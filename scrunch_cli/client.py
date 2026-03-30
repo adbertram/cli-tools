@@ -6,8 +6,17 @@ import time
 import requests
 
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
-from .models import Item, ItemDetail, create_item, create_item_detail
+from cli_tools_common.filters import validate_filters, FilterValidationError
+from .models import (
+    Brand, CreateBrand, UpdateBrand, create_brand,
+    Competitor, CreateCompetitor, UpdateCompetitor, create_competitor,
+    Persona, CreatePersona, UpdatePersona, create_persona,
+    Prompt, CreatePrompt, create_prompt,
+    QueryResult, create_query_result,
+    ResponseListing, create_response_listing,
+    PageAuditRecord, CreatePageAudit, create_page_audit,
+    AgentTrafficRow, AgentTrafficResponse, create_agent_traffic_row,
+)
 
 
 # Retry configuration defaults
@@ -44,9 +53,6 @@ class ScrunchClient:
         """
         self.config = get_config()
 
-        # NOTE: For dual-auth CLIs (API + browser_session), replace has_credentials()
-        # with a custom has_api_credentials() method that only checks API fields.
-        # See auth-standards.md "API Client Credential Gate in Dual-Auth CLIs".
         if not self.config.has_credentials():
             missing = self.config.get_missing_credentials()
             raise ClientError(
@@ -69,7 +75,6 @@ class ScrunchClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-        # Use Bearer token if available, otherwise PAT or API key
         if self.config.access_token:
             self.headers["Authorization"] = f"Bearer {self.config.access_token}"
         elif self.config.personal_access_token:
@@ -81,52 +86,26 @@ class ScrunchClient:
         """Check if access token is expired or about to expire."""
         expires_at = self.config.token_expires_at
         if not expires_at:
-            return False  # No expiry tracking, assume valid
+            return False
 
         try:
             expires_timestamp = float(expires_at)
-            # Consider expired if less than 5 minutes remaining
             return datetime.now().timestamp() > (expires_timestamp - 300)
         except (ValueError, TypeError):
             return False
 
     def _calculate_retry_delay(self, attempt: int, retry_after: Optional[float] = None) -> float:
-        """
-        Calculate delay before next retry using exponential backoff with jitter.
-
-        Args:
-            attempt: Current retry attempt number (0-indexed)
-            retry_after: Optional Retry-After header value from server
-
-        Returns:
-            Delay in seconds before next retry
-        """
-        # Honor Retry-After header if present
+        """Calculate delay before next retry using exponential backoff with jitter."""
         if retry_after is not None:
             return min(retry_after, self.max_delay)
 
-        # Exponential backoff: base_delay * 2^attempt
         delay = self.base_delay * (2 ** attempt)
-
-        # Add random jitter to prevent thundering herd
         jitter_range = delay * self.jitter
         delay += random.uniform(-jitter_range, jitter_range)
-
-        # Cap at max delay
         return min(delay, self.max_delay)
 
     def _is_retryable(self, response: Optional[requests.Response], exception: Optional[Exception]) -> bool:
-        """
-        Determine if a request should be retried.
-
-        Args:
-            response: Response object (if request completed)
-            exception: Exception raised (if request failed)
-
-        Returns:
-            True if request should be retried
-        """
-        # Retry on connection errors
+        """Determine if a request should be retried."""
         if exception is not None:
             return isinstance(exception, (
                 requests.exceptions.ConnectionError,
@@ -134,66 +113,44 @@ class ScrunchClient:
                 requests.exceptions.ChunkedEncodingError,
             ))
 
-        # Retry on specific status codes
         if response is not None:
             return response.status_code in RETRYABLE_STATUS_CODES
 
         return False
 
     def _get_retry_after(self, response: requests.Response) -> Optional[float]:
-        """
-        Extract Retry-After header value from response.
-
-        Args:
-            response: Response object
-
-        Returns:
-            Retry delay in seconds, or None if not present
-        """
+        """Extract Retry-After header value from response."""
         retry_after = response.headers.get("Retry-After")
         if retry_after is None:
             return None
 
         try:
-            # Try parsing as integer seconds
             return float(retry_after)
         except ValueError:
-            # Could be HTTP-date format, but we'll skip that complexity
             return None
 
     def _extract_error_detail(self, response: requests.Response) -> str:
-        """Extract error detail from an HTTP error response.
-
-        Handles multiple formats:
-        - Nested: {"error": {"message": "..."}} or {"_error": {"Description": "..."}}
-        - Simple: {"error": "..."} or {"message": "..."}
-        - Fallback: raw response text
-        """
+        """Extract error detail from an HTTP error response."""
         try:
             error_body = response.json()
 
-            # Handle nested error formats (e.g., Dataverse _error.Description)
             if "_error" in error_body:
                 err = error_body["_error"]
                 if isinstance(err, dict):
                     return err.get("Description") or err.get("Message") or err.get("Code") or str(err)
                 return str(err)
 
-            # Handle standard error format
             if "error" in error_body:
                 err = error_body["error"]
                 if isinstance(err, dict):
                     return err.get("message") or err.get("code") or err.get("description") or str(err)
                 return str(err)
 
-            # Handle simple message field
             if "message" in error_body:
                 return error_body["message"]
 
-            # Fallback: stringify the whole body (truncated)
             return str(error_body)[:500]
         except Exception:
-            # JSON parsing failed, use raw text
             return response.text[:500] if response.text else "Unknown error"
 
     def _refresh_token(self):
@@ -203,12 +160,6 @@ class ScrunchClient:
             raise ClientError(
                 "No refresh token available. Run 'scrunch auth login' to re-authenticate."
             )
-
-        # TODO: Implement token refresh for your specific API
-        # token_url = f"{self.base_url}/oauth/token"
-        # response = requests.post(token_url, data={...})
-        # self.config.save_tokens(new_access, new_refresh, expires_at)
-        # self._update_headers()
         raise ClientError("Token refresh not implemented. Run 'scrunch auth login'.")
 
     def _make_request(
@@ -219,30 +170,14 @@ class ScrunchClient:
         params: Optional[Dict] = None,
         retry: bool = True,
     ) -> Dict:
-        """
-        Make an HTTP request to the Scrunch API with exponential retry.
-
-        Args:
-            method: HTTP method (GET, POST, PUT, DELETE, etc.)
-            endpoint: API endpoint path (e.g., "/users")
-            data: Request body data
-            params: Query parameters
-            retry: Whether to retry on transient errors (default: True)
-
-        Returns:
-            Response JSON data
-
-        Raises:
-            ClientError: If request fails after all retries
-        """
+        """Make an HTTP request to the Scrunch API with exponential retry."""
         url = f"{self.base_url}{endpoint}"
 
-        # Check if token needs refresh
         if self._is_token_expired():
             try:
                 self._refresh_token()
             except Exception:
-                pass  # Try with existing token
+                pass
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
@@ -251,7 +186,6 @@ class ScrunchClient:
 
         for attempt in range(max_attempts):
             try:
-                # Make the request
                 response = requests.request(
                     method=method,
                     url=url,
@@ -261,7 +195,6 @@ class ScrunchClient:
                 )
                 last_response = response
 
-                # If 401, try refreshing token and retry (doesn't count against retry limit)
                 if response.status_code == 401:
                     try:
                         self._refresh_token()
@@ -276,27 +209,22 @@ class ScrunchClient:
                     except Exception as e:
                         raise ClientError(f"Authentication failed: {e}")
 
-                # Check if we should retry this response
                 if retry and self._is_retryable(response, None) and attempt < self.max_retries:
                     retry_after = self._get_retry_after(response)
                     delay = self._calculate_retry_delay(attempt, retry_after)
                     time.sleep(delay)
                     continue
 
-                # Success or non-retryable error - exit loop
                 break
 
             except requests.exceptions.RequestException as e:
                 last_exception = e
-                # Check if we should retry this exception
                 if retry and self._is_retryable(None, e) and attempt < self.max_retries:
                     delay = self._calculate_retry_delay(attempt)
                     time.sleep(delay)
                     continue
-                # Non-retryable exception or exhausted retries
                 break
 
-        # Handle the final result
         if last_exception is not None and last_response is None:
             raise ClientError(f"Request failed after {attempt + 1} attempts: {last_exception}")
 
@@ -307,129 +235,258 @@ class ScrunchClient:
             error_msg = self._extract_error_detail(last_response)
             raise ClientError(f"HTTP {last_response.status_code}: {error_msg}")
 
-        # Handle empty response (204 No Content)
         if last_response.status_code == 204:
             return {}
 
         return last_response.json()
 
-    # ==================== API Methods ====================
-    # All methods return Pydantic models for type safety and validation
-
-    def list_items(self, limit: int = 100, filters: Optional[List[str]] = None) -> List[Item]:
-        """
-        List items from the API.
-
-        Limiting: API-level (uses 'limit' query param)
-        Filtering: API-level where supported, client-side fallback
-
-        Args:
-            limit: Maximum number of items to return
-            filters: List of filter strings (field:op:value)
-
-        Returns:
-            List of Item models
-        """
-        endpoint = "/items"  # TODO: Update endpoint
-        params = {"limit": limit}  # TODO: Adjust param name for your API (per_page, limit, etc.)
-
-        if filters:
-            try:
-                validate_filters(filters)
-                # TODO: Translate filters to API params if supported
-                # params["status"] = extract_filter_value(filters, "status")
-            except FilterValidationError as e:
-                raise ClientError(f"Invalid filter: {e}")
-
-        response = self._make_request("GET", endpoint, params=params)
-
-        # Extract array from wrapped response - adjust key for your API
-        # Common patterns: response["data"], response["items"], response["results"]
+    def _extract_items(self, response: Any) -> list:
+        """Extract items array from a CollectionResponse or raw list."""
         if isinstance(response, dict):
-            raw_items = response.get("data", response.get("items", response.get("results", [])))
-        else:
-            raw_items = response
+            return response.get("items", response.get("data", response.get("results", [])))
+        if isinstance(response, list):
+            return response
+        return []
 
-        # Convert to models
-        items = [create_item(item) for item in raw_items]
+    # ==================== Brands ====================
 
-        return items
+    def list_brands(self, limit: int = 100) -> List[Brand]:
+        """List all brands."""
+        params: Dict[str, Any] = {"limit": limit}
+        response = self._make_request("GET", "/brands", params=params)
+        raw_items = self._extract_items(response)
+        return [create_brand(item) for item in raw_items]
 
-    def get_item(self, item_id: str) -> ItemDetail:
-        """
-        Get a specific item by ID.
+    def get_brand(self, brand_id: int) -> Brand:
+        """Get a specific brand by ID."""
+        response = self._make_request("GET", f"/brands/{brand_id}")
+        if isinstance(response, dict) and "items" in response:
+            return create_brand(response["items"][0])
+        return create_brand(response)
 
-        Args:
-            item_id: The item ID
+    def create_brand(self, data: CreateBrand) -> Brand:
+        """Create a new brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("POST", "/brands", data=payload)
+        return create_brand(response)
 
-        Returns:
-            ItemDetail model with full details
-        """
-        endpoint = f"/items/{item_id}"  # TODO: Update endpoint
-        response = self._make_request("GET", endpoint)
+    def update_brand(self, brand_id: int, data: UpdateBrand) -> Brand:
+        """Update an existing brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("PATCH", f"/brands/{brand_id}", data=payload)
+        return create_brand(response)
 
-        # Extract item from wrapped response if needed
-        if isinstance(response, dict) and "data" in response:
-            raw_item = response["data"]
-        else:
-            raw_item = response
+    def delete_brand(self, brand_id: int) -> dict:
+        """Archive (delete) a brand."""
+        return self._make_request("DELETE", f"/brands/{brand_id}")
 
-        return create_item_detail(raw_item)
+    # ==================== Competitors ====================
 
-    def search_items(
+    def list_competitors(self, brand_id: int, limit: int = 100) -> List[Competitor]:
+        """List competitors for a brand."""
+        params: Dict[str, Any] = {"limit": limit}
+        response = self._make_request("GET", f"/brands/{brand_id}/competitors", params=params)
+        raw_items = self._extract_items(response)
+        return [create_competitor(item) for item in raw_items]
+
+    def get_competitor(self, brand_id: int, competitor_id: int) -> Competitor:
+        """Get a specific competitor."""
+        response = self._make_request("GET", f"/brands/{brand_id}/competitors/{competitor_id}")
+        return create_competitor(response)
+
+    def create_competitor(self, brand_id: int, data: CreateCompetitor) -> Competitor:
+        """Create a new competitor for a brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("POST", f"/brands/{brand_id}/competitors", data=payload)
+        return create_competitor(response)
+
+    def update_competitor(self, brand_id: int, competitor_id: int, data: UpdateCompetitor) -> Competitor:
+        """Update a competitor."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("PUT", f"/brands/{brand_id}/competitors/{competitor_id}", data=payload)
+        return create_competitor(response)
+
+    def delete_competitor(self, brand_id: int, competitor_id: int) -> dict:
+        """Archive (delete) a competitor."""
+        return self._make_request("DELETE", f"/brands/{brand_id}/competitors/{competitor_id}")
+
+    # ==================== Personas ====================
+
+    def list_personas(self, brand_id: int, limit: int = 100) -> List[Persona]:
+        """List personas for a brand."""
+        params: Dict[str, Any] = {"limit": limit}
+        response = self._make_request("GET", f"/brands/{brand_id}/personas", params=params)
+        raw_items = self._extract_items(response)
+        return [create_persona(item) for item in raw_items]
+
+    def get_persona(self, brand_id: int, persona_id: int) -> Persona:
+        """Get a specific persona."""
+        response = self._make_request("GET", f"/brands/{brand_id}/personas/{persona_id}")
+        return create_persona(response)
+
+    def create_persona(self, brand_id: int, data: CreatePersona) -> Persona:
+        """Create a new persona for a brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("POST", f"/brands/{brand_id}/personas", data=payload)
+        return create_persona(response)
+
+    def update_persona(self, brand_id: int, persona_id: int, data: UpdatePersona) -> Persona:
+        """Update a persona."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("PUT", f"/brands/{brand_id}/personas/{persona_id}", data=payload)
+        return create_persona(response)
+
+    def delete_persona(self, brand_id: int, persona_id: int) -> dict:
+        """Archive (delete) a persona."""
+        return self._make_request("DELETE", f"/brands/{brand_id}/personas/{persona_id}")
+
+    # ==================== Prompts ====================
+
+    def list_prompts(self, brand_id: int, limit: int = 100, offset: int = 0) -> List[Prompt]:
+        """List prompts for a brand (paginated)."""
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        response = self._make_request("GET", f"/{brand_id}/prompts", params=params)
+        raw_items = self._extract_items(response)
+        return [create_prompt(item) for item in raw_items]
+
+    def get_prompt(self, brand_id: int, prompt_id: int) -> Prompt:
+        """Get a specific prompt."""
+        response = self._make_request("GET", f"/{brand_id}/prompts/{prompt_id}")
+        return create_prompt(response)
+
+    def create_prompt(self, brand_id: int, data: CreatePrompt) -> Prompt:
+        """Create a new prompt for a brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("POST", f"/{brand_id}/prompts", data=payload)
+        return create_prompt(response)
+
+    def delete_prompt(self, brand_id: int, prompt_id: int) -> dict:
+        """Archive (delete) a prompt."""
+        return self._make_request("DELETE", f"/{brand_id}/prompts/{prompt_id}")
+
+    # ==================== Query ====================
+
+    def query_metrics(
         self,
-        query: str,
+        brand_id: int,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        limit: int = 1000,
+        offset: int = 0,
+        fields: Optional[str] = None,
+    ) -> List[QueryResult]:
+        """Query aggregated metrics for a brand."""
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        if fields:
+            params["fields"] = fields
+
+        response = self._make_request("GET", f"/{brand_id}/query", params=params)
+        raw_items = self._extract_items(response)
+        return [create_query_result(item) for item in raw_items]
+
+    # ==================== Responses ====================
+
+    def list_responses(
+        self,
+        brand_id: int,
         limit: int = 100,
-        fields: Optional[List[str]] = None,
-    ) -> List[Item]:
-        """
-        Search items with wildcard matching.
+        offset: int = 0,
+        platform: Optional[str] = None,
+        prompt_id: Optional[int] = None,
+        persona_id: Optional[int] = None,
+        stage: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        has_shopping_data: Optional[bool] = None,
+    ) -> List[ResponseListing]:
+        """List AI responses for a brand with optional filters."""
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        if platform:
+            params["platform"] = platform
+        if prompt_id is not None:
+            params["prompt_id"] = prompt_id
+        if persona_id is not None:
+            params["persona_id"] = persona_id
+        if stage:
+            params["stage"] = stage
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        if has_shopping_data is not None:
+            params["has_shopping_data"] = has_shopping_data
 
-        Search: API-level if search endpoint exists, otherwise client-side
-        Wildcards: * matches any characters (fnmatch pattern)
+        response = self._make_request("GET", f"/{brand_id}/responses", params=params)
+        raw_items = self._extract_items(response)
+        return [create_response_listing(item) for item in raw_items]
 
-        Args:
-            query: Search query (supports * wildcards)
-            limit: Maximum number of items to return
-            fields: Optional list of fields to search (default: all string fields)
+    # ==================== Page Audits ====================
 
-        Returns:
-            List of matching Item models
-        """
-        import fnmatch
+    def list_page_audits(
+        self,
+        brand_id: int,
+        limit: int = 100,
+        status: Optional[str] = None,
+        url: Optional[str] = None,
+    ) -> List[PageAuditRecord]:
+        """List page audits for a brand."""
+        params: Dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
+        if url:
+            params["url"] = url
 
-        # TODO: Check if API has a search endpoint
-        # If so, use it:
-        # endpoint = "/items/search"
-        # params = {"q": query, "limit": limit}
-        # response = self._make_request("GET", endpoint, params=params)
-        # raw_items = response.get("data", response)
-        # return [create_item(item) for item in raw_items]
+        response = self._make_request("GET", f"/{brand_id}/page-audits", params=params)
+        raw_items = self._extract_items(response)
+        return [create_page_audit(item) for item in raw_items]
 
-        # Fall back to client-side wildcard matching
-        items = self.list_items(limit=limit)
+    def get_page_audit(self, brand_id: int, page_audit_id: int) -> PageAuditRecord:
+        """Get a specific page audit."""
+        response = self._make_request("GET", f"/{brand_id}/page-audits/{page_audit_id}")
+        return create_page_audit(response)
 
-        # Convert query to fnmatch pattern (case-insensitive)
-        pattern = query.lower()
-        if '*' not in pattern:
-            pattern = f'*{pattern}*'  # Default to contains match
+    def create_page_audit(self, brand_id: int, data: CreatePageAudit) -> PageAuditRecord:
+        """Create a new page audit for a brand."""
+        payload = data.model_dump(exclude_none=True)
+        response = self._make_request("POST", f"/{brand_id}/page-audits", data=payload)
+        return create_page_audit(response)
 
-        results = []
-        for item in items:
-            # Get item as dict for field access
-            item_dict = item.model_dump()
+    # ==================== Agent Traffic ====================
 
-            # Get fields to search
-            search_fields = fields or [k for k, v in item_dict.items() if isinstance(v, str)]
+    def get_agent_traffic(
+        self,
+        brand_id: int,
+        site_id: int,
+        start_date: str,
+        end_date: str,
+        limit: int = 100,
+        offset: int = 0,
+        fields: Optional[str] = None,
+        time_bucket: Optional[str] = None,
+        path: Optional[str] = None,
+    ) -> AgentTrafficResponse:
+        """Get agent traffic data for a brand's site."""
+        params: Dict[str, Any] = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "limit": limit,
+            "offset": offset,
+        }
+        if fields:
+            params["fields"] = fields
+        if time_bucket:
+            params["time_bucket"] = time_bucket
+        if path:
+            params["path"] = path
 
-            # Check if any field matches
-            for field in search_fields:
-                value = str(item_dict.get(field, '')).lower()
-                if fnmatch.fnmatch(value, pattern):
-                    results.append(item)
-                    break
-
-        return results
+        response = self._make_request(
+            "GET", f"/{brand_id}/sites/{site_id}/agent-traffic", params=params
+        )
+        return AgentTrafficResponse(**response)
 
 
 # Module-level client instance - singleton pattern
