@@ -1,0 +1,1 @@
+2025-07-02T16:29:23                          Error occurred, type: error, text: Deployment has been stopped due to SCM container restart. The restart can happen due to a management operation on site. Do not perform a management operation and a deployment operation in quick succession. Adding a small delay can help avoid any conflicts.

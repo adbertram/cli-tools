@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pluralsight-author-cli"
+version = "0.1.0"
+description = "CLI interface for PluralsightAuthor (browser automation)"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+]
+
+[project.scripts]
+pluralsight-author = "pluralsight_author_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pluralsight_author_cli*"]

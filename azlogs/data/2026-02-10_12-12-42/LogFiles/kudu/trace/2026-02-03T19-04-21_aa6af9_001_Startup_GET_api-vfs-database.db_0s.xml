@@ -1,0 +1,5 @@
+<step title="Startup Request" date="2026-02-03T19:04:21.992" instance="aa6af9" url="/api/vfs/database.db" method="GET" type="request" pid="785,1,28" ScmType="None" >
+  <step title="Cleanup Xml Logs" date="2026-02-03T19:04:22.012" >
+    <step title="Cleanup Infos" date="2026-02-03T19:04:22.129" totalFiles="385" totalCleanup="225" /><!-- duration: 31ms -->
+  </step><!-- duration: 168ms -->
+</step><!-- duration: 197ms -->

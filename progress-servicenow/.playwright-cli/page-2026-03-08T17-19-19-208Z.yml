@@ -1,0 +1,180 @@
+- generic [active] [ref=e1]:
+  - iframe [ref=e2]:
+    
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - status
+      - generic [ref=e7]:
+        - banner [ref=e12]:
+          - link "Skip to page content" [ref=e13] [cursor=pointer]:
+            - /url: javascript:void(0)
+          - link "Skip to chat" [ref=e14] [cursor=pointer]:
+            - /url: javascript:void(0)
+          - navigation "Primary" [ref=e16]:
+            - generic [ref=e18]:
+              - link "Employee Center - Home Page" [ref=e19] [cursor=pointer]:
+                - /url: "?id=ec_pro_home"
+                - img "Employee Center - Home Page" [ref=e20]
+              - search "Global" [ref=e25]:
+                - generic [ref=e27]:
+                  - combobox "Click here to find self-help articles, request forms, content from MyProgress and more.." [ref=e28]
+                  - button "Submit search" [ref=e30] [cursor=pointer]:
+                    - img [ref=e32]
+              - generic "Header menu" [ref=e35]:
+                - generic [ref=e36]:
+                  - link "My Requests" [ref=e38] [cursor=pointer]:
+                    - /url: "?id=my_requests"
+                    - text: Asks
+                  - link "Approvals" [ref=e40] [cursor=pointer]:
+                    - /url: "?id=hrm_todos_page"
+                  - link "Vendor Assessments" [ref=e42] [cursor=pointer]:
+                    - /url: "?id=svdp_grc_tiering_assessments"
+                  - button "6 new notifications" [ref=e46] [cursor=pointer]:
+                    - generic [ref=e47]: 
+                    - text: "6"
+                - menubar [ref=e49]:
+                  - 'menuitem "User options: Adam Bertram" [ref=e50] [cursor=pointer]':
+                    - generic [ref=e54]: AB
+                    - generic [ref=e55]: 
+                - list "Header menu"
+            - menubar [ref=e61]:
+              - generic [ref=e62]:
+                - menuitem "IT" [ref=e63]:
+                  - text: IT
+                  - generic [ref=e64]: 
+                - menuitem "Business Operations" [ref=e65]:
+                  - text: Business Operations
+                  - generic [ref=e66]: 
+                - menuitem "Workplace Operations" [ref=e67]:
+                  - text: Workplace Operations
+                  - generic [ref=e68]: 
+                - menuitem "Quick Links" [ref=e69]:
+                  - text: Quick Links
+                  - generic [ref=e70]: 
+          - navigation "Page breadcrumbs" [ref=e82]:
+            - list [ref=e83]:
+              - listitem [ref=e84]:
+                - generic [ref=e85]:
+                  - link "Home" [ref=e86] [cursor=pointer]:
+                    - /url: "?id=ec_pro_home"
+                  - generic [ref=e87]: 
+              - listitem [ref=e88]: Requests
+        - main [ref=e90]:
+          - heading "Requests" [level=1] [ref=e91]
+          - generic [ref=e99]:
+            - heading "My Requests" [level=2] [ref=e101]
+            - tablist [ref=e102]:
+              - list [ref=e103]:
+                - listitem [ref=e104]:
+                  - link "Submitted Tasks" [ref=e105]:
+                    - /url: ""
+                - listitem [ref=e106]:
+                  - link "Drafts" [ref=e107] [cursor=pointer]:
+                    - /url: ""
+              - generic [ref=e108]:
+                - generic [ref=e111]:
+                  - generic [ref=e112]:
+                    - generic [ref=e114]:
+                      - generic [ref=e115]: View
+                      - combobox "View View" [ref=e116]:
+                        - option "My Open Tasks"
+                        - option "My Closed Tasks"
+                        - option "My Watchlist Open Tasks" [selected]
+                        - option "My Watchlist Closed Tasks"
+                    - generic [ref=e118]:
+                      - textbox "Search My watlist open tasks" [ref=e148]
+                      - button "Search My watlist open tasks" [ref=e149] [cursor=pointer]:
+                        - generic [ref=e122]: 
+                  - table "My Requests" [ref=e150]:
+                    - rowgroup [ref=e151]:
+                      - row "Request State Updated" [ref=e152]:
+                        - columnheader "Request" [ref=e153]
+                        - columnheader "State" [ref=e154]
+                        - columnheader "Updated" [ref=e155]
+                    - rowgroup [ref=e156]:
+                      - row "Could we please get a OneDrive license applied to our psdxautomation@progress.com user account? (This is the service account for our DX content workfl , RITM0352332 RITM0352332 Mandy Mowers Work in Progress 4 days ago" [ref=e157]:
+                        - cell "Could we please get a OneDrive license applied to our psdxautomation@progress.com user account? (This is the service account for our DX content workfl , RITM0352332 RITM0352332 Mandy Mowers" [ref=e158]:
+                          - link "Could we please get a OneDrive license applied to our psdxautomation@progress.com user account? (This is the service account for our DX content workfl , RITM0352332" [ref=e160] [cursor=pointer]:
+                            - /url: "?id=ticket&table=sc_req_item&sys_id=cf86c17c2b5f7610dfc1f518fe91bfd5"
+                            - text: Could we please get a OneDrive license applied to our psdxautomation@progress.com user account? (This is the service account for our DX content workfl
+                          - generic [ref=e161]:
+                            - generic [ref=e162]: RITM0352332
+                            - generic [ref=e163]: Mandy Mowers
+                        - cell "Work in Progress" [ref=e164]:
+                          - generic [ref=e165]: Work in Progress
+                        - cell "4 days ago" [ref=e166]:
+                          - generic [ref=e167]:
+                            - generic [ref=e168]: 
+                            - time [ref=e170]:
+                              - text: 4d ago
+                              - generic [ref=e171]: 4 days ago
+                      - row "Hi - we recently ceated a Google apps for business account for Adam.Bertram@progress.com. However, the business informed me that they have a service a , RITM0353797 RITM0353797 Megan Gouveia Work in Progress 5 days ago" [ref=e172]:
+                        - cell "Hi - we recently ceated a Google apps for business account for Adam.Bertram@progress.com. However, the business informed me that they have a service a , RITM0353797 RITM0353797 Megan Gouveia" [ref=e173]:
+                          - link "Hi - we recently ceated a Google apps for business account for Adam.Bertram@progress.com. However, the business informed me that they have a service a , RITM0353797" [ref=e175] [cursor=pointer]:
+                            - /url: "?id=ticket&table=sc_req_item&sys_id=aa3729c73b97b61085cb3b44c3e45a6c"
+                            - text: Hi - we recently ceated a Google apps for business account for Adam.Bertram@progress.com. However, the business informed me that they have a service a
+                          - generic [ref=e176]:
+                            - generic [ref=e177]: RITM0353797
+                            - generic [ref=e178]: Megan Gouveia
+                        - cell "Work in Progress" [ref=e179]:
+                          - generic [ref=e180]: Work in Progress
+                        - cell "5 days ago" [ref=e181]:
+                          - generic [ref=e182]:
+                            - generic [ref=e183]: 
+                            - time [ref=e185]:
+                              - text: 5d ago
+                              - generic [ref=e186]: 5 days ago
+                      - row "Can we please get a license to both Grammarly and Scrunch for psdxautomation@progress.com? This is our service account for DX content workflows. , RITM0353691 RITM0353691 Mandy Mowers Work in Progress 5 days ago" [ref=e187]:
+                        - cell "Can we please get a license to both Grammarly and Scrunch for psdxautomation@progress.com? This is our service account for DX content workflows. , RITM0353691 RITM0353691 Mandy Mowers" [ref=e188]:
+                          - link "Can we please get a license to both Grammarly and Scrunch for psdxautomation@progress.com? This is our service account for DX content workflows. , RITM0353691" [ref=e190] [cursor=pointer]:
+                            - /url: "?id=ticket&table=sc_req_item&sys_id=073960cf471f76104dd5454a516d4335"
+                            - text: Can we please get a license to both Grammarly and Scrunch for psdxautomation@progress.com? This is our service account for DX content workflows.
+                          - generic [ref=e191]:
+                            - generic [ref=e192]: RITM0353691
+                            - generic [ref=e193]: Mandy Mowers
+                        - cell "Work in Progress" [ref=e194]:
+                          - generic [ref=e195]: Work in Progress
+                        - cell "5 days ago" [ref=e196]:
+                          - generic [ref=e197]:
+                            - generic [ref=e198]: 
+                            - time [ref=e200]:
+                              - text: 5d ago
+                              - generic [ref=e201]: 5 days ago
+                      - 'row "New Azure Service Principal: Hi there! We need a real user (psdxautomation@progress.com) and an Azure service principal. , RITM0347624 RITM0347624 Mandy Mowers Work in Progress 13 days ago" [ref=e202]':
+                        - 'cell "New Azure Service Principal: Hi there! We need a real user (psdxautomation@progress.com) and an Azure service principal. , RITM0347624 RITM0347624 Mandy Mowers" [ref=e203]':
+                          - 'link "New Azure Service Principal: Hi there! We need a real user (psdxautomation@progress.com) and an Azure service principal. , RITM0347624" [ref=e205] [cursor=pointer]':
+                            - /url: "?id=ticket&table=sc_req_item&sys_id=24a8bb202bb67210e100f641c891bf3e"
+                            - text: "New Azure Service Principal: Hi there! We need a real user (psdxautomation@progress.com) and an Azure service principal."
+                          - generic [ref=e206]:
+                            - generic [ref=e207]: RITM0347624
+                            - generic [ref=e208]: Mandy Mowers
+                        - cell "Work in Progress" [ref=e209]:
+                          - generic [ref=e210]: Work in Progress
+                        - cell "13 days ago" [ref=e211]:
+                          - generic [ref=e212]:
+                            - generic [ref=e213]: 
+                            - time [ref=e215]:
+                              - text: 13d ago
+                              - generic [ref=e216]: 13 days ago
+                      - row "Hello, We are working on automating some of our blog content workflows. Can you please help us get Adam Bertram (the contractor who is building , RITM0341747 RITM0341747 Mandy Mowers Work in Progress about a month ago" [ref=e217]:
+                        - cell "Hello, We are working on automating some of our blog content workflows. Can you please help us get Adam Bertram (the contractor who is building , RITM0341747 RITM0341747 Mandy Mowers" [ref=e218]:
+                          - link "Hello, We are working on automating some of our blog content workflows. Can you please help us get Adam Bertram (the contractor who is building , RITM0341747" [ref=e220] [cursor=pointer]:
+                            - /url: "?id=ticket&table=sc_req_item&sys_id=1bbc10e02b8ab210e100f641c891bf96"
+                            - text: Hello, We are working on automating some of our blog content workflows. Can you please help us get Adam Bertram (the contractor who is building
+                          - generic [ref=e221]:
+                            - generic [ref=e222]: RITM0341747
+                            - generic [ref=e223]: Mandy Mowers
+                        - cell "Work in Progress" [ref=e224]:
+                          - generic [ref=e225]: Work in Progress
+                        - cell "about a month ago" [ref=e226]:
+                          - generic [ref=e227]:
+                            - generic [ref=e228]: 
+                            - time [ref=e230]:
+                              - text: about a month ago
+                              - generic [ref=e231]: about a month ago
+                - text:   
+            - text:      
+          - generic [ref=e128]:
+            - generic: 
+    - button "Open panel" [ref=e135] [cursor=pointer]:
+      - img [ref=e139]

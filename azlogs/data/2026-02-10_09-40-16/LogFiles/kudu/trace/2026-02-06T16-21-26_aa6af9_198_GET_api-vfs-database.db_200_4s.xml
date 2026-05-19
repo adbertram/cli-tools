@@ -1,0 +1,6 @@
+<step title="Incoming Request" date="2026-02-06T16:21:26.498" instance="aa6af9" url="/api/vfs/database.db" method="GET" type="request" pid="789,1,18" Accept="*/*" Host="devolutions-ciem-psu.scm.azurewebsites.net" User-Agent="curl/8.7.1" Authorization="Bas..." X-ARR-LOG-ID="e5278e86-5cbe-43b7-bbed-98ba29b16aea" CLIENT-IP="74.129.114.247:54351" X-SITE-DEPLOYMENT-ID="devolutions-ciem-psu" WAS-DEFAULT-HOSTNAME="devolutions-ciem-psu.scm.azurewebsites.net" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-Original-Proto="http" X-WAWS-Unencoded-URL="/api/vfs/database.db" X-Client-IP="74.129.114.247" X-Client-Port="54351" X-Original-For="169.254.129.1:16159" >
+  <step title="Cleanup Xml Logs" date="2026-02-06T16:21:26.610" >
+    <step title="Cleanup Infos" date="2026-02-06T16:21:27.017" totalFiles="708" totalCleanup="548" /><!-- duration: 101ms -->
+  </step><!-- duration: 528ms -->
+  <step title="Outgoing response" date="2026-02-06T16:21:30.344" type="response" statusCode="200" statusText="OK" /><!-- duration: 80ms -->
+</step><!-- duration: 3928ms -->

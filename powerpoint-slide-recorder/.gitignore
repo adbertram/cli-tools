@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+.env.*
+!.env.example
+.DS_Store
+.profiles/
+scripts/*.log
+.fallow/

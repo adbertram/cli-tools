@@ -1,0 +1,5 @@
+<step title="Startup Request" date="2025-11-17T01:41:05.494" instance="9711a6" url="/api/vfs/LogFiles/2025_11_13_lw0sdlwk0000KW_docker.log" method="GET" type="request" pid="834,1,7" SCM_DO_BUILD_DURING_DEPLOYMENT="false" ScmType="None" >
+  <step title="Cleanup Xml Logs" date="2025-11-17T01:41:05.571" >
+    <step title="Cleanup Infos" date="2025-11-17T01:41:13.505" totalFiles="72088" totalCleanup="71928" /><!-- duration: 1110ms -->
+  </step><!-- duration: 9090ms -->
+</step><!-- duration: 9178ms -->

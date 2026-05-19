@@ -1,0 +1,106 @@
+name: "{{NAME}}"
+description: "{{DESCRIPTION}}"
+definition:
+  $schema: "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#"
+  contentVersion: "1.0.0.0"
+  parameters:
+    $authentication:
+      defaultValue: {}
+      type: "SecureObject"
+  triggers:
+    manual:
+      type: "Request"
+      kind: "Http"
+      inputs:
+        method: "POST"
+        schema:
+          type: "object"
+          properties: {}
+          required: []
+  actions:
+    Initialize_Status:
+      type: "InitializeVariable"
+      inputs:
+        variables:
+          - name: "statusCode"
+            type: "integer"
+            value: 200
+      runAfter: {}
+
+    Initialize_Error_Message:
+      type: "InitializeVariable"
+      inputs:
+        variables:
+          - name: "errorMessage"
+            type: "string"
+            value: ""
+      runAfter:
+        Initialize_Status:
+          - "Succeeded"
+
+    Try_Main_Processing:
+      type: "Scope"
+      actions:
+        # Add your main business logic actions here
+        Placeholder_Action:
+          type: "Compose"
+          inputs: "Replace this with your actual actions"
+          runAfter: {}
+      runAfter:
+        Initialize_Error_Message:
+          - "Succeeded"
+
+    Catch_Errors:
+      type: "Scope"
+      actions:
+        Set_Error_Status:
+          type: "SetVariable"
+          inputs:
+            name: "statusCode"
+            value: 500
+          runAfter: {}
+
+        Set_Error_Message:
+          type: "SetVariable"
+          inputs:
+            name: "errorMessage"
+            value: "An error occurred during processing."
+          runAfter:
+            Set_Error_Status:
+              - "Succeeded"
+
+        Log_Error_Details:
+          type: "Compose"
+          inputs:
+            error_logged: true
+            timestamp: "@utcNow()"
+            scope_result: "@result('Try_Main_Processing')"
+          runAfter:
+            Set_Error_Message:
+              - "Succeeded"
+      runAfter:
+        Try_Main_Processing:
+          - "Failed"
+          - "TimedOut"
+
+    Respond_to_agent:
+      type: "Response"
+      kind: "Http"
+      inputs:
+        statusCode: 200
+        body:
+          success: "@equals(variables('statusCode'), 200)"
+          statusCode: "@variables('statusCode')"
+          errorMessage: "@if(equals(variables('statusCode'), 500), variables('errorMessage'), null)"
+          processedAt: "@utcNow()"
+      runAfter:
+        Try_Main_Processing:
+          - "Succeeded"
+          - "Failed"
+          - "Skipped"
+        Catch_Errors:
+          - "Succeeded"
+          - "Failed"
+          - "Skipped"
+  outputs: {}
+connectionReferences: {}

@@ -1,0 +1,4 @@
+<step title="Incoming Request" date="2026-02-10T18:32:14.091" instance="0079c0" url="/api/dump" method="GET" type="request" pid="770,1,20" Host="devolutions-ciem-psu.scm.azurewebsites.net" User-Agent="Python-urllib/3.14" Accept-Encoding="identity" Authorization="Bas..." X-ARR-LOG-ID="02ae022d-676d-4685-945a-d499a0b756c4" CLIENT-IP="74.129.114.247:59560" X-SITE-DEPLOYMENT-ID="devolutions-ciem-psu" WAS-DEFAULT-HOSTNAME="devolutions-ciem-psu.scm.azurewebsites.net" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-Original-Proto="http" X-WAWS-Unencoded-URL="/api/dump" X-Client-IP="74.129.114.247" X-Client-Port="59560" X-Original-For="169.254.129.1:43517" >
+  <step title="Cleanup Xml Logs" date="2026-02-10T18:32:14.094" >
+    <step title="Cleanup Infos" date="2026-02-10T18:32:16.313" totalFiles="14613" totalCleanup="14453" /><!-- duration: 169ms -->
+  </step><!-- duration: 2407ms -->

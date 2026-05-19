@@ -1,0 +1,2 @@
+1.0.0.0
+-y --no-dot-deployment -r "/tmp/zipdeploy/extracted" -o "/home/site/deployments/tools" --basic --sitePath "/tmp/zipdeploy/extracted"

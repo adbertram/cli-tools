@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fitnesspal-cli"
+version = "0.1.0"
+description = "CLI interface for Fitnesspal API"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "typer[all]>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "myfitnesspal>=2.1.2",
+    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+]
+
+[project.scripts]
+fitnesspal = "fitnesspal_cli.main:app"
+
+[tool.uv]
+override-dependencies = [
+    "pydantic>=2.13.0",
+    "typing-extensions>=4.14.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fitnesspal_cli*"]

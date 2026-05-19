@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.profiles/
+.DS_Store
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+build/
+plans/
+tasks/
+
+scripts/*.log

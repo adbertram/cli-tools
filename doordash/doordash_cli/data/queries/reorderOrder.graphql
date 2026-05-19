@@ -1,0 +1,8 @@
+mutation reorderOrder($orderUuid: ID!) {
+  reorderOrder(orderUuid: $orderUuid) {
+    cartUuid
+    isGroup
+    failReason
+    __typename
+  }
+}

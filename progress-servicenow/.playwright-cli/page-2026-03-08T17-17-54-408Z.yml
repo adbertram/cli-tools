@@ -1,0 +1,12 @@
+- generic [active] [ref=e1]:
+  - iframe [ref=e2]:
+    
+  - generic [ref=e4]:
+    - status [ref=e5]:
+      - generic [ref=e6]: 
+      - text: Loading...
+    - status
+    - generic [ref=e7]:
+      - banner
+      - heading "Loading..." [level=1] [ref=e9]
+      - contentinfo

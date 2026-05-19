@@ -1,0 +1,77 @@
+"""Configuration management for PayPal CLI."""
+from pathlib import Path
+from typing import Optional
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.credentials import CredentialType
+
+
+class Config(BaseConfig):
+
+    DIST_NAME = "paypal-cli"
+    CREDENTIAL_TYPES = [CredentialType.OAUTH]
+    DEFAULT_BASE_URL = "https://api-m.paypal.com"
+
+    def __init__(self, profile=None):
+        super().__init__(
+            tool_dir=resolve_tool_dir(self.DIST_NAME),
+            profile=profile,
+        )
+
+    @property
+    def api_base_url(self) -> str:
+        """Get PayPal API base URL."""
+        return self.base_url or self.DEFAULT_BASE_URL
+
+    def has_credentials(self) -> bool:
+        """Check if API credentials are configured."""
+        return bool(self.client_id and self.client_secret)
+
+    def get_missing_credentials(self) -> list:
+        """Get list of missing API credentials."""
+        missing = []
+        if not self.client_id:
+            missing.append("CLIENT_ID")
+        if not self.client_secret:
+            missing.append("CLIENT_SECRET")
+        return missing
+
+    def test_connection(self) -> dict:
+        """Test API credentials by requesting an OAuth token.
+
+        Returns dict with 'authenticated' bool and optional details.
+        """
+        import requests
+        import base64
+        try:
+            credentials = base64.b64encode(
+                f"{self.client_id}:{self.client_secret}".encode()
+            ).decode()
+            response = requests.post(
+                f"{self.api_base_url}/v1/oauth2/token",
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data="grant_type=client_credentials",
+                timeout=10,
+            )
+            if response.ok:
+                data = response.json()
+                return {
+                    "authenticated": True,
+                    "app_id": data.get("app_id", ""),
+                    "scope": data.get("scope", "")[:100],
+                }
+            return {"authenticated": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            return {"authenticated": False, "error": str(e)}
+
+
+_configs = {}
+
+
+def get_config(profile=None):
+    key = profile or "_default"
+    if key not in _configs:
+        _configs[key] = Config(profile=profile)
+    return _configs[key]

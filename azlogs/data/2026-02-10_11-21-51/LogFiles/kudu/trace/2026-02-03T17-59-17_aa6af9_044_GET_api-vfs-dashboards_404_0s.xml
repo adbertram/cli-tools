@@ -1,0 +1,6 @@
+<step title="Incoming Request" date="2026-02-03T17:59:17.188" instance="aa6af9" url="/api/vfs/dashboards/" method="GET" type="request" pid="780,1,87" Accept="*/*" Host="devolutions-ciem-psu.scm.azurewebsites.net" User-Agent="curl/8.7.1" Authorization="Bas..." X-ARR-LOG-ID="08f288af-bfc2-4735-a6c2-0bc10155ed08" CLIENT-IP="74.129.114.247:58212" X-SITE-DEPLOYMENT-ID="devolutions-ciem-psu" WAS-DEFAULT-HOSTNAME="devolutions-ciem-psu.scm.azurewebsites.net" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-Original-Proto="http" X-WAWS-Unencoded-URL="/api/vfs/dashboards/" X-Client-IP="74.129.114.247" X-Client-Port="58212" X-Original-For="169.254.129.1:19651" >
+  <step title="Cleanup Xml Logs" date="2026-02-03T17:59:17.208" >
+    <step title="Cleanup Infos" date="2026-02-03T17:59:17.237" totalFiles="322" totalCleanup="162" /><!-- duration: 5ms -->
+  </step><!-- duration: 38ms -->
+  <step title="Outgoing response" date="2026-02-03T17:59:17.278" type="response" statusCode="404" statusText="NotFound" /><!-- duration: 4ms -->
+</step><!-- duration: 99ms -->

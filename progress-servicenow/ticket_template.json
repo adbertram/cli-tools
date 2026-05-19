@@ -1,0 +1,977 @@
+{
+  "_meta": {
+    "description": "Comprehensive ticket creation template for Progress ServiceNow Employee Center",
+    "portal_url": "https://progress1.service-now.com/esc",
+    "notes": [
+      "Each catalog_item has its own set of form fields.",
+      "Fields marked required=true must be filled before submission.",
+      "Fields with type 'dropdown' have options that are loaded dynamically from ServiceNow -- known values are listed where available.",
+      "Fields with type 'reference' are lookup fields that search ServiceNow records (users, cost centers, etc.).",
+      "Some fields are conditional and only appear based on other field selections.",
+      "All forms support 'Save as Draft' and 'Submit' actions, plus file attachments."
+    ],
+    "discovered_at": "2026-03-09",
+    "field_types": {
+      "text": "Single-line text input",
+      "textarea": "Multi-line rich text editor (WYSIWYG: bold, italic, alignment, lists, links, images, code samples)",
+      "dropdown": "Dropdown/combobox with predefined options",
+      "reference": "ServiceNow reference/lookup field that searches records (has 'Lookup using list' link)",
+      "checkbox": "Boolean toggle (checked/unchecked)",
+      "checkbox_group": "Group of checkboxes where one or more must be selected",
+      "date": "Date picker field (format: DD-MMM-YY)",
+      "file": "File upload attachment"
+    }
+  },
+  "common_fields": {
+    "attachments": {
+      "label": "Attachments",
+      "type": "file",
+      "required": false,
+      "description": "File upload. Available on every form via the 'Add attachments' button."
+    }
+  },
+  "common_actions": ["Save as Draft", "Submit"],
+  "catalog_items": {
+    "development_cloud_issue": {
+      "name": "Development Cloud Issue",
+      "description": "Request assistance with existing Product Development cloud resources. This includes the internal vCloud Director cloud, Amazon Web Services, Microsoft Azure and other public clouds.",
+      "category": "IT",
+      "fields": {
+        "product": {
+          "label": "Product",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "description": "Select the product this issue relates to."
+        },
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "placeholder": null,
+          "description": "Detailed description of the cloud issue or request."
+        },
+        "type": {
+          "label": "Type",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": ["Security", "Unreachable", "Performance", "Other"],
+          "description": "Type of cloud issue."
+        },
+        "progress_cloud": {
+          "label": "Progress Cloud",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": ["vCloud Director", "AWS", "vSphere", "Hyper-V", "Microsoft Azure", "Other"],
+          "description": "Progress cloud environment."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": "Low",
+          "options": ["Low", "Medium", "High"],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "application_access": {
+      "name": "Application Access",
+      "description": "Request access to Progress business applications.",
+      "category": "IT",
+      "fields": {
+        "onboarding_employee": {
+          "label": "Onboarding employee",
+          "type": "reference",
+          "required": false,
+          "default": null,
+          "description": "User reference lookup. Disabled by default. Has 'Lookup using list' link."
+        },
+        "company_or_individual_name": {
+          "label": "Company or Individual name",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Under 'Contractor VPN Details' section. Appears conditionally.",
+          "conditional": true,
+          "condition_note": "Visible under 'Contractor VPN Details' expandable section."
+        },
+        "access_details": {
+          "label": "What they need access to",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Here are some examples; Need access to environment A in Office A; Need access to environment B in Office B; Need access to website A; Need access to file server A; Need access over remote desktop to servers in dev environment A in Office A; Need ssh access...",
+          "description": "Describe what access is needed. Supports multiple items separated by semicolons.",
+          "conditional": true,
+          "condition_note": "Visible under 'Contractor VPN Details' expandable section."
+        },
+        "quantity": {
+          "label": "Quantity",
+          "type": "dropdown",
+          "required": false,
+          "default": "1",
+          "options": [],
+          "description": "Number of access requests. Defaults to 1."
+        }
+      },
+      "notes": "If you need any additional application access that is not listed, check 'Other' and provide the application name. Additional checkbox fields may appear dynamically based on selections."
+    },
+    "request_access_cloud_account_subscription": {
+      "name": "Request Access Cloud Account/Subscription",
+      "description": "Request access to a cloud account or subscription. Note: there will be a cost associated with this and will be charged to your cost center.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated. This catalog item involves requesting access to existing cloud subscriptions."
+    },
+    "progress_cloud_account_register": {
+      "name": "Progress Cloud Account Register",
+      "description": "Requesting a new Cloud Account or changes to an existing one, through a simple form. System of record for all Progress cloud accounts (AWS, Azure, GCP).",
+      "category": "IT",
+      "fields": {
+        "action_type": {
+          "label": "Choose what do you want to do?",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "help_text": "Choose the type of change you want in the Cloud Account Register.",
+          "description": "Add, Update, or Delete entries in the cloud account register."
+        },
+        "account_id": {
+          "label": "Account ID",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "AWS: 12 digits (e.g., 123456789012). Azure: Subscription GUID. GCP: Project ID (e.g., my-prod-123).",
+          "description": "Cloud provider account identifier."
+        },
+        "account_name": {
+          "label": "Account name",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Human-readable account name (e.g., \"ShareFile-Prod-Core\")",
+          "description": "Friendly name for the cloud account."
+        },
+        "cloud_provider": {
+          "label": "Choose a cloud provider",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "help_text": "Select the cloud provider.",
+          "description": "AWS, Azure, GCP, etc."
+        },
+        "product": {
+          "label": "Select the product this account is tied to",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Product associated with this cloud account."
+        },
+        "environment": {
+          "label": "Which environment does this account support?",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Environment type (e.g., Production, Staging, Development)."
+        },
+        "primary_region": {
+          "label": "Enter the primary region",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "AWS (us-east-1), Azure (eastus), GCP (us-central1)",
+          "help_text": "Primary region for the workload(s).",
+          "description": "Cloud provider region identifier."
+        },
+        "business_owner_email": {
+          "label": "Business owner (email)",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "The accountable business owner.",
+          "description": "Email of the business owner for this account."
+        },
+        "permissions_owner_email": {
+          "label": "Permissions owner (email)",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Approves access changes and account metadata updates.",
+          "description": "Email of the person who approves access changes."
+        },
+        "is_active": {
+          "label": "Is active",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "help_text": "Whether the account is active.",
+          "description": "Active status of the cloud account."
+        },
+        "product_line_name": {
+          "label": "Product line name",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Business grouping above product.",
+          "description": "Product line this account belongs to."
+        },
+        "business_unit_name": {
+          "label": "Business unit name",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Which BU this belongs to.",
+          "description": "Business unit for this account."
+        },
+        "business_justification": {
+          "label": "Business justification",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Justification for the account request."
+        }
+      },
+      "notes": "Fields may change based on the 'Choose what do you want to do?' selection (Add vs Update vs Delete)."
+    },
+    "purchase_request": {
+      "name": "Purchase Request",
+      "description": "Begin process here for vendors, service providers, and all purchasing needs (except End User Equipment). Submitter acknowledges they have read the Procurement Policy.",
+      "category": "Business Operations",
+      "fields": {
+        "requested_for": {
+          "label": "Requested for",
+          "type": "reference",
+          "required": true,
+          "default": "(current user)",
+          "description": "User reference field. Pre-populated with the logged-in user. Has Preview and Clear buttons."
+        },
+        "description": {
+          "label": "Description",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "Please define the business need and provide as much details as possible.",
+          "description": "Business need and detailed description of the purchase."
+        },
+        "service_duration": {
+          "label": "How long do you expect to use the service/product?",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "For example: one-time purchase, month-to-month subscription, 1 year, 3 years, no end date, etc.",
+          "description": "Expected duration of use."
+        },
+        "purchase_type": {
+          "label": "Purchase type",
+          "type": "checkbox_group",
+          "required": true,
+          "description": "Check ALL that apply. Incorrect/missing information may delay assessment.",
+          "options": [
+            {
+              "value": "new_product_service",
+              "label": "New product/service purchase",
+              "default": false
+            },
+            {
+              "value": "renewal",
+              "label": "Renewal of an existing product/service",
+              "default": false
+            },
+            {
+              "value": "one_time",
+              "label": "One-time purchase",
+              "default": false
+            },
+            {
+              "value": "subscription",
+              "label": "Subscription",
+              "default": false
+            },
+            {
+              "value": "existing_vendor",
+              "label": "We have done business with this vendor before",
+              "default": false
+            },
+            {
+              "value": "contractor_services",
+              "label": "Contractor Services",
+              "default": false
+            }
+          ]
+        },
+        "internal_support": {
+          "label": "Do you expect Progress to implement, integrate or support this system internally in any way?",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "help_text": "This includes any business application, software licenses/subscriptions, infrastructure, hardware/software, and maintenance of the aforementioned, regardless of departmental ownership or funding.",
+          "description": "Whether Progress IT involvement is needed."
+        },
+        "has_ai_features": {
+          "label": "Does the solution/product have any AI features embedded in it?",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Whether the product/service includes AI capabilities."
+        },
+        "askprogress_ticket_number": {
+          "label": "ASKprogress ticket number",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "If the use case hasn't been reviewed and approved, there will be an impact on the lead time.",
+          "description": "Reference to ASKProgress AI Request form ticket. Links to AI Acceptable Use Policy.",
+          "conditional": true,
+          "condition_note": "Likely relevant only when 'has_ai_features' is Yes."
+        },
+        "vendor_system_access": {
+          "label": "Will the vendor require any Progress system access?",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Whether the vendor needs access to Progress systems."
+        },
+        "vendor_name": {
+          "label": "Vendor name",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Name of the vendor."
+        },
+        "vendor_email": {
+          "label": "Vendor e-mail address",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Contact email for the vendor."
+        },
+        "vendor_contact_names": {
+          "label": "Vendor contact names",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Names of vendor contacts."
+        },
+        "vendor_country": {
+          "label": "Country of the vendor",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Country where the vendor is based."
+        },
+        "vendor_website": {
+          "label": "Please provide a link to the vendor's website",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "This helps us learn about the vendor's business and goods/services.",
+          "description": "URL of vendor's website."
+        },
+        "total_value_usd": {
+          "label": "What is the total value of the product/service (in USD)?",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "For any month-to-month subscriptions, please fill out the estimated total cost for the next 12 months.",
+          "description": "Total cost in USD."
+        },
+        "information_exchange_type": {
+          "label": "Information exchange type",
+          "type": "checkbox_group",
+          "required": true,
+          "description": "Specify what kind of information will be exchanged, used, accessed or stored between Progress and the vendor/3rd-party. Check all that apply.",
+          "help_text": "PII = Personally Identifiable Information (names, emails, etc.). Confidential = proprietary business information.",
+          "options": [
+            {
+              "value": "none",
+              "label": "None",
+              "default": false
+            },
+            {
+              "value": "employee_customer_pii",
+              "label": "Progress' Employee(s) or Customer(s) PII (names, e-mail addresses, etc.)",
+              "default": false
+            },
+            {
+              "value": "vendor_provides_pii",
+              "label": "Vendor is providing Progress with PII (e.g. lead data, attendee lists)",
+              "default": false
+            },
+            {
+              "value": "progress_confidential",
+              "label": "Progress' or Progress Customers' Confidential Information",
+              "default": false
+            },
+            {
+              "value": "vendor_confidential",
+              "label": "Vendor's Confidential Information",
+              "default": false
+            },
+            {
+              "value": "other",
+              "label": "Other",
+              "default": false
+            }
+          ]
+        },
+        "target_date": {
+          "label": "Target date for finalization of purchase",
+          "type": "date",
+          "required": false,
+          "default": null,
+          "placeholder": "DD-MMM-YY",
+          "description": "Desired completion date. Has a calendar picker."
+        },
+        "remaining_terms": {
+          "label": "If not all business terms are finalized or accurate, please specify any remaining or inaccurate terms",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "Example: no auto-renewal, intellectual property ownership terms, termination terms",
+          "description": "Outstanding or inaccurate business terms."
+        },
+        "paying_entity": {
+          "label": "Paying Progress Entity",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Progress legal entity making the payment."
+        },
+        "cost_center": {
+          "label": "Cost Center",
+          "type": "reference",
+          "required": false,
+          "default": "(auto-populated from user profile)",
+          "description": "Cost center reference. Auto-populated based on user profile. Has Preview and Clear buttons."
+        },
+        "product_division": {
+          "label": "Product Division",
+          "type": "reference",
+          "required": false,
+          "default": "(auto-populated from user profile)",
+          "description": "Product division reference. Auto-populated based on user profile. Has Preview and Clear buttons."
+        },
+        "additional_comments": {
+          "label": "Additional comments / Requirements / Special Instructions",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "description": "Any additional information. Full WYSIWYG rich text editor."
+        }
+      }
+    },
+    "development_tool_issue": {
+      "name": "Development Tool Issue",
+      "description": "Report issues with Source Code Control, Agile, Bug Tracking Systems and other common development tools such as Clearcase, SubVersion, Jira, Perforce, GitHub, TeamCity, ClearQuest, TeamPulse, AHA, FishEye.",
+      "category": "IT",
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "text",
+          "required": true,
+          "default": null,
+          "placeholder": "",
+          "description": "Description of the tool issue."
+        },
+        "tool": {
+          "label": "Tool",
+          "type": "reference",
+          "required": false,
+          "default": null,
+          "description": "Reference lookup for the development tool. Has 'Lookup using list' link."
+        },
+        "type": {
+          "label": "Type",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Type of tool issue."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": "Low",
+          "options": ["Low", "Medium", "High"],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "development_machine_issue": {
+      "name": "Development Machine Issue",
+      "description": "Report a problem with an existing development machine.",
+      "category": "IT",
+      "fields": {
+        "product": {
+          "label": "Product",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "description": "Select the product this issue relates to."
+        },
+        "machine_location": {
+          "label": "Machine Location",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Location of the development machine."
+        },
+        "type": {
+          "label": "Type",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Type of machine issue."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "development_database_issue": {
+      "name": "Development Database Issue",
+      "description": "Report a problem with existing development test database services.",
+      "category": "IT",
+      "fields": {
+        "product": {
+          "label": "Product",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "description": "Select the product this issue relates to."
+        },
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "description": "Detailed description of the database issue."
+        },
+        "database_location": {
+          "label": "Database Location",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Location of the database."
+        },
+        "type": {
+          "label": "Type",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Type of database issue."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": "Low",
+          "options": ["Low", "Medium", "High"],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "development_database_request": {
+      "name": "Development Database Request",
+      "description": "Request a new development database or client installation or reconfiguration.",
+      "category": "IT",
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "default": null,
+          "description": "Detailed description of the database request."
+        },
+        "desired_database_location": {
+          "label": "Desired Database Location",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Preferred location for the new database."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": "Low",
+          "options": ["Low", "Medium", "High"],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "other_development_request": {
+      "name": "Other Development Request",
+      "description": "Requests for Other Development Resources.",
+      "category": "IT",
+      "fields": {
+        "product": {
+          "label": "Product",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "description": "Select the product this request relates to."
+        },
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "description": "Detailed description of the development request."
+        },
+        "impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": false,
+          "default": "Low",
+          "options": ["Low", "Medium", "High"],
+          "description": "Impact level on productivity."
+        }
+      }
+    },
+    "request_vpn_access": {
+      "name": "Request VPN Access",
+      "description": "Request VPN Access. Includes self-help link to VPN-related KB articles.",
+      "category": "IT",
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "default": null,
+          "description": "Describe the VPN access needed."
+        }
+      }
+    },
+    "password_reset": {
+      "name": "Password Reset",
+      "description": "Password Reset. Includes self-help references to KB Articles for self-service password reset.",
+      "category": "IT",
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "default": null,
+          "description": "Describe the password reset needed."
+        }
+      }
+    },
+    "general_ip_request": {
+      "name": "General IP Request",
+      "description": "General IP Request (Infringement/Enforcement, NDA, Usage, etc.)",
+      "category": "Business Operations",
+      "fields": {
+        "location_of_requestor": {
+          "label": "Location of Requestor",
+          "type": "text",
+          "required": true,
+          "default": null,
+          "placeholder": "",
+          "description": "Physical location of the person making the request."
+        },
+        "department_of_requestor": {
+          "label": "Department of Requestor",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Department of the requestor."
+        },
+        "ip_request_type": {
+          "label": "Type of the General IP request",
+          "type": "dropdown",
+          "required": false,
+          "default": null,
+          "options": [],
+          "description": "Type of IP request (Infringement, Enforcement, NDA, Usage, etc.)."
+        },
+        "other_party_email": {
+          "label": "Other party signatory email address",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Email of the other party involved."
+        }
+      },
+      "notes": "Please attach any documents/email communications between Progress and the opposing party to date."
+    },
+    "new_hire_form": {
+      "name": "New Hire Form",
+      "description": "Onboarding form for new hires. Multi-step wizard with 3 tabs: Describe Needs, Choose Options, Summary.",
+      "category": "IT",
+      "wizard_steps": ["Describe Needs", "Choose Options", "Summary"],
+      "fields": {
+        "onboarding_employee": {
+          "label": "Onboarding employee",
+          "type": "reference",
+          "required": true,
+          "default": null,
+          "description": "User reference lookup for the new hire. Has 'Lookup using list' link.",
+          "wizard_step": "Describe Needs"
+        },
+        "desk_location_number": {
+          "label": "Desk location number",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "help_text": "Find the desk on Progress Locator. If the New Hire will be working from home, please enter WFH. If you have any questions/concerns about office space, please reach out to your local facility team.",
+          "description": "Desk location number or 'WFH' for remote.",
+          "wizard_step": "Describe Needs"
+        },
+        "employee_type": {
+          "label": "Employee type",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Type of employee (e.g., Full-time, Contractor).",
+          "wizard_step": "Describe Needs"
+        },
+        "full_name": {
+          "label": "Full name of the new hire",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Full name of the new hire.",
+          "wizard_step": "Describe Needs"
+        },
+        "position": {
+          "label": "Position of the new hire",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Job title/position for the new hire.",
+          "wizard_step": "Describe Needs"
+        },
+        "starting_date": {
+          "label": "Starting date",
+          "type": "date",
+          "required": false,
+          "default": null,
+          "placeholder": "",
+          "description": "Start date of the new hire.",
+          "wizard_step": "Describe Needs"
+        },
+        "need_new_hardware": {
+          "label": "Need new hardware?",
+          "type": "checkbox",
+          "required": false,
+          "default": true,
+          "help_text": "Select if new hardware is required.",
+          "description": "Whether new hardware is needed. Defaults to checked.",
+          "wizard_step": "Describe Needs"
+        }
+      },
+      "notes": "Tab 2 ('Choose Options') content depends on Tab 1 selections (e.g., hardware checkbox). Tab 3 ('Summary') is a review step before submission."
+    },
+    "report_security_incident": {
+      "name": "Report a Security Incident",
+      "description": "Report suspicious activity to the Cybersecurity Operations team for triage, analysis, and response.",
+      "category": "IT",
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "description": "Describe the security incident or suspicious activity."
+        },
+        "date_and_time": {
+          "label": "Date and time",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "description": "When the incident occurred."
+        },
+        "affected_devices": {
+          "label": "List hostnames and/or IP addresses of affected devices",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "description": "Hostnames or IPs of affected devices."
+        },
+        "contact_information": {
+          "label": "Contact information",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "description": "How to reach the reporter for follow-up."
+        },
+        "actions_taken": {
+          "label": "List any actions that you have taken",
+          "type": "text",
+          "required": false,
+          "default": null,
+          "description": "Actions already taken in response to the incident."
+        }
+      }
+    },
+    "decommission_application": {
+      "name": "Decommission Application",
+      "description": "Request to retire a legacy application and associated infrastructure.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated. Submit via catalog search for 'Decommission Application'."
+    },
+    "request_application_assistance": {
+      "name": "Request Application Assistance",
+      "description": "Request general assistance for business applications and all associated components. Use this template for any request related to applications NOT developed by Progress (Microsoft 365 Copilot Studio, Azure, Power Platform, third-party SaaS, etc.). For Progress-owned products, use other_development_request or development_cloud_issue instead.",
+      "category": "IT",
+      "url": "https://progress1.service-now.com/esc?id=sc_cat_item&sys_id=69a04cbfdb02109086e95f77489619bf",
+      "fields": {
+        "application": {
+          "label": "Please select the application from the list",
+          "type": "dropdown",
+          "required": true,
+          "default": null,
+          "options": [],
+          "description": "Select2-backed reference lookup of registered applications. Type a few characters to filter (e.g., 'Copilot' returns 'Microsoft 365 Copilot Studio'). Use `ticket form lookup -T request_application_assistance -f 'Please select the application from the list' -s <term>` to find the exact value.",
+          "lookup": true
+        },
+        "unable_to_find_application": {
+          "label": "Unable to find the application in the list above",
+          "type": "checkbox",
+          "required": false,
+          "default": false,
+          "description": "Check this if the target application is not in the lookup. Checking it likely reveals a conditional free-text field where you can name the application. Leave unchecked when a matching application exists in the lookup (preferred)."
+        },
+        "description": {
+          "label": "Detailed description",
+          "type": "textarea",
+          "required": false,
+          "default": null,
+          "description": "Free-form rich-text description of the request. WYSIWYG editor with bold/italic/lists/links/code."
+        }
+      },
+      "notes": "Use for non-Progress applications (Microsoft 365, Azure, Power Platform, third-party SaaS). The 'application' field is a required Select2 lookup — search it with `ticket form lookup` before submitting."
+    },
+    "request_access_business_application": {
+      "name": "Request Access to a Business Application",
+      "description": "Request access to a Progress business application such as Tableau, Confluence, Jira, etc.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated. Submit via catalog search for 'Request Access to a Business Application'."
+    },
+    "business_services_automated_deployment": {
+      "name": "Business Services automated application deployment",
+      "description": "Automated application deployment for business services.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "report_application_issue": {
+      "name": "Report an Application Issue or Error",
+      "description": "The business application displays an error message or does not perform as expected.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated. Submit via catalog search for 'Report an Application Issue or Error'."
+    },
+    "email_modification": {
+      "name": "Email Modification",
+      "description": "Modify permissions, distribution lists, anti-spam, and public folders.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "sharepoint_team_sites": {
+      "name": "SharePoint Team Sites",
+      "description": "Manage private team sites in Progresssoftware.sharepoint.com.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "domain_request": {
+      "name": "Domain Request",
+      "description": "Domain Requests (Domain Registration, DNS Server Changes, and/or Current Domain Portfolio).",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "request_vlan": {
+      "name": "Request Vlan",
+      "description": "Request Vlan.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "backup_services": {
+      "name": "Backup Services",
+      "description": "Request backup for a server.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "server_vm_retirement": {
+      "name": "Server/VM retirement",
+      "description": "Request retirement of a server or virtual machine.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "file_resources": {
+      "name": "File Resources",
+      "description": "Access, restore or request resources or shared folders.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "myprogress": {
+      "name": "MyProgress",
+      "description": "MyProgress related requests.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    },
+    "chef_google_drive_access": {
+      "name": "Chef - Request Access to Google Drive",
+      "description": "User is granted permission to use and interact with files stored in Google's cloud-based storage platform.",
+      "category": "IT",
+      "fields": {},
+      "notes": "Form fields not fully enumerated."
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "_comment": "Data-driven config for the post-cart-build browser flow used by `doordash orders reorder --confirm`. The cart itself is built server-side via the `reorderOrder` GraphQL mutation in client.py; this file describes ONLY the steps required to submit that cart through the checkout UI. Dry-run does not touch the browser at all -- it stops after the API call. {cart_uuid} is substituted with the cart UUID returned by the mutation before navigation.",
+  "version": 3,
+  "steps": [
+    {
+      "id": "open_checkout",
+      "description": "Navigate to the checkout page for the cart we just built. DoorDash uses query-string-based cart routing; the cart UUID returned by `reorderOrder` is the orderCartId.",
+      "action": "goto",
+      "url_templates": [
+        "https://www.doordash.com/checkout?orderCartId={cart_uuid}"
+      ],
+      "wait_for_selector_any": ["body"],
+      "wait_timeout_ms": 30000,
+      "required": true
+    },
+    {
+      "id": "wait_for_turnstile_clear",
+      "description": "Cloudflare Turnstile may interstitially gate checkout. Allow up to 120s for the widgets and the SPA loading panel to disappear before clicking Place Order.",
+      "action": "wait_for_selectors_to_disappear",
+      "selectors": [
+        "[data-testid='turnstile/widget']",
+        "[data-testid='turnstile/banner']",
+        "[data-testid='turnstile/overlay']",
+        "[data-testid='loadingPanel']"
+      ],
+      "wait_timeout_ms": 120000,
+      "required": true
+    },
+    {
+      "id": "wait_for_place_order_button",
+      "description": "Wait until the Place Order button appears on the checkout page.",
+      "action": "wait_for_url_or_selector",
+      "url_patterns": [],
+      "selectors": [
+        "[data-testid='checkout-place-order-button']",
+        "[data-anchor-id='CheckoutPlaceOrderButton']",
+        "button:has-text('Place Order')",
+        "button:has-text('Place order')"
+      ],
+      "wait_timeout_ms": 30000,
+      "confirm_only": true,
+      "required": true
+    },
+    {
+      "id": "submit_checkout",
+      "description": "Click the Place Order button. Only runs when --confirm is passed. This step actually charges the saved payment method.",
+      "action": "click_first",
+      "selectors": [
+        "[data-testid='checkout-place-order-button']",
+        "[data-anchor-id='CheckoutPlaceOrderButton']",
+        "button:has-text('Place Order')",
+        "button:has-text('Place order')"
+      ],
+      "confirm_only": true,
+      "required": true
+    },
+    {
+      "id": "wait_for_confirmation",
+      "description": "After submission, DoorDash navigates to the order confirmation page. Wait for that signal so we can extract the new order id.",
+      "action": "wait_for_url_or_selector",
+      "url_patterns": [
+        "/orders/[0-9a-fA-F-]+/?",
+        "/order-status/",
+        "/order-confirmation"
+      ],
+      "selectors": [
+        "[data-testid='OrderTrackerHeader']",
+        "[data-anchor-id='OrderTrackerHeader']",
+        "h1:has-text('Order')",
+        "h2:has-text('Order placed')"
+      ],
+      "wait_timeout_ms": 60000,
+      "confirm_only": true,
+      "required": true
+    }
+  ]
+}

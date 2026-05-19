@@ -1,0 +1,60 @@
+{
+  "_comment": "Maps Slack API operations to required token types. Token types: bot (any token), user (xoxp/xoxc), session (xoxc only)",
+  "_token_types": {
+    "bot": "Any token works - prefers bot token (xoxb) from OAuth app, falls back to user (xoxp) or session (xoxc)",
+    "user": "Requires user token (xoxp) or session token (xoxc)",
+    "session": "Requires session token (xoxc) only - browser-extracted tokens for internal APIs"
+  },
+  "operations": {
+    "auth.test": "bot",
+    "team.info": "bot",
+
+    "conversations.list": "bot",
+    "conversations.info": "bot",
+    "conversations.create": "bot",
+    "conversations.archive": "bot",
+    "conversations.join": "bot",
+    "conversations.leave": "bot",
+    "conversations.history": "bot",
+    "conversations.replies": "bot",
+    "conversations.open": "bot",
+
+    "users.conversations": "bot",
+    "users.list": "bot",
+    "users.info": "bot",
+    "users.lookupByEmail": "bot",
+    "users.profile.set": "user",
+    "users.setPhoto": "user",
+
+    "chat.postMessage": "bot",
+    "chat.delete": "bot",
+
+    "files.list": "bot",
+    "files.upload": "bot",
+    "files.getUploadURLExternal": "bot",
+    "files.completeUploadExternal": "bot",
+    "files.info": "bot",
+    "files.delete": "bot",
+
+    "bookmarks.list": "bot",
+    "pins.list": "bot",
+
+    "canvases.sections.lookup": "user",
+
+    "search.messages": "user",
+    "search.files": "user",
+    "search.all": "user",
+
+    "saved.list": "session",
+    "saved.add": "session",
+    "saved.remove": "session",
+
+    "reminders.list": "session",
+    "reminders.add": "session",
+    "reminders.complete": "session",
+    "reminders.delete": "session",
+
+    "client.counts": "session",
+    "client.boot": "session"
+  }
+}

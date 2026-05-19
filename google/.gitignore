@@ -1,0 +1,13 @@
+.env
+.env.*
+.venv/
+token.json
+credentials.json
+__pycache__/
+*.egg-info/
+.profiles/
+plans/
+tasks/
+!.env.example
+
+scripts/*.log

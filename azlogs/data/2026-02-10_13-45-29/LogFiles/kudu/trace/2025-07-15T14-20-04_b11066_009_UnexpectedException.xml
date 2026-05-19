@@ -1,0 +1,3 @@
+<exception>System.NullReferenceException: Object reference not set to an instance of an object.
+   at Kudu.Core.Infrastructure.XmlUtility.EscapeXmlText(String value) in /tmp/KuduLite/Kudu.Core/Infrastructure/XmlUtility.cs:line 75
+   at Kudu.Core.Tracing.XmlTracer.WriteStartElement(String title, IDictionary`2 attribs) in /tmp/KuduLite/Kudu.Core/Tracing/XmlTracer.cs:line 124</exception>

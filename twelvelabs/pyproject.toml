@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twelvelabs-cli"
+version = "0.1.0"
+description = "CLI interface for Twelvelabs API"
+requires-python = ">=3.9"
+dependencies = [
+    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "typer[all]>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "pydantic>=2.0.0",
+    "twelvelabs>=1.0.0",
+]
+
+[project.scripts]
+twelvelabs = "twelvelabs_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["twelvelabs_cli*"]

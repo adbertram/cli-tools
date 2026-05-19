@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+.DS_Store
+plans/
+tasks/
+.profiles/
+.env.*
+!.env.example
+.venv/
+
+scripts/*.log

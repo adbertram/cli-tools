@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.env
+.venv/
+venv/
+plans/
+tasks/
+.profiles/
+.env.*
+!.env.example
+
+scripts/*.log

@@ -1,0 +1,26 @@
+query getFeedV2($offset: Int!, $limit: Int!, $lat: Float!, $lng: Float!) {
+  storeFeed(offset: $offset, limit: $limit, lat: $lat, lng: $lng) {
+    stores {
+      id
+      name
+      description
+      headerImgUrl
+      averageRating
+      displayDeliveryFee
+      distanceFromConsumer
+      deliveryTime {
+        minTime
+        maxTime
+        asapMinutesRange
+      }
+      status {
+        isOpen
+      }
+      tags {
+        name
+      }
+    }
+    nextOffset
+    hasMore
+  }
+}

@@ -1,0 +1,169 @@
+{
+  "cookies": [
+    {
+      "name": "__Host-instacart_sid",
+      "value": "v2.1a45849.eiYUO-uOEVA4pxonqu2BTFkM_lVFP-6pKuRfI16-Icg",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1800336179.199842,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_instacart_session_id",
+      "value": "SzVZK3cvdG15d2xJNU1OWFBtVXlXMTFZUkJaUVAvNjVkQ0JnOUdlVDlFS3RwVEFjYlUwVlRJcFB6OE45VDNZR0luTTRlSnVML3BiZ3NESFBoUzVncGptTGVoR0crdDdpV3ZBSURKOE0zMW1XMGlLaFpINjE4RXpqem1zL1lmdFU2NXMwamloV2tGNmxuWEFHZWRPMElYSHR5L2Q0dlZYOXJ3Nm9TaXhpK3RFPS0tb29wb1M0eVlYM1BWWjNzVngzMUZodz09--a33312ea5e304e21c5d7a617b7f74197040d870d",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "device_uuid",
+      "value": "dc88956a-8827-40dc-bb78-51e37dabf824",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1803339045.261508,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "known_visitor",
+      "value": "%7Crandafaith%40gmail.com%7Cemail_code",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1803339227.199862,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ahoy_visitor",
+      "value": "CFD0FF59-54b0-4956-8ee5-91868568ea20",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1803339550.844967,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ahoy_visit",
+      "value": "FFE7F588-974a-4e48-852c-dfa025e047e8",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1768793950.844955,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "privacy_opt_out",
+      "value": "false",
+      "domain": "www.instacart.com",
+      "path": "/",
+      "expires": 1803339228.658546,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "aws-waf-token",
+      "value": "5d060d84-cded-45ce-b868-f38a453826db:EQoAcTakp0a/AAAA:/27IBGUw0c3RjewgMSGjTUfqdCoukOKtruKy6qCXhdQMaSCwzpZEPI0IWac7qwBZIU+pginGfuylMzHm2KDVFKcBH6PpS8HomMYZwuqd40OFloaz6T6czdg78EYeq98BrjHH49NaHP2XBHipLPgkVsqBrgUroZv7Dt3tEnvxdfHVWmjPDL9I7LgemdnBF+VMed8=",
+      "domain": ".www.instacart.com",
+      "path": "/",
+      "expires": 1769124999,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "forterToken",
+      "value": "03821035bd10424d8db8302d3acd63f6_1768779228983__UDF43-m4_24ck_",
+      "domain": ".instacart.com",
+      "path": "/",
+      "expires": 1803339231,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "graphql_endpoint": "https://www.instacart.com/graphql",
+  "persisted_queries": {
+    "PersonalOrderHistory": {
+      "sha256Hash": "064e7e11dc7ca1f3a4e855776d5ff6543580bf75eaede3ddba5013a9ac732a88",
+      "variables": {"first": 50}
+    },
+    "OrderDeliveriesConnection": {
+      "sha256Hash": "3a607c6dd2f24ed259549a32fb83378178ad88625db1a25b8377e7ab14fdfcd1",
+      "variables": {"numResults": 10}
+    },
+    "PostCheckoutOrderDelivery": {
+      "sha256Hash": "917b2a623586c6c10ca43dd2dfe27db9b13e50c713bdbecf50ca49f196cfa1f7",
+      "variables": {
+        "includePostCheckoutCards": true,
+        "includeShopperChat": true,
+        "includeOrderItems": true,
+        "includeOrderChanges": true,
+        "includePostCheckoutLoadingPlacement": true,
+        "orderId": ""
+      }
+    },
+    "CurrentUserFields": {
+      "sha256Hash": "d7d1050d8a8efb9a24d2fd0d9c39f58d852ab84ea709370bcbedbca790112952",
+      "variables": {}
+    },
+    "PersonalActiveCarts": {
+      "sha256Hash": "eac9d17bd45b099fbbdabca2e111acaf2a4fa486f2ce5bc4e8acbab2f31fd8c0",
+      "variables": {}
+    },
+    "CartData": {
+      "sha256Hash": "febb10bfcc2ba31eec79ad3f2bd7ef1e1a7d2d893b4f212ff438188bb5c1d359",
+      "variables": {"id": ""}
+    },
+    "HomepageShopCollection": {
+      "sha256Hash": "a1673521c0b83b8e73bda30552c5ae950fa24a4d31b599ec15c944d7fa3f45eb",
+      "variables": {"postalCode": "", "coordinates": {"latitude": 0, "longitude": 0}}
+    },
+    "UserAddresses": {
+      "sha256Hash": "22e6dfa5cb0c9e731bfb696f34f573c1c2e31b8191e96c2b14329c33400a0ddc",
+      "variables": {}
+    },
+    "CartTotals": {
+      "sha256Hash": "984e5041a796558d5c037722f5b3d35dcfc5d1c4c0d5580fa48b862502241ee0",
+      "variables": {"cartId": "", "shopId": "", "postalCode": ""}
+    },
+    "UserCartEnriched": {
+      "sha256Hash": "10f26994adc208a88841189d8ddd9f10204f75ec82c9acd0da552c298f04109e",
+      "variables": {"id": "", "shopId": "", "postalCode": ""}
+    },
+    "UserCart": {
+      "sha256Hash": "32a2c15d1cbda8f819ec107bacd83bc45add7e783d29cd0595b02254650918c1",
+      "variables": {"id": ""}
+    },
+    "cartItemCollection": {
+      "sha256Hash": "6ae22a1c59a391baf4d472d1418d4a2f538d163f4780ad3d6e1fba6e04ad7a8a",
+      "variables": {"id": ""}
+    },
+    "Items": {
+      "sha256Hash": "3301eb584bf218a369afa2a9300c81d00a2d691bacf9523adc5701d954cf62d3",
+      "variables": {"ids": [], "shopId": "", "zoneId": "", "postalCode": ""}
+    },
+    "HomeListCart": {
+      "sha256Hash": "731fda58b48911184d4449601f4d7e555c418f5edd5c8ad22f0cff05e3449f0c",
+      "variables": {}
+    },
+    "CrossRetailerAvailableRetailerServices": {
+      "sha256Hash": "b86d952cc2e417327f028e8abbf3fa479eba81f3e271a7db3898c28de37cc4cd",
+      "variables": {"postalCode": "", "addressId": "", "coordinates": {"latitude": 0, "longitude": 0}}
+    },
+    "FinishMyCartViewLayout": {
+      "sha256Hash": "10a27fc14e45bcc957edb0fb19dd330772af47057fa2a6ed3005a255cac4cd3f",
+      "variables": {"retailerId": ""}
+    }
+  },
+  "captured_at": "2026-01-18T17:33:00Z"
+}

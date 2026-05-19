@@ -1,0 +1,116 @@
+import sys
+import types
+
+import pytest
+
+from copilot_cli.config import Config, _reset_config
+from copilot_cli.commands.mcp import _acquire_mcp_token
+
+
+def _write_profile(path, *, is_default, dataverse_url):
+    path.write_text(
+        "\n".join(
+            [
+                f"IS_DEFAULT_PROFILE={1 if is_default else 0}",
+                f"DATAVERSE_URL={dataverse_url}",
+            ]
+        )
+        + "\n"
+    )
+
+
+def _setup_xdg_profiles_dir(tmp_path, monkeypatch):
+    """Point COPILOT_CONFIG_DIR at tmp_path and return the profiles dir."""
+    monkeypatch.setenv("COPILOT_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    profiles = tmp_path / "profiles"
+    profiles.mkdir(parents=True, exist_ok=True)
+    _reset_config()
+    return profiles
+
+
+def test_config_uses_active_profile_and_ignores_profile_environment_overrides(tmp_path, monkeypatch):
+    """The active-profile selection must not be diverted by stray env vars
+    such as ``COPILOT_CLI_TOOL_PROFILE`` or ``CLI_TOOLS_PROFILE`` — only an
+    explicit ``profile`` argument or the ``IS_DEFAULT_PROFILE=1`` marker
+    should switch profiles. This is the core invariant the public CLI
+    relies on for predictable credential lookup.
+    """
+    profiles = _setup_xdg_profiles_dir(tmp_path, monkeypatch)
+
+    active_profile = profiles / "active.env"
+    env_override_profile = profiles / "env_override.env"
+    cli_override_profile = profiles / "cli_override.env"
+
+    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
+    _write_profile(env_override_profile, is_default=False, dataverse_url="https://env.example.crm.dynamics.com")
+    _write_profile(cli_override_profile, is_default=False, dataverse_url="https://cli.example.crm.dynamics.com")
+
+    monkeypatch.setenv("COPILOT_CLI_TOOL_PROFILE", "env_override")
+    monkeypatch.setenv("CLI_TOOLS_PROFILE", "cli_override")
+
+    config = Config()
+
+    assert config.env_file_path == active_profile
+    assert config.dataverse_url == "https://active.example.crm.dynamics.com"
+
+
+def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch):
+    profiles = _setup_xdg_profiles_dir(tmp_path, monkeypatch)
+
+    active_profile = profiles / "active.env"
+    explicit_profile = profiles / "explicit.env"
+
+    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
+    _write_profile(explicit_profile, is_default=False, dataverse_url="https://explicit.example.crm.dynamics.com")
+
+    monkeypatch.setenv("COPILOT_CLI_TOOL_PROFILE", "active")
+    monkeypatch.setenv("CLI_TOOLS_PROFILE", "active")
+
+    config = Config(profile="explicit")
+
+    assert config.env_file_path == explicit_profile
+    assert config.dataverse_url == "https://explicit.example.crm.dynamics.com"
+
+
+def test_mcp_token_acquisition_uses_only_active_profile(tmp_path, monkeypatch):
+    """MCP token acquisition must read AZURE_CLIENT_ID from the active
+    profile only — never silently fall back to a different profile that
+    happens to have AZURE_CLIENT_SECRET set. This guards against the
+    cross-profile credential-leak class of bugs.
+    """
+    profiles = _setup_xdg_profiles_dir(tmp_path, monkeypatch)
+
+    active_profile = profiles / "active.env"
+    old_service_principal_profile = profiles / "legacy_tenant_service_principal.env"
+
+    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
+    old_service_principal_profile.write_text(
+        "\n".join(
+            [
+                "IS_DEFAULT_PROFILE=0",
+                "DATAVERSE_URL=https://sp.example.crm.dynamics.com",
+                "AZURE_CLIENT_ID=service-principal-client-id",
+                "AZURE_CLIENT_SECRET=service-principal-secret",
+            ]
+        )
+        + "\n"
+    )
+
+    _reset_config()
+
+    class FailingConfidentialClientApplication:
+        def __init__(self, **_kwargs):
+            raise AssertionError("MCP token acquisition must not load a fallback profile")
+
+    fake_msal = types.SimpleNamespace(
+        ConfidentialClientApplication=FailingConfidentialClientApplication,
+        PublicClientApplication=FailingConfidentialClientApplication,
+    )
+    monkeypatch.setitem(sys.modules, "msal", fake_msal)
+
+    with pytest.raises(RuntimeError, match="No AZURE_CLIENT_ID found"):
+        _acquire_mcp_token(
+            "https://login.microsoftonline.com/tenant-id",
+            ["api://resource-id/mcp.tools"],
+        )

@@ -1,0 +1,37 @@
+# Profiles and credentials
+.profiles/
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Pytest
+.pytest_cache/
+
+# Storage
+.storage/
+.browser-data/
+plans/
+tasks/
+
+scripts/*.log

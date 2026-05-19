@@ -1,0 +1,5 @@
+<step title="Startup Request" date="2026-02-04T20:16:45.114" instance="aa6af9" url="/api/vfs/LogFiles/" method="GET" type="request" pid="776,1,5" ScmType="None" >
+  <step title="Cleanup Xml Logs" date="2026-02-04T20:16:45.197" >
+    <step title="Cleanup Infos" date="2026-02-04T20:16:45.416" totalFiles="590" totalCleanup="430" /><!-- duration: 196ms -->
+  </step><!-- duration: 472ms -->
+</step><!-- duration: 576ms -->
