@@ -185,7 +185,7 @@ wheels = [
 [[package]]
 name = "cli-tools-shared"
 version = "0.2.0"
-source = { git = "https://github.com/adbertram/cli-tools.git?subdirectory=cli-tools-shared#84e96b2d5d86bf6623c714a06120188ce1543033" }
+source = { git = "https://github.com/adbertram/cli-tools.git?subdirectory=cli-tools-shared#11ddc057cc909e1278b3cdd5369a285e90d329a3" }
 dependencies = [
     { name = "browser-harness" },
     { name = "pydantic" },
