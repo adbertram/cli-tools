@@ -15,6 +15,9 @@ class BrowserHarnessError(Exception):
     """Error from BrowserHarnessService operations."""
 
 
+PlaywrightServiceError = BrowserHarnessError
+
+
 def __getattr__(name):
     if name == "BrowserHarnessService":
         from .driver import BrowserHarnessService

@@ -1,5 +1,0 @@
-<step title="Startup Request" date="2025-02-12T17:33:54.915" instance="09f58e" url="/api/settings" method="GET" type="request" pid="87,1,3" ScmType="None" >
-  <step title="Cleanup Xml Logs" date="2025-02-12T17:33:54.927" >
-    <step title="Cleanup Infos" date="2025-02-12T17:33:54.939" totalFiles="283" totalCleanup="123" /><!-- duration: 8ms -->
-  </step><!-- duration: 23ms -->
-</step><!-- duration: 42ms -->

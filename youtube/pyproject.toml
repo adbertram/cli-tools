@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "youtube-cli"
 version = "0.1.0"
 description = "CLI interface for Youtube API"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
     "typer>=0.9.0",

@@ -1,5 +1,0 @@
-<step title="Process Shutdown" date="2025-03-07T22:20:23.936" instance="abdb31" pid="825,1,2" uptime="00:22:10.3527606" lastrequesttime="00:00:16.3367030" >
-  <step title="Cleanup Xml Logs" date="2025-03-07T22:20:23.938" >
-    <step title="Cleanup Infos" date="2025-03-07T22:20:24.038" totalFiles="1285" totalCleanup="1125" /><!-- duration: 11ms -->
-  </step><!-- duration: 129ms -->
-</step><!-- duration: 140ms -->

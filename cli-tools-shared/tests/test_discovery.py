@@ -15,16 +15,16 @@ def _make_cli(tool_dir: Path, pkg: str, imports: str = "from cli_tools_shared.au
 
 def test_discover_consumers_finds_browser_py_under_cli_tools_shared_consumers(tmp_path):
     """Glob picks up every ``<tool>/<pkg>_cli/browser.py`` whose package
-    imports ``cli_tools_shared``. CLIs that import from a sibling package
-    (``cli_tools_shared``) must NOT appear in the result.
+    imports ``cli_tools_shared``. CLIs that do not import the shared package
+    must NOT appear in the result.
     """
     bricklink_browser = _make_cli(tmp_path / "bricklink", "bricklink_cli")
     ebay_browser = _make_cli(tmp_path / "ebay", "ebay_cli")
-    # A CLI on the older sibling library — must be excluded.
+    # A CLI without the shared package import — must be excluded.
     _make_cli(
         tmp_path / "google",
         "google_cli",
-        imports="from cli_tools_shared.auth import BrowserAutomation\n",
+        imports="from pathlib import Path\n",
     )
     # Junk directories — must be ignored.
     (tmp_path / ".git").mkdir()

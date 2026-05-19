@@ -1,5 +1,0 @@
-<step title="Startup Request" date="2025-11-07T14:53:54.895" instance="b2f004" url="/api/publish?async=true&amp;deployer=GITHUB_ONE_DEPLOY&amp;type=zip&amp;restart=true&amp;message=%7B%22type%22%3A%22deployment%22%2C%22sha%22%3A%22ff3c1e57b2639bd4f1a9df832f622a381d17a6f3%22%2C%22repoName%22%3A%22adbertram%2FBrickBuddyApp%22%2C%22actor%22%3A%22adbertram%22%2C%22slotName%22%3A%22production%22%2C%22commitMessage%22%3A%22%22%7D" method="POST" type="request" pid="833,1,7" SCM_DO_BUILD_DURING_DEPLOYMENT="false" ScmType="None" >
-  <step title="Cleanup Xml Logs" date="2025-11-07T14:53:54.945" >
-    <step title="Cleanup Infos" date="2025-11-07T14:53:56.166" totalFiles="5990" totalCleanup="5830" /><!-- duration: 177ms -->
-  </step><!-- duration: 1435ms -->
-</step><!-- duration: 1488ms -->

@@ -1,5 +1,0 @@
-<step title="Incoming Request" date="2026-02-04T20:29:39.362" instance="aa6af9" url="/logstream" method="GET" type="request" pid="776,1,33" Host="devolutions-ciem-psu.scm.azurewebsites.net" User-Agent="AZURECLI/2.80.0 (HOMEBREW)" Accept-Encoding="identity" Authorization="Bas..." x-ms-client-request-id="35f283b6-0208-11f1-b3ab-1a5eb7385422" X-ARR-LOG-ID="35f283b6-0208-11f1-b3ab-1a5eb7385422" CLIENT-IP="74.129.114.247:64184" X-SITE-DEPLOYMENT-ID="devolutions-ciem-psu" WAS-DEFAULT-HOSTNAME="devolutions-ciem-psu.scm.azurewebsites.net" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-Original-Proto="http" X-WAWS-Unencoded-URL="/logstream" X-Client-IP="74.129.114.247" X-Client-Port="64184" X-Original-For="169.254.129.1:31893" >
-  <step title="Cleanup Xml Logs" date="2026-02-04T20:29:39.373" >
-    <step title="Cleanup Infos" date="2026-02-04T20:29:39.665" totalFiles="601" totalCleanup="441" /><!-- duration: 214ms -->
-  </step><!-- duration: 562ms -->
-  <step title="LogStreamHandlerMiddleware.Invoke" date="2026-02-04T20:29:40.545" /><!-- duration: 11258ms -->

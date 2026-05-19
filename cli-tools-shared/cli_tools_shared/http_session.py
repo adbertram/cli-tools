@@ -10,12 +10,13 @@ truth; there is no on-disk snapshot.
 from __future__ import annotations
 
 import gzip
+import json
 import time
 import zlib
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .exceptions import ClientError
@@ -32,6 +33,7 @@ DEFAULT_BROWSER_HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     ),
 }
+DEFAULT_BROWSER_JSON_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class BrowserAuthStateError(ClientError):
@@ -124,6 +126,18 @@ class BrowserAuthState:
         cookies = self.cookies_for_host(hostname, allowed_domains, now=now)
         return _cookie_header(cookies, allowed_domains, required_cookies)
 
+
+@dataclass(frozen=True)
+class BrowserHttpResult:
+    """Text response plus timing data for instrumentation."""
+
+    url: str
+    status: int
+    text: str
+    bytes_read: int
+    elapsed_seconds: float
+
+
 @dataclass
 class BrowserAuthenticatedHttpClient:
     """Direct HTTP client using cookies from saved browser auth state."""
@@ -148,24 +162,357 @@ class BrowserAuthenticatedHttpClient:
         When ``stop_after_markers`` is supplied, response streaming stops after
         every marker appears in the bytes read so far.
         """
+        return self.get_text_result(
+            url,
+            headers=headers,
+            stop_after_markers=stop_after_markers,
+            chunk_size=chunk_size,
+            encoding=encoding,
+        ).text
+
+    def get_text_result(
+        self,
+        url: str,
+        headers: Mapping[str, str] | None = None,
+        stop_after_markers: Sequence[str] = (),
+        chunk_size: int = 65536,
+        encoding: str = "utf-8",
+    ) -> BrowserHttpResult:
+        """GET ``url`` and return response text with timing metadata."""
+        request = Request(url, headers=self._headers_for_url(url, headers))
+        return self._open_text_result(request, stop_after_markers, chunk_size, encoding)
+
+    def post_form_text(
+        self,
+        url: str,
+        form: Mapping[str, str],
+        headers: Mapping[str, str] | None = None,
+        encoding: str = "utf-8",
+    ) -> str:
+        """POST URL-encoded form data and return response text."""
+        return self.post_form_result(url, form, headers=headers, encoding=encoding).text
+
+    def post_form_result(
+        self,
+        url: str,
+        form: Mapping[str, str],
+        headers: Mapping[str, str] | None = None,
+        encoding: str = "utf-8",
+    ) -> BrowserHttpResult:
+        """POST URL-encoded form data and return text with timing metadata."""
+        _validate_string_mapping(form, "form")
+        request_headers = self._headers_for_url(url, headers)
+        request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        request = Request(
+            url,
+            data=urlencode(dict(form)).encode(encoding),
+            headers=request_headers,
+            method="POST",
+        )
+        return self._open_text_result(request, (), 65536, encoding)
+
+    def _headers_for_url(
+        self,
+        url: str,
+        headers: Mapping[str, str] | None,
+    ) -> dict[str, str]:
         request_headers = dict(self.headers)
         if headers is not None:
+            _validate_string_mapping(headers, "headers")
             request_headers.update(headers)
         request_headers["Cookie"] = self.auth_state.cookie_header_for_url(
-            url, self.allowed_domains, required_cookies=self.required_cookies,
+            url,
+            self.allowed_domains,
+            required_cookies=self.required_cookies,
         )
-        request = Request(url, headers=request_headers)
+        return request_headers
+
+    def _open_text_result(
+        self,
+        request: Request,
+        stop_after_markers: Sequence[str],
+        chunk_size: int,
+        encoding: str,
+    ) -> BrowserHttpResult:
+        started = time.perf_counter()
         try:
             with self.opener(request, timeout=self.timeout) as response:
                 if response.status != 200:
-                    raise ClientError(f"HTTP {response.status} returned for {url}")
+                    raise ClientError(f"HTTP {response.status} returned for {request.full_url}")
                 raw = _read_response(response, stop_after_markers, chunk_size, encoding)
+                wire_bytes = len(raw)
                 raw = _decode_response_body(raw, response.headers.get("Content-Encoding"))
         except HTTPError as exc:
-            raise ClientError(f"HTTP {exc.code} returned for {url}") from exc
+            raise ClientError(f"HTTP {exc.code} returned for {request.full_url}") from exc
         except URLError as exc:
-            raise ClientError(f"HTTP request failed for {url}: {exc.reason}") from exc
-        return raw.decode(encoding)
+            raise ClientError(f"HTTP request failed for {request.full_url}: {exc.reason}") from exc
+        return BrowserHttpResult(
+            url=request.full_url,
+            status=response.status,
+            text=raw.decode(encoding),
+            bytes_read=wire_bytes,
+            elapsed_seconds=time.perf_counter() - started,
+        )
+
+
+@dataclass
+class BrowserAutomationJsonClient:
+    """Execute same-origin JSON requests through a BrowserAutomation session."""
+
+    browser: Any
+    origin: str
+    retry_sleep: Callable[[float], None] = time.sleep
+    max_attempts: int = 3
+    retryable_status_codes: set[int] = field(
+        default_factory=lambda: set(DEFAULT_BROWSER_JSON_RETRYABLE_STATUS_CODES)
+    )
+    csrf_cookie_name: str | None = "csrftoken"
+    csrf_header_name: str = "X-CSRFToken"
+    extra_headers: Mapping[str, str] = field(default_factory=dict)
+
+    def request_json(self, method: str, path: str, json_body: Any = None) -> Any:
+        """Request JSON from a same-origin browser session endpoint."""
+        method = self._validate_method(method)
+        self._validate_path(path)
+        result = self._run_fetch_with_retry(method, path, json_body)
+        status = result["status"]
+        text = result["text"]
+        if status < 200 or status >= 300:
+            detail = text[:500] if text else result["statusText"]
+            raise ClientError(f"Browser JSON request failed with HTTP {status}: {detail}")
+        if text == "":
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ClientError(f"Browser JSON response was not valid JSON for {method} {path}.") from exc
+
+    def _run_fetch_with_retry(self, method: str, path: str, json_body: Any) -> dict[str, Any]:
+        for attempt in range(self.max_attempts):
+            result = self._run_fetch(method, path, json_body)
+            if result["status"] not in self.retryable_status_codes:
+                return result
+            if attempt == self.max_attempts - 1:
+                return result
+            self.retry_sleep(float(attempt + 1))
+        raise ClientError("Browser JSON retry loop exited unexpectedly.")
+
+    def _run_fetch(self, method: str, path: str, json_body: Any) -> dict[str, Any]:
+        payload = json.dumps({
+            "method": method,
+            "path": path,
+            "jsonBody": json_body,
+            "origin": self._origin(),
+            "csrfCookieName": self.csrf_cookie_name,
+            "csrfHeaderName": self.csrf_header_name,
+            "extraHeaders": dict(self.extra_headers),
+        })
+        code = f"""
+async () => {{
+  const request = {payload};
+  const headers = {{
+    "Accept": "application/json",
+    "X-Requested-With": "XMLHttpRequest",
+    ...request.extraHeaders
+  }};
+  const options = {{
+    method: request.method,
+    credentials: "include",
+    headers
+  }};
+  if (request.jsonBody !== null) {{
+    if (request.csrfCookieName !== null) {{
+      const prefix = request.csrfCookieName + "=";
+      const csrf = document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix));
+      if (!csrf) {{
+        throw new Error("CSRF cookie is required for browser writes: " + request.csrfCookieName);
+      }}
+      headers[request.csrfHeaderName] = decodeURIComponent(csrf.slice(prefix.length));
+    }}
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(request.jsonBody);
+  }}
+  const response = await fetch(request.path, options);
+  return {{
+    status: response.status,
+    statusText: response.statusText,
+    text: await response.text()
+  }};
+}}
+""".strip()
+        page = self.browser.get_page(self._origin() + "/")
+        try:
+            evaluation = page.page_eval(code)
+        except Exception as exc:
+            raise ClientError(f"Browser JSON page evaluation failed: {exc}") from exc
+        if not isinstance(evaluation, dict) or "result" not in evaluation:
+            raise ClientError("Browser JSON page evaluation did not return a result.")
+        result = evaluation["result"]
+        if not isinstance(result, dict):
+            raise ClientError("Browser JSON page evaluation result must be an object.")
+        for field_name in ("status", "statusText", "text"):
+            if field_name not in result:
+                raise ClientError(f"Browser JSON result missing field: {field_name}")
+        return result
+
+    def _origin(self) -> str:
+        parsed = urlparse(self.origin)
+        if not parsed.scheme or not parsed.netloc:
+            raise ClientError(f"Browser JSON origin must include scheme and host: {self.origin}")
+        return self.origin.rstrip("/")
+
+    def _validate_method(self, method: str) -> str:
+        if not isinstance(method, str) or not method:
+            raise ClientError("Browser JSON request method must be a non-empty string.")
+        normalized = method.upper()
+        if normalized not in {"GET", "PATCH", "POST", "PUT", "DELETE"}:
+            raise ClientError(f"Unsupported browser JSON request method: {normalized}")
+        return normalized
+
+    def _validate_path(self, path: str) -> None:
+        if not isinstance(path, str) or not path.startswith("/"):
+            raise ClientError("Browser JSON request path must start with '/'.")
+
+
+@dataclass(frozen=True)
+class RelayFormRequest:
+    """A Relay/GraphQL form POST with JSON variables."""
+
+    endpoint: str
+    operation_name: str
+    document_id: str
+    variables: Mapping[str, Any]
+    base_fields: Mapping[str, str]
+    operation_name_field: str = "fb_api_req_friendly_name"
+    document_id_field: str = "doc_id"
+    variables_field: str = "variables"
+
+    def form_fields(self) -> dict[str, str]:
+        """Build URL-encoded form fields for the Relay request."""
+        _validate_string_mapping(self.base_fields, "base_fields")
+        fields = dict(self.base_fields)
+        fields[self.operation_name_field] = self.operation_name
+        fields[self.document_id_field] = self.document_id
+        fields[self.variables_field] = json.dumps(self.variables, separators=(",", ":"))
+        return fields
+
+
+@dataclass(frozen=True)
+class RelayGraphQLClient:
+    """Execute Relay form POSTs through ``BrowserAuthenticatedHttpClient``."""
+
+    http: BrowserAuthenticatedHttpClient
+
+    def execute(
+        self,
+        request: RelayFormRequest,
+        headers: Mapping[str, str] | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Execute a Relay request and parse streamed JSON object responses."""
+        body = self.http.post_form_text(request.endpoint, request.form_fields(), headers=headers)
+        return tuple(iter_json_objects(body))
+
+
+def decode_json_at_marker(text: str, marker: str) -> Any:
+    """Decode the first JSON value whose first character matches ``marker``."""
+    for value in iter_json_values_at_marker(text, marker):
+        return value
+    raise ClientError(f"JSON marker not found: {marker}")
+
+
+def iter_json_values_at_marker(text: str, marker: str) -> Iterable[Any]:
+    """Yield JSON values decoded at each occurrence of ``marker``."""
+    if not marker:
+        raise ClientError("JSON marker must not be empty.")
+
+    decoder = json.JSONDecoder()
+    index = 0
+    while True:
+        start = text.find(marker, index)
+        if start < 0:
+            return
+        try:
+            value, end = decoder.raw_decode(text, start)
+        except json.JSONDecodeError as exc:
+            raise ClientError(f"Failed to decode JSON at marker: {marker}") from exc
+        yield value
+        index = end
+
+
+def extract_embedded_define(text: str, name: str, payload_index: int = 2) -> dict[str, Any]:
+    """Extract a dict payload from an embedded ``[name, ..., payload]`` array."""
+    value = decode_json_at_marker(text, f'["{name}",')
+    if not isinstance(value, list):
+        raise ClientError(f"Embedded define {name} is not a JSON array.")
+    if len(value) <= payload_index:
+        raise ClientError(f"Embedded define {name} does not contain payload index {payload_index}.")
+    payload = value[payload_index]
+    if not isinstance(payload, dict):
+        raise ClientError(f"Embedded define {name} payload is not a JSON object.")
+    return payload
+
+
+def iter_json_objects(text: str) -> Iterable[dict[str, Any]]:
+    """Yield concatenated or newline-delimited JSON objects from ``text``."""
+    decoder = json.JSONDecoder()
+    index = 0
+    while index < len(text):
+        while index < len(text) and text[index].isspace():
+            index += 1
+        if index >= len(text):
+            return
+        value, end = decoder.raw_decode(text, index)
+        if not isinstance(value, dict):
+            raise ClientError("Expected a JSON object in streamed response.")
+        yield value
+        index = end
+
+
+def required_path(
+    data: Any,
+    path: Sequence[str | int],
+    expected_type: type | tuple[type, ...] | None = None,
+) -> Any:
+    """Read a nested dict/list path and fail if any segment is missing."""
+    current = data
+    rendered = []
+    for segment in path:
+        rendered.append(str(segment))
+        if isinstance(segment, str):
+            if not isinstance(current, dict):
+                raise ClientError(f"Expected object before {'.'.join(rendered)}.")
+            if segment not in current:
+                raise ClientError(f"Missing required path: {'.'.join(rendered)}.")
+            current = current[segment]
+        elif isinstance(segment, int):
+            if not isinstance(current, list):
+                raise ClientError(f"Expected list before {'.'.join(rendered)}.")
+            if segment < 0 or segment >= len(current):
+                raise ClientError(f"Missing required path: {'.'.join(rendered)}.")
+            current = current[segment]
+        else:
+            raise ClientError(f"Path segment must be str or int, got {type(segment).__name__}.")
+
+    if expected_type is not None and not isinstance(current, expected_type):
+        raise ClientError(
+            f"Expected {'.'.join(rendered)} to be {_type_name(expected_type)}, "
+            f"got {type(current).__name__}."
+        )
+    return current
+
+
+def _validate_string_mapping(value: Mapping[str, str], label: str) -> None:
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise ClientError(f"{label} keys must be strings, got {type(key).__name__}.")
+        if not isinstance(item, str):
+            raise ClientError(f"{label}.{key} must be a string, got {type(item).__name__}.")
+
+
+def _type_name(expected_type: type | tuple[type, ...]) -> str:
+    if isinstance(expected_type, tuple):
+        return " or ".join(item.__name__ for item in expected_type)
+    return expected_type.__name__
 
 
 def _parse_cookie(raw: Any) -> BrowserCookie:

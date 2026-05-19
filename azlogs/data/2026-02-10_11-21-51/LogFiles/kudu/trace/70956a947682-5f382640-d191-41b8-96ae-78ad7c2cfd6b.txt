@@ -1,5 +1,0 @@
-2026-02-09T16:35:00    Error occurred, type: error, text: Could not find file '/home/LogFiles/2026_02_05_lw0sdlwk0004MP_docker.log'., stackTrace:    at Interop.ThrowExceptionForIoErrno(ErrorInfo errorInfo, String path, Boolean isDirError)
-   at Microsoft.Win32.SafeHandles.SafeFileHandle.Open(String fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize, UnixFileMode openPermissions, Int64& fileLength, UnixFileMode& filePermissions, Boolean failForSymlink, Boolean& wasSymlink, Func`4 createOpenException)
-   at System.IO.Strategies.OSFileStreamStrategy..ctor(String path, FileMode mode, FileAccess access, FileShare share, FileOptions options, Int64 preallocationSize, Nullable`1 unixCreateMode)
-   at Kudu.Services.Infrastructure.VfsControllerBase.GetItem() in /tmp/KuduLite/Kudu.Services/Infrastructure/VfsControllerBase.cs:line 95
-2026-02-09T16:35:00    Outgoing response, type: response, statusCode: 404, statusText: NotFound

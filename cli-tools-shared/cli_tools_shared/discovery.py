@@ -21,8 +21,8 @@ def discover_consumers(repo_root: Path | str | None = None) -> list[Path]:
     Walks ``<repo_root>/*/<pkg>_cli/browser.py``. A consumer is included
     when ``browser.py`` (or any sibling .py in the same package) contains
     a ``from cli_tools_shared``/``import cli_tools_shared`` line. Files
-    that import from a sibling package (``cli_tools_shared``) are
-    excluded. Hidden / underscore-prefixed package dirs are skipped.
+    that do not import ``cli_tools_shared`` are excluded. Hidden /
+    underscore-prefixed package dirs are skipped.
 
     Returns paths sorted by tool name for deterministic output.
     """

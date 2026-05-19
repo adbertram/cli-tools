@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "cryptocom-cli"
 version = "0.1.0"
 description = "Crypto.com Exchange API CLI"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "typer>=0.9.0",
     "python-dotenv>=1.0.0",

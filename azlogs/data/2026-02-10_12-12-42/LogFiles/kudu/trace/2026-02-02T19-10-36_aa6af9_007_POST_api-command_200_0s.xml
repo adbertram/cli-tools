@@ -1,5 +1,0 @@
-<step title="Incoming Request" date="2026-02-02T19:10:36.569" instance="aa6af9" url="/api/command" method="POST" type="request" pid="776,1,25" Accept="*/*" Host="devolutions-ciem-psu.scm.azurewebsites.net" User-Agent="curl/8.7.1" Authorization="Bas..." Content-Type="application/json" Content-Length="90" X-ARR-LOG-ID="5844e5e5-a071-468e-8fa3-c9324e3379e7" CLIENT-IP="74.129.114.247:56209" X-SITE-DEPLOYMENT-ID="devolutions-ciem-psu" WAS-DEFAULT-HOSTNAME="devolutions-ciem-psu.scm.azurewebsites.net" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-Original-Proto="http" X-WAWS-Unencoded-URL="/api/command" X-Client-IP="74.129.114.247" X-Client-Port="56209" X-Original-For="169.254.129.1:61097" >
-  <step title="Cleanup Xml Logs" date="2026-02-02T19:10:36.578" /><!-- duration: 28ms -->
-  <step title="Executing user command. " date="2026-02-02T19:10:36.646" CWD="/home" /><!-- duration: 311ms -->
-  <step title="Outgoing response" date="2026-02-02T19:10:36.975" type="response" statusCode="200" statusText="OK" /><!-- duration: 19ms -->
-</step><!-- duration: 428ms -->

@@ -129,7 +129,7 @@ cp .env.example .env
 
 ## Dependencies
 
-- typer[all] - CLI framework
+- typer - CLI framework
 - python-dotenv - Environment configuration
 - requests - HTTP client for API calls
 

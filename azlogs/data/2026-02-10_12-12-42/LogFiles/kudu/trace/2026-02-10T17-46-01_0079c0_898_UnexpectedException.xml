@@ -1,4 +1,0 @@
-<exception>System.IO.PathTooLongException: The specified file name or path is too long, or a component of the specified path is too long.
-   at System.IO.FileSystem.LinkOrCopyFile(String sourceFullPath, String destFullPath)
-   at System.IO.FileSystem.MoveFile(String sourceFullPath, String destFullPath, Boolean overwrite)
-   at Kudu.Core.Tracing.XmlTracer.WriteEndTrace() in /tmp/KuduLite/Kudu.Core/Tracing/XmlTracer.cs:line 204</exception>

@@ -1,5 +1,0 @@
-<step title="Startup Request" date="2025-02-12T00:21:27.175" instance="09f58e" url="/api/deployments/latest?deployer=GITHUB_ZIP_DEPLOY&amp;time=2025-02-12_00-12-51Z" method="GET" type="request" pid="87,1,7" ScmType="None" >
-  <step title="Cleanup Xml Logs" date="2025-02-12T00:21:27.187" >
-    <step title="Cleanup Infos" date="2025-02-12T00:21:27.215" totalFiles="228" totalCleanup="68" /><!-- duration: 39ms -->
-  </step><!-- duration: 95ms -->
-</step><!-- duration: 118ms -->

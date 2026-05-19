@@ -308,7 +308,7 @@ dropbox files search "*" | jq '.[] | select(.size > 10000000) | {name, size, pat
 
 - Python 3.9+
 - Dependencies (installed automatically):
-  - typer[all]
+  - typer
   - python-dotenv
   - dropbox
 

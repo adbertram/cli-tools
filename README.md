@@ -851,7 +851,7 @@ version = "0.1.0"
 description = "CLI interface for MyTool API"
 requires-python = ">=3.9"
 dependencies = [
-    "typer[all]>=0.9.0",
+    "typer>=0.9.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
 ]

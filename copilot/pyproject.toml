@@ -7,7 +7,7 @@ name = "copilot-cli"
 version = "0.1.0"
 description = "CLI interface for Microsoft Copilot Studio agents via Dataverse API"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Adam Bertram", email = "adbertram@gmail.com"}

@@ -1060,7 +1060,7 @@ app.add_typer(myresource.app, name="myresource", help="Manage my resource")
 
 ## Dependencies
 
-- **typer[all]** - CLI framework with rich formatting
+- **typer** - CLI framework with rich formatting
 - **pypodio2** - Podio API wrapper
 - **python-dotenv** - Environment variable management
 

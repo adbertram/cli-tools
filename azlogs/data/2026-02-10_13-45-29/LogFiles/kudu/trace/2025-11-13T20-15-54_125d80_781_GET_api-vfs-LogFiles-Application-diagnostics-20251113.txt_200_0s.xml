@@ -1,6 +1,0 @@
-<step title="Incoming Request" date="2025-11-13T20:15:54.264" instance="125d80" url="/api/vfs/LogFiles/Application/diagnostics-20251113.txt" method="GET" type="request" pid="833,1,20" Accept="*/*" Host="brickbuddy-api.scm.azurewebsites.net" User-Agent="curl/8.7.1" Authorization="Bas..." X-ARR-LOG-ID="1947d83a-e6b8-40ba-8150-85cdefb34fc7" CLIENT-IP="74.129.114.247:64442" X-SITE-DEPLOYMENT-ID="brickbuddy-api" WAS-DEFAULT-HOSTNAME="brickbuddy-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/vfs/LogFiles/Application/diagnostics-20251113.txt" X-Client-IP="74.129.114.247" X-Client-Port="64442" >
-  <step title="Cleanup Xml Logs" date="2025-11-13T20:15:54.267" >
-    <step title="Cleanup Infos" date="2025-11-13T20:15:54.548" totalFiles="12742" totalCleanup="12582" /><!-- duration: 57ms -->
-  </step><!-- duration: 343ms -->
-  <step title="Outgoing response" date="2025-11-13T20:15:54.673" type="response" statusCode="200" statusText="OK" /><!-- duration: 8ms -->
-</step><!-- duration: 423ms -->

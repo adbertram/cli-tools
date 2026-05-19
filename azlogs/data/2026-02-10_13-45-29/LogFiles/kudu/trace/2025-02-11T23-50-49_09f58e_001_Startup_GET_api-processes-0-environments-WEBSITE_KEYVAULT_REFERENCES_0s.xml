@@ -1,3 +1,0 @@
-<step title="Startup Request" date="2025-02-11T23:50:49.283" instance="09f58e" url="/api/processes/0/environments/WEBSITE_KEYVAULT_REFERENCES" method="GET" type="request" pid="86,1,7" ScmType="None" >
-  <step title="Cleanup Xml Logs" date="2025-02-11T23:50:49.296" /><!-- duration: 17ms -->
-</step><!-- duration: 38ms -->
