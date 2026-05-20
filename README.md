@@ -2,8 +2,6 @@
 
 One repo for service-specific command-line tools. Each tool is a small Python CLI with a consistent command shape, predictable JSON-first output, shared browser/auth helpers where needed, and repo-local installation through `uv`.
 
-> Scope: this README showcases CLI tools in this repo outside `_personal`. It excludes templates, skills, and shared support packages from the main catalog.
-
 ## At a Glance
 
 - 83 active CLI packages outside `_personal`.
