@@ -93,10 +93,10 @@ The CLI defaults to `eleven_multilingual_v2` because CourseCraft narration uses 
 
 ### 5. Cache Clear Requires Config Storage Directory
 **Symptom:** `coursecraft cache clear` failed with `Error: 'Config' object has no attribute 'storage_dir'`.
-**Cause:** CourseCraft registered the shared `cli_tools_common.cache_commands.create_cache_app`, which requires every tool config to expose a `storage_dir` property, but `coursecraft_cli.config.Config` only exposed `tool_dir` and profile helper methods.
+**Cause:** CourseCraft registered the shared `cli_tools_shared.cache_commands.create_cache_app`, which requires every tool config to expose a `storage_dir` property, but `coursecraft_cli.config.Config` only exposed `tool_dir` and profile helper methods.
 **Fix:** Add `Config.storage_dir` returning `self.get_profile_data_dir()` in `coursecraft_cli/config.py`.
 **Verification:** Run `python3 -m pytest tests/test_config.py`, `python3 -m pytest`, and `coursecraft cache clear`; the cache command should return JSON with `files_removed` and `bytes_freed`.
-**Recurrence Prevention:** When registering shared `cli_tools_common` apps, verify the tool-specific config implements the properties required by that shared app and add a focused config test.
+**Recurrence Prevention:** When registering shared `cli_tools_shared` apps, verify the tool-specific config implements the properties required by that shared app and add a focused config test.
 
 ### 6. Script Updates Must Clear All Voice Metadata
 **Symptom:** A slide or demo can show `Voice Generated At` after its `Script` changes even though `Voice Recording Path`, model metadata, and `Dictation Recorded` were cleared. The record then looks partially generated and blocks slide recording preflight.

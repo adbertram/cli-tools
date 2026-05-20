@@ -173,7 +173,7 @@ Browser session data is stored in the profile data directory for persistence bet
 
 ## Architecture
 
-This CLI uses the **BrowserAutomationService** - a generic browser automation layer that provides:
+This CLI uses `cli_tools_shared.auth.BrowserAutomation` with browser-harness-backed Chrome automation:
 
 - **Session Persistence**: Browser context persists between commands (cookies, localStorage)
 - **Interactive Login**: Opens browser for manual login, saves session automatically

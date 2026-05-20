@@ -100,10 +100,10 @@ This is the most common issue. The selector is wrong.
 # 3. browser.close()
 ```
 
-If using an old version of cli-tools-common, update:
+If using an old version of cli-tools-shared, update:
 ```bash
 cd <cli-tools-root>/<cli_name>
-pip install --force-reinstall --no-deps <cli-tools-root>/cli-tools-common
+pip install --force-reinstall --no-deps <cli-tools-root>/cli-tools-shared
 ```
 
 ## Step 6: Missing `browser_session` Field
@@ -121,9 +121,9 @@ This means `AuthVerifier._check_browser()` returned None.
    grep "def get_browser" <cli_dir>/<cli_name>_cli/config.py
    ```
 
-3. Is cli-tools-common up to date (has AuthVerifier)?
+3. Is cli-tools-shared up to date (has AuthVerifier)?
    ```bash
-   python -c "from cli_tools_common.auth_verifier import AuthVerifier; print('OK')"
+   python -c "from cli_tools_shared.auth_verifier import AuthVerifier; print('OK')"
    ```
 
 ## Step 7: Timeout Issues
@@ -137,7 +137,7 @@ If `is_authenticated()` hangs:
 
 2. Check for stale Playwright locks:
    ```bash
-   # PlaywrightService auto-clears stale locks, but check:
+   # BrowserHarnessService owns the running Chrome session, but check:
    ls ~/Library/Caches/ms-playwright/daemon/<SESSION_NAME>/SingletonLock
    ```
 

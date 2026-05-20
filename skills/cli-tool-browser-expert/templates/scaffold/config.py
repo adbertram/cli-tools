@@ -1,14 +1,14 @@
 """Configuration management for {{ServiceName}} CLI.
 
-Uses BaseConfig from cli_tools_common for profile-aware env loading.
+Uses BaseConfig from cli_tools_shared for profile-aware env loading.
 Browser automation lives in browser.py.
 """
 
 from pathlib import Path
 from typing import Optional
 
-from cli_tools_common import BaseConfig
-from cli_tools_common.credentials import CredentialType
+from cli_tools_shared import BaseConfig
+from cli_tools_shared.credentials import CredentialType
 
 
 class Config(BaseConfig):

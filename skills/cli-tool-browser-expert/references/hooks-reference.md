@@ -40,7 +40,7 @@ below) and should not be reflexively attributed to anti-bot blocking.
 
 ### Defensive launch hardening (always apply for browser CLIs)
 
-`cli_tools_common/browser/service.py` `browser_open()` already passes the
+`cli_tools_shared/browser/driver.py` `browser_open()` already passes the
 following on every persistent and non-persistent launch. Treat these as
 defensive defaults rather than DoorDash-specific fixes — they have not been
 shown necessary on DoorDash specifically (network logs prove DoorDash works

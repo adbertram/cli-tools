@@ -1,13 +1,13 @@
 """Browser automation for {{ServiceName}} dashboard.
 
 This file should be ~15 lines. It declares auth detection hooks as class
-constants and delegates ALL logic to cli_tools_common.BrowserAutomation.
+constants and delegates ALL logic to cli_tools_shared.auth.BrowserAutomation.
 
 DO NOT add custom methods here. If you need custom behavior, use the
 overridable hooks listed in references/hooks-reference.md.
 """
 
-from cli_tools_common.browser_automation import BrowserAutomation
+from cli_tools_shared.auth import BrowserAutomation
 
 from .config import get_config
 
@@ -18,7 +18,7 @@ class {{ServiceName}}Browser(BrowserAutomation):
     # === Required class constants (auth detection hooks) ===
 
     SESSION_NAME = "{{cli_name}}"
-    # Unique playwright-cli session name. Must be unique across all CLIs.
+    # Unique browser-harness session name. Must be unique across all CLIs.
 
     LOGIN_URL = "https://{{domain}}/login"
     # URL to open for interactive headed login.
@@ -34,7 +34,7 @@ class {{ServiceName}}Browser(BrowserAutomation):
     AUTH_SUCCESS_SELECTOR = "h2.page-title"
     # CSS selector that is VISIBLE only when authenticated.
     # MUST target a visible element — avoid collapsed menus, hidden sidebars, lazy-loaded images.
-    # Validate with: playwright-cli page goto "<AUTH_CHECK_URL>" && playwright-cli page snapshot
+    # Validate against a real DOM snapshot before committing the selector.
 
     # === Optional class constants (uncomment if needed) ===
 

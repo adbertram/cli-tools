@@ -1,6 +1,6 @@
 """Main entry point for {{ServiceName}} CLI.
 
-Auth commands are provided by cli_tools_common.create_auth_app() — do NOT
+Auth commands are provided by cli_tools_shared.create_auth_app() — do NOT
 create custom auth login/logout/status/test commands. The common package
 handles the entire auth lifecycle including browser session management.
 """
@@ -8,8 +8,8 @@ handles the entire auth lifecycle including browser session management.
 import typer
 from typing import Optional
 
-from cli_tools_common.auth_commands import create_auth_app
-from cli_tools_common.cache_commands import create_cache_app
+from cli_tools_shared.auth_commands import create_auth_app
+from cli_tools_shared.cache_commands import create_cache_app
 
 from .client import ClientError
 from .config import get_config
@@ -44,7 +44,7 @@ app = typer.Typer(
     add_completion=True,
 )
 
-# Register standard command modules from cli_tools_common
+# Register standard command modules from cli_tools_shared
 app.add_typer(
     create_auth_app(get_config, tool_name="{{cli_name}}", test_handler=_test_handler),
     name="auth",

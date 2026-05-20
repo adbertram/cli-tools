@@ -22,7 +22,7 @@ If the CLI already has `get_browser()`, this is an update — check if it follow
 
 Before writing any code, determine the 5 required class constants for the target site:
 
-1. **SESSION_NAME** — Unique name for the playwright-cli session (typically the CLI name)
+1. **SESSION_NAME** — Unique name for the browser-harness session (typically the CLI name)
 2. **LOGIN_URL** — The URL where users log in interactively
 3. **AUTH_CHECK_URL** — A page that requires authentication (dashboard, account page)
 4. **AUTH_URL_PATTERN** — Regex matching login/register URLs
@@ -44,7 +44,7 @@ Create `<cli_name>_cli/browser.py` following the scaffold template:
 ```python
 """Browser automation for <ServiceName>."""
 
-from cli_tools_common.browser_automation import BrowserAutomation
+from cli_tools_shared.auth import BrowserAutomation
 
 from .config import get_config
 
@@ -70,7 +70,7 @@ class <ServiceName>Browser(BrowserAutomation):
 Add `CredentialType.BROWSER_SESSION` and implement `get_browser()`:
 
 ```python
-from cli_tools_common.credentials import CredentialType
+from cli_tools_shared.credentials import CredentialType
 
 class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]  # or add to existing list
@@ -93,7 +93,7 @@ CREDENTIAL_TYPES = [CredentialType.OAUTH, CredentialType.BROWSER_SESSION]
 Ensure `create_auth_app()` is used with a `test_handler`:
 
 ```python
-from cli_tools_common.auth_commands import create_auth_app
+from cli_tools_shared.auth_commands import create_auth_app
 
 def _test_handler(config):
     """Test browser session by navigating to authenticated page.
@@ -171,5 +171,5 @@ Manual verification:
 - client.py uses `get_page()`, no auth logic
 - `auth status` returns `credential_types.browser_session.browser_session`
 - `auth logout` clears browser session
-- All test_browser_automation.py tests pass
+- All shared browser auth tests pass
 </success_criteria>

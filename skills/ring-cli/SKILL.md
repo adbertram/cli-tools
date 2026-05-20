@@ -35,7 +35,7 @@ That file contains the full command tree (every argument, every option, every le
 </principle>
 
 <principle name="2FA on first login">
-Ring requires a 6-digit 2FA code on the first login from this CLI client (delivered via SMS/email at the moment `ring auth login` runs). The CLI prompts for it through the standard cli_tools_common prompting pipeline. After a successful exchange the OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs — no further prompts. Use `ring auth login --force` to clear the cached token and re-run the 2FA challenge.
+Ring requires a 6-digit 2FA code on the first login from this CLI client (delivered via SMS/email at the moment `ring auth login` runs). The CLI prompts for it through the standard cli_tools_shared prompting pipeline. After a successful exchange the OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs — no further prompts. Use `ring auth login --force` to clear the cached token and re-run the 2FA challenge.
 </principle>
 
 <principle name="Device identifiers">

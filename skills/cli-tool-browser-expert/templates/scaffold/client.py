@@ -2,12 +2,12 @@
 
 The client uses BrowserAutomation.get_page() for all page interactions.
 It NEVER calls is_authenticated(), login(), or does session management —
-those are handled by the auth commands from cli_tools_common.
+those are handled by the auth commands from cli_tools_shared.
 """
 
 import logging
 
-from cli_tools_common.exceptions import ClientError
+from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
 
@@ -25,7 +25,7 @@ class Client:
         """Get an authenticated page via BrowserAutomation.
 
         This opens a headless browser (or reuses existing), navigates to the URL,
-        and returns the PlaywrightService instance for further interaction.
+        and returns the BrowserHarnessService instance for further interaction.
 
         Usage:
             page = self._get_page("https://site.com/dashboard")

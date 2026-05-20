@@ -2,10 +2,10 @@
 
 ## System Overview
 
-Browser automation in cli-tools-common follows a layered architecture where CLI tools provide minimal declarative configuration and the common package handles all auth lifecycle, session management, and verification.
+Browser automation in cli-tools-shared follows a layered architecture where CLI tools provide minimal declarative configuration and the shared package handles all auth lifecycle, session management, and verification.
 
 ```
-CLI Tool (minimal)          cli-tools-common (all logic)
+CLI Tool (minimal)          cli-tools-shared (all logic)
 ─────────────────          ──────────────────────────────
 browser.py                  BrowserAutomation
   5 class constants    →      is_authenticated()
@@ -34,9 +34,9 @@ main.py                     auth_commands.py
 
 ### BrowserAutomation (base class)
 
-**Location:** `cli_tools_common/browser_automation.py`
+**Location:** `cli_tools_shared/auth.py`
 
-All browser CLIs subclass this. It wraps `PlaywrightService` into a high-level auth lifecycle.
+All browser CLIs subclass this. It wraps `BrowserHarnessService` into a high-level auth lifecycle.
 
 **Key public methods:**
 
@@ -45,11 +45,11 @@ All browser CLIs subclass this. It wraps `PlaywrightService` into a high-level a
 | `is_authenticated()` | `AuthResult` | Live headless check with TTL caching (300s) |
 | `authenticate(force)` | None | Interactive headed login, polls until detected |
 | `login(force)` | `dict` | Calls authenticate(), returns `{"success": bool}` |
-| `get_page(url)` | `PlaywrightService` | Opens/reuses headless browser, navigates to url |
+| `get_page(url)` | `BrowserHarnessService` | Opens/reuses headless browser, navigates to url |
 | `has_session()` | `bool` | Checks if profile.json marker file exists |
-| `clear_session()` | None | Removes marker file + deletes playwright-cli session |
+| `clear_session()` | None | Removes marker file + clears browser session data |
 | `test_session()` | `dict` | Headless verify: loads AUTH_CHECK_URL, calls _check_auth() |
-| `close()` | None | Closes browser via PlaywrightService.browser_close() |
+| `close()` | None | Closes browser via BrowserHarnessService.browser_close() |
 
 **Auth check priority** (in `_check_auth()`):
 1. Cookie patterns (`AUTH_COOKIE_PATTERNS`)
@@ -60,7 +60,7 @@ All browser CLIs subclass this. It wraps `PlaywrightService` into a high-level a
 
 ### AuthVerifier
 
-**Location:** `cli_tools_common/auth_verifier.py`
+**Location:** `cli_tools_shared/auth_verifier.py`
 
 Central verification service used by `auth status` and `auth test`. Performs live checks per credential type.
 
@@ -100,7 +100,7 @@ def _check_browser(self) -> Optional[bool]:
 
 ### BaseConfig (browser-related)
 
-**Location:** `cli_tools_common/config.py`
+**Location:** `cli_tools_shared/config.py`
 
 | Method | Description |
 |--------|-------------|
@@ -111,11 +111,11 @@ def _check_browser(self) -> Optional[bool]:
 | `clear_session()` | `shutil.rmtree` on profile directory |
 | `clear_ephemeral()` | Clears tokens AND calls `clear_session()` |
 
-### PlaywrightService
+### BrowserHarnessService
 
-**Location:** `cli_tools_common/browser/service.py`
+**Location:** `cli_tools_shared/browser/driver.py`
 
-Low-level subprocess wrapper around `playwright-cli -s=<session>`. BrowserAutomation uses this internally. CLI tools should NEVER interact with PlaywrightService directly.
+Low-level browser-harness/Chrome CDP wrapper. BrowserAutomation uses this internally. CLI tools should NEVER interact with BrowserHarnessService directly.
 
 Key operations: `browser_open()`, `browser_close()`, `goto()`, `evaluate()`, `cookie_list()`, `wait_for_selector()`, `data_delete()`.
 
@@ -139,7 +139,7 @@ Credential validity is determined purely by `has_saved_session()` (profile.json 
 
 ### auth logout
 1. Calls `config.clear_credentials()` (clears env vars)
-2. Calls `browser.clear_session()` (wipes playwright-cli session + marker)
+2. Calls `browser.clear_session()` (wipes browser session data + marker)
 3. Calls `browser.close()` in finally block
 
 ### auth status
@@ -159,7 +159,7 @@ Credential validity is determined purely by `has_saved_session()` (profile.json 
   .profiles/
     <profile_name>/
       .env                    # Profile environment variables
-      browser-data/           # Playwright session data (managed by PlaywrightService)
+      browser-data/           # Persistent browser data (managed by BrowserHarnessService)
       profile.json            # Marker file (written after successful login)
 ```
 

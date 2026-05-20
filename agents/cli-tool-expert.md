@@ -167,7 +167,7 @@ The other 15+ `_get_page_for` callers are automatically protected by (3). Do NOT
   ```
   Direct interpreter invocation + `PYTHONPATH` prepended to the source tree. `sys.path` puts your source ahead of the env's installed copy, so the test imports resolve to local files. `uv` cannot intercept and re-resolve.
 - Whether `pytest` is installed in the consumer's env determines whether `uv run pytest` falls back to `~/.local/bin/pytest` (a different Python, no consumer modules). Install pytest into each env via `<env>/bin/python3 -m pip install pytest` — that does not trigger uv's resolver. Confirm with `<env>/bin/python3 -c "import pytest; print(pytest.__version__)"`.
-- `discover_consumers()` in `cli-tools-shared/cli_tools_shared/discovery.py` enumerates true consumers by scanning `browser.py` files that import `cli_tools_shared`. `cli_tools_common` (a DIFFERENT shared package under `<cli-tools-root>/cli-tools-common/`) is NOT in scope of cli-tools-shared changes — consumers like `fitnesspal` and `globiflow` that import only `cli_tools_common` should be skipped.
+- `discover_consumers()` in `cli-tools-shared/cli_tools_shared/discovery.py` enumerates browser-backed consumers by scanning `browser.py` files that import `cli_tools_shared`. CLIs whose `browser.py` does not import `cli_tools_shared` are outside that consumer set and should be skipped for that specific validation surface.
 
 **Gotchas:**
 - A passing test run against an unreleased shared-package change proves nothing if the env is still resolving the git-pinned version. Always verify `cli_tools_shared.auth.__file__` (or whichever module) resolves to the source tree path before trusting test output.

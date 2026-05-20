@@ -5,8 +5,8 @@ Some CLIs need both API credentials (OAuth, API key) AND a browser session. Exam
 ## Config Setup
 
 ```python
-from cli_tools_common.config import BaseConfig
-from cli_tools_common.credentials import CredentialType
+from cli_tools_shared.config import BaseConfig
+from cli_tools_shared.credentials import CredentialType
 
 class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.OAUTH, CredentialType.BROWSER_SESSION]
@@ -78,7 +78,7 @@ With `--credential-type`:
 
 Clears everything:
 1. `config.clear_credentials()` — Clears all env vars (OAuth tokens, etc.)
-2. `browser.clear_session()` — Wipes playwright-cli session data
+2. `browser.clear_session()` — Wipes browser session data
 3. `browser.close()` — Closes browser process
 
 ## has_credentials() for Dual Auth

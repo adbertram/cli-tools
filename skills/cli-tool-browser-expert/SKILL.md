@@ -4,7 +4,7 @@ description: "MANDATORY: SUPPORTING SKILL for cli-tool-expert. Parent sessions m
 ---
 
 <objective>
-Add, update, or troubleshoot browser automation in CLI tools built on cli-tools-common.
+Add, update, or troubleshoot browser automation in CLI tools built on cli-tools-shared.
 Every browser CLI must delegate auth lifecycle to the common package — zero custom auth logic.
 </objective>
 
@@ -29,7 +29,7 @@ Route based on intent:
 
 <principle name="Zero Custom Auth Logic">
 Browser CLIs NEVER implement auth state detection, session checking, or login flows.
-All auth lifecycle is handled by `cli_tools_common.browser_automation.BrowserAutomation` and `cli_tools_common.auth_verifier.AuthVerifier`.
+All auth lifecycle is handled by `cli_tools_shared.auth.BrowserAutomation` and `cli_tools_shared.auth_verifier.AuthVerifier`.
 The CLI's `browser.py` provides ONLY declarative hooks (class constants). No methods.
 </principle>
 
@@ -37,7 +37,7 @@ The CLI's `browser.py` provides ONLY declarative hooks (class constants). No met
 A compliant browser.py declares 5 constants and nothing else:
 
 ```python
-from cli_tools_common.browser_automation import BrowserAutomation
+from cli_tools_shared.auth import BrowserAutomation
 from .config import get_config
 
 class MyBrowser(BrowserAutomation):
@@ -125,7 +125,7 @@ All domain knowledge in `references/`:
 - browser.py is ~15 lines with only class constants
 - config.py implements `get_browser()` returning BrowserAutomation subclass
 - config.py sets `CREDENTIAL_TYPES` including `CredentialType.BROWSER_SESSION`
-- main.py uses `create_auth_app()` from cli_tools_common
+- main.py uses `create_auth_app()` from cli_tools_shared
 - No forbidden patterns exist anywhere in the CLI package
 - `auth status` returns `credential_types.browser_session.browser_session: true/false` via AuthVerifier
 - `auth logout` clears browser session (handled by common package)
@@ -138,31 +138,22 @@ Validated by validate-skill on 2026-03-04 18:45
 
 ## Known Issues
 
-### 1. BrowserAutomation persists profile but not storage_state — httpx-backed reads fail with misleading "Session expired"
+### 1. BrowserAutomation must keep browser state outside source trees
 
-**Symptom:** A CLI that combines `BrowserAutomation` (for login) with `BrowserAuthState` / `BrowserAuthenticatedHttpClient` (for httpx-backed reads) reports `Error: Session expired. Run '<cli> auth login' to re-authenticate.` even when the user is fully logged in. `auth status` says authenticated (because it runs a live browser check), but data commands (e.g. `doordash orders list`) fail. The persistent Playwright profile under `~/Library/Caches/ms-playwright/daemon/ud-<session>/` has valid cookies; the Playwright storage_state JSON at `~/.local/share/cli-tools/<tool>/.profiles/<profile>/browser-data/auth-state.json` is missing or empty. A secondary symptom is `Browser auth failed: EOF when reading a line` when `auth login --force` is run in a context where stdin is closed or piped.
+**Symptom:** A browser-backed CLI writes session markers, cookie snapshots, browser profiles, or other runtime state under `<cli-tools-root>/` or another source repo. A fresh clone then contains Adam-local paths, stale browser state, or Dropbox-synced runtime artifacts that do not belong to the CLI source.
 
-**Cause:** `BrowserAutomation.authenticate()` historically wrote only a `profile.json` marker and an optional `_on_authenticated()` hook — it never unconditionally captured `page.context.storage_state(path=...)`. Subclasses that didn't override `_on_authenticated` (the common case) ended up with a session marker but no storage_state file. `has_session()` returned True based solely on the marker, so subsequent `auth login` calls short-circuited with "Already authenticated" and never wrote the file the HTTP client needs. The marker and the storage_state had become two parallel session stores that could disagree. The EOFError was a separate but related symptom: bare `input()` cannot read from a non-TTY stdin.
+**Cause:** Older browser automation patterns treated storage-state JSON and profile markers as separate artifacts. That created multiple state stores and made it easy for one path to drift into the source tree.
 
-**Fix:** Apply ALL of the following in `cli_tools_common/browser_automation.py` — never in per-CLI subclasses:
-
-1. Add `_state_file_path()` returning `<user_browser_data_dir>/auth-state.json`. The path MUST resolve through `_get_browser_data_dir()` (which goes through `config.get_browser_data_dir()`), so the file lives under `~/.local/share/cli-tools/<tool>/.profiles/<profile>/browser-data/` — NOT inside any CLI source repo under `<cli-tools-root>/`. CRITICAL path constraint.
-2. Add `_save_auth_state()` that calls `self._get_service().state_save(str(state_file))`. Raise `BrowserAutomationError` on any underlying `PlaywrightServiceError` — no fallback / no silent recovery.
-3. In `authenticate()`: after the user confirms login and the marker is written, call `get_page(self.AUTH_CHECK_URL)` then `_save_auth_state()` unconditionally — BEFORE running the optional `_on_authenticated` hook.
-4. In `is_authenticated()`: when the live check returns True, call `_save_auth_state()` to refresh the snapshot, and call `_write_marker(browser="chrome")` if the marker is missing. Cookies rotate; the on-disk snapshot must stay current, and an already-authenticated persistent profile must bootstrap both files on the first live check.
-5. In `has_session()`: require BOTH `profile.json` AND a non-empty `auth-state.json` under the user data dir before returning True. Marker-only no longer counts.
-6. Replace the bare `input()` confirmation with an EOFError-safe prompt that falls back to reading `/dev/tty` and exits with status 2 if neither is available.
+**Fix:** Keep the current `cli_tools_shared.auth.BrowserAutomation` model: the persistent Chromium user-data-dir under `~/.local/share/cli-tools/<tool>/.profiles/<profile>/browser-data/chromium-profile/` is the single browser-session source of truth. HTTP-backed reads use `BrowserAutomation.live_cookies()` instead of source-tree snapshots. Do not add per-CLI state files, repo-local browser profiles, or compatibility snapshots.
 
 **Verification:**
-1. Delete the existing snapshot: `rm -f ~/.local/share/cli-tools/<tool>/.profiles/default/browser-data/auth-state.json ~/.local/share/cli-tools/<tool>/.profiles/default/browser-data/profile.json`.
-2. With the persistent Playwright profile already logged in, run `<tool> auth status`. The live check should succeed AND auto-write both files under the user data dir.
-3. Confirm path: `ls -la ~/.local/share/cli-tools/<tool>/.profiles/default/browser-data/auth-state.json`. It MUST live under `~/.local/share/cli-tools/` — never under `~/Dropbox/GitRepos/`.
-4. Run a data command (e.g. `<tool> orders list --table`). Must succeed, not raise "Session expired".
-5. Run `pytest tests/test_browser_automation.py` in `cli-tools-common`. The compliance tests cover state_save invocation, the user-data-dir path constraint, the both-files `has_session` rule, the live-check auto-refresh, and the EOF-safe prompt.
+1. Run `pytest tests/test_auth.py tests/test_http_session.py` in `cli-tools-shared`.
+2. Confirm browser data resolves under `~/.local/share/cli-tools/<tool>/`, never under `<cli-tools-root>/`.
+3. Run the real installed launcher for the target CLI and a domain command that requires auth.
 
-**Recurrence Prevention:** The fix lives entirely in the shared `BrowserAutomation` base class, so every CLI that combines persistent browser auth with httpx-backed reads (DoorDash, etc.) inherits the correct behavior without per-CLI code. Unit tests in `cli-tools-common/tests/test_browser_automation.py` assert: state_save is called during `authenticate()`, the snapshot path lives under the user data dir (NOT inside a repo), `has_session()` requires both files, and `is_authenticated()` refreshes the snapshot on a successful live check. If a future change ever resolves the auth-state path relative to the cwd or any source-tree location, `test_authenticate_saves_storage_state_under_user_data_dir` fails immediately. CRITICAL: never write auth-state.json anywhere inside `<cli-tools-root>/` — the user data dir resolved by `config.get_browser_data_dir()` is the only correct location.
+**Recurrence Prevention:** `cli-tools-shared/tests/test_auth.py` documents the persistent-profile contract and explicitly removes the old `_save_auth_state`, `_state_file_path`, marker, and state-save/state-load expectations. Any future browser-auth implementation must preserve one browser state location outside the repo.
 
-**General rule:** When a shared base class manages dual on-disk state stores (e.g. session marker + cookie/state snapshot), every code path that confirms the session must keep both files in sync. Splitting that responsibility across subclasses or optional hooks guarantees that some consumer ends up reading a stale or missing file and reporting a misleading error.
+**General rule:** Browser session state is runtime data, not source. If a browser file is needed after cloning, it belongs in the user profile data directory and must be recreated by `auth login`, not committed or synced in the repo tree.
 
 ### 2. `auth status` and `auth login` lie about session validity by trusting on-disk state instead of round-tripping
 
@@ -207,16 +198,16 @@ The OLDER guard tests that pinned the opposite "auth status is filesystem-only" 
 
 **Symptom:** `<cli> auth status` reports `credential_types.browser_session.authenticated: true` for a CLI that declares `CredentialType.BROWSER_SESSION` but no `AUTH_STORAGE_KEY` and no `AUTH_COOKIE_PATTERNS` (e.g. `cj`). The next data command (`cj relationships apply --dry-run 7453049`) immediately fails with `Authentication required. Missing credentials: - browser_session: browser session expired`. The two surfaces inspect the same on-disk session and produce opposite verdicts. Re-running `cj auth login` reports "already authenticated" and does nothing — the disagreement persists across runs.
 
-**Cause:** Two different code paths verify the same browser session and the defaults disagree. `auth status` runs through `AuthVerifier._check_browser`, which is filesystem-only via `browser.has_session()` (marker + non-empty `auth-state.json`). The dispatch-time credential gate runs through `cli_tools_common.command_registry._check_credentials`, which first tries `_check_browser_saved_auth` (looking at `AUTH_STORAGE_KEY` for localStorage or `AUTH_COOKIE_PATTERNS` for cookies). When the browser subclass declares neither hook, `_check_browser_saved_auth` returns `None` and the historical gate fell back to `browser.is_authenticated()` — a **live** navigation to `AUTH_CHECK_URL` that can fail when cookies are stale even while the on-disk session is intact (transient network issue, cookie rotation, slow SPA hydrate, headed-mode race). Same resource, two checks, two verdicts.
+**Cause:** Two different code paths verify the same browser session and the defaults disagree. `auth status` runs through `AuthVerifier._check_browser`, which is filesystem-only via `browser.has_session()` (marker + non-empty `auth-state.json`). The dispatch-time credential gate runs through `cli_tools_shared.command_registry._check_credentials`, which first tries `_check_browser_saved_auth` (looking at `AUTH_STORAGE_KEY` for localStorage or `AUTH_COOKIE_PATTERNS` for cookies). When the browser subclass declares neither hook, `_check_browser_saved_auth` returns `None` and the historical gate fell back to `browser.is_authenticated()` — a **live** navigation to `AUTH_CHECK_URL` that can fail when cookies are stale even while the on-disk session is intact (transient network issue, cookie rotation, slow SPA hydrate, headed-mode race). Same resource, two checks, two verdicts.
 
-**Fix:** In `cli_tools_common/command_registry.py::_check_credentials`, when the `BROWSER_SESSION` branch sees `_check_browser_saved_auth` return `None`, fall back to `browser.has_session()` — the same filesystem inspection `auth status` uses — instead of `browser.is_authenticated()`. The gate and `auth status` now agree by construction for every browser-session CLI. Commands that genuinely need a live check (the real apply path in `cj relationships apply`, real read paths in DoorDash, etc.) still perform `browser.is_authenticated()` themselves at the point of use; the difference is the **dispatch gate** no longer rejects commands based on a transient live-navigation failure that disagrees with the rest of the system. CLIs that need a stricter dispatch-time check should declare `AUTH_STORAGE_KEY` or `AUTH_COOKIE_PATTERNS` on the browser subclass — that turns on the deterministic saved-auth check rather than the flaky live check.
+**Fix:** In `cli_tools_shared/command_registry.py::_check_credentials`, when the `BROWSER_SESSION` branch sees `_check_browser_saved_auth` return `None`, fall back to `browser.has_session()` — the same filesystem inspection `auth status` uses — instead of `browser.is_authenticated()`. The gate and `auth status` now agree by construction for every browser-session CLI. Commands that genuinely need a live check (the real apply path in `cj relationships apply`, real read paths in DoorDash, etc.) still perform `browser.is_authenticated()` themselves at the point of use; the difference is the **dispatch gate** no longer rejects commands based on a transient live-navigation failure that disagrees with the rest of the system. CLIs that need a stricter dispatch-time check should declare `AUTH_STORAGE_KEY` or `AUTH_COOKIE_PATTERNS` on the browser subclass — that turns on the deterministic saved-auth check rather than the flaky live check.
 
 **Verification:**
-1. `cd cli-tools-common && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-common-tests uv run pytest tests/test_command_registry.py` — `test_browser_session_gate_uses_has_session_without_storage_or_cookie_hooks` and `test_browser_session_gate_fails_when_has_session_returns_false` both pass; assert `browser.is_authenticated.assert_not_called()`.
-2. Full cli-tools-common suite: 357 passed.
+1. `cd cli-tools-shared && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-shared-tests uv run pytest tests/test_command_registry.py` — `test_browser_session_gate_uses_has_session_without_storage_or_cookie_hooks` and `test_browser_session_gate_fails_when_has_session_returns_false` both pass; assert `browser.is_authenticated.assert_not_called()`.
+2. Full cli-tools-shared suite: 357 passed.
 3. `cj auth status` and `cj relationships apply --dry-run <id>` agree end-to-end against a real saved session.
 
-**Recurrence Prevention:** Two regression tests in `cli-tools-common/tests/test_command_registry.py` enforce the contract — the gate MUST use `has_session` and MUST NOT call `is_authenticated` when neither `AUTH_STORAGE_KEY` nor `AUTH_COOKIE_PATTERNS` is declared. The retired `test_browser_session_gate_uses_live_check_without_storage_key` enforced the buggy behavior and is now replaced. Any future change that adds an implicit live-check fallback inside `_check_credentials` will fail these tests immediately.
+**Recurrence Prevention:** Two regression tests in `cli-tools-shared/tests/test_command_registry.py` enforce the contract — the gate MUST use `has_session` and MUST NOT call `is_authenticated` when neither `AUTH_STORAGE_KEY` nor `AUTH_COOKIE_PATTERNS` is declared. The retired `test_browser_session_gate_uses_live_check_without_storage_key` enforced the buggy behavior and is now replaced. Any future change that adds an implicit live-check fallback inside `_check_credentials` will fail these tests immediately.
 
 **General rule:** When two surfaces inspect the same on-disk state (`auth status` and the command dispatch gate; UI and API; cache and source of truth), they MUST use the same default check. Diverging defaults across "status" and "gate" code paths guarantees user-visible disagreement and produces "it says I'm logged in but the command says I'm not" bugs.
 
@@ -240,13 +231,13 @@ The pattern is the same in both cases: a positive marker pinned to surface attri
 5. **Pure CSS class selectors are a last resort** — `button.btn-primary` or `class*="apply"` rots on every redesign.
 
 **Verification:**
-1. Compliance tests: `cd cli-tools-common && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-common-tests uv run pytest tests/test_browser_automation.py -k bug5 -v` — 3 tests pin the new auth-probe priority order and the login-form-visible-vs-absent semantics.
+1. Compliance tests: `cd cli-tools-shared && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-shared-tests uv run pytest tests/test_auth.py -k bug5 -v` — 3 tests pin the new auth-probe priority order and the login-form-visible-vs-absent semantics.
 2. Per-CLI: write a regression test that asserts the browser subclass declares `AUTH_LOGIN_FORM_SELECTOR` and does NOT re-declare any legacy positive nav-link selector. For action buttons, add a string-contract test on the locator-builder helper (assert the locator contains the row id + the action text + a row-class scope) so a future regression that loosens scope fails immediately.
 3. End-to-end: a real command that exercises the selector (e.g. `cj relationships apply <id>` for auth + action) succeeds against a live page.
 
 **Recurrence Prevention:** Two layers of tests:
 
-* **Shared layer:** `cli_tools_common/tests/test_browser_automation.py` locks the `_check_auth` priority order: when `AUTH_LOGIN_FORM_SELECTOR` is declared, `_check_auth` returns True when the form is absent and False when it is visible.
+* **Shared layer:** `cli_tools_shared/tests/test_auth.py` locks the `_check_auth` priority order: when `AUTH_LOGIN_FORM_SELECTOR` is declared, `_check_auth` returns True when the form is absent and False when it is visible.
 * **Per-CLI layer:** every browser CLI's `tests/test_bugfixes.py` (or equivalent) pins the declarative shape of its selectors. CJ's `test_bug5_cj_browser_uses_absence_of_login_form_check` and `test_bug6_apply_locator_is_row_scoped_and_text_matched` are the templates — the first asserts the absence of the legacy positive nav-link, the second asserts the apply locator contains the advertiser id, the action label, and the row-scope `:has()`.
 
 When auditing a new browser CLI during code review: reject positive nav-link `AUTH_SUCCESS_SELECTOR` values, reject `data-testid` / `aria-label*=` tuples used as the only identifiers for click targets, and require row-scope on any per-row click selector. These are tomorrow-bugs by construction.

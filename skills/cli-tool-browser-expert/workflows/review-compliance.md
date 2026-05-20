@@ -52,7 +52,7 @@ Read `main.py` and verify:
 
 | Check | Pass Criteria |
 |-------|--------------|
-| Uses `create_auth_app()` | From `cli_tools_common.auth_commands` |
+| Uses `create_auth_app()` | From `cli_tools_shared.auth_commands` |
 | Has `test_handler` | Function that calls `browser.test_session()` |
 | No top-level `profiles` command | Profile management is under `auth profiles` from `create_auth_app()` |
 | No custom auth commands | No manual `auth login`/`auth status`/etc. |

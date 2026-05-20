@@ -30,7 +30,7 @@ Replace `{{ServiceName}}`, `{{cli_name}}`, and `{{domain}}` with actual values.
 - **DOES:** Use `get_page(url)` for page navigation, implement domain methods
 - **DOESN'T:** Call `is_authenticated()`, `login()`, or do any session management
 
-## Auth Lifecycle (handled entirely by cli-tools-common)
+## Auth Lifecycle (handled entirely by cli-tools-shared)
 
 ```
 User runs `auth login`
