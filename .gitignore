@@ -31,4 +31,5 @@ node_modules/
 cache/
 MagicMock/
 agent_workspaces/
+_personal/
 .fallow/
