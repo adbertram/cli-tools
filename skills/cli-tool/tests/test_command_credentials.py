@@ -12,6 +12,7 @@ command requires, enabling separate nodes per credential type (e.g.,
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -36,6 +37,68 @@ VALID_CREDENTIAL_TYPES = {
 # auth flow. It should never appear in Config.CREDENTIAL_TYPES but is valid in
 # COMMAND_CREDENTIALS.
 COMMAND_ONLY_TYPES = {"no_auth"}
+
+
+def _command_module_files(commands_dir: Path) -> list[Path]:
+    """Return real command modules, ignoring package boilerplate and private files."""
+    if not commands_dir.is_dir():
+        return []
+    return [
+        module_file
+        for module_file in sorted(commands_dir.glob("*.py"))
+        if module_file.name != "__init__.py" and not module_file.name.startswith("_")
+    ]
+
+
+def _command_module_entries(cli_dir: Path, cli_pkg: str) -> list[tuple[str, Path, str]]:
+    """Return importable command modules from package or flat layout."""
+    pkg_dir = cli_dir / cli_pkg
+    package_modules = _command_module_files(pkg_dir / "commands")
+    flat_module = pkg_dir / "commands.py"
+    if package_modules and flat_module.is_file():
+        raise AssertionError(
+            f"{cli_pkg} has both commands.py and command modules in commands/. "
+            "Use exactly one command layout."
+        )
+    if package_modules:
+        return [
+            (module_file.stem, module_file, f"{cli_pkg}.commands.{module_file.stem}")
+            for module_file in package_modules
+        ]
+    if flat_module.is_file():
+        return [("commands", flat_module, f"{cli_pkg}.commands")]
+    return []
+
+
+def test_command_module_files_ignores_empty_directory(tmp_path):
+    """An empty leftover commands/ directory does not imply commands/<group>.py layout."""
+    commands_dir = tmp_path / "commands"
+    commands_dir.mkdir()
+
+    assert _command_module_files(commands_dir) == []
+
+
+def test_command_module_files_ignores_init_only_directory(tmp_path):
+    """A commands/ package with only __init__.py still has no real command modules."""
+    commands_dir = tmp_path / "commands"
+    commands_dir.mkdir()
+    (commands_dir / "__init__.py").write_text('"""package"""')
+
+    assert _command_module_files(commands_dir) == []
+
+
+def test_command_module_entries_use_flat_commands_with_empty_directory(tmp_path):
+    """Flat commands.py remains the command module when commands/ is empty."""
+    cli_dir = tmp_path / "keywords"
+    pkg_dir = cli_dir / "keywords_cli"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "commands").mkdir()
+    flat_module = pkg_dir / "commands.py"
+    flat_module.write_text("COMMAND_CREDENTIALS = {'query': ['custom']}")
+
+    assert _command_module_entries(cli_dir, "keywords_cli") == [
+        ("commands", flat_module, "keywords_cli.commands")
+    ]
 
 
 def test_config_declares_credential_types(
@@ -124,9 +187,9 @@ def test_command_credentials_subset_of_config(
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
     cli_pkg = cli_name.replace("-", "_") + "_cli"
-    commands_dir = cli_dir / cli_pkg / "commands"
-    if not commands_dir.exists():
-        pytest.skip(f"{cli_name} has no commands/ directory")
+    module_entries = _command_module_entries(cli_dir, cli_pkg)
+    if not module_entries:
+        pytest.skip(f"{cli_name} has no command modules")
 
     from cli_test_utils import get_uv_tool_venv_dir
     uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
@@ -156,16 +219,12 @@ def test_command_credentials_subset_of_config(
 
     # Scan all command modules for COMMAND_CREDENTIALS
     mismatches = []
-    for module_file in sorted(commands_dir.glob("*.py")):
-        if module_file.name.startswith("_"):
-            continue
-        module_name = module_file.stem
+    for module_name, _module_file, import_path in module_entries:
         if module_name in SKIP_GROUPS:
             continue
-        if command_filter and module_name != command_filter:
+        if command_filter and module_name != command_filter and module_name != "commands":
             continue
 
-        import_path = f"{cli_pkg}.commands.{module_name}"
         result = subprocess.run(
             [
                 venv_python,
@@ -216,9 +275,9 @@ def test_all_commands_have_credential_mapping(
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
     cli_pkg = cli_name.replace("-", "_") + "_cli"
-    commands_dir = cli_dir / cli_pkg / "commands"
-    if not commands_dir.exists():
-        pytest.skip(f"{cli_name} has no commands/ directory")
+    module_entries = _command_module_entries(cli_dir, cli_pkg)
+    if not module_entries:
+        pytest.skip(f"{cli_name} has no command modules")
 
     # Discover all leaf commands (depth 2 = "group command")
     all_commands = discover_nested_commands(
@@ -257,12 +316,24 @@ def test_all_commands_have_credential_mapping(
     for group, cmd in leaf_commands:
         modules.setdefault(group, []).append(cmd)
 
+    module_entries_by_stem = {entry[0]: entry for entry in module_entries}
+    flat_entry = (
+        module_entries[0]
+        if len(module_entries) == 1 and module_entries[0][0] == "commands"
+        else None
+    )
+
+    if flat_entry is not None and len(modules) != 1:
+        pytest.fail(
+            f"{cli_name} uses flat commands.py but exposes multiple command groups: "
+            f"{', '.join(sorted(modules))}. Use commands/<group>.py modules instead."
+        )
+
     for module_name, commands in modules.items():
-        module_file = commands_dir / f"{module_name}.py"
-        if not module_file.exists():
-            # Try with underscores
-            module_file = commands_dir / f"{module_name.replace('-', '_')}.py"
-            if not module_file.exists():
+        module_entry = flat_entry or module_entries_by_stem.get(module_name)
+        if module_entry is None:
+            module_entry = module_entries_by_stem.get(module_name.replace("-", "_"))
+            if module_entry is None:
                 for cmd in commands:
                     missing_commands.append(
                         f"  {module_name} {cmd} (module file not found)"
@@ -270,7 +341,7 @@ def test_all_commands_have_credential_mapping(
                 continue
 
         # Import COMMAND_CREDENTIALS from the module using the CLI's venv Python
-        import_path = f"{cli_pkg}.commands.{module_file.stem}"
+        _entry_name, _module_file, import_path = module_entry
         result = subprocess.run(
             [
                 venv_python,
@@ -350,9 +421,9 @@ def test_command_aliases_have_credential_mapping(
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
     cli_pkg = cli_name.replace("-", "_") + "_cli"
-    commands_dir = cli_dir / cli_pkg / "commands"
-    if not commands_dir.exists():
-        pytest.skip(f"{cli_name} has no commands/ directory")
+    module_entries = _command_module_entries(cli_dir, cli_pkg)
+    if not module_entries:
+        pytest.skip(f"{cli_name} has no command modules")
 
     import re
 
@@ -363,13 +434,10 @@ def test_command_aliases_have_credential_mapping(
     venv_python = str(uv_venv / "bin" / "python")
     missing_aliases = []
 
-    for module_file in sorted(commands_dir.glob("*.py")):
-        if module_file.name.startswith("_"):
-            continue
-        module_name = module_file.stem
+    for module_name, module_file, import_path in module_entries:
         if module_name in SKIP_GROUPS:
             continue
-        if command_filter and module_name != command_filter:
+        if command_filter and module_name != command_filter and module_name != "commands":
             continue
 
         # Read file to find all @app.command("name") decorators
@@ -382,7 +450,6 @@ def test_command_aliases_have_credential_mapping(
             continue
 
         # Import COMMAND_CREDENTIALS from the module
-        import_path = f"{cli_pkg}.commands.{module_name}"
         result = subprocess.run(
             [
                 venv_python,
@@ -448,10 +515,10 @@ def test_register_commands_adoption(
 
     cli_pkg = cli_name.replace("-", "_") + "_cli"
     main_file = cli_dir / cli_pkg / "main.py"
-    commands_dir = cli_dir / cli_pkg / "commands"
 
-    if not main_file.exists() or not commands_dir.exists():
-        pytest.skip(f"{cli_name} has no main.py or commands/ directory")
+    module_entries = _command_module_entries(cli_dir, cli_pkg)
+    if not main_file.exists() or not module_entries:
+        pytest.skip(f"{cli_name} has no main.py or command modules")
 
     main_content = main_file.read_text()
     from cli_test_utils import get_uv_tool_venv_dir
@@ -462,14 +529,10 @@ def test_register_commands_adoption(
 
     # Find command modules that have COMMAND_CREDENTIALS
     modules_with_creds = []
-    for module_file in sorted(commands_dir.glob("*.py")):
-        if module_file.name.startswith("_"):
-            continue
-        module_name = module_file.stem
+    for module_name, _module_file, import_path in module_entries:
         if module_name in SKIP_GROUPS:
             continue
 
-        import_path = f"{cli_pkg}.commands.{module_name}"
         result = subprocess.run(
             [
                 venv_python,

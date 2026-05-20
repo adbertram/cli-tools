@@ -72,23 +72,62 @@ def _command_credentials_from_module(module_file: Path) -> dict[str, list[str]]:
     return {}
 
 
+def _command_module_files(commands_dir: Path) -> list[Path]:
+    """Return real command modules, ignoring package boilerplate and private files."""
+    if not commands_dir.is_dir():
+        return []
+    return [
+        module_file
+        for module_file in sorted(commands_dir.glob("*.py"))
+        if module_file.name != "__init__.py" and not module_file.name.startswith("_")
+    ]
+
+
 def _required_credential_types_for_list_commands(
     cli_dir: Path,
     cli_name: str,
     list_commands: list[str],
 ) -> list[str]:
     """Return credential types required by the discovered list commands."""
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    commands_dir = pkg_dir / "commands"
+    package_modules = {
+        module_file.stem: module_file
+        for module_file in _command_module_files(commands_dir)
+    }
+    flat_module = pkg_dir / "commands.py"
+    flat_credentials = None
+    if package_modules and flat_module.is_file():
+        pytest.fail(
+            f"{cli_name} has both commands.py and command modules in commands/. "
+            "Use exactly one command layout."
+        )
+    if not package_modules and flat_module.is_file():
+        command_groups = {
+            parts[0]
+            for command in list_commands
+            if len(parts := command.split()) >= 2
+        }
+        if len(command_groups) > 1:
+            pytest.fail(
+                f"{cli_name} uses flat commands.py but exposes multiple list-command groups: "
+                f"{', '.join(sorted(command_groups))}. Use commands/<group>.py modules instead."
+            )
+        flat_credentials = _command_credentials_from_module(flat_module)
+
     required_types: set[str] = set()
 
     for cmd_path in list_commands:
         parts = cmd_path.split()
         if len(parts) < 2:
             continue
-        module_file = commands_dir / f"{parts[0]}.py"
-        if not module_file.exists():
-            continue
-        command_credentials = _command_credentials_from_module(module_file)
+        module_file = package_modules.get(parts[0]) or package_modules.get(parts[0].replace("-", "_"))
+        if module_file is None:
+            if flat_credentials is None:
+                continue
+            command_credentials = flat_credentials
+        else:
+            command_credentials = _command_credentials_from_module(module_file)
         required_types.update(command_credentials.get(parts[-1], []))
 
     return sorted(required_types)
