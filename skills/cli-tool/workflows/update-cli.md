@@ -38,9 +38,9 @@ Ask the user (if not clear):
    - Fix output formatting
    - Update API endpoints
 
-## Step 1.5: Implementation Planning (MANDATORY)
+## Step 1.5: Implementation Planning
 
-**STOP. Run `/create-plan` before making any changes.**
+For non-trivial changes, run `/create-plan` before implementation so the change is grounded in the existing CLI structure and conventions.
 
 ```
 /create-plan <cli-name> <modification-description>
@@ -64,9 +64,7 @@ The plan MUST document:
 - Dependencies between components
 - Potential breaking changes
 
-**Why this is mandatory:** Understanding existing patterns before modifying prevents introducing inconsistencies. The plan ensures changes align with established conventions.
-
-**DO NOT proceed to Step 2 until the plan is approved.**
+Understanding existing patterns before modifying prevents introducing inconsistencies. The plan ensures changes align with established conventions.
 
 ## Step 2: Navigate to CLI Directory
 
@@ -389,7 +387,7 @@ After completing the update, provide:
 
 <success_criteria>
 Update is complete when:
-- [ ] `/create-plan` executed and plan approved by user
+- [ ] `/create-plan` executed for non-trivial changes
 - [ ] Changes implemented following standards
 - [ ] New or modified command output shape is covered by tests
 - [ ] Internal representation is minimal: no unused helpers, models, or dependencies

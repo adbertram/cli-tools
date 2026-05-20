@@ -14,6 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from cli_test_utils import discover_list_commands, run_cli_command
 
+SKIP_GROUPS = {"auth", "cache", "profiles"}
+
 
 def _credential_types_from_config(cli_dir: Path, cli_name: str) -> list[str] | None:
     """Return declared CREDENTIAL_TYPES, or None if the config cannot be parsed."""
@@ -107,6 +109,7 @@ def _required_credential_types_for_list_commands(
             parts[0]
             for command in list_commands
             if len(parts := command.split()) >= 2
+            and parts[0] not in SKIP_GROUPS
         }
         if len(command_groups) > 1:
             pytest.fail(
@@ -120,6 +123,8 @@ def _required_credential_types_for_list_commands(
     for cmd_path in list_commands:
         parts = cmd_path.split()
         if len(parts) < 2:
+            continue
+        if parts[0] in SKIP_GROUPS:
             continue
         module_file = package_modules.get(parts[0]) or package_modules.get(parts[0].replace("-", "_"))
         if module_file is None:

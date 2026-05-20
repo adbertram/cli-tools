@@ -43,7 +43,7 @@
               "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
               "short": "-c"
             }
           ]

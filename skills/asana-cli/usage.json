@@ -1,8 +1,8 @@
 {
   "tool": "asana",
   "description": "CLI interface for Asana API",
-  "discovered_at": "2026-05-06T15:12:56.836932+00:00",
-  "total_commands": 28,
+  "discovered_at": "2026-05-20T19:56:39.402705+00:00",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -43,14 +43,14 @@
               "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "help": "Authenticate only this credential type (e.g., 'custom')",
               "short": "-c"
             }
           ],
           "usage_instructions": "Configure Asana auth with a PAT. Use --pat/-p to provide token directly (otherwise prompts). Use --workspace/-w to set a default workspace ID. Get PAT from https://app.asana.com/0/my-apps."
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "options": [
             {
               "name": "--profile",
@@ -63,7 +63,7 @@
           "usage_instructions": "Clear all stored Asana credentials."
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -81,26 +81,6 @@
             }
           ],
           "usage_instructions": "Check current auth status. Use --table/-t for formatted output."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `asana auth refresh --help` for exact arguments and options."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
