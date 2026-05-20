@@ -21,12 +21,8 @@ app.add_typer(plugins_app, name="plugins")
 
 
 def _run_wordpress(args: List[str]) -> None:
-    """Run a wordpress admin command and forward its output."""
-    result = subprocess.run(["wordpress", "admin"] + args, capture_output=True, text=True)
-    if result.stdout:
-        typer.echo(result.stdout, nl=False)
-    if result.stderr:
-        typer.echo(result.stderr, err=True, nl=False)
+    """Run a wordpress admin command with inherited stdio for interactive flows."""
+    result = subprocess.run(["wordpress", "admin"] + args, text=True)
     raise typer.Exit(result.returncode)
 
 
