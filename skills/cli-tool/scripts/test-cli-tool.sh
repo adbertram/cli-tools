@@ -95,15 +95,20 @@ fi
 cd "$SKILL_DIR" || exit 1
 
 JUNIT=$(mktemp -t cli-tool-tests-XXXXXX.xml)
-trap 'rm -f "$JUNIT"' EXIT
+RAW_OUTPUT_FILE=$(mktemp -t cli-tool-tests-raw-XXXXXX.log)
+trap 'rm -f "$JUNIT" "$RAW_OUTPUT_FILE"' EXIT
 export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/.cache/uv/project-envs/cli-tool-skill-tests}"
 
 PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 [[ "$VERBOSE" == "true" ]] && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
-RAW_OUTPUT=$(uv run pytest "${PYTEST_ARGS[@]}" 2>&1)
-EXIT_CODE=$?
+if uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee "$RAW_OUTPUT_FILE" >&2; then
+    EXIT_CODE=0
+else
+    EXIT_CODE=$?
+fi
+RAW_OUTPUT=$(cat "$RAW_OUTPUT_FILE")
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \
     EXIT_CODE="$EXIT_CODE" RAW_OUTPUT="$RAW_OUTPUT" \

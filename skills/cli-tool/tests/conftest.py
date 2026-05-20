@@ -258,8 +258,24 @@ def authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, co
 @pytest.fixture(scope="session")
 def require_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter):
     """Return a callable so tests can discover commands before auth gating."""
+    auth_verified = False
+    cached_result = None
+
     def _require_authenticated():
-        return _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter)
+        nonlocal auth_verified, cached_result
+        if auth_verified:
+            return cached_result
+
+        cached_result = _check_authenticated(
+            cli_executable,
+            cli_name,
+            cli_dir,
+            test_config,
+            help_cache,
+            command_filter,
+        )
+        auth_verified = True
+        return cached_result
 
     return _require_authenticated
 

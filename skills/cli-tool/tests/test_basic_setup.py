@@ -214,16 +214,23 @@ def test_is_git_repo(cli_name, cli_dir, command_filter):
 
 
 def test_no_runtime_agent_dirs(cli_name, cli_dir, command_filter):
-    """CLI tool directories must not contain runtime agent config folders."""
+    """CLI tool directories must not contain runtime agent metadata."""
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    forbidden_dirs = [".claude", ".codex", ".gemini"]
-    present = [name for name in forbidden_dirs if (cli_dir / name).exists()]
+    forbidden_dirs = [".agents", ".claude", ".codex", ".gemini"]
+    forbidden_files = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"]
+    present_dirs = [name for name in forbidden_dirs if (cli_dir / name).exists()]
+    present_files = [name for name in forbidden_files if (cli_dir / name).exists()]
 
-    assert not present, (
-        f"CLI tool '{cli_name}' contains forbidden runtime agent folders: {', '.join(present)}. "
+    assert not present_dirs, (
+        f"CLI tool '{cli_name}' contains forbidden runtime agent folders: {', '.join(present_dirs)}. "
         "Fix: remove runtime agent folders from the tool directory; service skills belong under "
+        "cli-tools/skills/<tool>-cli."
+    )
+    assert not present_files, (
+        f"CLI tool '{cli_name}' contains forbidden runtime agent files: {', '.join(present_files)}. "
+        "Fix: remove runtime agent files from the tool directory; service skills belong under "
         "cli-tools/skills/<tool>-cli."
     )
 
