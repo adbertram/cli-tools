@@ -30,11 +30,10 @@ def token(
     ctx: typer.Context,
     client_id: Optional[str] = typer.Option(None, "--client-id", help="WordPress.com OAuth client id"),
     client_secret: Optional[str] = typer.Option(None, "--client-secret", help="WordPress.com OAuth client secret"),
-    username: Optional[str] = typer.Option(None, "--username", help="WordPress.com username"),
-    password: Optional[str] = typer.Option(None, "--password", help="WordPress.com password"),
     site: Optional[str] = typer.Option(None, "--site", help="WordPress.com site identifier"),
+    redirect_uri: Optional[str] = typer.Option(None, "--redirect-uri", help="Registered WordPress.com OAuth redirect URI"),
 ) -> None:
-    """Acquire and save a WordPress.com OAuth access token."""
+    """Acquire and save a WordPress.com OAuth access token through browser authorization."""
     if ctx.invoked_subcommand is not None:
         return
 
@@ -43,9 +42,8 @@ def token(
         config,
         client_id=client_id,
         client_secret=client_secret,
-        username=username,
-        password=password,
         site=site,
+        redirect_uri=redirect_uri,
     )
     print_success(f"WordPress.com access token saved for {result['site']}")
     print_json(result)
@@ -56,9 +54,8 @@ def token(
 def save_credential(
     client_id: Optional[str] = typer.Option(None, "--client-id", help="WordPress.com OAuth client id"),
     client_secret: Optional[str] = typer.Option(None, "--client-secret", help="WordPress.com OAuth client secret"),
-    username: Optional[str] = typer.Option(None, "--username", help="WordPress.com username"),
-    password: Optional[str] = typer.Option(None, "--password", help="WordPress.com password"),
     site: Optional[str] = typer.Option(None, "--site", help="WordPress.com site identifier"),
+    redirect_uri: Optional[str] = typer.Option(None, "--redirect-uri", help="Registered WordPress.com OAuth redirect URI"),
 ) -> None:
     """Save the WordPress.com credential bundle used to acquire Jetpack tokens."""
     config = get_config()
@@ -66,9 +63,8 @@ def save_credential(
         config,
         client_id=client_id,
         client_secret=client_secret,
-        username=username,
-        password=password,
         site=site,
+        redirect_uri=redirect_uri,
     )
     print_success(f"WordPress.com credentials saved for {result['site']}")
     print_json(result)

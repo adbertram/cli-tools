@@ -31,9 +31,8 @@ PASSWORD=your_application_password
 # Optional secondary WordPress.com bundle for native Jetpack plugin upgrades.
 WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
 WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
-WPCOM_USERNAME=your_wpcom_username
-WPCOM_PASSWORD=your_wpcom_password
 WPCOM_SITE=your-site.com
+WPCOM_REDIRECT_URI=https://localhost.example/callback
 WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
 ```
 
@@ -80,9 +79,8 @@ USERNAME=your_username
 PASSWORD=your_application_password
 WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
 WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
-WPCOM_USERNAME=your_wpcom_username
-WPCOM_PASSWORD=your_wpcom_password
 WPCOM_SITE=your-site.com
+WPCOM_REDIRECT_URI=https://localhost.example/callback
 WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
 ```
 
@@ -94,23 +92,22 @@ Save the secondary WordPress.com credential bundle once:
 wordpress org token save-credential \
   --client-id your-client-id \
   --client-secret your-client-secret \
-  --username your-wpcom-username \
-  --password your-wpcom-password \
-  --site your-site.com
+  --site your-site.com \
+  --redirect-uri https://localhost.example/callback
 ```
 
-Acquire and save a WordPress.com OAuth token without a browser:
+Acquire and save a WordPress.com OAuth token through browser approval:
 
 ```bash
 wordpress org token
 ```
 
-You can also provide the same flags directly to `wordpress org token` for a one-shot non-interactive run. The command saves `WPCOM_ACCESS_TOKEN` into the active profile `.env` and does not print the raw token.
+The command prints the authorization URL, opens it in your default browser, waits for you to approve access, then prompts you to paste the full redirect URL or the authorization code. It saves `WPCOM_ACCESS_TOKEN` into the active profile `.env` and does not print the raw token.
 
 If any required WordPress.com fields are missing, the CLI fails with an exact missing-field list and tells you to rerun:
 
 ```bash
-wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...
+wordpress org token save-credential --client-id ... --client-secret ... --site ... --redirect-uri ...
 ```
 
 ### Setting Up Application Password
@@ -832,9 +829,8 @@ PASSWORD=your_application_password
 # Optional secondary WordPress.com bundle for native Jetpack plugin upgrades
 WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
 WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
-WPCOM_USERNAME=your_wpcom_username
-WPCOM_PASSWORD=your_wpcom_password
 WPCOM_SITE=your-site.com
+WPCOM_REDIRECT_URI=https://localhost.example/callback
 WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
 ```
 

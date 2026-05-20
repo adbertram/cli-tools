@@ -8,7 +8,7 @@ import random
 import time
 import requests
 from requests.auth import HTTPBasicAuth
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from cli_tools_shared.exceptions import ClientError
 
@@ -53,6 +53,10 @@ WPCOM_API_BASE_URL = "https://public-api.wordpress.com/rest/v1.1"
 JETPACK_PLUGIN_MANAGEMENT_ERROR = (
     "Jetpack is not connected to a WordPress.com account that can manage plugins for this site. "
     "Connect the current WordPress admin user to WordPress.com through Jetpack before plugin updates can run."
+)
+WPCOM_PLUGIN_AUTHORIZATION_ERROR = (
+    "WordPress.com still denied plugin-management access after browser authorization. "
+    "Log in in the browser, approve the configured app for this site, then retry the plugin update."
 )
 
 
@@ -296,6 +300,7 @@ class WordPressClient:
         method: str,
         endpoint: str,
         data: Optional[Dict] = None,
+        retry_on_forbidden: bool = False,
     ) -> Any:
         token = self.config.wpcom_access_token
         if not token:
@@ -314,6 +319,16 @@ class WordPressClient:
             if not token:
                 raise ClientError("WordPress.com token acquisition did not save WPCOM_ACCESS_TOKEN")
             response = self._dispatch_wpcom_request(method, url, token, data)
+
+        if response.status_code == 403 and retry_on_forbidden:
+            self.config.clear_wpcom_access_token()
+            acquire_wpcom_access_token(self.config)
+            token = self.config.wpcom_access_token
+            if not token:
+                raise ClientError("WordPress.com token acquisition did not save WPCOM_ACCESS_TOKEN")
+            response = self._dispatch_wpcom_request(method, url, token, data)
+            if response.status_code == 403:
+                raise ClientError(WPCOM_PLUGIN_AUTHORIZATION_ERROR)
 
         if not response.ok:
             error_msg = extract_wpcom_error_message(response)
@@ -1268,27 +1283,68 @@ class WordPressClient:
             raise ClientError(f"Expected Jetpack connection response to be a dict, got {type(response)}")
         return response
 
-    def _get_jetpack_site_data(self) -> dict:
-        response = self._make_request(
-            "GET",
-            "/jetpack/v4/site",
-            base_url=self._wp_json_base_url(),
-        )
+    @staticmethod
+    def _normalize_site_identifier(value: str) -> str:
+        if not isinstance(value, str):
+            raise ClientError(f"Expected site identifier to be a string, got {type(value)}")
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ClientError("Site identifier cannot be empty")
+        parsed = urlparse(normalized if "://" in normalized else f"https://{normalized}")
+        host = parsed.netloc or parsed.path
+        host = host.rstrip("/")
+        if not host:
+            raise ClientError(f"Could not normalize site identifier: {value}")
+        return host
+
+    def _get_wpcom_site_record(self) -> dict:
+        configured_site = self.config.wpcom_site
+        if not configured_site:
+            raise ClientError("Missing WordPress.com site identifier: WPCOM_SITE")
+        normalized_configured_site = self._normalize_site_identifier(configured_site)
+
+        response = self._make_wpcom_request("GET", "/me/sites")
         if not isinstance(response, dict):
-            raise ClientError(f"Expected Jetpack site response to be a dict, got {type(response)}")
-        code = response.get("code")
-        if code != "success":
-            raise ClientError(f"Expected Jetpack site response code to be success, got {code}")
-        raw_data = response.get("data")
-        if not isinstance(raw_data, str):
-            raise ClientError("Jetpack site response did not include data JSON string")
-        try:
-            site_data = json.loads(raw_data)
-        except json.JSONDecodeError as exc:
-            raise ClientError("Jetpack site response data was not valid JSON") from exc
-        if not isinstance(site_data, dict):
-            raise ClientError(f"Expected Jetpack site data to decode to a dict, got {type(site_data)}")
-        return site_data
+            raise ClientError(f"Expected WordPress.com /me/sites response to be a dict, got {type(response)}")
+        sites = response.get("sites")
+        if not isinstance(sites, list):
+            raise ClientError("WordPress.com /me/sites response did not include sites list")
+
+        for site in sites:
+            if not isinstance(site, dict):
+                raise ClientError(f"Expected WordPress.com site entry to be a dict, got {type(site)}")
+            for key in ("URL", "domain"):
+                raw_value = site.get(key)
+                if raw_value is None:
+                    continue
+                if not isinstance(raw_value, str):
+                    raise ClientError(f"Expected WordPress.com site {key} to be a string, got {type(raw_value)}")
+                if self._normalize_site_identifier(raw_value) == normalized_configured_site:
+                    return site
+
+        raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
+
+    @staticmethod
+    def _assert_wpcom_site_has_plugin_management_access(site: dict) -> None:
+        capabilities = site.get("capabilities")
+        if capabilities is None:
+            return
+        if not isinstance(capabilities, dict):
+            raise ClientError("WordPress.com site record did not include capabilities dict")
+
+        capability_names = [name for name in ("update_plugins", "manage_options") if name in capabilities]
+        if not capability_names:
+            return
+
+        allowed = False
+        for name in capability_names:
+            value = capabilities.get(name)
+            if not isinstance(value, bool):
+                raise ClientError(f"WordPress.com site capabilities.{name} was not a boolean")
+            if value:
+                allowed = True
+        if not allowed:
+            raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
     def _assert_jetpack_plugin_management_connected(self) -> None:
         connection = self._get_jetpack_connection_data()
@@ -1301,18 +1357,26 @@ class WordPressClient:
         if not is_connected:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-        site = self._get_jetpack_site_data()
-        user_can_manage = site.get("user_can_manage")
-        if not isinstance(user_can_manage, bool):
-            raise ClientError("Jetpack site response did not include user_can_manage boolean")
-        capabilities = site.get("capabilities")
-        if not isinstance(capabilities, dict):
-            raise ClientError("Jetpack site response did not include capabilities")
-        update_plugins = capabilities.get("update_plugins")
-        if not isinstance(update_plugins, bool):
-            raise ClientError("Jetpack site response did not include capabilities.update_plugins boolean")
-        if not user_can_manage or not update_plugins:
+        permissions = current_user.get("permissions")
+        if not isinstance(permissions, dict):
+            raise ClientError("Jetpack connection response did not include currentUser.permissions")
+        manage_plugins = permissions.get("manage_plugins")
+        if not isinstance(manage_plugins, bool):
+            raise ClientError("Jetpack connection response did not include currentUser.permissions.manage_plugins boolean")
+        if not manage_plugins:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
+
+        wpcom_site = self._get_wpcom_site_record()
+        self._assert_wpcom_site_has_plugin_management_access(wpcom_site)
+        self._assert_wpcom_plugin_endpoint_access()
+
+    def _assert_wpcom_plugin_endpoint_access(self) -> None:
+        site = quote(self.config.wpcom_site, safe="")
+        self._make_wpcom_request(
+            "GET",
+            f"/sites/{site}/plugins",
+            retry_on_forbidden=True,
+        )
 
     def get_wordpress_org_plugin_info(self, slug: str) -> dict:
         """

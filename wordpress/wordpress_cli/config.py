@@ -13,9 +13,8 @@ class Config(BaseConfig):
     WPCOM_REQUIRED_FIELDS = (
         "WPCOM_CLIENT_ID",
         "WPCOM_CLIENT_SECRET",
-        "WPCOM_USERNAME",
-        "WPCOM_PASSWORD",
         "WPCOM_SITE",
+        "WPCOM_REDIRECT_URI",
     )
 
     def __init__(self, profile=None):
@@ -75,19 +74,14 @@ class Config(BaseConfig):
         return self._get("WPCOM_CLIENT_SECRET")
 
     @property
-    def wpcom_username(self) -> Optional[str]:
-        """Get WordPress.com OAuth username."""
-        return self._get("WPCOM_USERNAME")
-
-    @property
-    def wpcom_password(self) -> Optional[str]:
-        """Get WordPress.com OAuth password."""
-        return self._get("WPCOM_PASSWORD")
-
-    @property
     def wpcom_site(self) -> Optional[str]:
         """Get the WordPress.com site identifier for Jetpack management APIs."""
         return self._get("WPCOM_SITE")
+
+    @property
+    def wpcom_redirect_uri(self) -> Optional[str]:
+        """Get the registered WordPress.com OAuth redirect URI."""
+        return self._get("WPCOM_REDIRECT_URI")
 
     @property
     def wpcom_token_type(self) -> Optional[str]:
@@ -112,17 +106,15 @@ class Config(BaseConfig):
         *,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
         site: Optional[str] = None,
+        redirect_uri: Optional[str] = None,
     ) -> None:
         """Save provided WordPress.com credential fields and clear any stale token."""
         updates = {
             "WPCOM_CLIENT_ID": client_id,
             "WPCOM_CLIENT_SECRET": client_secret,
-            "WPCOM_USERNAME": username,
-            "WPCOM_PASSWORD": password,
             "WPCOM_SITE": site,
+            "WPCOM_REDIRECT_URI": redirect_uri,
         }
         changed = False
         for field, value in updates.items():
