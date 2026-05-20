@@ -1,7 +1,7 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-05-20T16:34:40.274180+00:00",
+  "discovered_at": "2026-05-20T20:11:44.494781+00:00",
   "total_commands": 42,
   "global_options": [
     {
@@ -1302,22 +1302,16 @@
               "help": "WordPress.com OAuth client secret"
             },
             {
-              "name": "--username",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com username"
-            },
-            {
-              "name": "--password",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com password"
-            },
-            {
               "name": "--site",
               "type": "TEXT",
               "required": false,
               "help": "WordPress.com site identifier"
+            },
+            {
+              "name": "--redirect-uri",
+              "type": "TEXT",
+              "required": false,
+              "help": "Registered WordPress.com OAuth redirect URI"
             }
           ],
           "commands": {
@@ -1337,31 +1331,25 @@
                   "help": "WordPress.com OAuth client secret"
                 },
                 {
-                  "name": "--username",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com username"
-                },
-                {
-                  "name": "--password",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com password"
-                },
-                {
                   "name": "--site",
                   "type": "TEXT",
                   "required": false,
                   "help": "WordPress.com site identifier"
+                },
+                {
+                  "name": "--redirect-uri",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Registered WordPress.com OAuth redirect URI"
                 }
               ],
-              "usage_instructions": "Run `wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...` to save the WordPress.com credential bundle without requesting a token."
+              "usage_instructions": "Run `wordpress org token save-credential --client-id ... --client-secret ... --site ... --redirect-uri ...` to save the WordPress.com OAuth app settings used for browser-based token acquisition."
             }
           },
-          "usage_instructions": "Run `wordpress org token` to acquire and save `WPCOM_ACCESS_TOKEN` using saved WordPress.com credentials, or pass all credential options directly."
+          "usage_instructions": "Run `wordpress org token` to open the WordPress.com authorization URL in a browser, approve access, then paste the redirect URL or authorization code to save `WPCOM_ACCESS_TOKEN`. Optional flags let you override the saved app settings for this run."
         }
       },
-      "usage_instructions": "Use `wordpress org token` commands for WordPress.com OAuth credentials and Jetpack plugin-update tokens."
+      "usage_instructions": "Use `wordpress org token` commands to save WordPress.com OAuth app settings and acquire the token required by Jetpack plugin-management endpoints."
     }
   },
   "usage_instructions": "Use `wordpress --help` to inspect current commands, arguments, and options."
