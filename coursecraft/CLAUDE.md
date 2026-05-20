@@ -1,7 +1,7 @@
 # CourseCraft CLI - Claude Instructions
 
 ## Overview
-The `coursecraft` CLI manages CourseCraft course content. It replicates functionality from the bash scripts in `~/Dropbox/GitRepos/Agents/CourseCraft/scripts/` but provides a cleaner Python interface.
+The `coursecraft` CLI manages CourseCraft course content with a Python interface.
 
 ## Key Design Decisions
 1. **Wraps database operations** - This CLI provides a simplified interface for course content management

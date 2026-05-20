@@ -23,7 +23,7 @@ mailchimp --help
 
 1. Copy the example environment file:
    ```bash
-   cd ~/Dropbox/GitRepos/cli-tools/mailchimp
+   cd <cli-tools-root>/mailchimp
    cp .env.example .env
    ```
 

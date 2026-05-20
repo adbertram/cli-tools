@@ -9,8 +9,9 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import List, Optional
 
+from cli_tools_shared.output import handle_error, print_json
+
 from ..client import get_client
-from ..output import handle_error, print_json
 from . import emit_rows
 
 

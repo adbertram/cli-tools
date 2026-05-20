@@ -1,6 +1,9 @@
 """Make.com client using shared browser session tooling."""
 
 from typing import Optional
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
 
 from cli_tools_shared.http_session import BrowserAuthState, BrowserAuthenticatedHttpClient
 

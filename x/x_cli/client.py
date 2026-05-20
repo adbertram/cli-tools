@@ -54,7 +54,7 @@ class XClient:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
-                "Add them to ~/Dropbox/GitRepos/cli-tools/x/.env"
+                "Run `x auth login` to configure them."
             )
 
         self.base_url = self.config.base_url

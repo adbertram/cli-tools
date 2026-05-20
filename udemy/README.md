@@ -5,7 +5,7 @@ Command-line access to Udemy instructor courses. Course list/get commands use th
 ## Installation
 
 ```bash
-uv tool install -e /Users/adam/Dropbox/GitRepos/cli-tools/udemy --force --refresh
+uv tool install -e <cli-tools-root>/udemy --force --refresh
 ```
 
 ## Quick Start

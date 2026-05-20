@@ -1,6 +1,3 @@
-"""Fedex CLI - Command-line interface for Fedex API."""
-# Suppress urllib3 SSL warnings (LibreSSL compatibility) - must be before urllib3 import
-import warnings
-warnings.filterwarnings("ignore", module="urllib3")
+"""FedEx CLI package."""
 
 __version__ = "0.1.0"

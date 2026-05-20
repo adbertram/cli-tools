@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://modelloturbo.com/"
     DIST_NAME = "modello-turbo-cli"
-    SESSION_NAME = "modello-turbo"
-    LOGIN_URL = "https://modelloturbo.com/"
 
     def __init__(self, profile=None):
         super().__init__(

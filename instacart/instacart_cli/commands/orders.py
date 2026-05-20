@@ -6,7 +6,7 @@ import typer
 from pydantic import BaseModel
 
 from ..client import get_client
-from ..filters import apply_filters, parse_filter_string, validate_filters
+from cli_tools_shared.filters import apply_filters, parse_filter_string, validate_filters
 from cli_tools_shared.output import handle_error, print_json, print_success, print_table
 
 

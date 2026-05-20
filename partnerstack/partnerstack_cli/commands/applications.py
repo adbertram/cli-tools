@@ -11,7 +11,9 @@ from cli_tools_shared.output import handle_error, print_json, print_table
 from ._common import model_to_dict
 
 
-COMMAND_CREDENTIALS = {}
+COMMAND_CREDENTIALS = {
+    "create": ["custom"],
+}
 COMMAND_AUTH_TYPES = {
     "create": AUTH_BASIC,
 }

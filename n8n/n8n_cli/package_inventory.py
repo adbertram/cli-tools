@@ -1,12 +1,13 @@
 """Server-side n8n community package inventory helpers."""
 import json
 import shlex
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .server import run_on_server_raw
 
 
-N8N_NODES_DIR = "/Users/adam/.n8n/nodes"
+N8N_NODES_DIR = str(Path.home() / ".n8n" / "nodes")
 CUSTOM_PACKAGE_MARKER = "n8nCliPackage"
 _GENERATED_AUTHORS = {"Adam", "Adam Bertram", "Adam Marczak"}
 

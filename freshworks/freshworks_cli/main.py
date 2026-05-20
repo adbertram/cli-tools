@@ -1,18 +1,15 @@
 """Main entry point for Freshworks CLI."""
 from . import __version__
-from .config import get_config
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
-from cli_tools_shared.command_registry import register_commands
+
+from .commands import app as items_app
+from .config import get_config
 
 app = create_app(name="freshworks", help="CLI interface for Freshworks API", version=__version__)
 
-# Register command modules
-from .commands import items
-register_commands(app, get_config, items, name="items", help="Manage freshworks items")
-
-# Register shared apps
+app.add_typer(items_app, name="items")
 app.add_typer(create_auth_app(get_config, tool_name="freshworks"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 

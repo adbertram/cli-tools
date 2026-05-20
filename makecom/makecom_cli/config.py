@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.make.com/en/affiliate"
     DIST_NAME = "makecom-cli"
-    SESSION_NAME = "makecom"
-    LOGIN_URL = "https://www.make.com/en/login"
 
     def __init__(self, profile=None):
         super().__init__(

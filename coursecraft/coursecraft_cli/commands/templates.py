@@ -2,10 +2,10 @@
 import typer
 from typing import Optional, List
 
+from cli_tools_shared.filters import apply_properties_filter, apply_limit
 from ..client import get_client, ClientError
 from ..output import print_success, print_error, print_json, print_table
 from ..filter_map import translate_filters
-from ..filters import apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage slide template records")
 
@@ -90,6 +90,14 @@ def list_templates(
     except ClientError as e:
         print_error(str(e))
         raise typer.Exit(1)
+
+
+COMMAND_CREDENTIALS = {
+    "create": ["custom"],
+    "get": ["custom"],
+    "list": ["custom"],
+    "update": ["custom"],
+}
 
 
 @app.command("get")

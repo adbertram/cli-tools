@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://signup.cj.com/member/signup/publisher/?cid=3065612"
     DIST_NAME = "microsoft-advertising-cli"
-    SESSION_NAME = "microsoft-advertising"
-    LOGIN_URL = "https://signup.cj.com/member/signup/publisher/?cid=3065612"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -45,7 +45,6 @@ FIELD_MAPPINGS = {
         'idea': 'Idea',
         'action_summary': 'Action Summary',
         'script': 'Script',
-        'demo_environment': 'Demo Environment',
         'demo_walkthrough_script_path': 'Demo Walkthrough Script Path',
         'demo_walkthrough_script_created': 'Demo Walkthrough Script Created',
         'voice_recording_id': 'Voice Recording ID',
@@ -87,20 +86,6 @@ FIELD_MAPPINGS = {
         'requirements': 'Requirements',
         'use_cases': 'Use Cases',
         'deck_number': 'Template Deck Number',
-    },
-    'Demo Environments': {
-        'name': 'Name',
-        'environment_id': 'Environment ID',
-        'provider': 'Provider',
-        'status': 'Status',
-        'notes': 'Notes',
-        'tenant_name': 'Tenant Name',
-        'tenant_id': 'Tenant ID',
-        'subscription_name': 'Subscription Name',
-        'subscription_id': 'Subscription ID',
-        'cloud_name': 'Cloud Name',
-        'default_location': 'Default Location',
-        'owner_account': 'Owner Account',
     },
 }
 

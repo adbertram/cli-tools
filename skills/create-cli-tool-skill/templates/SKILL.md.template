@@ -1,0 +1,45 @@
+---
+name: {skill_name}
+description: >-
+  Execute {tool_name} operations using the `{tool_name}` CLI tool.
+  {description}
+  Triggers: {tool_name}, {tool_name} cli, {natural_triggers}
+---
+
+<objective>
+Execute {tool_name} operations using the `{tool_name}` CLI. All {tool_name} interactions should use this CLI.
+</objective>
+
+<quick_start>
+The `{tool_name}` CLI follows this pattern:
+```bash
+{tool_name} <command-group> <action> [arguments] [options]
+```
+
+{common_commands}
+</quick_start>
+
+<essential_principles>
+<principle name="Usage Reference">
+**MANDATORY: Consult `usage.json` before executing ANY `{tool_name}` command.**
+This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="AI Instruction Results">
+After every `{tool_name}` command, inspect stdout. If it is JSON with `type: "ai_instruction"` and `schema_version: "1.0"`, follow the instruction object as the next task instead of summarizing it as ordinary command output. Use the allowed tools, context, constraints, and success criteria in the payload. Run `verification_commands` or `follow_up_commands` only after completing the instructed AI work; they are not required commands for performing the handoff.
+</principle>
+
+<principle name="Command Groups">
+{command_groups}
+</principle>
+</essential_principles>
+
+<reference_index>
+**`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
+</reference_index>
+
+<success_criteria>
+- Command executes without error
+- Output is displayed in requested format
+- Correct command and flags used (verified against usage.json)
+</success_criteria>

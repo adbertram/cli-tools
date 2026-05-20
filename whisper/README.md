@@ -118,7 +118,7 @@ The wrapper stores minimal configuration in `.env`:
 WHISPER_CLI_COMMAND=whisper
 
 # Optional: Full path to CLI executable
-# WHISPER_CLI_PATH=/usr/local/bin/whisper
+# WHISPER_CLI_PATH=
 ```
 
 ## Exit Codes

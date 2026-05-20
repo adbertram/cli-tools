@@ -10,7 +10,7 @@ app = create_app(
     cache_support=False,
 )
 
-from .commands.record import record
+from .commands import record
 
 app.command("record")(record)
 

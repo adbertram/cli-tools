@@ -7,8 +7,8 @@ from typing import Dict, List, Optional, Any
 import requests
 
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 from cli_tools_shared import FilterMap
+from cli_tools_shared.filters import FilterValidationError, validate_filters
 
 from cli_tools_shared.exceptions import ClientError
 
@@ -218,7 +218,7 @@ class AirtableClient:
 
         Translates CLI filter syntax to Airtable filterByFormula API parameter.
         """
-        from .filters import parse_filter_string
+        from cli_tools_shared.filters import parse_filter_string
 
         def _is_numeric(v: str) -> bool:
             if v is None:
@@ -392,6 +392,13 @@ class AirtableClient:
                 return table.get("fields", [])
         raise ClientError(f"Table not found in base metadata: {table_id}")
 
+    def get_field(self, base_id: str, table_id: str, field_id: str) -> Dict[str, Any]:
+        """Get one field by ID or name from a table schema."""
+        for field in self.list_fields(base_id, table_id):
+            if field.get("id") == field_id or field.get("name") == field_id:
+                return field
+        raise ClientError(f"Field not found in table metadata: {field_id}")
+
     def list_tables(self, base_id: str) -> List[Dict[str, Any]]:
         """List all tables in an Airtable base.
 
@@ -400,6 +407,13 @@ class AirtableClient:
         endpoint = f"/meta/bases/{base_id}/tables"
         result = self._make_request("GET", endpoint)
         return result.get("tables", [])
+
+    def get_table(self, base_id: str, table_id: str) -> Dict[str, Any]:
+        """Get one table by ID or name from base metadata."""
+        for table in self.list_tables(base_id):
+            if table.get("id") == table_id or table.get("name") == table_id:
+                return table
+        raise ClientError(f"Table not found in base metadata: {table_id}")
 
     def create_table(
         self,

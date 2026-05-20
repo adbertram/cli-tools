@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://twopagescurtains.com/"
     DIST_NAME = "twopages-cli"
-    SESSION_NAME = "twopages"
-    LOGIN_URL = "https://twopagescurtains.com/"
 
     def __init__(self, profile=None):
         super().__init__(

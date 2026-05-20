@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.hp.com/us-en/shop/cv/affiliate-program"
     DIST_NAME = "hp-cli"
-    SESSION_NAME = "hp"
-    LOGIN_URL = "https://www.hp.com/us-en/shop/cv/affiliate-program"
 
     def __init__(self, profile=None):
         super().__init__(

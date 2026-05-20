@@ -2,8 +2,8 @@
 
 import re
 from typing import List, Optional
+from cli_tools_shared.filters import parse_filter_string
 from .field_mappings import validate_field
-from .filters import parse_filter_string
 
 
 def escape_value(value: str) -> str:

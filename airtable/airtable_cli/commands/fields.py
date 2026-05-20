@@ -1,5 +1,8 @@
 """Field schema commands for Airtable CLI."""
 COMMAND_CREDENTIALS = {
+    "get": [
+        "personal_access_token"
+    ],
     "create": [
         "personal_access_token"
     ],
@@ -12,12 +15,13 @@ COMMAND_CREDENTIALS = {
 }
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import typer
 
 from ..client import get_client
 from ..commands.records import resolve_base_id
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success
 
 app = typer.Typer(help="Manage Airtable fields", no_args_is_help=True)
@@ -57,6 +61,13 @@ def fields_list(
     table_id: str = typer.Argument(..., help="The table ID or table name"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum fields to return"),
+    filter: Optional[List[str]] = typer.Option(
+        None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:Status, type:eq:singleLineText)"
+    ),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated list of fields to include in output"
+    ),
 ):
     """
     List fields in an Airtable table.
@@ -72,6 +83,13 @@ def fields_list(
             base_id=resolved_base_id,
             table_id=table_id,
         )
+        if filter:
+            validate_filters(filter)
+            result = apply_filters(result, filter)
+        if limit and len(result) > limit:
+            result = result[:limit]
+        if properties:
+            result = apply_properties_filter(result, properties)
         if not table:
             print_json(result)
             return
@@ -86,6 +104,27 @@ def fields_list(
                 "options": json.dumps(field.get("options", {}), sort_keys=True),
             })
         print_table(rows, ["id", "name", "type", "description", "options"], ["ID", "Name", "Type", "Description", "Options"])
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("get")
+def fields_get(
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
+    field_id: str = typer.Argument(..., help="The field ID or field name"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Get a single field schema by ID or name."""
+    try:
+        resolved_base_id = resolve_base_id(base_id)
+        client = get_client()
+        result = client.get_field(
+            base_id=resolved_base_id,
+            table_id=table_id,
+            field_id=field_id,
+        )
+        print_field(result, table)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

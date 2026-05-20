@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.pluralsight.com/"
     DIST_NAME = "pluralsight-cli"
-    SESSION_NAME = "pluralsight"
-    LOGIN_URL = "https://www.pluralsight.com/"
 
     def __init__(self, profile=None):
         super().__init__(

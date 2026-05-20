@@ -5,7 +5,7 @@ Command-line access to the Buttondown REST API for subscribers, emails, and tags
 ## Installation
 
 ```bash
-uv tool install -e /Users/adam/Dropbox/GitRepos/cli-tools/buttondown --force --refresh
+uv tool install -e <cli-tools-root>/buttondown --force --refresh
 ```
 
 ## Quick Start

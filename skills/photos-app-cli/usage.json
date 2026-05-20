@@ -1,0 +1,633 @@
+{
+  "tool": "photos-app",
+  "description": "Query and export photos from macOS Photos library",
+  "discovered_at": "2026-05-20T16:16:22.959327+00:00",
+  "total_commands": 22,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use to configure authentication credentials. Use --profile/-p for a specific profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate a specific credential type."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to clear stored credentials. Use --profile/-p to target a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to check current authentication status. Use --profile/-p for a specific profile. Use --table/-t for formatted output."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to verify credentials are valid. Use --verbose/-v for detailed output. Use --profile/-p for a specific profile."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use to list all profiles and see which is the default. Use --table/-t for formatted output."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use to get details of a specific profile. NAME is a required positional arg."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use to create a new profile. NAME is a required positional arg."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use to switch the active profile. NAME is a required positional arg."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to permanently delete a profile. NAME is a required positional arg. Use --force/-F to skip confirmation."
+            }
+          },
+          "usage_instructions": "Profile management -- list, get, create, set default, and delete profiles. Standard profile group for multi-account support."
+        }
+      },
+      "usage_instructions": "Authentication management for Photos app access. Standard auth group for profile-based credential management. Photos app itself doesn't require OAuth but profiles are supported for consistency."
+    },
+    "photos": {
+      "help": "List and download photos",
+      "commands": {
+        "list": {
+          "help": "List photos from the Photos library. By default returns JSON with photo metadata. Use --table for tabular output.",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-t"
+            },
+            {
+              "name": "--album",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by album name",
+              "short": "-a"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--videos",
+              "type": "bool",
+              "required": false,
+              "help": "Include videos",
+              "short": "-v"
+            },
+            {
+              "name": "--hidden",
+              "type": "bool",
+              "required": false,
+              "help": "Include hidden photos"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "photos-app photos list --limit 10",
+            "photos-app photos list --from 2024-01-01 --to 2024-12-31",
+            "photos-app photos list --album \"Vacation 2024\"",
+            "photos-app photos list --table",
+            "photos-app photos list --filter \"is_favorite:eq:true\"",
+            "photos-app photos list --properties uuid,filename,date_created"
+          ],
+          "usage_instructions": "Use to list photos with metadata from the Photos library. Filter by date range with --from and --to (YYYY-MM-DD format). Filter by album with --album/-a. Default limit is 100; adjust with --limit/-l. Use --videos/-v to include videos. Use --hidden to include hidden photos. Use --filter/-f for field-based filtering (e.g., 'is_favorite:eq:true'). Use --properties/-p to select specific fields."
+        },
+        "get": {
+          "help": "Get details for a single photo by UUID.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "Photo UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "photos-app photos get \"ABC123-DEF456\"",
+            "photos-app photos get \"ABC123-DEF456\" --table"
+          ],
+          "usage_instructions": "Use to get detailed metadata for a specific photo. UUID is a required positional arg. Use --table/-t for formatted output."
+        },
+        "download": {
+          "help": "Download/export photos to a destination folder. This command exports photos via Photos.app, which automatically handles downloading from iCloud if the photos are not stored locally.",
+          "arguments": [
+            {
+              "name": "destination",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination folder"
+            }
+          ],
+          "options": [
+            {
+              "name": "--album",
+              "type": "TEXT",
+              "required": false,
+              "help": "Download from specific album",
+              "short": "-a"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-f"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max photos to download",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--videos",
+              "type": "bool",
+              "required": false,
+              "help": "Include videos",
+              "short": "-v"
+            }
+          ],
+          "examples": [
+            "photos-app photos download ~/Desktop/export --limit 10",
+            "photos-app photos download /tmp/photos --from 2024-01-01",
+            "photos-app photos download /tmp/photos --album \"ebaylisting\""
+          ],
+          "usage_instructions": "Use to export photos from the Photos library to a local folder. DESTINATION is a required positional arg (the export folder). Filter with --album/-a, --from/-f, --to/-t date range. Default limit is 100; adjust with --limit/-l. Use --videos/-v to include videos. Automatically downloads iCloud photos."
+        },
+        "count": {
+          "help": "Show total number of photos in the library.",
+          "usage_instructions": "Use to get the total photo count in the library. No arguments or options needed."
+        }
+      },
+      "usage_instructions": "Photo operations -- list photos with metadata, get details for a specific photo, download/export photos to a local folder, and count total photos. Use `photos list` with date range and album filters. Downloads handle iCloud photos automatically."
+    },
+    "albums": {
+      "help": "List and create albums",
+      "commands": {
+        "open": {
+          "help": "Open the Photos app to the Albums view. Launches Photos.app and navigates to My Albums in the sidebar.",
+          "examples": [
+            "photos-app albums open"
+          ],
+          "usage_instructions": "Use to open Photos.app directly to the Albums view. No arguments needed."
+        },
+        "list": {
+          "help": "List all albums in the Photos library. By default shows only user-created albums. Use --system to include system albums (imports, sync progress, etc.).",
+          "options": [
+            {
+              "name": "--system",
+              "type": "bool",
+              "required": false,
+              "help": "Include system albums",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--exclude-folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclude albums in folder"
+            }
+          ],
+          "examples": [
+            "photos-app albums list",
+            "photos-app albums list --system",
+            "photos-app albums list --limit 10",
+            "photos-app albums list --filter \"title:like:%Vacation%\"",
+            "photos-app albums list --table",
+            "photos-app albums list --properties uuid,title,photo_count",
+            "photos-app albums list --exclude-folder \"Completed eBay Listings\""
+          ],
+          "usage_instructions": "Use to list all albums. Shows user-created albums by default; use --system/-s to include system albums. Default limit is 100. Use --filter/-f for field-based filtering (e.g., 'title:like:%Vacation%'). Use --exclude-folder to hide albums in a specific folder. Use --properties/-p to select fields like uuid, title, photo_count."
+        },
+        "get": {
+          "help": "Get details for a single album by name or UUID.",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Album name or UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "photos-app albums get \"Vacation 2024\"",
+            "photos-app albums get \"5152941D-A164-4979-A624-C876D56EA38A\" --table"
+          ],
+          "usage_instructions": "Use to get details of a specific album. IDENTIFIER is a required positional arg -- can be album name or UUID. Use --table/-t for formatted output."
+        },
+        "create": {
+          "help": "Create a new album in the Photos library. Creates an empty album with the specified name. Use Photos.app to add photos to the album.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name for the new album"
+            }
+          ],
+          "examples": [
+            "photos-app albums create \"Vacation 2024\"",
+            "photos-app albums create \"Family Photos\""
+          ],
+          "usage_instructions": "Use to create a new empty album. NAME is a required positional arg. Use `albums add-photos` to add photos to the album after creation."
+        },
+        "delete": {
+          "help": "Delete an album from the Photos library. This only deletes the album itself, not the photos in it. The photos will remain in your library.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the album to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            }
+          ],
+          "examples": [
+            "photos-app albums delete \"Old Album\"",
+            "photos-app albums delete \"Temp Album\" --yes"
+          ],
+          "usage_instructions": "Use to delete an album (photos inside are preserved). NAME is a required positional arg. Use --yes/-y to skip confirmation. Only deletes the album container, not the photos."
+        },
+        "move": {
+          "help": "Move an album into a folder. Moves the specified album into the target folder. The folder is auto-created if it doesn't exist. Photos in the album are preserved.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the album to move"
+            }
+          ],
+          "options": [
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": true,
+              "help": "Target folder name",
+              "short": "-f"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            }
+          ],
+          "examples": [
+            "photos-app albums move \"ebay-listing-20240101\" --folder \"Completed eBay Listings\"",
+            "photos-app albums move \"Old Album\" -f \"Archive\" --yes"
+          ],
+          "usage_instructions": "Use to organize albums into folders. NAME is a required positional arg. --folder/-f is required to specify the target folder (auto-created if missing). Use --yes/-y to skip confirmation."
+        },
+        "enhance": {
+          "help": "Auto-enhance all photos in an album. Applies the built-in Auto Enhance (Cmd+E) to each photo in the album sequentially via UI automation. Your computer will be unusable during the batch \u2014 Photos.app must stay in the foreground. Note: Auto-enhance is a toggle. Running on already-enhanced photos will REMOVE the enhancement. Requires Accessibility permissions for System Events.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Album name to enhance photos in"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max photos to enhance",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--delay",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds between UI steps",
+              "short": "-d",
+              "default": "1.5"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ],
+          "examples": [
+            "photos-app albums enhance \"ebaylisting-boxes\"",
+            "photos-app albums enhance \"ebaylisting-boxes\" --limit 10",
+            "photos-app albums enhance \"ebaylisting-boxes\" --delay 2.0 --yes"
+          ],
+          "usage_instructions": "Use to auto-enhance all photos in an album via UI automation (Cmd+E). NAME is a required positional arg. WARNING: This blocks the computer during execution -- Photos.app must stay in foreground. Auto-enhance is a toggle, so running on already-enhanced photos removes enhancement. Default limit is 100; adjust with --limit/-l. Use --delay/-d to adjust seconds between UI steps (default 1.5). Use --yes/-y to skip confirmation."
+        },
+        "add-photos": {
+          "help": "Add photos to an existing album. Adds one or more photos (by UUID) to the specified album. Photo UUIDs can be obtained from 'photos-app photos list'.",
+          "options": [
+            {
+              "name": "--album",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the target album",
+              "short": "-a"
+            },
+            {
+              "name": "--photo-ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated photo UUIDs",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "photos-app albums add-photos --album \"Vacation 2024\" --photo-ids \"ABC123,DEF456\"",
+            "photos-app albums add-photos -a \"Family\" -p \"UUID1,UUID2,UUID3\"",
+            "photos-app albums add-photos -a \"My Album\" -p \"$UUIDS\""
+          ],
+          "usage_instructions": "Use to add photos to an album by UUID. --album/-a is required (album name). --photo-ids/-p is required (comma-separated UUIDs). Get photo UUIDs from `photos-app photos list`."
+        }
+      },
+      "usage_instructions": "Album management -- list, get, create, delete, move, enhance, and add photos to albums. Use `albums list` to see all albums. Use `albums enhance` to auto-enhance all photos in an album via UI automation (blocks the computer). Use `albums add-photos` to add photos by UUID."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `photos-app cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `photos-app cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for querying and exporting photos from the macOS Photos library. Commands follow `photos-app <group> <action>` pattern. Supports --table for table output, --filter/-f for field-based filtering, and --properties/-p for field selection. Works directly with the macOS Photos.app SQLite database and AppleScript automation. No API key needed."
+}

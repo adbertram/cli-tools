@@ -41,7 +41,7 @@ Positional `brickfreedom task complete <N>` and `--bulk` still work unchanged.
 Run them with:
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/brickfreedom && \
+cd <cli-tools-root>/brickfreedom && \
   UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/brickfreedom-tests \
   uv run --with pytest python -m pytest tests/ -v
 ```

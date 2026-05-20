@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://affiliate-program.amazon.com/"
     DIST_NAME = "yubico-cli"
-    SESSION_NAME = "yubico"
-    LOGIN_URL = "https://affiliate-program.amazon.com/"
 
     def __init__(self, profile=None):
         super().__init__(

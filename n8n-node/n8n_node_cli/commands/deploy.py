@@ -11,7 +11,7 @@ import typer
 from ..config import get_config
 from ..parser import parse_cli_tool, ParserError
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from ..output import print_error, print_info, print_success, print_json
+from cli_tools_shared.output import print_error, print_info, print_success, print_json
 
 
 N8N_SERVER_HOST = "adam-server"
@@ -167,7 +167,7 @@ def deploy_node(
 
     pack_cmd = (
         f'sudo bash -c "cd {tmp_dir} && '
-        f'PATH={N8N_PATH} /usr/local/bin/npm pack --pack-destination /tmp"'
+        f'PATH={N8N_PATH} npm pack --pack-destination /tmp"'
     )
     result = _run_ssh(pack_cmd, timeout=60)
     if result.returncode != 0:
@@ -180,7 +180,7 @@ def deploy_node(
 
     install_cmd = (
         f'sudo bash -c "cd {N8N_NODES_DIR} && '
-        f'PATH={N8N_PATH} /usr/local/bin/npm install {tarball_path} --save"'
+        f'PATH={N8N_PATH} npm install {tarball_path} --save"'
     )
     result = _run_ssh(install_cmd, timeout=180)
     if result.returncode != 0:

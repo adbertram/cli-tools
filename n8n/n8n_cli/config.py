@@ -1,9 +1,9 @@
 """Configuration management for n8n CLI."""
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
+from cli_tools_shared.repo_paths import find_cli_tools_repo_root
 
 
 class Config(BaseConfig):
@@ -23,15 +23,13 @@ class Config(BaseConfig):
     @property
     def cli_tools_dir(self) -> str:
         """Get CLI tools directory path."""
-        return self._get("N8N_CONVERTER_CLI_TOOLS_DIR") or str(
-            Path.home() / "Dropbox" / "GitRepos" / "cli-tools"
-        )
+        return self._get("N8N_CONVERTER_CLI_TOOLS_DIR") or str(find_cli_tools_repo_root())
 
     @property
     def output_dir(self) -> str:
         """Get output directory for generated n8n node packages."""
         return self._get("N8N_CONVERTER_OUTPUT_DIR") or str(
-            Path.home() / "Dropbox" / "GitRepos" / "n8n-nodes"
+            self.get_profile_data_dir() / "n8n-nodes"
         )
 
     def save_cli_tools_dir(self, path: str):

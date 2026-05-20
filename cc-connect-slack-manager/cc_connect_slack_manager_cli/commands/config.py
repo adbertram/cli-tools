@@ -25,3 +25,10 @@ def show(
             print_json(result)
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+COMMAND_CREDENTIALS = {
+    "show": [
+        "custom"
+    ]
+}

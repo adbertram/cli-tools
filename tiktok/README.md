@@ -36,9 +36,29 @@ tiktok transcripts download --format vtt "https://www.tiktok.com/@user/video/123
 
 # Prefer manual subtitles if available
 tiktok transcripts download --manual-sub "https://www.tiktok.com/@user/video/1234567890"
+
+# Check wrapper readiness and profile state
+tiktok auth status
+tiktok auth test
 ```
 
 ## Commands
+
+### Auth
+
+```bash
+# Show profile state
+tiktok auth status
+tiktok auth profiles list
+tiktok auth profiles get default
+
+# Verify yt-dlp is installed and callable
+tiktok auth test
+```
+
+This CLI does not store TikTok credentials itself. The shared `auth` commands
+exist so the wrapper exposes the standard profile surface and can report whether
+the upstream `yt-dlp` dependency is available.
 
 ### Transcripts Download
 

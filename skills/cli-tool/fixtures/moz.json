@@ -1,0 +1,19 @@
+{
+  "commands": {
+    "keywords list": {
+      "args": ["python", "javascript"]
+    },
+    "keywords get": {
+      "args": ["machine learning"]
+    },
+    "keywords suggestions": {
+      "args": ["seo"]
+    },
+    "keywords intent": {
+      "args": ["buy laptop"]
+    },
+    "keywords ranking": {
+      "args": ["https://example.com"]
+    }
+  }
+}

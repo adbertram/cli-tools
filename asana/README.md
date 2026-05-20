@@ -7,7 +7,7 @@ Command-line interface for the Asana API - manage projects, tasks, custom fields
 The CLI is installed in a virtual environment and accessible globally via symlink.
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/asana
+cd <cli-tools-root>/asana
 
 # Install in virtual environment
 python3 -m venv venv
@@ -16,7 +16,7 @@ pip install -e .
 deactivate
 
 # Create symlink for global access
-ln -sf ~/Dropbox/GitRepos/cli-tools/asana/venv/bin/asana ~/.local/bin/asana
+ln -sf <cli-tools-root>/asana/venv/bin/asana ~/.local/bin/asana
 ```
 
 ## Quick Start

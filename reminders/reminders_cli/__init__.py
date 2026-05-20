@@ -1,5 +1,3 @@
-"""Reminders CLI - Command-line interface for macOS Reminders."""
-import warnings
-warnings.filterwarnings("ignore", module="urllib3")
+"""Reminders CLI package metadata."""
 
 __version__ = "0.1.0"

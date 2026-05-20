@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.sectigo.com/"
     DIST_NAME = "sectigo-cli"
-    SESSION_NAME = "sectigo"
-    LOGIN_URL = "https://www.sectigo.com/"
 
     def __init__(self, profile=None):
         super().__init__(

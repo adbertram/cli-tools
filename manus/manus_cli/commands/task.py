@@ -7,7 +7,7 @@ import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from ..output import print_json, print_table, print_success, print_status, print_error, handle_error
-from ..filters import apply_filters, apply_properties_filter, validate_filters, FilterValidationError
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters, FilterValidationError
 
 
 def download_files(task_result: dict, output_dir: Path) -> List[str]:

@@ -30,8 +30,6 @@ class Config(BaseConfig):
     DIST_NAME = "clickbank-cli"
     CREDENTIAL_TYPES = [CredentialType.API_KEY, CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://api.clickbank.com/rest/1.3"
-    SESSION_NAME = "clickbank"
-    LOGIN_URL = "https://accounts.clickbank.com/login.htm"
     LOGIN_INSTRUCTIONS = (
         "ClickBank uses two separate credentials:\n"
         "1. REST API key (orders, products, quickstats):\n"

@@ -5,16 +5,21 @@ from cli_tools_shared.credentials import CredentialType
 
 
 class Config(BaseConfig):
-
     DIST_NAME = "msword-cli"
-    CREDENTIAL_TYPES = []
-    DEFAULT_BASE_URL = "file://local"
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+    CUSTOM_REQUIRED_FIELDS = []
+    CUSTOM_ALL_FIELDS = []
+    CUSTOM_EPHEMERAL_FIELDS = []
 
     def __init__(self, profile=None):
         super().__init__(
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
+
+    def test_connection(self) -> dict:
+        """Local file processing requires no remote authentication."""
+        return {"api_test": "passed"}
 
 
 _configs = {}

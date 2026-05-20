@@ -23,18 +23,18 @@ After installation the `venmo` command is on your PATH.
 ## Authentication
 
 This CLI does NOT prompt for a username or password — credentials are read from the
-shared macOS keychain (service `claude-agents`) under these names:
+CLI-tools macOS keychain (service `cli-tools`) under these names:
 
 | Secret name      | Source                                                 |
 |------------------|--------------------------------------------------------|
 | `venmo-username` | Your Venmo phone, email, or username                   |
 | `venmo-password` | Your Venmo account password                            |
 
-Store them once via the shared secrets helper:
+Store them once via the CLI-tools secret manager from the repo root:
 
 ```bash
-~/.claude/scripts/secrets.sh set venmo-username
-~/.claude/scripts/secrets.sh set venmo-password
+secret-manager/secrets.sh set venmo-username
+secret-manager/secrets.sh set venmo-password
 ```
 
 Then run the interactive login. Venmo sends a 6-digit OTP via SMS; the CLI prompts

@@ -74,42 +74,44 @@ def auth_status(
     """
     try:
         config = get_config()
-
-        # First check if CLI is available
-        if not config.is_cli_available():
-            status_data = {
-                "authenticated": False,
-                "cli_available": False,
-                "cli_path": None,
-                "version": None,
-                "accessibility_permissions": False,
-                "message": "cliclick not found. Install with: brew install cliclick",
-            }
-            if table:
-                rows = [
-                    {"setting": "CLI Available", "value": "No"},
-                    {"setting": "Authenticated", "value": "No"},
-                    {"setting": "Message", "value": status_data["message"]},
-                ]
-                print_table(rows, ["setting", "value"], ["Setting", "Value"])
-            else:
-                print_json(status_data)
-            return
-
-        # Check auth status via client
         client = CliclickClient(skip_availability_check=True)
-        status_data = client.auth_status()
+        raw_status = client.auth_status()
+        authenticated = bool(raw_status["authenticated"])
+        profile_name = config.profile or "default"
+        status_data = {
+            "profiles": [
+                {
+                    "name": profile_name,
+                    "is_default": profile_name == "default",
+                    "authenticated": authenticated,
+                    "credential_types": {
+                        "custom": {
+                            "credentials_saved": True,
+                            "authenticated": authenticated,
+                            "cli_available": bool(raw_status.get("cli_available")),
+                            "cli_path": raw_status.get("cli_path"),
+                            "version": raw_status.get("version"),
+                            "accessibility_permissions": bool(raw_status.get("accessibility_permissions")),
+                            "message": raw_status.get("message"),
+                        }
+                    },
+                }
+            ]
+        }
 
         if table:
+            profile = status_data["profiles"][0]
+            custom = profile["credential_types"]["custom"]
             rows = [
-                {"setting": "Authenticated", "value": "Yes" if status_data["authenticated"] else "No"},
-                {"setting": "CLI Available", "value": "Yes" if status_data.get("cli_available") else "No"},
-                {"setting": "CLI Path", "value": status_data.get("cli_path") or "N/A"},
-                {"setting": "Version", "value": status_data.get("version") or "Unknown"},
-                {"setting": "Accessibility", "value": "Yes" if status_data.get("accessibility_permissions") else "No"},
+                {"setting": "Profile", "value": profile["name"]},
+                {"setting": "Authenticated", "value": "Yes" if profile["authenticated"] else "No"},
+                {"setting": "CLI Available", "value": "Yes" if custom["cli_available"] else "No"},
+                {"setting": "CLI Path", "value": custom["cli_path"] or "N/A"},
+                {"setting": "Version", "value": custom["version"] or "Unknown"},
+                {"setting": "Accessibility", "value": "Yes" if custom["accessibility_permissions"] else "No"},
             ]
-            if status_data.get("message") and not status_data["authenticated"]:
-                rows.append({"setting": "Message", "value": status_data["message"][:60]})
+            if custom.get("message") and not profile["authenticated"]:
+                rows.append({"setting": "Message", "value": custom["message"][:60]})
             print_table(rows, ["setting", "value"], ["Setting", "Value"])
         else:
             print_json(status_data)

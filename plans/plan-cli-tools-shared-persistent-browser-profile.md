@@ -373,8 +373,8 @@ Add to `cli-tools-shared/tests/test_validate_rollout.py` (new):
 
 **Verify:**
 - `pytest cli-tools-shared/tests/test_http_session.py -xvs`
-- `grep -rn 'auth-state\.json\|state_save\|state_load\|_save_auth_state\|_state_file_path\|profile\.json' --include='*.py' /Users/adam/Dropbox/GitRepos/cli-tools/ | grep -v __pycache__` → zero matches outside tests that target the now-deleted behavior (those tests are deleted per the T section).
-- `grep -rn 'def has_session\|def has_saved_session' --include='*.py' /Users/adam/Dropbox/GitRepos/cli-tools/cli-tools-shared/` → exactly ONE match (`BaseConfig.has_saved_session` in `config.py`).
+- `grep -rn 'auth-state\.json\|state_save\|state_load\|_save_auth_state\|_state_file_path\|profile\.json' --include='*.py' <cli-tools-root>/ | grep -v __pycache__` → zero matches outside tests that target the now-deleted behavior (those tests are deleted per the T section).
+- `grep -rn 'def has_session\|def has_saved_session' --include='*.py' <cli-tools-root>/cli-tools-shared/` → exactly ONE match (`BaseConfig.has_saved_session` in `config.py`).
 - `pytest cli-tools-shared/tests -x` — must remain green.
 
 **Why:** code-eliminator TIER 6 — single source of truth (persistent profile); ~120 LoC deleted across auth.py + driver.py + http_session.py; ~30 LoC of new live-read code in their place. Net ~-90 LoC.

@@ -355,10 +355,10 @@ def decode_project_path(encoded_path: str) -> str:
     Decode an encoded project path back to original.
 
     Args:
-        encoded_path: Path like "-Users-adam-project"
+        encoded_path: Path like "-path-to-project"
 
     Returns:
-        Original path like "/Users/adam/project"
+        Original path like "/path/to/project"
     """
     # Replace leading hyphen with /
     if encoded_path.startswith('-'):
@@ -371,10 +371,10 @@ def encode_project_path(original_path: str) -> str:
     Encode a path for Claude Code's directory naming.
 
     Args:
-        original_path: Path like "/Users/adam/project"
+        original_path: Path like "/path/to/project"
 
     Returns:
-        Encoded path like "-Users-adam-project"
+        Encoded path like "-path-to-project"
     """
     return original_path.replace('/', '-')
 
@@ -384,13 +384,13 @@ def extract_project_name(encoded_path: str) -> str:
     Extract the project name from an encoded path.
 
     Args:
-        encoded_path: Path like "-Users-adam-Dropbox-GitRepos-Agent-ATABlogger"
+        encoded_path: Path like "-path-to-project-name"
 
     Returns:
         Project name like "Agent-ATABlogger"
     """
     # The last segment after the known prefixes is typically the project name
-    # Handle cases like "-Users-adam-Dropbox-GitRepos-Agent-ATABlogger"
+    # Handle cases like "-path-to-project-name"
     parts = encoded_path.split('-')
 
     # Find common path segments to skip

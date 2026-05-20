@@ -221,7 +221,7 @@ def connection_references_list(
         copilot connection-references list --limit 50
         copilot connection-references list --properties "name,id,connector"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

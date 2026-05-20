@@ -26,11 +26,11 @@ Community node types use camelCase after the package prefix. Example:
 - `nodes create` takes CLI tool name (directory name under cli-tools/), NOT package name
   - Example: `n8n nodes create n8n --name n8n-manager --force` (source=n8n, package=n8n-manager)
 - `nodes deploy` takes short package name: `n8n nodes deploy n8n-manager` (NOT `n8n-nodes-n8n-manager`)
-- Generated packages output to: `~/Dropbox/GitRepos/n8n-nodes/<package-name>/`
+- Generated packages output to the configured converter output directory.
 
 ### Server-Side Paths (adam-server)
 - Community nodes installed at: `~/.n8n/nodes/node_modules/<npm-package-name>/`
-- Custom node source (claudecode, claudecode-model): `/Users/adam/n8n-nodes-claudecode/` on adam-server
+- Custom node sources are passed explicitly to deploy commands.
 - n8n startup takes 30-60s after restart; use `n8n server restart` CLI command if available (has built-in wait)
 
 ### n8n Execution Data

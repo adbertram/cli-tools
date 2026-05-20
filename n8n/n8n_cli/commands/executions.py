@@ -5,7 +5,7 @@ from datetime import timezone
 from typing import Optional, List
 
 from cli_tools_shared.output import print_json, print_table, print_error, print_info, handle_error
-from ..filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..parsers import format_local_time
 from ..n8n_api import get_n8n_api_client
 from ..server import run_on_server

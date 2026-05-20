@@ -5,8 +5,8 @@ import random
 import time
 import requests
 
+from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from .config import get_config
-from .filters import validate_filters, apply_filters, FilterValidationError
 from .models import TrackingInfo, create_tracking_info
 
 

@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://metabox.io/"
     DIST_NAME = "meta-box-cli"
-    SESSION_NAME = "meta-box"
-    LOGIN_URL = "https://metabox.io/"
 
     def __init__(self, profile=None):
         super().__init__(

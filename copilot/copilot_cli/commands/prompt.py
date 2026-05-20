@@ -180,7 +180,7 @@ def prompt_list(
         copilot prompt list --limit 50
         copilot prompt list --properties "name,id,type"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     if custom and system:
         typer.echo("Error: Cannot specify both --custom and --system", err=True)

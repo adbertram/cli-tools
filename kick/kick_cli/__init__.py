@@ -1,6 +1,3 @@
-"""Kick CLI - Command-line interface for Kick API."""
-# Suppress urllib3 SSL warnings (LibreSSL compatibility) - must be before urllib3 import
-import warnings
-warnings.filterwarnings("ignore", module="urllib3")
+"""Kick CLI package metadata."""
 
 __version__ = "0.1.0"

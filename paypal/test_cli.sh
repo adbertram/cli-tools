@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Test script for PayPal CLI
 
-PAYPAL="/Users/adam/Dropbox/GitRepos/cli-tools/paypal/venv/bin/paypal"
+PAYPAL="<cli-tools-root>/paypal/venv/bin/paypal"
 
 echo "=== Testing PayPal CLI ==="
 echo ""

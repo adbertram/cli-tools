@@ -12,7 +12,7 @@ class Config(BaseConfig):
     # Venmo has no public API. We use the reverse-engineered venmo-api
     # library which authenticates via username+password+SMS-OTP and
     # returns a long-lived access token. Username and password are
-    # pulled from the shared keychain (venmo-username / venmo-password)
+    # pulled from the CLI-tools keychain (venmo-username / venmo-password)
     # by the custom login_handler; the resulting ACCESS_TOKEN and
     # DEVICE_ID are persisted to the per-profile .env. Subsequent
     # data commands need only the ACCESS_TOKEN.

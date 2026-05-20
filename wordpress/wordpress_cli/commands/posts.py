@@ -3,12 +3,8 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 
-from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info
-from ..models import PostStatus
 from ..filter_map import wordpress_filter_map
-from ..utils.docx import extract_post_from_docx, _add_link_attributes
-from ..utils.markdown import convert_markdown_to_html
 from . import model_to_dict, extract_fields, apply_client_side_filters
 
 
@@ -31,6 +27,11 @@ COMMAND_CREDENTIALS = {
         "username_password"
     ]
 }
+
+
+def get_client():
+    from ..client import get_client as _get_client
+    return _get_client()
 
 
 @app.command("list")
@@ -143,6 +144,7 @@ def posts_create(
                 raise FileNotFoundError(f"DOCX file not found: {from_docx}")
 
             print_info(f"Converting DOCX file: {from_docx}")
+            from ..utils.docx import extract_post_from_docx
 
             def upload_image(filename: str, data: bytes, content_type: str) -> str:
                 media = client.upload_media(filename, data, content_type)
@@ -156,6 +158,7 @@ def posts_create(
                 raise FileNotFoundError(f"Markdown file not found: {from_markdown}")
 
             print_info(f"Converting Markdown file: {from_markdown}")
+            from ..utils.markdown import convert_markdown_to_html
 
             markdown_content = from_markdown.read_text(encoding='utf-8')
             content = convert_markdown_to_html(markdown_content)
@@ -168,6 +171,7 @@ def posts_create(
         if sponsored:
             _is_sponsored = True
             print_info("Adding rel='sponsored nofollow' to all links")
+            from ..utils.docx import _add_link_attributes
             content = _add_link_attributes(content)
             SPONSORED_TAG_ID = "7"
             if tags:

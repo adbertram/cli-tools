@@ -1,0 +1,313 @@
+{
+  "tool": "keywords",
+  "description": "Query autocomplete suggestions from search engines for keyword research",
+  "discovered_at": "2026-05-20T17:46:58.133561+00:00",
+  "total_commands": 12,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "suggest": {
+      "help": "Query autocomplete suggestions",
+      "commands": {
+        "query": {
+          "help": "Get autocomplete suggestions for a query.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query to get suggestions for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--source",
+              "type": "bool",
+              "required": false,
+              "help": "[google|youtube|bing|amazon|ddg]  Sources to query (google, youtube, bing, amazon, ddg). Can be repeated",
+              "short": "-s",
+              "default": "google"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum suggestions per source",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--recurse",
+              "type": "bool",
+              "required": false,
+              "help": "Recursively query suggestions of suggestions",
+              "short": "-r"
+            },
+            {
+              "name": "--depth",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Recursion depth (how many levels deep to query)",
+              "short": "-d",
+              "default": "1"
+            },
+            {
+              "name": "--recurse-limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max suggestions to recurse into per level (default: 5)",
+              "default": "5"
+            }
+          ],
+          "usage_instructions": "Get keyword suggestions from search engine autocomplete. QUERY is required (positional). Use --source/-s to select engines (google, youtube, bing, amazon, ddg -- can repeat for multiple). Use --filter/-f to only show suggestions containing specific text. Use --recurse/-r with --depth/-d to recursively expand suggestions (default depth: 1, limit: 5 per level). Use --limit/-l (default: 100), --table/-t."
+        },
+        "sources": {
+          "help": "List available autocomplete sources.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show which search engines are available as autocomplete sources. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Keyword suggestion tools -- query autocomplete APIs and list available sources."
+    },
+    "auth": {
+      "help": "Manage keywords authentication",
+      "usage_instructions": "Authentication and profile management for the Keywords CLI. Use `auth status` or `auth test` to verify the shared auth contract, and use `auth profiles` when you need to inspect or switch saved profile state.",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Initialize or refresh the shared auth profile state for Keywords. Use `--profile/-p` to target a specific profile and `--force/-F` to clear ephemeral state before re-authenticating.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Clear stored auth state for a profile. Use `--profile/-p` when you need to remove a non-default profile's saved state.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Check auth status across profiles using the shared live-verification flow. Use `--table/-t` for readable output or `--profile/-p` to inspect one profile.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run the shared auth verification explicitly. Use `--verbose/-v` for per-check detail and `--profile/-p` to scope the test to one profile.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Inspect and manage named auth profiles for Keywords. Use this group to list, inspect, create, delete, or set the default profile backing the shared auth contract.",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ]
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `keywords cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `keywords cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for keyword research by querying autocomplete suggestions from multiple search engines (Google, YouTube, Bing, Amazon, DuckDuckGo). Supports recursive expansion of suggestions. Commands follow `keywords suggest <action>` pattern."
+}

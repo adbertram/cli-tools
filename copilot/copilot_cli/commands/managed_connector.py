@@ -271,7 +271,7 @@ def managed_connector_list(
         copilot managed-connector list --raw
         copilot managed-connector list --properties "name,id,publisher"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

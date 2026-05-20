@@ -38,7 +38,8 @@ class CcConnectSlackManagerClient:
         ("thinking-messages-disabled", "Thinking messages disabled", "thinking_messages = false"),
     ]
 
-    def __init__(self):
+    def __init__(self, config=None):
+        self.config = config
         self.home = Path.home()
         self.cody_config_path = self._cody_config_path()
         self.cody_config = self._read_cody_config()
@@ -190,18 +191,21 @@ class CcConnectSlackManagerClient:
         return result.returncode == 0 and bool(result.stdout.strip())
 
     def _slack_user(self, user_id: str) -> SlackUserStatus:
-        result = self._run(
-            [
-                "slack",
-                "--profile",
-                self.SLACK_PROFILE,
-                "--no-cache",
-                "users",
-                "get",
-                user_id,
-            ]
+        token = self._keychain_token(self.bot_token_config)
+        request = urllib.request.Request(
+            f"https://slack.com/api/users.info?user={urllib.parse.quote(user_id)}",
+            headers={
+                "Authorization": f"Bearer {token}",
+            },
+            method="GET",
         )
-        data = json.loads(result.stdout)
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode())
+        if not payload.get("ok"):
+            raise ClientError(f"Slack users.info failed: {payload.get('error', 'unknown_error')}")
+        data = payload.get("user")
+        if not isinstance(data, dict):
+            raise ClientError("Slack users.info response did not include a user object")
         profile = data.get("profile", {})
         return SlackUserStatus(
             id=data["id"],

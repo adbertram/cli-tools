@@ -5,7 +5,7 @@ from typing import List, Optional
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError
-from ..filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 
 app = typer.Typer(help="File operations with Gemini Files API")
 

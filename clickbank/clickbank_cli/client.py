@@ -5,13 +5,15 @@ from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 import random
 import time
+import warnings
 
+warnings.filterwarnings("ignore", module="urllib3")
 import requests
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.filters import apply_filters, parse_filter_string, validate_filters
 
 from .config import Config, get_config
-from .filters import apply_filters, parse_filter_string, validate_filters
 from .models import (
     Order,
     OrderCount,

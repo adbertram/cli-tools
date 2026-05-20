@@ -13,7 +13,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "monarchmoneycommunity>=1.2.0",
     "gql>=4.0",  # Required by monarchmoneycommunity
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.scripts]
@@ -22,3 +22,6 @@ monarch = "monarch_cli.main:app"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["monarch_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

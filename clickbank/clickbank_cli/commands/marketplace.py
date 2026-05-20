@@ -20,8 +20,10 @@ from typing import List, Optional
 
 import typer
 
+from cli_tools_shared.filters import apply_filters
+from cli_tools_shared.output import handle_error, print_json
+
 from ..marketplace_client import VALID_SORT_FIELDS, get_marketplace_client
-from ..output import handle_error, print_json
 from . import emit_rows
 
 
@@ -105,7 +107,6 @@ def marketplace_categories(
         client = get_marketplace_client()
         rows = client.categories_flat_cached() if flat else client.categories_cached()
         if filter:
-            from ..filters import apply_filters
             rows = apply_filters(rows, filter)
         rows = rows[:limit]
         view = MARKETPLACE_VIEWS["categories"]
@@ -188,7 +189,6 @@ def marketplace_search(
         )
         rows = [hit.model_dump(mode="json") for hit in result.hits]
         if filter:
-            from ..filters import apply_filters
             rows = apply_filters(rows, filter)
         view = MARKETPLACE_VIEWS["search"]
         emit_rows(

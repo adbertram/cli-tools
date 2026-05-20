@@ -4,6 +4,9 @@ import hashlib
 import hmac
 import random
 import time
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
 
 import requests
 from pydantic import BaseModel

@@ -6,7 +6,7 @@ Read-only Amazon order evidence lookup using a persistent browser session from
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/amazon
+cd <cli-tools-root>/amazon
 pip install -e .
 ```
 

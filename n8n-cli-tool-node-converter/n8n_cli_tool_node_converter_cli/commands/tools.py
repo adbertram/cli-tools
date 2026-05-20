@@ -3,8 +3,8 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from ..output import print_json, print_table, handle_error
-from ..filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.output import handle_error, print_json, print_table
 
 app = typer.Typer(help="List and inspect available CLI tools", no_args_is_help=True)
 
@@ -93,3 +93,13 @@ def tools_get(
 
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+COMMAND_CREDENTIALS = {
+    "get": [
+        "custom"
+    ],
+    "list": [
+        "custom"
+    ]
+}

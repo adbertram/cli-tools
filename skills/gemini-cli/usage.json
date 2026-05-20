@@ -1,0 +1,691 @@
+{
+  "tool": "gemini",
+  "description": "CLI interface for Gemini API",
+  "discovered_at": "2026-05-20T16:12:05.288149+00:00",
+  "total_commands": 25,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage Gemini API authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Set up API key for Gemini. Use --api-key/-k to pass key directly, or --no-browser to skip opening the browser. Without flags, opens AI Studio in browser and prompts for the key."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Remove stored API credentials. Use when rotating keys or switching accounts."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Verify API key is configured and valid. Use --table/-t for formatted output. Run this first if other commands fail with auth errors."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `gemini auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `gemini auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `gemini auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `gemini auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `gemini auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `gemini auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `gemini auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication management -- login with API key, check status, or logout. Use `auth status` to verify credentials before other operations."
+    },
+    "chat": {
+      "help": "Chat and content generation",
+      "commands": {
+        "new": {
+          "help": "Start a new chat conversation with a prompt. Example: gemini chat new \"Explain quantum computing in simple terms\" gemini chat new \"What is in this image?\" --file photo.jpg gemini chat new \"Summarize this document\" -f report.pdf --model gemini-3.1-pro-preview",
+          "arguments": [
+            {
+              "name": "prompt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Prompt to start the conversation"
+            }
+          ],
+          "options": [
+            {
+              "name": "--file",
+              "type": "PATH",
+              "required": false,
+              "help": "File to attach to the conversation",
+              "short": "-f"
+            },
+            {
+              "name": "--model",
+              "type": "TEXT",
+              "required": false,
+              "help": "Model to use",
+              "short": "-m",
+              "default": "gemini-3.1-pro-preview"
+            }
+          ],
+          "usage_instructions": "Send a prompt to Gemini and get a response. PROMPT is required (positional). Attach files with --file/-f (images, PDFs, etc.) for multimodal queries. Use --model/-m to select model (default: gemini-3-pro-preview)."
+        }
+      },
+      "usage_instructions": "Send prompts to Gemini for text generation and chat. Supports file attachments for multimodal input (images, PDFs)."
+    },
+    "files": {
+      "help": "File operations with Gemini Files API",
+      "commands": {
+        "upload": {
+          "help": "Upload a file to Gemini Files API. Example: gemini files upload document.pdf gemini files upload video.mp4 --wait",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to file to upload"
+            }
+          ],
+          "options": [
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait      Wait for processing",
+              "default": "wait"
+            }
+          ],
+          "usage_instructions": "Upload a local file to Gemini's Files API for later use in prompts. FILE_PATH is required (positional). Use --wait (default) to wait for processing; --no-wait to return immediately for large files."
+        },
+        "list": {
+          "help": "List all uploaded files. Example: gemini files list gemini files list --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of files to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Show all files uploaded to the Gemini Files API. Use --table/-t for formatted table output."
+        },
+        "get": {
+          "help": "Get file metadata. Example: gemini files get files/abc123 gemini files get files/abc123 --table",
+          "arguments": [
+            {
+              "name": "file_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "File name (e.g., files/abc123)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Retrieve metadata for a specific uploaded file. FILE_NAME is required (positional), in the format `files/abc123`."
+        },
+        "delete": {
+          "help": "Delete an uploaded file. Example: gemini files delete files/abc123 gemini files delete files/abc123 --yes",
+          "arguments": [
+            {
+              "name": "file_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "File name to delete (e.g., files/abc123)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ],
+          "usage_instructions": "Remove a file from the Gemini Files API. FILE_NAME is required (positional). Use --yes/-y to skip confirmation prompt."
+        }
+      },
+      "usage_instructions": "Manage files uploaded to the Gemini Files API. Upload files for use in chat/video analysis, list uploaded files, get metadata, or delete files. File names use the format `files/abc123`."
+    },
+    "image": {
+      "help": "Image generation with Nano Banana Pro",
+      "commands": {
+        "generate": {
+          "help": "Generate an image from a text prompt using Nano Banana Pro. Example: gemini image generate \"A cyberpunk cityscape at sunset\" gemini image generate \"Cloud infrastructure diagram\" -o cloud.png -ar 16:9 gemini image generate \"Current weather in Tokyo visualization\" --search gemini image generate \"Professional blog header\" -m nano-banana-pro -s 4K",
+          "arguments": [
+            {
+              "name": "prompt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Text prompt describing the image to generate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": false,
+              "help": "Output file path",
+              "short": "-o",
+              "default": "generated_image.png"
+            },
+            {
+              "name": "--model",
+              "type": "bool",
+              "required": false,
+              "help": "[gemini-3-pro-image-preview|gemini-2.5-flash-image|imagen-4.0-generate-001|imagen-4.  Image generation model to use",
+              "short": "-m",
+              "default": "gemini-3-pro-image-preview"
+            },
+            {
+              "name": "--aspect-ratio",
+              "type": "bool",
+              "required": false,
+              "help": "r      [1:1|16:9|9:16|4:3|3:4|1.91:1]                                                        Aspect ratio of generated image",
+              "short": "-a",
+              "default": "16:9"
+            },
+            {
+              "name": "--size",
+              "type": "bool",
+              "required": false,
+              "help": "[1K|2K|4K]                                                                            Output image size/resolution",
+              "short": "-s",
+              "default": "2K"
+            },
+            {
+              "name": "--search",
+              "type": "bool",
+              "required": false,
+              "help": "Enable Google Search grounding for real-time data"
+            },
+            {
+              "name": "--input-image",
+              "type": "PATH",
+              "required": false,
+              "help": "Reference image(s) for image editing / multi-image composition. Repeatable. Only supported by Nano Banana models (gemini-3-pro-image-preview, gemini-2.5-flash-image)",
+              "short": "-i"
+            }
+          ],
+          "usage_instructions": "Create an image from a text description, optionally with reference image(s) for image editing / multi-image composition. PROMPT is required (positional). Use --output/-o to set output path (default: generated_image.png). Use --model/-m to select model (default: gemini-3-pro-image-preview). Set --aspect-ratio/-a (default: 16:9, options: 1:1, 16:9, 9:16, 4:3, 3:4, 1.91:1). Set --size/-s for resolution (default: 2K, options: 1K, 2K, 4K). Use --search for real-time data grounding. Pass one or more reference images with --input-image/-i (repeatable); only Nano Banana models support this (gemini-3-pro-image-preview, gemini-2.5-flash-image) -- Imagen models will reject -i."
+        },
+        "models": {
+          "help": "List available image generation models. Example: gemini image models",
+          "usage_instructions": "Show which image generation models are available. Useful before `image generate` to pick a model."
+        }
+      },
+      "usage_instructions": "Generate images from text prompts. Supports multiple models including gemini-3-pro-image-preview and imagen-4.0. Control aspect ratio, resolution, and enable Google Search grounding for real-time data."
+    },
+    "models": {
+      "help": "List available Gemini models",
+      "commands": {
+        "list": {
+          "help": "List available Gemini models. Example: gemini models list gemini models list --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show all Gemini models. Use --table/-t for formatted output. Useful for finding model IDs to pass to --model flags in other commands."
+        }
+      },
+      "usage_instructions": "Discover available Gemini models for use with chat, image, video, and research commands."
+    },
+    "research": {
+      "help": "Deep Research using Gemini Deep Research Agent",
+      "commands": {
+        "start": {
+          "help": "Start a deep research task using Gemini Deep Research Agent. The agent autonomously plans, executes, and synthesizes multi-step research tasks. It uses web search and can produce detailed, cited reports. Example: gemini research start \"Research the history of Google TPUs\" gemini research start \"Compare React vs Vue in 2025\" --no-stream gemini research start \"Analyze Cursor AI features\" --timeout 1800 gemini research start --prompt-file /path/to/prompt.txt",
+          "arguments": [
+            {
+              "name": "prompt",
+              "type": "PROMPT",
+              "required": false,
+              "help": "Research prompt/question"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read prompt from file instead of argument",
+              "short": "-f"
+            },
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Deep Research agent to use",
+              "short": "-a",
+              "default": "deep-research-pro-preview-12-2025"
+            },
+            {
+              "name": "--stream",
+              "type": "bool",
+              "required": false,
+              "help": "--no-stream             Stream results in real-time",
+              "default": "stream"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum time to wait in seconds (default: 60 min)",
+              "short": "-t",
+              "default": "3600"
+            }
+          ],
+          "usage_instructions": "Launch a deep research task. PROMPT is optional (positional) -- can also use --prompt-file/-f to read from a file. Results stream by default; use --no-stream to wait for completion. Set --timeout/-t for max wait in seconds (default: 3600). Use --agent/-a to select agent (default: deep-research-pro-preview-12-2025)."
+        },
+        "status": {
+          "help": "Check the status of a running or completed research task. Example: gemini research status abc123xyz",
+          "arguments": [
+            {
+              "name": "interaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Interaction ID from a previous research task"
+            }
+          ],
+          "usage_instructions": "Check progress of a deep research task. INTERACTION_ID is required (positional) -- obtained from `research start` output."
+        },
+        "resume": {
+          "help": "Resume streaming a research task that was interrupted. Example: gemini research resume abc123xyz gemini research resume abc123xyz --from-event evt_456",
+          "arguments": [
+            {
+              "name": "interaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Interaction ID to resume streaming"
+            }
+          ],
+          "options": [
+            {
+              "name": "--from-event",
+              "type": "TEXT",
+              "required": false,
+              "help": "Resume from specific event ID",
+              "short": "-e"
+            }
+          ],
+          "usage_instructions": "Continue streaming results from a previously started research task. INTERACTION_ID is required (positional). Use --from-event/-e to resume from a specific event ID."
+        }
+      },
+      "usage_instructions": "Run autonomous deep research tasks that plan, search, and synthesize reports with citations. For complex research questions requiring multi-step investigation."
+    },
+    "usage": {
+      "help": "View API usage statistics",
+      "commands": {
+        "show": {
+          "help": "Show API usage statistics. Use --source local for CLI-only tracking (default). Use --source cloud for ALL Gemini usage across all API consumers via Cloud Monitoring. Example: gemini usage show gemini usage show --source cloud --table gemini usage show --source cloud --by-model --table gemini usage show --source cloud --daily --table --days 7 gemini usage show --days 7 --by-model --table",
+          "options": [
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of days to show",
+              "short": "-d",
+              "default": "30"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--by-model",
+              "type": "bool",
+              "required": false,
+              "help": "Show breakdown by model",
+              "short": "-m"
+            },
+            {
+              "name": "--daily",
+              "type": "bool",
+              "required": false,
+              "help": "Show daily breakdown"
+            },
+            {
+              "name": "--source",
+              "type": "bool",
+              "required": false,
+              "help": "[local|cloud]  Data source: local (CLI tracking) or cloud (Cloud Monitoring)",
+              "short": "-s",
+              "default": "local"
+            }
+          ],
+          "usage_instructions": "Display usage stats. Use --source/-s to choose data source: 'local' (CLI-only, default) or 'cloud' (all API consumers via Cloud Monitoring). Use --days/-d to set time range (default: 30). Use --by-model/-m for model breakdown, --daily for daily breakdown. Use --table/-t for formatted output."
+        },
+        "setup": {
+          "help": "Configure BigQuery billing export for cloud cost tracking. This connects your CLI to Google Cloud's billing export so you can see cost data alongside token usage from Cloud Monitoring. Prerequisites: 1. Enable billing export in GCP Console: Billing > Billing export > BigQuery export > Enable 2. Run: gcloud auth application-default login",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "BigQuery billing table ID (project.dataset.table)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--save-anyway",
+              "type": "bool",
+              "required": false,
+              "help": "Save the table ID even if connection verification fails"
+            }
+          ],
+          "usage_instructions": "Set up cloud cost tracking via BigQuery billing export. Requires GCP billing export to be enabled and `gcloud auth application-default login` to be run first."
+        },
+        "clear": {
+          "help": "Clear all local usage data. Example: gemini usage clear gemini usage clear --yes",
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ],
+          "usage_instructions": "Delete all locally tracked usage data. Use --yes/-y to skip confirmation prompt. Does not affect cloud data."
+        }
+      },
+      "usage_instructions": "Track and manage Gemini API usage. View token counts, costs, and breakdowns by model or day. Supports both local CLI tracking and cloud-based monitoring."
+    },
+    "video": {
+      "help": "Video analysis operations",
+      "commands": {
+        "analyze": {
+          "help": "Upload and analyze a video file with Gemini. For videos < 20MB, the video is analyzed immediately using inline upload. For videos >= 20MB, the video is uploaded to Files API first. Provide a prompt either inline with --prompt or from a file with --prompt-file. Additional context files (PDFs, docs, etc.) can be included with --files. Use --json-schema for structured JSON output that guarantees valid JSON. Example: gemini video analyze video.mp4 --prompt \"Summarize this video\" gemini video analyze video.mp4 --prompt-file prompts/review.txt gemini video analyze lecture.mp4 -p \"What are the key topics discussed?\" gemini video analyze demo.mp4 -f analysis_prompt.txt --model gemini-3.1-pro-preview gemini video analyze video.mp4 -p \"Review this\" --files outline.pdf --files notes.txt gemini video analyze video.mp4 -p \"Review this\" --json-schema schema.json",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to video file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Analysis prompt (inline text)",
+              "short": "-p"
+            },
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to file containing prompt",
+              "short": "-f"
+            },
+            {
+              "name": "--files",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional files to include (can specify multiple times)"
+            },
+            {
+              "name": "--model",
+              "type": "TEXT",
+              "required": false,
+              "help": "Model to use",
+              "short": "-m",
+              "default": "gemini-3.1-pro-preview"
+            },
+            {
+              "name": "--no-wait",
+              "type": "bool",
+              "required": false,
+              "help": "Don't wait for processing (large files only)"
+            },
+            {
+              "name": "--json-schema",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to JSON schema file for structured output",
+              "short": "-s"
+            },
+            {
+              "name": "--fps",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Frames per second for video sampling (default: 1). Use higher values (2-5) for fast-action or sync detection"
+            }
+          ],
+          "usage_instructions": "Analyze a video with Gemini. FILE_PATH is required (positional). Provide a prompt with --prompt/-p (inline) or --prompt-file/-f (from file). Videos < 20MB are sent inline; larger files use Files API. Attach extra context files with --files (repeatable). Use --model/-m to select model (default: gemini-3-pro-preview). Use --json-schema/-s for structured JSON output. Set --fps for video sampling rate (default: 1)."
+        }
+      },
+      "usage_instructions": "Analyze video files using Gemini's multimodal capabilities. Upload and prompt Gemini about video content."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `gemini cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `gemini cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for interacting with the Google Gemini API: chat, image generation, video analysis, deep research, file management, and usage tracking. Commands follow `gemini <group> <action>` pattern. Most list commands support --table/-t for formatted output."
+}

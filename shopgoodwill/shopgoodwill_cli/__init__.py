@@ -1,6 +1,3 @@
-"""ShopGoodwill CLI - Command-line interface for ShopGoodwill."""
-# Suppress urllib3 SSL warnings (LibreSSL compatibility) - must be before urllib3 import
-import warnings
-warnings.filterwarnings("ignore", module="urllib3")
+"""ShopGoodwill CLI package."""
 
 __version__ = "0.1.0"

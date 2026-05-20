@@ -5,8 +5,8 @@ import time
 import uuid
 import requests
 
+from cli_tools_shared.filters import FilterValidationError, validate_filters
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 from .models import (
     KeywordMetrics,
     KeywordDetail,

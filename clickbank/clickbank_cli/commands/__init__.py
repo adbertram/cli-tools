@@ -1,7 +1,7 @@
 """Shared command helpers for ClickBank CLI."""
 from pydantic import BaseModel
 
-from ..output import print_json, print_table
+from cli_tools_shared.output import print_json, print_table
 
 
 def model_to_dict(item):

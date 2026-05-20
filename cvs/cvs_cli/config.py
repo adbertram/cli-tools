@@ -1,17 +1,12 @@
 """Configuration management for CVS CLI."""
-from pathlib import Path
-
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 
 class Config(BaseConfig):
-
     DIST_NAME = "cvs-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.cvs.com"
-    SESSION_NAME = "cvs"
-    LOGIN_URL = "https://www.cvs.com/account-login/look-up"
 
     def __init__(self, profile=None):
         super().__init__(

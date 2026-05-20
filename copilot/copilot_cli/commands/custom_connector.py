@@ -544,7 +544,7 @@ def custom_connector_list(
         copilot custom-connector list --raw
         copilot custom-connector list --properties "name,id,auth_types"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

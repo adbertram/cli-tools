@@ -267,7 +267,7 @@ def _export_photos_from_album(album_name: str, limit: int = MAX_IMAGES) -> tuple
             timeout=300,
         )
     except FileNotFoundError:
-        raise RuntimeError("photos-app CLI not found. Install it from ~/Dropbox/GitRepos/cli-tools/photos-app")
+        raise RuntimeError("photos-app CLI not found. Install it with `scripts/install-cli-tool.sh photos-app` from the cli-tools repo root.")
     except subprocess.TimeoutExpired:
         raise RuntimeError("Photo export timed out - photos may still be downloading from iCloud")
 

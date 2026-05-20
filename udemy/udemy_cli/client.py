@@ -5,7 +5,7 @@ import time
 import requests
 
 from .browser import UDEMY_ORIGIN
-from .filters import validate_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, FilterValidationError
 from .config import activity, get_config
 from .models import Course, create_course
 from cli_tools_shared.http_session import BrowserAutomationJsonClient, required_path

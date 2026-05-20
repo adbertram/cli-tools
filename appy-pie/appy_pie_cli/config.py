@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.appy-pie.com/"
     DIST_NAME = "appy-pie-cli"
-    SESSION_NAME = "appy-pie"
-    LOGIN_URL = "https://www.appy-pie.com/"
 
     def __init__(self, profile=None):
         super().__init__(

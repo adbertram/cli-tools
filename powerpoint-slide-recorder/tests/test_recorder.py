@@ -93,8 +93,8 @@ class RecordTests(unittest.TestCase):
         runner = CliRunner()
         fake_result = mock.Mock()
 
-        with mock.patch("powerpoint_slide_recorder_cli.commands.record.get_client") as get_client, \
-                mock.patch("powerpoint_slide_recorder_cli.commands.record.print_json"):
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
             get_client.return_value.record.return_value = fake_result
             result = runner.invoke(app, [
                 "record",
@@ -113,8 +113,8 @@ class RecordTests(unittest.TestCase):
         runner = CliRunner()
         fake_result = mock.Mock()
 
-        with mock.patch("powerpoint_slide_recorder_cli.commands.record.get_client") as get_client, \
-                mock.patch("powerpoint_slide_recorder_cli.commands.record.print_json"):
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
             get_client.return_value.record.return_value = fake_result
             result = runner.invoke(app, [
                 "record",
@@ -134,8 +134,8 @@ class RecordTests(unittest.TestCase):
         runner = CliRunner()
         fake_result = mock.Mock()
 
-        with mock.patch("powerpoint_slide_recorder_cli.commands.record.get_client") as get_client, \
-                mock.patch("powerpoint_slide_recorder_cli.commands.record.print_json"):
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
             get_client.return_value.record.return_value = fake_result
             result = runner.invoke(app, [
                 "record",
@@ -155,8 +155,8 @@ class RecordTests(unittest.TestCase):
         runner = CliRunner()
         fake_result = mock.Mock()
 
-        with mock.patch("powerpoint_slide_recorder_cli.commands.record.get_client") as get_client, \
-                mock.patch("powerpoint_slide_recorder_cli.commands.record.print_json"):
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
             get_client.return_value.record.return_value = fake_result
             result = runner.invoke(app, [
                 "record",

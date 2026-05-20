@@ -170,7 +170,7 @@ def list_permissions(
 
         # Apply filters
         if filter:
-            from .filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 enriched = apply_filters(enriched, filter)

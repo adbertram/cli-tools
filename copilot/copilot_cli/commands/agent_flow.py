@@ -174,7 +174,7 @@ def scaffold_list(
 
     # Apply filters
     if filter:
-        from ..filters import apply_filters, validate_filters, FilterValidationError
+        from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
         try:
             validate_filters(filter)
             scaffolds = apply_filters(scaffolds, filter)
@@ -314,7 +314,7 @@ def runs_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -562,7 +562,7 @@ def agent_flow_list(
         copilot agent-flow list --limit 50
         copilot agent-flow list --properties "name,id,status,triggers"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

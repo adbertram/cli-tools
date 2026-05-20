@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.microsoft-365.com/"
     DIST_NAME = "microsoft-365-cli"
-    SESSION_NAME = "microsoft-365"
-    LOGIN_URL = "https://www.microsoft-365.com/"
 
     def __init__(self, profile=None):
         super().__init__(

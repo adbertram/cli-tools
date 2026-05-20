@@ -1,5 +1,8 @@
 """Table schema commands for Airtable CLI."""
 COMMAND_CREDENTIALS = {
+    "get": [
+        "personal_access_token"
+    ],
     "create": [
         "personal_access_token"
     ],
@@ -18,6 +21,7 @@ import typer
 
 from ..client import get_client
 from ..commands.records import resolve_base_id
+from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success
 
 app = typer.Typer(help="Manage Airtable tables", no_args_is_help=True)
@@ -59,6 +63,17 @@ def print_table_schema(result: Dict[str, Any], table: bool) -> None:
     )
 
 
+def summarize_table(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the flat list-view representation for a table schema."""
+    return {
+        "id": result.get("id", ""),
+        "name": result.get("name", ""),
+        "primaryFieldId": result.get("primaryFieldId", ""),
+        "description": result.get("description", ""),
+        "field_count": len(result.get("fields", [])),
+    }
+
+
 @app.command("list")
 def tables_list(
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
@@ -76,8 +91,6 @@ def tables_list(
         airtable tables list --filter "name:contains:log"
     """
     try:
-        from ..filters import apply_filters
-
         resolved_base_id = resolve_base_id(base_id)
         client = get_client()
         tables = client.list_tables(base_id=resolved_base_id)
@@ -88,28 +101,45 @@ def tables_list(
         if limit and len(tables) > limit:
             tables = tables[:limit]
 
+        summarized_tables = [summarize_table(table_schema) for table_schema in tables]
+
         if properties:
-            keys = [k.strip() for k in properties.split(",") if k.strip()]
-            tables = [{k: t.get(k) for k in keys} for t in tables]
+            summarized_tables = apply_properties_filter(summarized_tables, properties)
 
         if not table:
-            print_json(tables)
+            print_json(summarized_tables)
             return
 
         rows = []
-        for t in tables:
+        for table_schema in summarized_tables:
             rows.append({
-                "id": t.get("id", ""),
-                "name": t.get("name", ""),
-                "primary_field_id": t.get("primaryFieldId", ""),
-                "description": t.get("description", ""),
-                "field_count": len(t.get("fields", [])),
+                "id": table_schema.get("id", ""),
+                "name": table_schema.get("name", ""),
+                "primary_field_id": table_schema.get("primaryFieldId", ""),
+                "description": table_schema.get("description", ""),
+                "field_count": table_schema.get("field_count", ""),
             })
         print_table(
             rows,
             ["id", "name", "primary_field_id", "description", "field_count"],
             ["ID", "Name", "Primary Field ID", "Description", "Field Count"],
         )
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("get")
+def tables_get(
+    table_id: str = typer.Argument(..., help="The table ID (beginning with tbl) or table name"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Get one table schema by ID or name."""
+    try:
+        resolved_base_id = resolve_base_id(base_id)
+        client = get_client()
+        result = client.get_table(base_id=resolved_base_id, table_id=table_id)
+        print_table_schema(result, table)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

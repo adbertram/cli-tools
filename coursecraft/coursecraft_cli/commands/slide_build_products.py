@@ -5,15 +5,13 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 
+from cli_tools_shared.filters import apply_properties_filter, apply_limit
 from ..client import get_client, ClientError
 from ..output import print_success, print_error, print_info, print_json, print_table
 from ..filter_map import translate_filters
-from ..filters import apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage slide build product definitions")
 
-# Default path to XML files
-DEFAULT_XML_PATH = Path.home() / "Dropbox/GitRepos/Agent-CourseCraft/docs/slide-build-products"
 TABLE_NAME = "Slide Build Products"
 
 
@@ -187,9 +185,9 @@ def get_build_product(
 
 @app.command("sync")
 def sync_build_products(
-    xml_path: Optional[Path] = typer.Option(
-        None, "--path", "-p",
-        help=f"Path to XML files directory (default: {DEFAULT_XML_PATH})"
+    xml_path: Path = typer.Option(
+        ..., "--path", "-p",
+        help="Path to XML files directory"
     ),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be updated without making changes"),
     file: Optional[str] = typer.Option(None, "--file", "-f", help="Sync only a specific XML file"),
@@ -202,13 +200,13 @@ def sync_build_products(
 
     Examples:
         # Sync all slide build products
-        coursecraft slide-build-products sync
+        coursecraft slide-build-products sync --path /path/to/slide-build-products
 
         # Dry run to see what would change
-        coursecraft slide-build-products sync --dry-run
+        coursecraft slide-build-products sync --path /path/to/slide-build-products --dry-run
 
         # Sync a specific file
-        coursecraft slide-build-products sync --file demo-intro-slide.xml
+        coursecraft slide-build-products sync --path /path/to/slide-build-products --file demo-intro-slide.xml
 
         # Use custom path
         coursecraft slide-build-products sync --path /custom/path/to/xml
@@ -216,8 +214,7 @@ def sync_build_products(
     try:
         client = get_client()
 
-        # Determine XML directory
-        xml_dir = xml_path if xml_path else DEFAULT_XML_PATH
+        xml_dir = xml_path
 
         if not xml_dir.exists():
             print_error(f"XML directory not found: {xml_dir}")

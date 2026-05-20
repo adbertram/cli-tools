@@ -13,7 +13,7 @@ dependencies = [
     "requests>=2.31.0",
     "jsonschema>=4.0.0",
     "pydantic>=2.0.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
     "playwright>=1.40.0",
 ]
 
@@ -26,3 +26,6 @@ include = ["ebay_cli*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

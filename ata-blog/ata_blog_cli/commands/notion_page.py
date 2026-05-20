@@ -8,6 +8,7 @@ from typing import Optional, List
 
 from ..client import get_client, AtaBlogClient, ClientError
 from ..utils.images import process_local_images_for_wordpress
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info
 from cli_tools_shared import FilterMap
 
@@ -427,8 +428,6 @@ def comments_list(
         ata-blog notion-page comments list PAGE_ID --no-context
     """
     try:
-        from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
-
         client = get_client()
         comments = client.get_article_comments(page_id, with_context=not no_context)
 
@@ -442,12 +441,11 @@ def comments_list(
             return
 
         if properties:
-            prop_list = [p.strip() for p in properties.split(",")]
-            comments = apply_properties_filter(comments, prop_list)
+            comments = apply_properties_filter(comments, properties)
 
         if table:
             if properties:
-                columns = prop_list
+                columns = [name.strip() for name in properties.split(",") if name.strip()]
                 headers = columns
             else:
                 columns = ["context", "text", "created_time"]

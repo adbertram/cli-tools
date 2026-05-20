@@ -1,0 +1,654 @@
+{
+  "tool": "twelvelabs",
+  "description": "CLI interface for TwelveLabs video AI API",
+  "discovered_at": "2026-05-06T15:21:56.240989+00:00",
+  "total_commands": 21,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage TwelveLabs API authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Set up TwelveLabs API credentials. Pass the key directly with --api-key/-k, or run without flags to be prompted. Use --force/-F to clear existing credentials and re-authenticate."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Remove stored TwelveLabs API credentials from the local machine."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Verify TwelveLabs API credentials are configured and valid by making a test API call. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `twelvelabs auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `twelvelabs auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `twelvelabs auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `twelvelabs auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `twelvelabs auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `twelvelabs auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `twelvelabs auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `twelvelabs auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication management for the TwelveLabs API. Use login to configure the API key, status to verify connectivity, and logout to clear stored credentials."
+    },
+    "indexes": {
+      "help": "Manage video indexes",
+      "commands": {
+        "list": {
+          "help": "List all indexes.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of indexes to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "twelvelabs indexes list",
+            "twelvelabs indexes list --table",
+            "twelvelabs indexes list --limit 10",
+            "twelvelabs indexes list --filter \"index_name:contains:course\"",
+            "twelvelabs indexes list --properties \"id,index_name,video_count\""
+          ],
+          "usage_instructions": "List all video indexes. Use --table/-t for formatted output, --filter/-f to search (e.g., \"index_name:contains:course\"), --properties/-p to select fields (id, index_name, video_count), --limit/-l to cap results (default 100)."
+        },
+        "get": {
+          "help": "Get details for a specific index.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "twelvelabs indexes get INDEX_ID",
+            "twelvelabs indexes get INDEX_ID --table",
+            "twelvelabs indexes get INDEX_ID --properties \"id,index_name\""
+          ],
+          "usage_instructions": "Retrieve details for a single index by its INDEX_ID (positional argument). Use --properties/-p to select specific fields."
+        },
+        "create": {
+          "help": "Create a new index.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name for the new index"
+            }
+          ],
+          "options": [
+            {
+              "name": "--engine",
+              "type": "TEXT",
+              "required": false,
+              "help": "Engine to use (default: pegasus1.2)",
+              "short": "-e",
+              "default": "pegasus1.2"
+            }
+          ],
+          "examples": [
+            "twelvelabs indexes create my-course-index",
+            "twelvelabs indexes create ai-102-nlp --engine pegasus1.2"
+          ],
+          "usage_instructions": "Create a new video index. NAME is a required positional argument. Use --engine/-e to specify the engine (default: pegasus1.2)."
+        },
+        "delete": {
+          "help": "Delete an index and all its videos.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-F"
+            }
+          ],
+          "examples": [
+            "twelvelabs indexes delete INDEX_ID",
+            "twelvelabs indexes delete INDEX_ID --force"
+          ],
+          "usage_instructions": "Delete an index and all its videos. INDEX_ID is a required positional argument. Use --force/-F to skip confirmation. This is destructive and irreversible."
+        }
+      },
+      "usage_instructions": "Manage video indexes -- containers that hold videos for AI analysis. Create an index first, then upload videos to it. Use list to see all indexes, get for details on one."
+    },
+    "videos": {
+      "help": "Manage videos in indexes",
+      "commands": {
+        "list": {
+          "help": "List videos in an index.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID to list videos from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of videos to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "twelvelabs videos list INDEX_ID",
+            "twelvelabs videos list INDEX_ID --table",
+            "twelvelabs videos list INDEX_ID --limit 10",
+            "twelvelabs videos list INDEX_ID --filter \"metadata.filename:contains:clip\"",
+            "twelvelabs videos list INDEX_ID --properties \"id,metadata.filename\""
+          ],
+          "usage_instructions": "List videos in a specific index. INDEX_ID is a required positional argument. Use --table/-t for formatted output, --filter/-f to search, --properties/-p to select fields, --limit/-l to cap results (default 100)."
+        },
+        "get": {
+          "help": "Get details for a specific video.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID"
+            },
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "twelvelabs videos get INDEX_ID VIDEO_ID",
+            "twelvelabs videos get INDEX_ID VIDEO_ID --table",
+            "twelvelabs videos get INDEX_ID VIDEO_ID --properties \"id,duration\""
+          ],
+          "usage_instructions": "Retrieve details for a single video. Both INDEX_ID and VIDEO_ID are required positional arguments. Use --properties/-p to select specific fields."
+        },
+        "upload": {
+          "help": "Upload a video to an index. By default, waits for the video to be indexed before returning. Use --no-wait to return immediately after upload starts.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID to upload to"
+            },
+            {
+              "name": "video_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the video file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait                  Wait for indexing to complete (default: wait)",
+              "default": "wait"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Timeout in seconds when waiting (default: 600)",
+              "default": "600"
+            },
+            {
+              "name": "--skip-duplicate",
+              "type": "bool",
+              "required": false,
+              "help": "--force-upload             Skip if video with same filename exists (default: skip)",
+              "default": "skip-duplicate"
+            }
+          ],
+          "examples": [
+            "twelvelabs videos upload INDEX_ID /path/to/video.mp4",
+            "twelvelabs videos upload INDEX_ID video.mp4 --no-wait",
+            "twelvelabs videos upload INDEX_ID video.mp4 --force-upload",
+            "twelvelabs videos upload INDEX_ID video.mp4 --timeout 300"
+          ],
+          "usage_instructions": "Upload a video file to an index for AI analysis. INDEX_ID and VIDEO_PATH are required positional arguments. By default, waits for indexing to complete (up to 600s). Use --no-wait to return immediately. Use --force-upload to upload even if a video with the same filename exists (default: skip duplicates)."
+        },
+        "delete": {
+          "help": "Delete a video from an index.",
+          "arguments": [
+            {
+              "name": "index_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The index ID"
+            },
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The video ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-F"
+            }
+          ],
+          "examples": [
+            "twelvelabs videos delete INDEX_ID VIDEO_ID",
+            "twelvelabs videos delete INDEX_ID VIDEO_ID --force"
+          ],
+          "usage_instructions": "Delete a video from an index. Both INDEX_ID and VIDEO_ID are required positional arguments. Use --force/-F to skip confirmation."
+        }
+      },
+      "usage_instructions": "Manage videos within indexes. Upload videos for AI analysis, list videos in an index, get details, or delete. INDEX_ID is always the first positional argument."
+    },
+    "generate": {
+      "help": "Generate text from indexed videos",
+      "commands": {
+        "text": {
+          "help": "Generate text from an indexed video using a custom prompt. Provide either --prompt or --prompt-file, not both. Output is sent to stdout for easy piping.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The video ID to analyze"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt",
+              "type": "TEXT",
+              "required": false,
+              "help": "The prompt for text generation",
+              "short": "-p"
+            },
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to file containing the prompt",
+              "short": "-f"
+            },
+            {
+              "name": "--temperature",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Controls randomness (0.0=deterministic, 1.0=creative)",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "twelvelabs generate text VIDEO_ID --prompt \"Describe this video\"",
+            "twelvelabs generate text VIDEO_ID --prompt-file review_prompt.md",
+            "twelvelabs generate text VIDEO_ID --prompt \"List all issues\" > output.txt",
+            "twelvelabs generate text VIDEO_ID -f prompt.txt | jq '.'",
+            "twelvelabs generate text VIDEO_ID -p \"Find issues\" -t 0.2"
+          ],
+          "usage_instructions": "Generate free-form text from a video using AI. VIDEO_ID is a required positional argument. Provide the prompt with --prompt/-p or --prompt-file/-f (not both). Use --temperature/-t to control randomness (0.0=deterministic, 1.0=creative). Output goes to stdout for piping."
+        },
+        "json": {
+          "help": "Generate JSON from an indexed video using a custom prompt. The prompt should instruct the model to return valid JSON. By default, validates that the output is valid JSON.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The video ID to analyze"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt",
+              "type": "TEXT",
+              "required": false,
+              "help": "The prompt for JSON generation",
+              "short": "-p"
+            },
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to file containing the prompt",
+              "short": "-f"
+            },
+            {
+              "name": "--validate",
+              "type": "bool",
+              "required": false,
+              "help": "--no-validate           Validate JSON output (default: validate)",
+              "default": "validate"
+            },
+            {
+              "name": "--temperature",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Controls randomness (0.0=deterministic, 1.0=creative)",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "twelvelabs generate json VIDEO_ID --prompt \"Return a JSON array of issues found\"",
+            "twelvelabs generate json VIDEO_ID --prompt-file review_prompt.md",
+            "twelvelabs generate json VIDEO_ID -f prompt.txt > review.json",
+            "twelvelabs generate json VIDEO_ID -p \"Find issues as JSON\" -t 0.1"
+          ],
+          "usage_instructions": "Generate structured JSON from a video using AI. VIDEO_ID is a required positional argument. Provide the prompt with --prompt/-p or --prompt-file/-f. The prompt should instruct the model to return valid JSON. Use --no-validate to skip JSON validation. Use --temperature/-t to control randomness."
+        }
+      },
+      "usage_instructions": "Generate text or structured JSON from indexed videos using AI. Provide a prompt with --prompt/-p or --prompt-file/-f. Output goes to stdout for easy piping. Use text for free-form generation and json for structured output."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `twelvelabs cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `twelvelabs cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for video AI operations via the TwelveLabs API. Commands follow `twelvelabs <group> <action>` pattern. Workflow: create an index, upload videos to it, then generate text/JSON from the indexed videos. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+}

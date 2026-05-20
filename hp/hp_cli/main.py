@@ -9,7 +9,7 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="hp", help="CLI interface for Hp (browser automation)", version=__version__)
 
 # Register command modules
-from .commands import search
+from . import commands as search
 register_commands(app, get_config, search, name="search", help="Search hp")
 app.add_typer(create_auth_app(get_config, tool_name="hp"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")

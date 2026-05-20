@@ -8,6 +8,7 @@ from cli_tools_shared.exceptions import ClientError
 
 activity = get_activity_logger("progress-servicenow")
 
+from .browser import ProgressServiceNowBrowser
 from .config import get_config
 from .parsers import (
     extract_tickets_from_list,
@@ -163,7 +164,7 @@ class ProgressServicenowClient:
         self._browser = self.config.get_browser()
         self._svc = None  # Lazily obtained via _ensure_browser
         self._ref_map: Dict[str, Dict] = {}
-        activity.info("Client initialized (session=%s)", self.config.SESSION_NAME)
+        activity.info("Client initialized (session=%s)", ProgressServiceNowBrowser.SESSION_NAME)
 
     def _ensure_browser(self):
         """Ensure a persistent browser session is open.

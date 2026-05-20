@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://trycrush.ai"
     DIST_NAME = "trycrush-cli"
-    SESSION_NAME = "trycrush"
-    LOGIN_URL = "https://trycrush.ai"
 
     def __init__(self, profile=None):
         super().__init__(

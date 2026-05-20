@@ -54,6 +54,7 @@ from .oauth import oauth_login, extract_code_from_input, generate_pkce_pair, bui
 from .token_manager import TokenManager
 from .app_factory import create_app, run_app
 from .activity_log import get_activity_logger
+from .repo_paths import find_cli_tools_repo_root, secret_manager_script
 from .output import (
     print_json,
     print_table,

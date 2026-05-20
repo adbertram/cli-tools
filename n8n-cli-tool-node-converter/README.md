@@ -72,10 +72,10 @@ n8n-cli-tool-node-converter nodes get brickowl
 Settings are stored in `.env`:
 
 ```bash
-# Path to CLI tools directory (default: ~/Dropbox/GitRepos/cli-tools)
+# Path to CLI tools directory (default: discovered from this clone)
 N8N_CONVERTER_CLI_TOOLS_DIR=
 
-# Path for generated n8n node packages (default: ~/Dropbox/GitRepos/n8n-nodes)
+# Path for generated n8n node packages (default: profile data dir / n8n-nodes)
 N8N_CONVERTER_OUTPUT_DIR=
 ```
 

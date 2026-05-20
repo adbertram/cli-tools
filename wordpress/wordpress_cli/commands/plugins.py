@@ -2,8 +2,8 @@
 import typer
 from typing import Optional, List
 
-from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info, print_warning
+from cli_tools_shared.filters import apply_filters, apply_limit
+from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info
 from . import model_to_dict, extract_fields
 
 
@@ -23,6 +23,11 @@ COMMAND_CREDENTIALS = {
 UPDATE_FIELDS = {"update_status", "update_version", "latest_version", "latest_version_source"}
 
 
+def get_client():
+    from ..client import get_client as _get_client
+    return _get_client()
+
+
 def requires_update_status(properties: Optional[str]) -> bool:
     if not properties:
         return False
@@ -33,6 +38,8 @@ def requires_update_status(properties: Optional[str]) -> bool:
 @app.command("list")
 def plugins_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of plugins to return"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., plugin:contains:acf, status:eq:active)"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (active, inactive)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ):
@@ -47,6 +54,9 @@ def plugins_list(
         # Filter by status if specified
         if status:
             plugin_dicts = [p for p in plugin_dicts if p.get("status") == status]
+        if filter:
+            plugin_dicts = apply_filters(plugin_dicts, filter)
+        plugin_dicts = apply_limit(plugin_dicts, limit)
 
         if properties:
             fields = [f.strip() for f in properties.split(",")]
@@ -169,17 +179,11 @@ def plugins_install(
 def plugins_upgrade(
     plugin: str = typer.Argument(..., help="Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"),
 ):
-    """Upgrade a plugin to the latest version from wordpress.org.
-
-    This deactivates the plugin, removes it, and reinstalls the latest version,
-    preserving the original activation state. Plugin settings stored in the database
-    are retained.
-    """
+    """Upgrade a plugin to the latest version through Jetpack's native updater."""
     try:
         client = get_client()
         current = client.get_plugin(plugin)
         print_info(f"Upgrading {current.name} from v{current.version}...")
-        print_warning("Plugin will be briefly deactivated during upgrade")
 
         result = client.upgrade_plugin(plugin)
         print_success(f"Plugin {result.name} upgraded to v{result.version} (status: {result.status})")

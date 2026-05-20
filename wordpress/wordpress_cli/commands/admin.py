@@ -6,7 +6,7 @@ from . import plugins
 app = typer.Typer(help="WordPress admin commands")
 
 COMMAND_CREDENTIALS = {
-    "plugins": ["custom"],
+    "plugins": ["username_password"],
 }
 
 app.add_typer(plugins.app, name="plugins", help="Manage WordPress plugins")

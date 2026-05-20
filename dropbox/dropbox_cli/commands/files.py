@@ -148,7 +148,7 @@ def files_list_alias(
 
         # Apply client-side filtering
         if filter:
-            from ..filters import validate_filters, apply_filters, FilterValidationError
+            from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 entries = apply_filters(entries, filter)

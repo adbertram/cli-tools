@@ -33,6 +33,8 @@ def _run_wordpress(args: List[str]) -> None:
 @plugins_app.command("list")
 def plugins_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum plugins to return"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Forwarded filter expressions for wordpress admin"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (active, inactive)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ) -> None:
@@ -40,6 +42,11 @@ def plugins_list(
     args = ["plugins", "list"]
     if table:
         args.append("--table")
+    if limit is not None:
+        args.extend(["--limit", str(limit)])
+    if filter:
+        for value in filter:
+            args.extend(["--filter", value])
     if status:
         args.extend(["--status", status])
     if properties:
@@ -94,5 +101,5 @@ def plugins_install(
 
 @plugins_app.command("upgrade")
 def plugins_upgrade(plugin: str = typer.Argument(..., help="Plugin identifier")) -> None:
-    """Upgrade a plugin to the latest version from wordpress.org."""
+    """Upgrade a plugin through the WordPress CLI's native updater path."""
     _run_wordpress(["plugins", "upgrade", plugin])

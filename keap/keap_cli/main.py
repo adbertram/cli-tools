@@ -9,8 +9,8 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="keap", help="CLI interface for Keap API", version=__version__)
 
 # Register command modules
-from .commands import items
-register_commands(app, get_config, items, name="items", help="Manage keap items")
+from . import commands
+register_commands(app, get_config, commands, name="items", help="Manage keap items")
 
 # Register shared apps
 app.add_typer(create_auth_app(get_config, tool_name="keap"), name="auth")

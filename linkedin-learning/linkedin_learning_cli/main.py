@@ -6,7 +6,7 @@ from cli_tools_shared.command_registry import register_commands
 
 from . import __version__
 from .config import get_config
-from .commands import program
+from . import commands as program
 
 app = create_app(
     name="linkedin-learning",

@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://creators.ui.com/"
     DIST_NAME = "ubiquiti-cli"
-    SESSION_NAME = "ubiquiti"
-    LOGIN_URL = "https://creators.ui.com/"
 
     def __init__(self, profile=None):
         super().__init__(

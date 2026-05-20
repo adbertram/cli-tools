@@ -58,5 +58,6 @@ def test_cli_tools_shared_dependency(cli_tool):
 
     assert _has_dependency(cli_tool), (
         f"{cli_tool.name}/pyproject.toml is missing cli-tools-shared dependency. "
-        f"Add: \"cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared\""
+        'Add "cli-tools-shared" to dependencies and map it to ../cli-tools-shared '
+        "under [tool.uv.sources]."
     )

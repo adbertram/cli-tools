@@ -7,12 +7,13 @@ import os
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.credentials import CredentialType
 
 
 class Config(BaseConfig):
     """Configuration manager for Keywords CLI."""
 
-    CREDENTIAL_TYPES: list = []  # public APIs — no auth required
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DIST_NAME = "keywords-cli"
 
     def __init__(self, profile: Optional[str] = None):
@@ -44,14 +45,11 @@ class Config(BaseConfig):
         """
         return []
 
+    def test_connection(self):
+        """Keywords uses public suggestion endpoints and requires no saved secrets."""
+        return {"api_test": "passed"}
 
-# Global config instance - singleton pattern
-_config: Optional[Config] = None
 
-
-def get_config() -> Config:
-    """Get or create the global config instance."""
-    global _config
-    if _config is None:
-        _config = Config()
-    return _config
+def get_config(profile: Optional[str] = None) -> Config:
+    """Create a config for the requested profile."""
+    return Config(profile=profile)

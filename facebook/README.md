@@ -170,7 +170,7 @@ facebook groups posts reply 123/posts/456 -c 2 -m "I agree"
 Run the batched groups smoke test to reuse one authenticated browser session for auth, joined groups, group post listing, and post get:
 
 ```bash
-/Users/adam/.local/share/uv/tools/facebook-cli/bin/python3 scripts/smoke_groups.py --group-id 2318028917
+~/.local/share/uv/tools/facebook-cli/bin/python3 scripts/smoke_groups.py --group-id 2318028917
 ```
 
 ### Groups Get Instrumentation
@@ -178,7 +178,7 @@ Run the batched groups smoke test to reuse one authenticated browser session for
 Measure end-to-end process timing for `facebook groups get`, including CLI startup, the browser credential gate, page load, extraction, and JSON output:
 
 ```bash
-/Users/adam/.local/share/uv/tools/facebook-cli/bin/python3 scripts/instrument_groups_get.py GROUP_ID --iterations 3 --output data/group-get-timings.json
+~/.local/share/uv/tools/facebook-cli/bin/python3 scripts/instrument_groups_get.py GROUP_ID --iterations 3 --output data/group-get-timings.json
 ```
 
 ### Groups Posts Instrumentation
@@ -186,7 +186,7 @@ Measure end-to-end process timing for `facebook groups get`, including CLI start
 Measure end-to-end process timing for `facebook groups posts list`, including CLI startup, authenticated group-page fetch, GraphQL feed fetch, extraction, and JSON output:
 
 ```bash
-/Users/adam/.local/share/uv/tools/facebook-cli/bin/python3 scripts/instrument_groups_posts_list.py GROUP_ID --limit 3 --iterations 3 --output data/group-posts-timings.json
+~/.local/share/uv/tools/facebook-cli/bin/python3 scripts/instrument_groups_posts_list.py GROUP_ID --limit 3 --iterations 3 --output data/group-posts-timings.json
 ```
 
 `facebook groups posts list` returns the latest 20 posts by default and accepts

@@ -13,7 +13,7 @@ Command-line interface for the Grammarly Plagiarism Detection API.
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/grammarly
+cd <cli-tools-root>/grammarly
 ./install.sh
 ```
 

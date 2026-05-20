@@ -141,7 +141,7 @@ def list_solutions(
         copilot solution list --filter "name:ilike:%solution%"
         copilot solution list --limit 50
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()
@@ -857,7 +857,7 @@ def list_publishers(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -1096,7 +1096,7 @@ def list_connection_references(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -1651,7 +1651,7 @@ def list_components(
 
                 # Apply filters
                 if filter:
-                    from ..filters import apply_filters, validate_filters, FilterValidationError
+                    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
                     try:
                         validate_filters(filter)
                         summary_data = apply_filters(summary_data, filter)
@@ -1705,7 +1705,7 @@ def list_components(
 
             # Apply filters
             if filter:
-                from ..filters import apply_filters, validate_filters, FilterValidationError
+                from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
                 try:
                     validate_filters(filter)
                     formatted = apply_filters(formatted, filter)

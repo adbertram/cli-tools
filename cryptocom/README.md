@@ -7,7 +7,7 @@ Official API docs: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.ht
 ## Installation
 
 ```bash
-uv tool install -e ~/Dropbox/GitRepos/cli-tools/cryptocom --force --refresh
+uv tool install -e <cli-tools-root>/cryptocom --force --refresh
 ```
 
 The `cryptocom` command is installed into `~/.local/bin`.

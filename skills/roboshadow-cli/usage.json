@@ -1,0 +1,393 @@
+{
+  "tool": "roboshadow",
+  "description": "CLI interface for Roboshadow (browser automation)",
+  "discovered_at": "2026-05-20T16:22:22.968405+00:00",
+  "total_commands": 14,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "search": {
+      "help": "Search roboshadow",
+      "commands": {
+        "query": {
+          "help": "Search for items on Roboshadow. Example: roboshadow search query \"my search term\" --limit 20 --table roboshadow search query \"keyword\" --filter \"price:lt:100\" roboshadow search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow search query` to Search for items on Roboshadow. Example: roboshadow search query \"my search term\" --limit 20 --table roboshadow search query \"keyword\" --filter \"price:lt:100\" roboshadow search query \"keyword\" --properties \"title,price\". Provide positional arguments: query. Useful options: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: roboshadow search item abc123 --table roboshadow search item \"https://example.com/item/abc123\" roboshadow search item abc123 --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow search item` to Get details for a specific item. Example: roboshadow search item abc123 --table roboshadow search item \"https://example.com/item/abc123\" roboshadow search item abc123 --properties \"title,price\". Provide positional arguments: item_id. Useful options: --table/-t, --properties/-p."
+        },
+        "list": {
+          "help": "List items from Roboshadow. Example: roboshadow search list --limit 100 --table roboshadow search list --filter \"status:active\" roboshadow search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow search list` to List items from Roboshadow. Example: roboshadow search list --limit 100 --table roboshadow search list --filter \"status:active\" roboshadow search list --properties \"id,name,status\". Useful options: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "wildcard": {
+          "help": "Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports * wildcards)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to search"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "roboshadow search wildcard \"*test*\"",
+            "roboshadow search wildcard \"prefix*\"",
+            "roboshadow search wildcard \"*pending*\" --fields \"status,notes\"",
+            "roboshadow search wildcard \"*error*\" --properties \"id,name,status\" --table"
+          ],
+          "usage_instructions": "Use `roboshadow search wildcard` to Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search. Provide positional arguments: query. Useful options: --table/-t, --limit/-l, --fields, --properties/-p."
+        }
+      },
+      "usage_instructions": "Use `roboshadow search` for Search roboshadow commands. Check the nested actions in `usage.json` before executing anything."
+    },
+    "auth": {
+      "help": "Manage roboshadow authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow auth login` to Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Useful options: --profile/-p, --force/-F."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow auth logout` to Clear stored credentials and browser sessions. Useful options: --profile/-p."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow auth status` to Check authentication status across profiles. Useful options: --profile/-p, --table/-t."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `roboshadow auth test` to Test authentication by verifying credentials work across profiles. Useful options: --table/-t, --profile/-p."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles list` to List all profiles and show which is the default. Useful options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles get` to Get details for a specific profile. Provide positional arguments: name. Useful options: --table/-t."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles create` to Create a new profile from .env.example template. Provide positional arguments: name."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles set-default` to Set a profile as the default (IS_DEFAULT_PROFILE=1). Provide positional arguments: name."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles delete` to Delete a profile and its data. Provide positional arguments: name. Useful options: --force/-F."
+            }
+          },
+          "usage_instructions": "Use `roboshadow auth profiles` for Manage authentication profiles commands. Check the nested actions in `usage.json` before executing anything."
+        }
+      },
+      "usage_instructions": "Use `roboshadow auth` for Manage roboshadow authentication commands. Check the nested actions in `usage.json` before executing anything."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `roboshadow cache clear` to Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
+        }
+      },
+      "usage_instructions": "Use `roboshadow cache` for Manage response cache commands. Check the nested actions in `usage.json` before executing anything."
+    }
+  },
+  "usage_instructions": "Use the `roboshadow` CLI for CLI interface for Roboshadow (browser automation). Commands follow `roboshadow <group> <action>`. Consult `usage.json` before execution instead of guessing flags or argument order."
+}

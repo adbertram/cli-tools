@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://affiliate.bitport.io/"
     DIST_NAME = "bitport-cli"
-    SESSION_NAME = "bitport"
-    LOGIN_URL = "https://affiliate.bitport.io/"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -6,13 +6,12 @@ probing its Select2-based lookup fields.  Use these when the offline
 find the exact value of a reference field (e.g., application name)
 before creating a ticket.
 """
-import json
-from pathlib import Path
 from typing import Optional
 
 import typer
 
 from ..client import get_client
+from ..template_data import load_ticket_template
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.output import (
     print_json, print_table, handle_error, print_error, print_info,
@@ -28,17 +27,14 @@ COMMAND_CREDENTIALS = {
     "lookup": ["browser_session"],
 }
 
-_TEMPLATE_PATH = Path(__file__).resolve().parent.parent.parent / "ticket_template.json"
-
-
 def _load_template_data(template_key: str) -> dict:
     """Load a single catalog item template entry by key."""
-    if not _TEMPLATE_PATH.exists():
+    try:
+        data = load_ticket_template()
+    except FileNotFoundError as exc:
         raise typer.BadParameter(
-            f"ticket_template.json not found at {_TEMPLATE_PATH}."
-        )
-    with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+            "ticket_template.json is missing from the installed package."
+        ) from exc
     catalog_items = data["catalog_items"]
     if template_key not in catalog_items:
         print_error(f"Unknown template key: '{template_key}'")

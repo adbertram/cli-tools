@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.rewarx.com/"
     DIST_NAME = "rewarx-cli"
-    SESSION_NAME = "rewarx"
-    LOGIN_URL = "https://www.rewarx.com/"
 
     def __init__(self, profile=None):
         super().__init__(

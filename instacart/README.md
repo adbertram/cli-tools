@@ -28,7 +28,7 @@ The session.json file should contain:
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/instacart
+cd <cli-tools-root>/instacart
 pip install -e .
 ```
 

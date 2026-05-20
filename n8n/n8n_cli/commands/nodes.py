@@ -5,7 +5,7 @@ from typing import Optional, List
 
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error
-from ..filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..package_inventory import list_server_packages, node_belongs_to_package, package_map
 from .test import test_node
 from .convert import convert_cli_tool

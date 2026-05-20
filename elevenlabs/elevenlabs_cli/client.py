@@ -8,7 +8,7 @@ import requests
 from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
-from .filters import FilterValidationError, apply_filters, validate_filters
+from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
 from .models import (
     Model,
     PronunciationDictionary,

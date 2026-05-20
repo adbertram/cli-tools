@@ -1,14 +1,13 @@
 """Command modules for Wordpress CLI."""
-from pydantic import BaseModel
 from typing import List, Optional
 
-from ..filters import apply_filters
+from cli_tools_shared.filters import apply_filters
 from ..filter_map import wordpress_filter_map
 
 
 def model_to_dict(item):
     """Convert model or dict to dict for field extraction."""
-    if isinstance(item, BaseModel):
+    if hasattr(item, "model_dump"):
         return item.model_dump()
     return item
 

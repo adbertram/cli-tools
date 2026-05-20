@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.onspace.ai/imp/ai-app-builder-free"
     DIST_NAME = "onspace-cli"
-    SESSION_NAME = "onspace"
-    LOGIN_URL = "https://www.onspace.ai/imp/ai-app-builder-free"
 
     def __init__(self, profile=None):
         super().__init__(

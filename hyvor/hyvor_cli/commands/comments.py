@@ -28,10 +28,10 @@ from typing import Optional, List
 
 from pydantic import BaseModel
 
+from cli_tools_shared.filters import apply_filters
 from ..client import get_client
 from ..config import get_config
 from cli_tools_shared import FilterMap
-from ..filters import apply_filters
 from cli_tools_shared.output import print_json, print_table, handle_error, print_info
 from ..parsers import format_local_time
 

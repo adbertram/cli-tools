@@ -18,7 +18,7 @@ from cli_tools_shared.output import print_error, print_info, print_success, prin
 from ..server import run_on_server_raw, sync_to_server, copy_file_to_server, get_server_host
 
 
-N8N_NODES_DIR = "/Users/adam/.n8n/nodes"
+N8N_NODES_DIR = str(Path.home() / ".n8n" / "nodes")
 N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 N8N_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
@@ -151,9 +151,9 @@ def deploy_node(
 
     Example:
         n8n nodes deploy shippo
-        n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl
-        n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes-claudecode
-        n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl --skip-build
+        n8n nodes deploy /path/to/n8n-nodes/brickowl
+        n8n nodes deploy /path/to/n8n-nodes-claudecode
+        n8n nodes deploy /path/to/n8n-nodes/brickowl --skip-build
     """
     config = get_config()
     package_dir = str(Path(package_path).expanduser().resolve())

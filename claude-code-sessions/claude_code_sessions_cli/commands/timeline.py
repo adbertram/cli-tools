@@ -3,8 +3,8 @@ import json
 import typer
 from typing import Optional, List, Any
 from ..client import get_client, ClientError
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table, handle_error
-from ..filters import apply_filters
 from ..parsers import format_local_time_only
 
 app = typer.Typer(help="View unified activity timeline", no_args_is_help=True)

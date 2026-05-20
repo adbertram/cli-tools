@@ -13,7 +13,7 @@ CLI tool for interacting with iMessage on macOS. Uses SQLite for fast reads from
 The CLI is installed automatically via the cli-tools scaffolding. To install manually:
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/imessage
+cd <cli-tools-root>/imessage
 pip install -e .
 ```
 

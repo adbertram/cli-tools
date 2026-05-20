@@ -6,6 +6,7 @@ from urllib.error import URLError
 import pytest
 
 from cc_connect_slack_manager_cli.client import CcConnectSlackManagerClient, ClientError
+from cc_connect_slack_manager_cli.models import SlackUserStatus
 
 
 def write_cody_config(home: Path, app_id: str = "A_TEST_APP", include_runtime_sections: bool = True) -> Path:
@@ -142,19 +143,20 @@ def test_token_status_reads_keychain_services_and_account(client, monkeypatch):
 
 
 def test_slack_verify_accepts_configured_bot_app(client, monkeypatch):
-    data = {
-        "id": "U_TEST_BOT",
-        "name": "cody",
-        "deleted": False,
-        "is_bot": True,
-        "is_app_user": True,
-        "profile": {"api_app_id": "A_TEST_APP", "bot_id": "B_TEST_BOT"},
-    }
-
-    def fake_run(args, check=True):
-        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(data), stderr="")
-
-    monkeypatch.setattr(client, "_run", fake_run)
+    monkeypatch.setattr(
+        client,
+        "_slack_user",
+        lambda user_id: SlackUserStatus(
+            id=user_id,
+            name="cody",
+            deleted=False,
+            is_bot=True,
+            is_app_user=True,
+            api_app_id="A_TEST_APP",
+            bot_id="B_TEST_BOT",
+            image_512=None,
+        ),
+    )
 
     result = client.slack_verify()
 
@@ -173,19 +175,20 @@ def client(tmp_path, monkeypatch):
 
 
 def test_slack_verify_rejects_bot_from_wrong_app(client, monkeypatch):
-    data = {
-        "id": "U_TEST_BOT",
-        "name": "cody",
-        "deleted": False,
-        "is_bot": True,
-        "is_app_user": True,
-        "profile": {"api_app_id": "A_WRONG_APP"},
-    }
-
-    def fake_run(args, check=True):
-        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(data), stderr="")
-
-    monkeypatch.setattr(client, "_run", fake_run)
+    monkeypatch.setattr(
+        client,
+        "_slack_user",
+        lambda user_id: SlackUserStatus(
+            id=user_id,
+            name="cody",
+            deleted=False,
+            is_bot=True,
+            is_app_user=True,
+            api_app_id="A_WRONG_APP",
+            bot_id=None,
+            image_512=None,
+        ),
+    )
 
     with pytest.raises(ClientError, match="belongs to Slack app A_WRONG_APP"):
         client.slack_verify()

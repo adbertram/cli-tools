@@ -2,6 +2,10 @@
 from typing import Any, Dict, List, Optional
 import random
 import time
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 import requests
 
 from .config import get_config
@@ -242,7 +246,7 @@ class InstacartClient:
         Returns:
             List of Order models
         """
-        from .filters import apply_filters, parse_filter_string
+        from cli_tools_shared.filters import apply_filters, parse_filter_string
 
         variables = {"first": limit}
         data = self._graphql_request("PersonalOrderHistory", variables)

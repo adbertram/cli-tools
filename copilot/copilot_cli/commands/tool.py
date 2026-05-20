@@ -364,7 +364,7 @@ def tool_list(
 
         # Apply filters using standard field:op:value syntax
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 all_tools = apply_filters(all_tools, filter)

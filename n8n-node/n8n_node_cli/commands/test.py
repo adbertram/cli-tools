@@ -4,7 +4,7 @@ import uuid
 import typer
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from ..output import print_json, print_error, print_info, print_success
+from cli_tools_shared.output import print_json, print_error, print_info, print_success
 
 
 def _cleanup(api, workflow_id, no_cleanup):
@@ -38,7 +38,7 @@ def test_node(
 
     Requires:
     - The n8n node must already be installed on the n8n server
-    - n8n API credentials in ~/.claude/skills/n8n/.env
+    - n8n API credentials configured with `n8n-node auth login`
 
     Example:
         n8n-node test claudecode -p '{"prompt":"What is 2+2?","model":"haiku","outputFormat":"text"}'

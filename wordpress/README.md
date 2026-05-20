@@ -19,14 +19,22 @@ Create a `.env` file in the wordpress CLI directory with your WordPress credenti
 
 ```bash
 # WordPress site URL
-WORDPRESS_URL=https://adamtheautomator.com
+URL=https://adamtheautomator.com
 
 # WordPress username
-WORDPRESS_USERNAME=your_username
+USERNAME=your_username
 
 # WordPress Application Password (NOT your account password)
 # Generate this in WordPress admin: Users > Profile > Application Passwords
-WORDPRESS_APP_PASSWORD=your_application_password
+PASSWORD=your_application_password
+
+# Optional secondary WordPress.com bundle for native Jetpack plugin upgrades.
+WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
+WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
+WPCOM_USERNAME=your_wpcom_username
+WPCOM_PASSWORD=your_wpcom_password
+WPCOM_SITE=your-site.com
+WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
 ```
 
 ### 2. Verify Authentication
@@ -64,12 +72,45 @@ wordpress posts list --filter status=publish --limit 20
 
 ### Configuration
 
-WordPress CLI requires three environment variables. Store these in a `.env` file in the wordpress CLI directory:
+WordPress CLI requires the WordPress site credentials below. Native plugin version upgrades use a separate WordPress.com credential bundle and an auto-saved OAuth token for the Jetpack management API.
 
 ```env
-WORDPRESS_URL=https://your-site.com
-WORDPRESS_USERNAME=your_username
-WORDPRESS_APP_PASSWORD=your_application_password
+URL=https://your-site.com
+USERNAME=your_username
+PASSWORD=your_application_password
+WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
+WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
+WPCOM_USERNAME=your_wpcom_username
+WPCOM_PASSWORD=your_wpcom_password
+WPCOM_SITE=your-site.com
+WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
+```
+
+### WordPress.com Token Setup
+
+Save the secondary WordPress.com credential bundle once:
+
+```bash
+wordpress org token save-credential \
+  --client-id your-client-id \
+  --client-secret your-client-secret \
+  --username your-wpcom-username \
+  --password your-wpcom-password \
+  --site your-site.com
+```
+
+Acquire and save a WordPress.com OAuth token without a browser:
+
+```bash
+wordpress org token
+```
+
+You can also provide the same flags directly to `wordpress org token` for a one-shot non-interactive run. The command saves `WPCOM_ACCESS_TOKEN` into the active profile `.env` and does not print the raw token.
+
+If any required WordPress.com fields are missing, the CLI fails with an exact missing-field list and tells you to rerun:
+
+```bash
+wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...
 ```
 
 ### Setting Up Application Password
@@ -769,27 +810,32 @@ This ensures posts work seamlessly with WordPress's modern block editor.
 
 ### .env File Location
 
-The `.env` file must be placed in the wordpress CLI directory:
+Profile `.env` files live under the CLI data directory:
 
 ```
-~/Dropbox/GitRepos/cli-tools/wordpress/.env
+~/.local/share/cli-tools/wordpress/.profiles/<profile>/.env
 ```
 
 ### .env Format
 
 ```bash
 # Required: WordPress site URL
-WORDPRESS_URL=https://adamtheautomator.com
+URL=https://adamtheautomator.com
 
 # Required: WordPress username
-WORDPRESS_USERNAME=your_username
+USERNAME=your_username
 
 # Required: Application Password
 # Generate in WordPress: Users > Profile > Application Passwords
-WORDPRESS_APP_PASSWORD=your_application_password
+PASSWORD=your_application_password
 
-# Optional: Custom API base URL (auto-constructed if not set)
-# WORDPRESS_BASE_URL=https://adamtheautomator.com/wp-json/wp/v2
+# Optional secondary WordPress.com bundle for native Jetpack plugin upgrades
+WPCOM_CLIENT_ID=your_wpcom_oauth_client_id
+WPCOM_CLIENT_SECRET=your_wpcom_oauth_client_secret
+WPCOM_USERNAME=your_wpcom_username
+WPCOM_PASSWORD=your_wpcom_password
+WPCOM_SITE=your-site.com
+WPCOM_ACCESS_TOKEN=auto_saved_by_wordpress_org_token
 ```
 
 ## Requirements
@@ -827,4 +873,7 @@ wordpress cache clear
 ```bash
 wordpress admin plugins list
 wordpress admin plugins get akismet
+wordpress admin plugins upgrade akismet/akismet
+wordpress org token --help
+wordpress org token save-credential --help
 ```

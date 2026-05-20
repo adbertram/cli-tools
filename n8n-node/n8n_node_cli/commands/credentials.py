@@ -4,8 +4,8 @@ import typer
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from ..output import print_json, print_table, print_error, print_success, handle_error
-from ..filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 
 app = typer.Typer(help="Manage n8n credentials on the server", no_args_is_help=True)
 
@@ -106,7 +106,7 @@ def credentials_create(
         dupes = [c for c in existing if c["type"] == cred_type]
         if dupes:
             print_error(f"Credential of type '{cred_type}' already exists: '{dupes[0]['name']}' (id: {dupes[0]['id']})")
-            from ..output import print_info
+            from cli_tools_shared.output import print_info
             print_info("Delete the existing one first with: n8n-node credentials delete " + dupes[0]["id"])
             raise typer.Exit(1)
 
@@ -117,7 +117,7 @@ def credentials_create(
             missing = [f for f in required_fields if not cred_data.get(f)]
             if missing:
                 print_error(f"Required fields missing or empty: {', '.join(missing)}")
-                from ..output import print_info
+                from cli_tools_shared.output import print_info
                 print_info(f"Run 'n8n-node credentials schema {cred_type}' to see all fields")
                 raise typer.Exit(1)
         except N8nApiError:

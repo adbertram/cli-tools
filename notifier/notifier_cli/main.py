@@ -6,10 +6,10 @@ from cli_tools_shared import create_app, run_app
 app = create_app(name="notifier", help="CLI wrapper for terminal-notifier - macOS desktop notifications", version=__version__, cache_support=False)
 
 # Register command modules
-from .commands import notifications
+from . import commands
 
 # Add send command at top level
-app.command("send")(notifications.send_notification)
+app.command("send")(commands.send_notification)
 
 
 def main():

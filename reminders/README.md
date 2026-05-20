@@ -24,7 +24,7 @@ Command-line interface for managing macOS Reminders using the EventKit framework
 
 ```bash
 # Clone or navigate to the repository
-cd ~/Dropbox/GitRepos/cli-tools/reminders
+cd <cli-tools-root>/reminders
 
 # Create virtual environment
 python3 -m venv venv

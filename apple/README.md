@@ -7,7 +7,7 @@ browser session.
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/apple
+cd <cli-tools-root>/apple
 uv tool install -e . --force --refresh
 ```
 

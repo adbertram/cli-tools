@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://hide.me/en/affiliate"
     DIST_NAME = "hide-me-cli"
-    SESSION_NAME = "hide-me"
-    LOGIN_URL = "https://hide.me/en/affiliate"
 
     def __init__(self, profile=None):
         super().__init__(

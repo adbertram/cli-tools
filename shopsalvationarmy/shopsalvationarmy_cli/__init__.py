@@ -1,6 +1,3 @@
-"""ShopSalvationArmy CLI - Command-line interface for Shop Salvation Army."""
-# Suppress urllib3 SSL warnings (LibreSSL compatibility) - must be before urllib3 import
-import warnings
-warnings.filterwarnings("ignore", module="urllib3")
+"""ShopSalvationArmy CLI."""
 
 __version__ = "0.1.0"

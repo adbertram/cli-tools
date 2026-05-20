@@ -3,7 +3,7 @@ import typer
 from typing import Optional
 
 from ..client import get_client
-from ..output import print_json, print_success, handle_error
+from cli_tools_shared.output import print_json, print_success, handle_error
 
 
 def convert_cli_tool(

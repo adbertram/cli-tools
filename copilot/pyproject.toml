@@ -35,7 +35,7 @@ dependencies = [
     # Pin will be bumped once cli-tools-shared cuts a release tag that
     # includes the paths + secrets modules and the profile-discovery
     # hooks (currently on main as 244b661).
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
     # Cross-platform OS keychain access (macOS Keychain, Windows Credential
     # Manager, Linux libsecret). Required for storing AZURE_CLIENT_SECRET,
     # M365_SDK_CLIENT_SECRET, and DIRECTLINE_SECRET outside plain-text .env.
@@ -57,8 +57,8 @@ dev = [
 copilot = "copilot_cli.main:app"
 
 [project.urls]
-"Homepage" = "https://github.com/adbertram/copilot-cli"
-"Bug Tracker" = "https://github.com/adbertram/copilot-cli/issues"
+"Homepage" = "https://github.com/adbertram/cli-tools"
+"Bug Tracker" = "https://github.com/adbertram/cli-tools/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -80,3 +80,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=copilot_cli --cov-report=term-missing"
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

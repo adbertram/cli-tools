@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.measureup.com/"
     DIST_NAME = "measureup-cli"
-    SESSION_NAME = "measureup"
-    LOGIN_URL = "https://www.measureup.com/"
 
     def __init__(self, profile=None):
         super().__init__(

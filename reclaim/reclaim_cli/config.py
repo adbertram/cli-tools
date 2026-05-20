@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://reclaim.ai/"
     DIST_NAME = "reclaim-cli"
-    SESSION_NAME = "reclaim"
-    LOGIN_URL = "https://reclaim.ai/"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -10,7 +10,7 @@ from cli_tools_shared.output import print_json, print_table, handle_error, print
 from ..client import get_client
 from ..config import get_config
 from ..formatters import format_invoice_for_display
-from ..filters import apply_filters, validate_filters, FilterValidationError
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 app = typer.Typer(help="Manage FreshBooks invoices")
 

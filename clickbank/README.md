@@ -11,7 +11,7 @@ Implemented endpoint families:
 ## Install
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/clickbank
+cd <cli-tools-root>/clickbank
 uv tool install -e . --force --refresh
 ```
 

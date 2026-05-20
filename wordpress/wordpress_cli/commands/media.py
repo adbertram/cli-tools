@@ -4,7 +4,6 @@ from typing import Optional, List
 from pathlib import Path
 from mimetypes import guess_type
 
-from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info
 from ..filter_map import wordpress_filter_map
 from . import model_to_dict, extract_fields, apply_client_side_filters
@@ -26,6 +25,11 @@ COMMAND_CREDENTIALS = {
         "username_password"
     ]
 }
+
+
+def get_client():
+    from ..client import get_client as _get_client
+    return _get_client()
 
 
 @app.command("list")

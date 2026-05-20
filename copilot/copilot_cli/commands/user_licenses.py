@@ -66,7 +66,7 @@ def _emit_user_licenses(
     limit: int,
 ) -> None:
     if filter:
-        from ..filters import apply_filters, validate_filters, FilterValidationError
+        from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
         try:
             validate_filters(filter)
             formatted = apply_filters(formatted, filter)

@@ -333,6 +333,7 @@ ata-blog shoutouts list <post_id> --table
 ata-blog shoutouts list <post_id> --limit 5
 
 # List shoutouts for an ATABlogger sponsor
+export ATABLOGGER_SPONSORS_FILE=/path/to/sponsors.json
 ata-blog shoutouts list --sponsor Specops
 ata-blog shoutouts list --sponsor Specops --properties post_id,slug,position,preview
 ```

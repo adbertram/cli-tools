@@ -1,0 +1,873 @@
+{
+  "tool": "linkedin",
+  "description": "Create and manage LinkedIn member and page posts",
+  "discovered_at": "2026-05-18T20:50:10.452320+00:00",
+  "total_commands": 24,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "user": {
+      "help": "Manage authenticated-member LinkedIn resources",
+      "commands": {
+        "posts": {
+          "help": "Manage LinkedIn member posts",
+          "commands": {
+            "list": {
+              "help": "List LinkedIn posts for a member author.",
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--start",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Zero-based paging offset",
+                  "default": "0"
+                },
+                {
+                  "name": "--sort-by",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sort order accepted by LinkedIn (for example LAST_MODIFIED)",
+                  "default": "LAST_MODIFIED"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of posts",
+                  "short": "-l",
+                  "default": "10"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List member posts from LinkedIn's official Posts API for the resolved member author. Use `--person` to target a specific member URN, otherwise the CLI falls back to `LINKEDIN_PERSON_URN`, then authenticated-member identity lookup. Use `--limit/-l`, `--filter/-f`, `--table/-t`, and `--properties/-p` to shape the result. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "get": {
+              "help": "Get a single member post by URN.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--view-context",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn view context (AUTHOR or READER)",
+                  "default": "AUTHOR"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Get one member post by `POST_URN` through LinkedIn's official Posts API. Use `--person` when the CLI cannot infer the member author from config or identity lookup. Use `--view-context`, `--table/-t`, or `--properties/-p` to shape the output. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "create": {
+              "help": "Create a text-only LinkedIn member post.",
+              "arguments": [
+                {
+                  "name": "commentary",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Text content for the post"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when LinkedIn identity lookup is available"
+                },
+                {
+                  "name": "--visibility",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn visibility value",
+                  "default": "PUBLIC"
+                },
+                {
+                  "name": "--feed-distribution",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn distribution feed value",
+                  "default": "MAIN_FEED"
+                },
+                {
+                  "name": "--disable-reshare",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Prevent resharing the post"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Create a text-only member post from `COMMENTARY` through LinkedIn's official Posts API. Omit `--person` to use `LINKEDIN_PERSON_URN`, then authenticated-member identity lookup through `/v2/me` and `/v2/userinfo` when available. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "update": {
+              "help": "Update the commentary for an existing member post.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                },
+                {
+                  "name": "commentary",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Updated text content"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Update the commentary for an existing member post identified by `POST_URN` through LinkedIn's official Posts API. Use `--person` when the CLI cannot infer the member author from config or identity lookup so scope errors can be attributed correctly. Use `--table/-t` for formatted output and `--profile` for a named auth profile."
+            },
+            "delete": {
+              "help": "Delete a member post.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Delete a member post by `POST_URN` through LinkedIn's official Posts API. Use `--person` when the CLI cannot infer the member author from config or identity lookup so scope errors can be attributed correctly. Use `--table/-t` for formatted output and `--profile` for a named auth profile."
+            },
+            "search": {
+              "help": "Search member posts with client-side wildcard matching.",
+              "arguments": [
+                {
+                  "name": "query",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Search query (supports * wildcards)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member author URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of posts",
+                  "short": "-l",
+                  "default": "10"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Search member posts with a wildcard `QUERY` across rows returned by LinkedIn's official Posts API for the resolved member author. Use `--person` to target a specific member URN, otherwise the CLI falls back to `LINKEDIN_PERSON_URN`, then authenticated-member identity lookup. Use `--limit/-l` to cap fetched rows, then refine with `--filter/-f`, `--table/-t`, or `--properties/-p`. Use `--profile` to select a non-default LinkedIn auth profile."
+            }
+          },
+          "usage_instructions": "Member-post operations through LinkedIn's official Posts API: list, get, create, update, delete, and client-side search. Member writes require `w_member_social`; member reads require `r_member_social`. Use `--person` or `LINKEDIN_PERSON_URN` when authenticated-member identity lookup is unavailable."
+        }
+      },
+      "usage_instructions": "Authenticated-member operations. Use `linkedin user posts <action>` for official API member-post list, get, create, update, delete, and search operations."
+    },
+    "page": {
+      "help": "Manage LinkedIn page resources",
+      "commands": {
+        "posts": {
+          "help": "Manage LinkedIn page posts",
+          "commands": {
+            "list": {
+              "help": "List LinkedIn posts for an organization or showcase page.",
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--start",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Zero-based paging offset",
+                  "default": "0"
+                },
+                {
+                  "name": "--sort-by",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sort order accepted by LinkedIn (for example LAST_MODIFIED)",
+                  "default": "LAST_MODIFIED"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of posts",
+                  "short": "-l",
+                  "default": "10"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List organization or showcase-page posts through LinkedIn's official Posts API. Pass `--page` with the page URN or rely on `LINKEDIN_PAGE_URN` when configured. Use `--limit/-l`, `--filter/-f`, `--table/-t`, and `--properties/-p` to shape the result. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "get": {
+              "help": "Get a single page post by URN.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--view-context",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn view context (AUTHOR or READER)",
+                  "default": "AUTHOR"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Get one page post by `POST_URN` through LinkedIn's official Posts API. Pass `--page` with the page URN or rely on `LINKEDIN_PAGE_URN` when configured. Use `--view-context`, `--table/-t`, or `--properties/-p` to shape the output. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "create": {
+              "help": "Create a text-only LinkedIn page post.",
+              "arguments": [
+                {
+                  "name": "commentary",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Text content for the post"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--visibility",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn visibility value",
+                  "default": "PUBLIC"
+                },
+                {
+                  "name": "--feed-distribution",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LinkedIn distribution feed value",
+                  "default": "MAIN_FEED"
+                },
+                {
+                  "name": "--disable-reshare",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Prevent resharing the post"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Create a text-only organization or showcase-page post from `COMMENTARY` through LinkedIn's official Posts API. Pass `--page` or configure `LINKEDIN_PAGE_URN` to choose the page author. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile."
+            },
+            "update": {
+              "help": "Update the commentary for an existing page post.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                },
+                {
+                  "name": "commentary",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Updated text content"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Update the commentary for an existing page post identified by `POST_URN` through LinkedIn's official Posts API. Pass `--page` or configure `LINKEDIN_PAGE_URN` so scope errors can be attributed correctly. Use `--table/-t` for formatted output and `--profile` for a named auth profile."
+            },
+            "delete": {
+              "help": "Delete a page post.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Delete a page post by `POST_URN` through LinkedIn's official Posts API. Pass `--page` or configure `LINKEDIN_PAGE_URN` so scope errors can be attributed correctly. Use `--table/-t` for formatted output and `--profile` for a named auth profile."
+            },
+            "search": {
+              "help": "Search page posts with client-side wildcard matching.",
+              "arguments": [
+                {
+                  "name": "query",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Search query (supports * wildcards)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active default profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page author URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of posts",
+                  "short": "-l",
+                  "default": "10"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Search organization or showcase-page posts with a wildcard `QUERY` across rows returned by LinkedIn's official Posts API. Pass `--page` with the page URN or rely on `LINKEDIN_PAGE_URN` when configured. Use `--limit/-l` to cap fetched rows, then refine with `--filter/-f`, `--table/-t`, or `--properties/-p`. Use `--profile` to select a non-default LinkedIn auth profile."
+            }
+          },
+          "usage_instructions": "Page-post operations through LinkedIn's official Posts API: list, get, create, update, delete, and client-side search. Page writes require `w_organization_social`; page reads require `r_organization_social`. Use `--page` or `LINKEDIN_PAGE_URN` to select the organization or showcase-page author."
+        }
+      },
+      "usage_instructions": "LinkedIn page operations. Use `linkedin page posts <action>` for official API organization or showcase-page post management."
+    },
+    "auth": {
+      "help": "Manage linkedin authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth_authorization_code')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Run the LinkedIn OAuth authorization-code login flow. Use `--credential-type oauth_authorization_code` to target the OAuth credential explicitly, `--force/-F` to clear active token state before re-authenticating, and `--profile/-p` for a named profile."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored LinkedIn OAuth credentials for the selected profile. Use `--profile/-p` to target a named profile instead of the active default profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check LinkedIn OAuth authentication status across profiles. The command performs live token verification and reports saved scopes, token status, and whether the current OAuth credentials are usable. Use `--profile/-p` to inspect one profile and `--table/-t` for tabular output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Refresh the stored LinkedIn OAuth access token using the saved refresh token. Use --profile/-p for a specific profile and --table/-t for formatted output."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run the CLI authentication verification command across profiles. Use --profile/-p to scope the check, --verbose/-v for more detail, and --table/-t for tabular output."
+        },
+        "readiness": {
+          "help": "Show LinkedIn post command readiness by profile and scope.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check. Defaults to all profiles",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show whether each LinkedIn auth profile is ready for member and page post command groups. Member writes require `w_member_social`, member reads require `r_member_social`, page writes require `w_organization_social`, and page reads require `r_organization_social`. Use `--profile/-p` for one profile and `--table/-t` for tabular output."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all configured LinkedIn auth profiles and show which one is the default. Use --limit/-l, --filter/-f, --table/-t, and --properties/-p to shape the result."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Get details for one saved auth profile by NAME. Use --table/-t for formatted output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new profile named NAME from the LinkedIn .env template. Use this before configuring separate staging or alternate LinkedIn app credentials."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Set the named profile as the CLI default used when --profile is omitted from other commands."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete the named profile and its stored data. Use --force/-F to skip the confirmation prompt."
+            }
+          },
+          "usage_instructions": "Manage named authentication profiles used by the LinkedIn CLI."
+        }
+      },
+      "usage_instructions": "OAuth authentication management, live token verification, token refresh, logout, readiness checks, and nested profile management."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove every cached LinkedIn API response for the active profile. Use when you need fresh server results instead of cached reads."
+        }
+      },
+      "usage_instructions": "Manage cached LinkedIn API responses stored for this CLI profile."
+    }
+  },
+  "usage_instructions": "Use for LinkedIn member-post, page-post, and OAuth authentication operations through the `linkedin` CLI. Use `linkedin user posts <action>` for member posts and `linkedin page posts <action>` for organization or showcase-page posts. All post commands use LinkedIn's official OAuth APIs only. Use `--profile` on post commands when selecting a non-default LinkedIn profile."
+}

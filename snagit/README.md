@@ -1,6 +1,6 @@
 # Snagit CLI
 
-A command-line interface for the [Snagit API](file:///Users/adam/Pictures/Snagit/Autosaved Captures.localized/). Manage Snagit capture files (.snagx format)
+A command-line interface for managing Snagit capture files (.snagx format).
 
 ## Installation
 

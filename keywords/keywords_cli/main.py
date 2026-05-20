@@ -1,7 +1,9 @@
 """Main entry point for Keywords CLI."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
+from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
+from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
 from .config import get_config
 
@@ -12,9 +14,10 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import suggest
+from . import commands
 
-app.add_typer(suggest.app, name="suggest", help="Query autocomplete suggestions")
+register_commands(app, get_config, commands, name="suggest", help="Query autocomplete suggestions")
+app.add_typer(create_auth_app(get_config, tool_name="keywords"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 
 

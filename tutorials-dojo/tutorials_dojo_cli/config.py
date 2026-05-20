@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://portal.tutorialsdojo.com/faq-for-affiliate-marketing/"
     DIST_NAME = "tutorials-dojo-cli"
-    SESSION_NAME = "tutorials-dojo"
-    LOGIN_URL = "https://portal.tutorialsdojo.com/faq-for-affiliate-marketing/"
 
     def __init__(self, profile=None):
         super().__init__(

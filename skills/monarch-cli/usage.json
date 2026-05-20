@@ -1,0 +1,1382 @@
+{
+  "tool": "monarch",
+  "description": "CLI for Monarch Money personal finance",
+  "discovered_at": "2026-05-15T19:30:13Z",
+  "total_commands": 40,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use to set up Monarch Money credentials. Use --profile/-p to save to a specific profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate a specific type."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to verify you are authenticated. Use --profile/-p to check a specific profile. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to refresh an expired token without re-authenticating."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to verify credentials work against the API. Use --verbose/-v for detailed checks."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use to browse profiles. Use --filter/-f to find specific profiles (e.g., is_default:eq:True). Use --table/-t for formatted output."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use to view a profile by NAME. Use --table/-t for formatted output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use to create a new profile. NAME is positional and required."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use to switch the default profile used by all commands."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to permanently delete a profile. Use --force/-F to skip confirmation."
+            }
+          },
+          "usage_instructions": "Profile management -- list, get, create, set-default, and delete configuration profiles for multiple environments."
+        }
+      },
+      "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p."
+    },
+    "accounts": {
+      "help": "Manage accounts",
+      "commands": {
+        "list": {
+          "help": "List all accounts. Filter Examples: monarch accounts list --filter \"type:Checking\" monarch accounts list --filter \"balance:gte:1000\" monarch accounts list --filter \"institution:like:%Chase%\" Other Examples: monarch accounts list monarch accounts list --table monarch accounts list --hidden",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--hidden",
+              "type": "bool",
+              "required": false,
+              "help": "Include hidden accounts"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum accounts to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., type:Checking, balance:gte:1000)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse financial accounts. Use --hidden to include hidden accounts. Filter with --filter/-f (e.g., type:Checking, balance:gte:1000). Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific account.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get full details of an account by ACCOUNT_ID. Use --table/-t for formatted output."
+        },
+        "history": {
+          "help": "Get balance history for an account.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of history entries",
+              "short": "-l",
+              "default": "30"
+            }
+          ],
+          "usage_instructions": "Use to view balance history over time for a specific account. Default returns 30 entries; change with --limit/-l. Use --table/-t for formatted output."
+        },
+        "holdings": {
+          "help": "Get securities holdings for a brokerage account.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to view investment holdings for a brokerage account by ACCOUNT_ID. Use --table/-t for formatted output."
+        },
+        "sync": {
+          "help": "Trigger account refresh/sync.",
+          "arguments": [
+            {
+              "name": "account_ids",
+              "type": "TEXT",
+              "required": false,
+              "help": "[ACCOUNT_IDS]...  Account IDs to sync (all if empty)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "Wait for sync to complete",
+              "short": "-w"
+            }
+          ],
+          "usage_instructions": "Use to refresh account data from financial institutions. Optionally provide specific ACCOUNT_IDS; syncs all if empty. Use --wait/-w to wait for sync completion."
+        }
+      },
+      "usage_instructions": "Account management -- list, get details, view balance history, view holdings, and trigger sync. Use --filter/-f with field:op:value (e.g., type:Checking, balance:gte:1000, institution:like:%Chase%)."
+    },
+    "transactions": {
+      "help": "Manage transactions",
+      "commands": {
+        "list": {
+          "help": "List transactions with filtering. Review-Status Filter: monarch transactions list --needs-review            # only \"Needs Review\" monarch transactions list --reviewed                # only already-reviewed (--needs-review and --reviewed are mutually exclusive.) Filter Examples: monarch transactions list --filter \"amount:gte:100\" monarch transactions list --filter \"merchant:like:%Amazon%\" monarch transactions list --filter \"category:Groceries\" monarch transactions list --filter \"is_pending:true\" monarch transactions list --filter \"amount:gte:50,category:Dining\" Supported operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull Other Examples: monarch transactions list monarch transactions list --days 30 monarch transactions list --start 2024-01-01 --end 2024-01-31 monarch transactions list --account ACC_ID --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum transactions to return",
+              "short": "-l",
+              "default": "500"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            },
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by account ID",
+              "short": "-a"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by category ID",
+              "short": "-c"
+            },
+            {
+              "name": "--search",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search string",
+              "short": "-q"
+            },
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Last N days (shortcut for date range)",
+              "short": "-d"
+            },
+            {
+              "name": "--needs-review",
+              "type": "bool",
+              "required": false,
+              "help": "Only transactions where needsReview == true (Monarch 'Needs Review' filter)"
+            },
+            {
+              "name": "--reviewed",
+              "type": "bool",
+              "required": false,
+              "help": "Only transactions where needsReview == false (already reviewed)"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., amount:gte:100, merchant:like:%Amazon%)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse transactions. Filter by date range with --start/-s and --end/-e (YYYY-MM-DD) or --days/-d for last N days. Filter by --account/-a, --category/-c, or --search/-q. Filter by review status with --needs-review (only needsReview==true) or --reviewed (only needsReview==false); these two flags are mutually exclusive and applied server-side. Output rows include needs_review and reviewed_at fields. Use --filter/-f for advanced filtering (amount:gte:100, merchant:like:%Amazon%). Default limit is 500. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific transaction.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get full details of a transaction by TRANSACTION_ID. Use --table/-t for formatted output."
+        },
+        "update": {
+          "help": "Update a transaction.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Transaction ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--merchant",
+              "type": "TEXT",
+              "required": false,
+              "help": "New merchant name",
+              "short": "-m"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "New category ID",
+              "short": "-c"
+            },
+            {
+              "name": "--amount",
+              "type": "FLOAT",
+              "required": false,
+              "help": "New amount",
+              "short": "-a"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "New date (YYYY-MM-DD)",
+              "short": "-d"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "New notes (use '' to clear)",
+              "short": "-n"
+            },
+            {
+              "name": "--goal",
+              "type": "TEXT",
+              "required": false,
+              "help": "Goal ID (use '' to clear)",
+              "short": "-g"
+            },
+            {
+              "name": "--hide-from-reports",
+              "type": "bool",
+              "required": false,
+              "help": "Hide from reports"
+            },
+            {
+              "name": "--needs-review",
+              "type": "bool",
+              "required": false,
+              "help": "Mark as needs review"
+            }
+          ],
+          "examples": [
+            "monarch transactions update TXN_ID --merchant \"Amazon\"",
+            "monarch transactions update TXN_ID --category CAT_ID",
+            "monarch transactions update TXN_ID --amount 50.00 --date 2024-01-15",
+            "monarch transactions update TXN_ID --notes \"Reimbursement pending\"",
+            "monarch transactions update TXN_ID --notes \"\"  # Clear notes",
+            "monarch transactions update TXN_ID --hide-from-reports",
+            "monarch transactions update TXN_ID --no-needs-review"
+          ],
+          "usage_instructions": "Use to modify a transaction's merchant, category, amount, date, notes, or goal. TRANSACTION_ID is positional. Use --notes '' to clear notes. Use --hide-from-reports to exclude from reports. Use --needs-review/--no-needs-review to toggle review status."
+        },
+        "recurring": {
+          "help": "List recurring transactions (unique streams).",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            }
+          ],
+          "usage_instructions": "Use to view recurring transaction patterns. Optionally filter by date range with --start/-s and --end/-e. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Transaction management -- list, get, update, and view recurring transactions. Rich filtering via --filter/-f (amount:gte:100, merchant:like:%Amazon%, category:Groceries). Date ranges via --start/-s, --end/-e, or --days/-d."
+    },
+    "budgets": {
+      "help": "View budgets",
+      "commands": {
+        "list": {
+          "help": "List budgets. Filter Examples: monarch budgets list --filter \"category:Groceries\" monarch budgets list --filter \"budgeted:gte:100\" monarch budgets list --filter \"remaining:lt:0\" Other Examples: monarch budgets list monarch budgets list --month 2024-01 monarch budgets list --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum budgets to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            },
+            {
+              "name": "--month",
+              "type": "TEXT",
+              "required": false,
+              "help": "Month (YYYY-MM)",
+              "short": "-m"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., category:Groceries, budgeted:gte:100)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse budgets. Filter with --filter/-f (category:Groceries, budgeted:gte:100, remaining:lt:0). View specific month with --month/-m (YYYY-MM) or date range with --start/-s and --end/-e. Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific budget item.",
+          "arguments": [
+            {
+              "name": "budget_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Budget item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--month",
+              "type": "TEXT",
+              "required": false,
+              "help": "Month (YYYY-MM)",
+              "short": "-m"
+            }
+          ],
+          "usage_instructions": "Use to get details for a specific budget by BUDGET_ID. Optionally specify --month/-m."
+        }
+      },
+      "usage_instructions": "Budget viewing -- list and get budget details. Filter by category, amount, or remaining. Use --month/-m for specific month (YYYY-MM)."
+    },
+    "categories": {
+      "help": "Manage categories",
+      "commands": {
+        "list": {
+          "help": "List all transaction categories. Filter Examples: monarch categories list --filter \"group:Income\" monarch categories list --filter \"name:like:%food%\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum categories to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., group:Income, name:like:%food%)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse categories. Filter with --filter/-f (group:Income, name:like:%food%). Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific category.",
+          "arguments": [
+            {
+              "name": "category_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get category details by CATEGORY_ID."
+        }
+      },
+      "usage_instructions": "Category management -- list and get transaction categories. Filter by group or name."
+    },
+    "category-groups": {
+      "help": "Manage category groups",
+      "commands": {
+        "list": {
+          "help": "List all category groups.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum category groups to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., type:expense, name:ilike:%income%)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "monarch category-groups list",
+            "monarch category-groups list --table",
+            "monarch category-groups list --filter \"type:expense\"",
+            "monarch category-groups list --filter \"name:ilike:%food%\""
+          ],
+          "usage_instructions": "Use to browse category groups. Filter with --filter/-f (type:expense, name:ilike:%income%). Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific category group.",
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category group ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "monarch category-groups get 12345678",
+            "monarch category-groups get 12345678 --table"
+          ],
+          "usage_instructions": "Use to get category group details by GROUP_ID."
+        }
+      },
+      "usage_instructions": "Category group management -- list and get category groups (top-level groupings like Income, Expenses)."
+    },
+    "tags": {
+      "help": "Manage tags",
+      "commands": {
+        "list": {
+          "help": "List all transaction tags. Filter Examples: monarch tags list --filter \"name:like:%work%\" monarch tags list --filter \"color:blue\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum tags to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:like:%work%)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse tags. Filter with --filter/-f (name:like:%work%). Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific tag.",
+          "arguments": [
+            {
+              "name": "tag_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tag ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get tag details by TAG_ID."
+        }
+      },
+      "usage_instructions": "Tag management -- list and get transaction tags."
+    },
+    "cashflow": {
+      "help": "View cashflow",
+      "commands": {
+        "summary": {
+          "help": "Get cashflow summary (income, expenses, savings).",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get a high-level cashflow overview showing income, expenses, and savings. Use --table/-t for formatted output."
+        },
+        "list": {
+          "help": "Get detailed cashflow by period. Filter Examples: monarch cashflow list --filter \"group:Income\" monarch cashflow list --filter \"sum:gte:1000\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., group:Income, sum:gte:1000)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to view detailed cashflow breakdown. Filter with --filter/-f (group:Income, sum:gte:1000). Use --start/-s and --end/-e for date ranges. Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get cashflow details for a specific category group.",
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category group ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            }
+          ],
+          "usage_instructions": "Use to view cashflow for a specific category group by GROUP_ID. Use --start/-s and --end/-e for date ranges. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Cashflow analysis -- view summary (income, expenses, savings), detailed breakdowns by period, and cashflow by category group."
+    },
+    "institutions": {
+      "help": "Manage linked institutions",
+      "commands": {
+        "list": {
+          "help": "List all linked financial institutions. Filter Examples: monarch institutions list --filter \"name:like:%Chase%\" monarch institutions list --filter \"update_required:true\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum institutions to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:like:%Chase%, update_required:true)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse linked institutions. Filter with --filter/-f (name:like:%Chase%, update_required:true). Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific linked institution.",
+          "arguments": [
+            {
+              "name": "institution_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Institution credential ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get institution details by INSTITUTION_ID."
+        }
+      },
+      "usage_instructions": "Institution management -- list and get details of linked financial institutions. Filter by name or update status."
+    },
+    "merchants": {
+      "help": "Manage merchants",
+      "commands": {
+        "list": {
+          "help": "List all merchants available for transaction assignment. Merchants are extracted from cashflow data grouped by merchant, querying the maximum date range to capture all merchants. Filter Examples: monarch merchants list --filter \"name:ilike:%amazon%\" monarch merchants list --filter \"sumExpense:lt:-100\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum merchants to return",
+              "short": "-l",
+              "default": "10000"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:ilike:%amazon%)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse merchants. Filter with --filter/-f (name:ilike:%amazon%, sumExpense:lt:-100). Default limit is 10000. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific merchant.",
+          "arguments": [
+            {
+              "name": "merchant_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Merchant ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "monarch merchants get 12345678"
+          ],
+          "usage_instructions": "Use to get merchant details by MERCHANT_ID."
+        }
+      },
+      "usage_instructions": "Merchant management -- list and get merchants. Default limit is 10000 to capture all merchants. Filter by name or expense amount."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `monarch cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `monarch cache --help` for exact arguments and options."
+    },
+    "rules": {
+      "help": "Manage transaction rules",
+      "commands": {
+        "list": {
+          "help": "List all transaction rules. Filter Examples: monarch rules list --filter \"id:eq:RULE_ID\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum rules to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., id:eq:RULE_ID)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all transaction rules. Use --table/-t for tabular view. Filter with --filter/-f 'field:op:value' (e.g., id:eq:RULE_ID). Use --properties/-p to select fields. JSON by default."
+        },
+        "get": {
+          "help": "Get details for a specific transaction rule.",
+          "arguments": [
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Rule ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get full details for a single transaction rule by ID. Use --table/-t for field/value table view. JSON by default."
+        },
+        "create": {
+          "help": "Create a new transaction rule. A rule needs at least one criterion (--merchant, --amount, --category-id, or --account-id) and at least one action (--set-category, --set-merchant, --add-tag).",
+          "options": [
+            {
+              "name": "--merchant",
+              "type": "TEXT",
+              "required": false,
+              "help": "Merchant criterion 'operator:value' (e.g., contains:amazon). Repeatable",
+              "short": "-m"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Amount criterion. Forms: 'op:value' (gt:20) or 'between:lower:upper' (between:50:200)",
+              "short": "-a"
+            },
+            {
+              "name": "--expense",
+              "type": "bool",
+              "required": false,
+              "help": "--income          When --amount is set, apply only to expenses (default) or income"
+            },
+            {
+              "name": "--category-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter criterion: only match transactions currently in this category ID. Repeatable"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter criterion: only match transactions on this account ID. Repeatable"
+            },
+            {
+              "name": "--set-category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Action: set this category ID on matching transactions"
+            },
+            {
+              "name": "--set-merchant",
+              "type": "TEXT",
+              "required": false,
+              "help": "Action: set this merchant ID on matching transactions"
+            },
+            {
+              "name": "--add-tag",
+              "type": "TEXT",
+              "required": false,
+              "help": "Action: add this tag ID. Repeatable"
+            },
+            {
+              "name": "--use-original-statement",
+              "type": "bool",
+              "required": false,
+              "help": "Match merchant criteria against the original bank statement text"
+            },
+            {
+              "name": "--apply-to-existing",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the new rule retroactively to existing transactions"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display created rule as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "monarch rules create --merchant contains:amazon --set-category 12345",
+            "monarch rules create --amount gt:1000 --expense --set-category 67890",
+            "monarch rules create --merchant equals:\"Whole Foods\" --add-tag TAG_ID"
+          ],
+          "usage_instructions": "Create a new transaction rule. REQUIRES at least one criterion (--merchant 'op:value', --amount 'op:value', --category-id, or --account-id) AND at least one action (--set-category, --set-merchant, or --add-tag). Merchant criterion forms: 'contains:amazon', 'equals:Whole Foods'. Amount forms: 'eq:115.32', 'gt:20', 'between:50:200'. Use --expense/--income to scope amount criteria. Use --apply-to-existing to retroactively apply the rule."
+        },
+        "update": {
+          "help": "Update an existing transaction rule. Only the fields you pass are sent.",
+          "arguments": [
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Rule ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--merchant",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replace merchant criteria. 'operator:value', repeatable",
+              "short": "-m"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replace amount criterion. 'operator:value' or 'between:lower:upper'",
+              "short": "-a"
+            },
+            {
+              "name": "--expense",
+              "type": "bool",
+              "required": false,
+              "help": "--income                             When --amount is set, apply only to expenses or income"
+            },
+            {
+              "name": "--category-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replace category filter IDs. Repeatable"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replace account filter IDs. Repeatable"
+            },
+            {
+              "name": "--set-category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Set the setCategory action. Pass empty string to clear"
+            },
+            {
+              "name": "--set-merchant",
+              "type": "TEXT",
+              "required": false,
+              "help": "Set the setMerchant action. Pass empty string to clear"
+            },
+            {
+              "name": "--add-tag",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replace addTags action with these tag IDs. Repeatable"
+            },
+            {
+              "name": "--use-original-statement",
+              "type": "bool",
+              "required": false,
+              "help": "--no-use-original-statement          Toggle 'match against original statement text'"
+            },
+            {
+              "name": "--apply-to-existing",
+              "type": "bool",
+              "required": false,
+              "help": "--no-apply-to-existing               Toggle retroactive application"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display updated rule as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "monarch rules update RULE_ID --set-category NEW_CAT_ID",
+            "monarch rules update RULE_ID --merchant contains:netflix",
+            "monarch rules update RULE_ID --apply-to-existing"
+          ],
+          "usage_instructions": "Update an existing transaction rule. Pass only the fields you want to change. Re-pass --merchant, --amount, --category-id, --account-id to replace criteria. Re-pass --set-category, --set-merchant, --add-tag to replace actions. Pass empty string to --set-category/--set-merchant to clear that action."
+        },
+        "delete": {
+          "help": "Delete a transaction rule.",
+          "arguments": [
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Rule ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-F"
+            }
+          ],
+          "examples": [
+            "monarch rules delete RULE_ID --force"
+          ],
+          "usage_instructions": "Delete a transaction rule by ID. Use --force/-F to skip the confirmation prompt. Note: the underlying API may report deleted=false even on success; the CLI verifies by re-listing and confirms removal before returning."
+        }
+      },
+      "usage_instructions": "Manage Monarch Money transaction rules (CRUD). Use 'list' to view all rules, 'get <id>' for one rule, 'create' to add a new rule with criteria + actions, 'update <id>' to modify an existing rule, 'delete <id>' to remove one."
+    }
+  },
+  "usage_instructions": "Use for managing personal finances via Monarch Money. Commands follow `monarch <group> <action>` pattern. Most list commands support --table/-t, --filter/-f (field:op:value syntax), --limit/-l, and --properties/-p. Covers accounts, transactions, budgets, categories, cashflow, tags, institutions, and merchants."
+}

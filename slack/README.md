@@ -310,7 +310,7 @@ Supported operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in
 
 ### Environment Variables
 
-Credentials are stored per-profile in `.env` files at `~/Dropbox/GitRepos/cli-tools/slack/profiles/<name>/.env`:
+Credentials are stored per-profile in `.env` files at `<cli-tools-root>/slack/profiles/<name>/.env`:
 
 ```bash
 ACCESS_TOKEN=xoxc-your-token-here

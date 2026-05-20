@@ -17,8 +17,8 @@ import string
 from typing import Optional, List
 
 from ..client import get_docs_client, ClientError
+from cli_tools_shared.filters import apply_filters, validate_filters
 from cli_tools_shared.output import print_json, print_table, print_error, print_success
-from ..filters import apply_filters, validate_filters
 
 
 app = typer.Typer(help="Manage Grammarly documents", no_args_is_help=True)

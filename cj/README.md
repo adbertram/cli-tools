@@ -14,7 +14,7 @@ CJ splits its public surface across two systems:
 ## Installation
 
 ```bash
-uv tool install -e ~/Dropbox/GitRepos/cli-tools/cj
+uv tool install -e <cli-tools-root>/cj
 ```
 
 The `cj` executable is then on `$PATH`.

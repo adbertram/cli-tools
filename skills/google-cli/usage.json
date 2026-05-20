@@ -1,0 +1,3775 @@
+{
+  "tool": "google",
+  "description": "CLI interface for Google Workspace APIs",
+  "discovered_at": "2026-04-29T20:45:18.016435+00:00",
+  "total_commands": 95,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Authenticate with Google OAuth2. Use --force/-F to re-authenticate. Optionally provide --oauth-client-id and --oauth-client-secret for custom OAuth apps."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored Google OAuth2 tokens."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check if Google authentication is active and valid. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Refresh OAuth access token using stored refresh token. Run `google auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Test authentication by verifying credentials work across profiles. Run `google auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all profiles and show which is the default. Run `google auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Get details for a specific profile. Run `google auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new profile from .env.example template. Run `google auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Set a profile as the default (IS_DEFAULT_PROFILE=1). Run `google auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and its data. Run `google auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Manage authentication profiles Available subcommands: create, delete, get, list, set-default."
+        }
+      },
+      "usage_instructions": "OAuth2 authentication for Google APIs. Use `auth login` to authenticate, `auth status` to verify, `auth logout` to clear tokens."
+    },
+    "analytics": {
+      "help": "Access Google Analytics data",
+      "commands": {
+        "accounts": {
+          "help": "List GA4 accounts and properties.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of accounts to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List GA4 accounts and properties. Use --limit/-l to limit accounts, --table/-t for formatted output, --filter/-f for field filters, --properties/-p to choose output fields, and --profile for a named Google profile."
+        },
+        "properties": {
+          "help": "List GA4 properties.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of properties to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List GA4 properties. Run `google analytics properties --help` for exact arguments and options."
+        },
+        "report": {
+          "help": "Run a custom GA4 report with dimensions and metrics.",
+          "options": [
+            {
+              "name": "--metrics",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated metrics (e.g., sessions,activeUsers)",
+              "short": "-m"
+            },
+            {
+              "name": "--dimensions",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated dimensions (e.g., date,pagePath)",
+              "short": "-d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD, default: 7 days ago)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD, default: today)",
+              "short": "-e"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of rows",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--order-by",
+              "type": "TEXT",
+              "required": false,
+              "help": "Metric or dimension to order by"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "--asc             Sort descending (default) or ascending",
+              "default": "desc"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "GA4 property ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Run a custom GA4 report. --metrics/-m is required. Use --dimensions/-d, --start/-s, --end/-e, --limit/-l, --order-by, --desc/--asc, --filter/-f, --property, --table/-t, and --profile as needed. If --property is omitted, GOOGLE_ANALYTICS_PROPERTY_ID must be configured."
+        },
+        "top-pages": {
+          "help": "Show top pages by pageviews.",
+          "options": [
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of days to look back",
+              "short": "-d",
+              "default": "7"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of pages",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "GA4 property ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Show top pages by pageviews. Use --days/-d for the lookback window, --limit/-l for result count, --property for a GA4 property ID, --table/-t for formatted output, and --profile for a named Google profile."
+        },
+        "traffic": {
+          "help": "Show traffic sources breakdown.",
+          "options": [
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of days to look back",
+              "short": "-d",
+              "default": "7"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of sources",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "GA4 property ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Show traffic sources by session source and medium. Use --days/-d for the lookback window, --limit/-l for result count, --property for a GA4 property ID, --table/-t for formatted output, and --profile for a named Google profile."
+        },
+        "realtime": {
+          "help": "Show real-time active users and pages.",
+          "options": [
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "GA4 property ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Show real-time active users and pages. Use --property for a GA4 property ID, --table/-t for formatted output, and --profile for a named Google profile."
+        }
+      },
+      "usage_instructions": "Google Analytics GA4 data access -- list accounts and properties, run custom reports, show top pages, inspect traffic sources, and view realtime metrics."
+    },
+    "calendar": {
+      "help": "Access Google Calendar events",
+      "commands": {
+        "list": {
+          "help": "List upcoming calendar events.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of events to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of days to look ahead",
+              "short": "-d",
+              "default": "7"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List calendar events. Use --calendar-id/-c for a specific calendar (default: primary). Use --max-results/-l to limit results. Use --time-min and --time-max for date ranges (ISO 8601 format). Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get a specific calendar event.",
+          "arguments": [
+            {
+              "name": "event_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Event ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get a specific calendar event by EVENT_ID (positional). Use --calendar-id/-c for non-primary calendars. Use --table/-t for formatted output."
+        },
+        "search": {
+          "help": "Search calendar events.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Search calendar events by keyword. QUERY is required (positional). Use --calendar-id/-c, --time-min, --time-max for scoping. Use --table/-t for formatted output."
+        },
+        "today": {
+          "help": "List today's calendar events.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Show today's events. Convenience command equivalent to list with today's date range. Use --calendar-id/-c, --table/-t."
+        }
+      },
+      "usage_instructions": "Google Calendar event access -- list, search, and view events."
+    },
+    "chat": {
+      "help": "Access Google Chat messages",
+      "commands": {
+        "send": {
+          "help": "Send a message to a Chat space. By default, shows a preview of the message without sending. Use --confirm to actually send the message.",
+          "options": [
+            {
+              "name": "--space",
+              "type": "TEXT",
+              "required": true,
+              "help": "Space ID (e.g., 'spaces/AAAA' or just 'AAAA')",
+              "short": "-s"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message text to send",
+              "short": "-t"
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Actually send the message. Without this flag, only previews"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Send a message to a Chat space. By default, shows a preview of the message without sending. Use --confirm to actually send the message. Run `google chat send --help` for exact arguments and options."
+        },
+        "spaces": {
+          "help": "Manage Chat spaces",
+          "commands": {
+            "list": {
+              "help": "List Chat spaces the user belongs to.",
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of spaces to list",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List Chat spaces the user belongs to. Run `google chat spaces list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details of a specific Chat space.",
+              "arguments": [
+                {
+                  "name": "space_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Space ID (e.g., 'spaces/AAAA' or just 'AAAA')"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get details of a specific Chat space. Run `google chat spaces get --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Manage Chat spaces Available subcommands: get, list."
+        },
+        "messages": {
+          "help": "Manage Chat messages",
+          "commands": {
+            "list": {
+              "help": "List messages in a Chat space.",
+              "options": [
+                {
+                  "name": "--space",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Space ID (e.g., 'spaces/AAAA' or just 'AAAA')",
+                  "short": "-s"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of messages to list",
+                  "short": "-l",
+                  "default": "25"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--order",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Order by (default: 'createTime desc')",
+                  "short": "-o",
+                  "default": "createTime desc"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List messages in a Chat space. Run `google chat messages list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get a specific Chat message.",
+              "arguments": [
+                {
+                  "name": "message_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Message name (e.g., 'spaces/AAAA/messages/BBBB')"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get a specific Chat message. Run `google chat messages get --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Manage Chat messages Available subcommands: get, list."
+        }
+      },
+      "usage_instructions": "Access Google Chat messages Available subcommands: messages, send, spaces."
+    },
+    "cloud": {
+      "help": "Manage Google Cloud resources",
+      "commands": {
+        "projects": {
+          "help": "Manage Google Cloud projects",
+          "commands": {
+            "list": {
+              "help": "List Google Cloud projects.",
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of projects to list",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List Google Cloud projects."
+            },
+            "get": {
+              "help": "Get a Google Cloud project by ID.",
+              "arguments": [
+                {
+                  "name": "project_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Project ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get a Google Cloud project by ID."
+            },
+            "create": {
+              "help": "Create a new Google Cloud project.",
+              "options": [
+                {
+                  "name": "--project-id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Unique project ID"
+                },
+                {
+                  "name": "--display-name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Human-readable project name"
+                },
+                {
+                  "name": "--parent",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Parent resource (e.g. 'organizations/123' or 'folders/456')"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Create a new Google Cloud project."
+            },
+            "update": {
+              "help": "Update a Google Cloud project.",
+              "arguments": [
+                {
+                  "name": "project_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Project ID to update"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--display-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New display name"
+                },
+                {
+                  "name": "--labels",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Labels as key=value pairs"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Update a Google Cloud project."
+            },
+            "delete": {
+              "help": "Delete a Google Cloud project.",
+              "arguments": [
+                {
+                  "name": "project_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Project ID to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--confirm",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-y"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Delete a Google Cloud project."
+            }
+          },
+          "usage_instructions": "Nested group for GCP project operations."
+        },
+        "credentials": {
+          "help": "Manage project credentials (service accounts, API keys, OAuth clients)",
+          "commands": {
+            "list": {
+              "help": "List project credentials.",
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Credential type: service-account, api-key, oauth-client"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of credentials to list",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List project credentials."
+            },
+            "get": {
+              "help": "Get a project credential.",
+              "arguments": [
+                {
+                  "name": "credential_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Credential identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Credential type: service-account, api-key, oauth-client"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get a project credential. Run `google cloud credentials get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a project credential.",
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Credential type: service-account, api-key"
+                },
+                {
+                  "name": "--account-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Service account ID (required for service-account)"
+                },
+                {
+                  "name": "--display-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Display name"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Description (service-account only)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Create a project credential."
+            },
+            "update": {
+              "help": "Update a project credential.",
+              "arguments": [
+                {
+                  "name": "credential_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Credential identifier (email, key name, or OAuth client name)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Credential type: service-account, api-key, oauth-client"
+                },
+                {
+                  "name": "--display-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New display name"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New description (service-account only)"
+                },
+                {
+                  "name": "--add-redirect-uri",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Redirect URI to add (oauth-client only)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Update a project credential."
+            }
+          },
+          "usage_instructions": "Nested group for service account credential management."
+        },
+        "services": {
+          "help": "Manage Google Cloud API services",
+          "commands": {
+            "list": {
+              "help": "List API services for a project.",
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID or number"
+                },
+                {
+                  "name": "--state",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by state: ENABLED, DISABLED, or ALL",
+                  "default": "ENABLED"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of services to list",
+                  "short": "-l",
+                  "default": "200"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List API services for a project. Run `google cloud services list --help` for exact arguments and options."
+            },
+            "enable": {
+              "help": "Enable an API service for a project.",
+              "arguments": [
+                {
+                  "name": "service_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "API service name (e.g. gmail.googleapis.com)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID or number"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Enable an API service for a project. Run `google cloud services enable --help` for exact arguments and options."
+            },
+            "disable": {
+              "help": "Disable an API service for a project.",
+              "arguments": [
+                {
+                  "name": "service_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "API service name (e.g. gmail.googleapis.com)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID or number"
+                },
+                {
+                  "name": "--confirm",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-y"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Disable an API service for a project. Run `google cloud services disable --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details of an API service for a project.",
+              "arguments": [
+                {
+                  "name": "service_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "API service name (e.g. gmail.googleapis.com)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "GCP project ID or number"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get details of an API service for a project. Run `google cloud services get --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Manage Google Cloud API services Available subcommands: disable, enable, get, list."
+        }
+      },
+      "usage_instructions": "Google Cloud resource management -- projects and credentials."
+    },
+    "docs": {
+      "help": "Manage Google Docs documents",
+      "commands": {
+        "list": {
+          "help": "List Google Docs documents.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of documents to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List Google Docs. Use --folder-id to scope to a Drive folder. Use --limit/-l, --table/-t, --properties/-p."
+        },
+        "get": {
+          "help": "Get a document by ID.",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get document metadata by DOCUMENT_ID (positional). Use --table/-t for formatted output."
+        },
+        "read": {
+          "help": "Read document content (text only). Extracts 100% of all text from the document including paragraphs, tables, headers, footers, and all other content.",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Read the text content of a Google Doc by DOCUMENT_ID (positional). Returns the document body text."
+        },
+        "create": {
+          "help": "Create a new document.",
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document title",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Create a new Google Doc. Use --title/-t for the document title. Use --content/-c for initial text content. Use --folder-id to place in a specific Drive folder."
+        },
+        "export": {
+          "help": "Export a Google Doc to various formats. Supported formats: - txt: Plain text - md: Markdown (preserves headings, bold, italic, links, tables) - pdf: PDF document - docx: Microsoft Word - html: HTML - rtf: Rich Text Format - epub: EPUB ebook",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Export format: txt, pdf, docx, html, rtf, epub, md",
+              "short": "-f",
+              "default": "txt"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: stdout for text formats)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "examples": [
+            "google docs export DOC_ID --format md",
+            "google docs export DOC_ID --format pdf -o document.pdf",
+            "google docs export DOC_ID --format txt > content.txt"
+          ],
+          "usage_instructions": "Export a Google Doc to a file. DOCUMENT_ID is required (positional). Use --format/-f (pdf, docx, txt, html, etc.) and --output/-o for output path."
+        },
+        "update": {
+          "help": "Update a Google Doc's content. Replaces the entire document body with new content, or appends to the end.",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "New content to replace document body",
+              "short": "-c"
+            },
+            {
+              "name": "--file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to file containing new content",
+              "short": "-f"
+            },
+            {
+              "name": "--append",
+              "type": "bool",
+              "required": false,
+              "help": "Append content instead of replacing",
+              "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "examples": [
+            "google docs update DOC_ID --content \"New content here\"",
+            "google docs update DOC_ID --file content.md",
+            "google docs update DOC_ID --file content.md --append"
+          ],
+          "usage_instructions": "Update a Google Doc. DOCUMENT_ID is required (positional). Use --title for renaming. Use --content/-c to replace body text. Use --append/-a to add text at the end."
+        },
+        "tables": {
+          "help": "Manage tables in Google Docs",
+          "commands": {
+            "update": {
+              "help": "Update table cells in a Google Doc. Supports two modes: 1. Single cell update: Use --table, --row (or --label), --col, and --content 2. Batch updates: Use --data or --file with array of updates For batch updates, JSON format: [ {\"table\": 0, \"row\": 1, \"col\": 1, \"content\": \"New value\"}, {\"table\": 0, \"label\": \"Course Title\", \"col\": 1, \"content\": \"My Course\"} ] When using --label, it finds the row where the first column matches the label.",
+              "arguments": [
+                {
+                  "name": "document_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Document ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--data",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "JSON array of updates: [{table, row, col, content}, ...]",
+                  "short": "-d"
+                },
+                {
+                  "name": "--file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "Path to JSON file with updates"
+                },
+                {
+                  "name": "--table",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Table index (0-based) for single update",
+                  "short": "-t"
+                },
+                {
+                  "name": "--row",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Row index (0-based) for single update",
+                  "short": "-r"
+                },
+                {
+                  "name": "--col",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Column index (0-based) for single update",
+                  "short": "-c"
+                },
+                {
+                  "name": "--content",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New content for single update"
+                },
+                {
+                  "name": "--label",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Find row by label in first column (alternative to --row)",
+                  "short": "-l"
+                },
+                {
+                  "name": "--list",
+                  "type": "bool",
+                  "required": false,
+                  "help": "List all tables and their structure"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "examples": [
+                "google docs tables update DOC_ID --list",
+                "google docs tables update DOC_ID --table 0 --row 1 --col 1 --content \"New value\"",
+                "google docs tables update DOC_ID --table 0 --label \"Course Title\" --col 1 --content \"My Course\"",
+                "google docs tables update DOC_ID --data '[{\"table\":0,\"row\":1,\"col\":1,\"content\":\"Value\"}]'"
+              ],
+              "usage_instructions": "Update table cells in a Google Doc. Supports two modes: 1. Single cell update: Use --table, --row (or --label), --col, and --content 2. Batch updates: Use --data or --file with array of updates For batch updates, JSON format: [ {\"table\": 0, \"row\": 1, \"col\": 1, \"content\": \"New value\"}, {\"table\": 0, \"label\": \"Course Title\", \"col\": 1, \"content\": \"My Course\"} ] When using --label, it finds the row where the first column matches the label."
+            }
+          },
+          "usage_instructions": "Nested group for managing tables within Google Docs."
+        }
+      },
+      "usage_instructions": "Google Docs document management -- create, read, update, export, and manage tables."
+    },
+    "drive": {
+      "help": "Manage Google Drive files",
+      "commands": {
+        "list": {
+          "help": "List files in Google Drive.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of files to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List files in Google Drive. Use --folder-id to scope to a folder. Use --mime-type to filter by type. Use --limit/-l, --table/-t, --properties/-p."
+        },
+        "get": {
+          "help": "Get file metadata.",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "File ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get file metadata by FILE_ID (positional). Use --table/-t for formatted output."
+        },
+        "search": {
+          "help": "Search for files in Google Drive.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Search Drive files by keyword. QUERY is required (positional). Use --mime-type, --limit/-l, --table/-t."
+        },
+        "download": {
+          "help": "Download a file from Google Drive.",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "File ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output directory",
+              "short": "-o",
+              "default": "."
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Download a file from Drive. FILE_ID is required (positional). Use --output/-o for local path."
+        }
+      },
+      "usage_instructions": "Google Drive file management -- list, search, get details, and download files."
+    },
+    "gmail": {
+      "help": "Access Gmail messages",
+      "commands": {
+        "list": {
+          "help": "List Gmail messages.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of messages to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--label",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by label (e.g., INBOX, SENT)"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List Gmail messages. Use --label/-L to filter by label (default: INBOX). Use --limit/-l, --table/-t, --properties/-p."
+        },
+        "get": {
+          "help": "Get a specific message.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw API response without processing",
+              "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get message metadata by MESSAGE_ID (positional). Use --table/-t for formatted output."
+        },
+        "read": {
+          "help": "Read message content (text only).",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Read full message content by MESSAGE_ID (positional). Returns headers and body text."
+        },
+        "search": {
+          "help": "Search Gmail messages.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (Gmail search syntax)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Search Gmail with Gmail query syntax. QUERY is required (positional). Use --limit/-l, --table/-t."
+        },
+        "send": {
+          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Use --confirm to actually send the email.",
+          "options": [
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient email address"
+            },
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email subject",
+              "short": "-s"
+            },
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email body (plain text)",
+              "short": "-b"
+            },
+            {
+              "name": "--cc",
+              "type": "TEXT",
+              "required": false,
+              "help": "CC recipients (comma-separated)"
+            },
+            {
+              "name": "--bcc",
+              "type": "TEXT",
+              "required": false,
+              "help": "BCC recipients (comma-separated)"
+            },
+            {
+              "name": "--attach",
+              "type": "PATH",
+              "required": false,
+              "help": "File(s) to attach (can be used multiple times)",
+              "short": "-a"
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Actually send the email. Without this flag, only previews the message"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Send an email. Use --to (required), --subject/-s, --body/-b. Use --cc, --bcc for additional recipients. Use --attachment/-a for file attachments."
+        },
+        "archive": {
+          "help": "Archive messages by removing them from inbox.",
+          "arguments": [
+            {
+              "name": "message_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "MESSAGE_IDS...  Message ID(s) to archive"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Archive a message by MESSAGE_ID (positional). Removes INBOX label."
+        },
+        "download-attachment": {
+          "help": "Download attachment(s) from a message. Specify either --filename, --attachment-id, or --all to select which attachment(s) to download.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID containing the attachment"
+            }
+          ],
+          "options": [
+            {
+              "name": "--filename",
+              "type": "TEXT",
+              "required": false,
+              "help": "Attachment filename to download",
+              "short": "-f"
+            },
+            {
+              "name": "--attachment-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Attachment ID to download",
+              "short": "-a"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": false,
+              "help": "Output path (defaults to current directory with original filename)",
+              "short": "-o"
+            },
+            {
+              "name": "--all",
+              "type": "bool",
+              "required": false,
+              "help": "Download all attachments from the message"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Download an attachment. MESSAGE_ID and ATTACHMENT_ID required (positional). Use --output/-o for save path."
+        },
+        "draft": {
+          "help": "Create an email draft with optional attachments.",
+          "options": [
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient email address"
+            },
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email subject",
+              "short": "-s"
+            },
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email body (plain text)",
+              "short": "-b"
+            },
+            {
+              "name": "--cc",
+              "type": "TEXT",
+              "required": false,
+              "help": "CC recipients (comma-separated)"
+            },
+            {
+              "name": "--bcc",
+              "type": "TEXT",
+              "required": false,
+              "help": "BCC recipients (comma-separated)"
+            },
+            {
+              "name": "--attach",
+              "type": "PATH",
+              "required": false,
+              "help": "File(s) to attach (can be used multiple times)",
+              "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Create a draft email. Same options as send (--to, --subject/-s, --body/-b, etc.)."
+        },
+        "send-draft": {
+          "help": "Send an existing Gmail draft. By default, prints the draft metadata without sending. Use --confirm to actually send the draft.",
+          "arguments": [
+            {
+              "name": "draft_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Gmail draft ID (returned by `gmail draft`)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Actually send the draft. Without this flag, only previews the draft"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Send an existing Gmail draft. By default, prints the draft metadata without sending. Use --confirm to actually send the draft. Run `google gmail send-draft --help` for exact arguments and options."
+        },
+        "reply": {
+          "help": "Reply to a message (sender only). By default, shows a preview of the reply without sending. Use --confirm to actually send the reply.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID to reply to"
+            }
+          ],
+          "options": [
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply body (plain text)",
+              "short": "-b"
+            },
+            {
+              "name": "--cc",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional CC recipients (comma-separated)"
+            },
+            {
+              "name": "--bcc",
+              "type": "TEXT",
+              "required": false,
+              "help": "BCC recipients (comma-separated)"
+            },
+            {
+              "name": "--attach",
+              "type": "PATH",
+              "required": false,
+              "help": "File(s) to attach (can be used multiple times)",
+              "short": "-a"
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Actually send the reply. Without this flag, only previews the message"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Reply to a message. MESSAGE_ID is required (positional). Use --body/-b for reply text."
+        },
+        "reply-all": {
+          "help": "Reply to all recipients of a message. By default, shows a preview of the reply without sending. Use --confirm to actually send the reply.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID to reply to"
+            }
+          ],
+          "options": [
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply body (plain text)",
+              "short": "-b"
+            },
+            {
+              "name": "--cc",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional CC recipients (comma-separated)"
+            },
+            {
+              "name": "--bcc",
+              "type": "TEXT",
+              "required": false,
+              "help": "BCC recipients (comma-separated)"
+            },
+            {
+              "name": "--attach",
+              "type": "PATH",
+              "required": false,
+              "help": "File(s) to attach (can be used multiple times)",
+              "short": "-a"
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Actually send the reply. Without this flag, only previews the message"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Reply-all to a message. MESSAGE_ID is required (positional). Use --body/-b for reply text."
+        },
+        "labels": {
+          "help": "Manage message labels",
+          "commands": {
+            "list": {
+              "help": "List labels on a message.",
+              "arguments": [
+                {
+                  "name": "message_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Message ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of labels to list",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List labels on a message."
+            },
+            "get": {
+              "help": "Get label details by ID.",
+              "arguments": [
+                {
+                  "name": "label_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Label ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get label details by ID."
+            },
+            "add": {
+              "help": "Add labels to a message.",
+              "arguments": [
+                {
+                  "name": "message_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Message ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--label",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Label ID(s) to add",
+                  "short": "-l"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Add labels to a message."
+            },
+            "remove": {
+              "help": "Remove labels from a message.",
+              "arguments": [
+                {
+                  "name": "message_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Message ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--label",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Label ID(s) to remove",
+                  "short": "-l"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Remove labels from a message."
+            }
+          },
+          "usage_instructions": "Nested group for Gmail label management."
+        }
+      },
+      "usage_instructions": "Gmail message management -- list, read, search, send, reply, archive, and manage labels."
+    },
+    "lookerstudio": {
+      "help": "Manage Looker Studio assets",
+      "commands": {
+        "reports": {
+          "help": "Manage Looker Studio reports",
+          "commands": {
+            "list": {
+              "help": "List Looker Studio report assets.",
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of reports to list",
+                  "short": "-l",
+                  "default": "1000"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Search title string"
+                },
+                {
+                  "name": "--owner",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Asset owner's email"
+                },
+                {
+                  "name": "--include-trashed",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Include reports from trash"
+                },
+                {
+                  "name": "--order-by",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sort field"
+                },
+                {
+                  "name": "--page-token",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page token"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List Looker Studio REPORT assets. Use --title, --owner, --include-trashed, --order-by, --limit, --filter, and --properties to narrow output."
+            },
+            "get": {
+              "help": "Get a Looker Studio report asset.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get one Looker Studio REPORT asset by report ID. Use --properties to limit returned fields and --table for table output."
+            },
+            "create-link": {
+              "help": "Create a Looker Studio Linking API URL for a report.",
+              "options": [
+                {
+                  "name": "--report-id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Template report ID"
+                },
+                {
+                  "name": "--report-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Created report name"
+                },
+                {
+                  "name": "--page-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Initial page ID"
+                },
+                {
+                  "name": "--mode",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Initial mode: view or edit"
+                },
+                {
+                  "name": "--explain",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show Linking API debug info"
+                },
+                {
+                  "name": "--measurement-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics measurement ID for report usage"
+                },
+                {
+                  "name": "--keep-measurement-id",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Use the template report measurement ID"
+                },
+                {
+                  "name": "--data-source",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Data source parameter as alias.key=value"
+                },
+                {
+                  "name": "--ga-alias",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics data source alias"
+                },
+                {
+                  "name": "--ga-account-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics account ID"
+                },
+                {
+                  "name": "--ga-property-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics property ID"
+                },
+                {
+                  "name": "--ga-view-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Universal Analytics view ID"
+                },
+                {
+                  "name": "--ga-refresh-fields",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Whether to refresh fields: true or false"
+                },
+                {
+                  "name": "--embed",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Generate an embed create URL"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Generate a Looker Studio Linking API URL from a report ID. Use --data-source alias.key=value for generic parameters or --ga-* options for Google Analytics data sources."
+            },
+            "update-link": {
+              "help": "Create a Linking API URL with data-source params.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--report-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Created report name"
+                },
+                {
+                  "name": "--page-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Initial page ID"
+                },
+                {
+                  "name": "--mode",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Initial mode: view or edit"
+                },
+                {
+                  "name": "--explain",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show Linking API debug info"
+                },
+                {
+                  "name": "--measurement-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics measurement ID for report usage"
+                },
+                {
+                  "name": "--keep-measurement-id",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Use the template report measurement ID"
+                },
+                {
+                  "name": "--data-source",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Data source parameter as alias.key=value"
+                },
+                {
+                  "name": "--ga-alias",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics data source alias"
+                },
+                {
+                  "name": "--ga-account-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics account ID"
+                },
+                {
+                  "name": "--ga-property-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Google Analytics property ID"
+                },
+                {
+                  "name": "--ga-view-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Universal Analytics view ID"
+                },
+                {
+                  "name": "--ga-refresh-fields",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Whether to refresh fields: true or false"
+                },
+                {
+                  "name": "--embed",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Generate an embed create URL"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Generate a Looker Studio Linking API URL that updates data source parameters when a new report is created from the report ID. This does not mutate the source report."
+            },
+            "permissions-get": {
+              "help": "Get permissions for a Looker Studio report.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get permissions for a Looker Studio report by report ID."
+            },
+            "permissions-add-members": {
+              "help": "[OPTIONS] REPORT_ID Add members to a Looker Studio report permission role.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--role",
+                  "type": "bool",
+                  "required": true,
+                  "help": "[VIEWER|EDITOR|OWNER|LINK_VIEWER|LINK_EDITOR]  Role to add members to"
+                },
+                {
+                  "name": "--member",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Member to add"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Add members to a Looker Studio report permission role by report ID."
+            },
+            "permissions-patch": {
+              "help": "Patch permissions for a Looker Studio report.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--permissions-json",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Permissions map JSON"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Patch permissions for a Looker Studio report by report ID using --permissions-json."
+            },
+            "permissions-revoke-all": {
+              "help": "Revoke all permissions for members on a Looker Studio report.",
+              "arguments": [
+                {
+                  "name": "report_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Report ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--member",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Member to remove"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Revoke all permissions for members on a Looker Studio report by report ID."
+            }
+          },
+          "usage_instructions": "Work with Looker Studio REPORT assets. Use list/get for REST asset lookup, create-link/update-link for report creation URLs, and permissions-* commands for sharing operations."
+        }
+      },
+      "usage_instructions": "Manage Looker Studio assets. Use reports list/get for REPORT assets and reports create-link/update-link for Linking API report creation URLs."
+    },
+    "searchconsole": {
+      "help": "Access Google Search Console",
+      "commands": {
+        "index": {
+          "help": "Request Google to crawl and index a URL via URL Inspection API.",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "TEXT",
+              "required": true,
+              "help": "URL to request indexing for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--site-url",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search Console site URL (overrides GOOGLE_SEARCHCONSOLE_SITE env var)",
+              "short": "-s"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Nested group for indexing operations."
+        },
+        "sites": {
+          "help": "Manage Search Console sites",
+          "commands": {
+            "list": {
+              "help": "List verified Search Console sites.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table instead of JSON",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of sites to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter sites (field:op:value format, e.g., 'permissionLevel:eq:siteOwner')",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output (e.g., 'siteUrl,permissionLevel')",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List verified Search Console sites."
+            },
+            "get": {
+              "help": "Get details for a specific Search Console site.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Site URL to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table instead of JSON",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Get details for a specific Search Console site."
+            }
+          },
+          "usage_instructions": "Nested group for site management."
+        },
+        "urls": {
+          "help": "Query indexed URLs and search analytics",
+          "commands": {
+            "list": {
+              "help": "List indexed URLs with search performance data. Returns URLs that have appeared in search results within the date range, along with clicks, impressions, CTR, and average position.",
+              "options": [
+                {
+                  "name": "--site-url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Search Console site URL (overrides GOOGLE_SEARCHCONSOLE_SITE env var)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--start-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Start date in YYYY-MM-DD format (default: 30 days ago)"
+                },
+                {
+                  "name": "--end-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "End date in YYYY-MM-DD format (default: today)"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Search type: web, image, video, discover, googleNews, news",
+                  "default": "web"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table instead of JSON",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of URLs to return (max 25000)",
+                  "short": "-l",
+                  "default": "1000"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Starting row offset for pagination",
+                  "short": "-o",
+                  "default": "0"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (e.g., 'page:contains:/blog/', 'query:eq:python')",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output (e.g., 'page,clicks,impressions')",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "examples": [
+                "google searchconsole urls list",
+                "google searchconsole urls list --filter \"page:contains:/blog/\"",
+                "google searchconsole urls list --start-date 2024-01-01 --limit 100",
+                "google searchconsole urls list -t -p page,clicks,impressions"
+              ],
+              "usage_instructions": "List indexed URLs with search performance data. Returns URLs that have appeared in search results within the date range, along with clicks, impressions, CTR, and average position."
+            },
+            "get": {
+              "help": "Get indexing status and details for a specific URL. Uses the URL Inspection API to retrieve indexing information including: - Index status and verdict - Crawl information - Mobile usability - Rich results status",
+              "arguments": [
+                {
+                  "name": "url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "URL to inspect"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--site-url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Search Console site URL (overrides GOOGLE_SEARCHCONSOLE_SITE env var)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table instead of JSON",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "examples": [
+                "google searchconsole urls get https://example.com/page",
+                "google searchconsole urls get https://example.com/page --table"
+              ],
+              "usage_instructions": "Get indexing status and details for a specific URL. Uses the URL Inspection API to retrieve indexing information including: - Index status and verdict - Crawl information - Mobile usability - Rich results status"
+            }
+          },
+          "usage_instructions": "Nested group for URL inspection."
+        }
+      },
+      "usage_instructions": "Google Search Console access -- manage sites, URL inspection, and index status."
+    },
+    "sheets": {
+      "help": "Manage Google Sheets spreadsheets",
+      "commands": {
+        "list": {
+          "help": "List Google Sheets spreadsheets.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of spreadsheets to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List Google Sheets. Use --folder-id to scope to a folder. Use --limit/-l, --table/-t, --properties/-p."
+        },
+        "get": {
+          "help": "Get spreadsheet metadata.",
+          "arguments": [
+            {
+              "name": "spreadsheet_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get spreadsheet metadata by SPREADSHEET_ID (positional). Use --table/-t for formatted output."
+        },
+        "read": {
+          "help": "Read values from a spreadsheet.",
+          "arguments": [
+            {
+              "name": "spreadsheet_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Range to read (e.g., Sheet1!A1:D10)",
+              "short": "-r",
+              "default": "Sheet1"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Read cell data from a sheet. SPREADSHEET_ID is required (positional). Use --range/-r (e.g., 'Sheet1!A1:D10'). Use --table/-t for formatted output."
+        },
+        "create": {
+          "help": "Create a new spreadsheet.",
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet title",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Create a new spreadsheet. Use --title/-t for the name. Use --sheet-name for the initial sheet tab name."
+        },
+        "append": {
+          "help": "Append values to a spreadsheet.",
+          "arguments": [
+            {
+              "name": "spreadsheet_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Range to append to",
+              "short": "-r",
+              "default": "Sheet1"
+            },
+            {
+              "name": "--values",
+              "type": "TEXT",
+              "required": true,
+              "help": "Values to append (comma-separated)",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Append rows to a sheet. SPREADSHEET_ID is required (positional). Use --range/-r and --values/-v (JSON array of arrays)."
+        },
+        "update": {
+          "help": "Update values in specific cells or range.",
+          "arguments": [
+            {
+              "name": "spreadsheet_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": true,
+              "help": "Cell or range to update (e.g., Sheet1!A1, Sheet1!A1:C3)",
+              "short": "-r"
+            },
+            {
+              "name": "--values",
+              "type": "TEXT",
+              "required": true,
+              "help": "Values to write (comma-separated for row, semicolon-separated for multiple rows)",
+              "short": "-v"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Use RAW input (default is USER_ENTERED which parses formulas/numbers)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "examples": [
+            "google sheets update <id> --range \"Sheet1!A1\" --values \"Hello\"",
+            "google sheets update <id> --range \"Sheet1!A1:C1\" --values \"John,Doe,john@example.com\"",
+            "google sheets update <id> --range \"Sheet1!A1:B2\" --values \"Row1Col1,Row1Col2;Row2Col1,Row2Col2\"",
+            "google sheets update <id> --range \"Sheet1!A1\" --values \"=SUM(B1:B10)\"",
+            "google sheets update <id> --range \"Sheet1!A1\" --values \"=SUM(B1:B10)\" --raw"
+          ],
+          "usage_instructions": "Update cells in a sheet. SPREADSHEET_ID is required (positional). Use --range/-r and --values/-v (JSON array of arrays)."
+        }
+      },
+      "usage_instructions": "Google Sheets spreadsheet management -- create, read, update, and append data."
+    },
+    "webstore": {
+      "help": "Manage Chrome Web Store items",
+      "commands": {
+        "package": {
+          "help": "Create a Chrome Web Store ZIP package for an unpacked extension.",
+          "arguments": [
+            {
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
+              "required": false,
+              "help": "Unpacked extension directory",
+              "default": "."
+            }
+          ],
+          "options": [
+            {
+              "name": "--output-dir",
+              "type": "PATH",
+              "required": false,
+              "help": "Directory for the release ZIP",
+              "default": "dist/chrome-webstore"
+            },
+            {
+              "name": "--verify-command",
+              "type": "TEXT",
+              "required": false,
+              "help": "Command to run before packaging; repeat for multiple commands"
+            },
+            {
+              "name": "--exclude",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional package-relative glob to exclude; repeat for multiple patterns"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Create a Chrome Web Store ZIP package for an unpacked extension. Run `google webstore package --help` for exact arguments and options."
+        },
+        "list": {
+          "help": "List the configured Chrome Web Store item status.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to list",
+              "short": "-l",
+              "default": "1"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List the configured Chrome Web Store item status as an array. Uses --publisher-id/--item-id or CWS_PUBLISHER_ID/CWS_EXTENSION_ID, with --filter, --limit, --properties, and --table."
+        },
+        "status": {
+          "help": "Fetch Chrome Web Store item status.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Fetch Chrome Web Store item status. Run `google webstore status --help` for exact arguments and options."
+        },
+        "get": {
+          "help": "Fetch Chrome Web Store item status.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Fetch Chrome Web Store item status. Run `google webstore get --help` for exact arguments and options."
+        },
+        "upload": {
+          "help": "Upload a package to an existing Chrome Web Store item.",
+          "arguments": [
+            {
+              "name": "package",
+              "type": "FILE",
+              "required": true,
+              "help": "Extension ZIP package"
+            }
+          ],
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Upload a package to an existing Chrome Web Store item. Run `google webstore upload --help` for exact arguments and options."
+        },
+        "upload-extension": {
+          "help": "Package and upload extension.",
+          "arguments": [
+            {
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
+              "required": false,
+              "help": "Unpacked extension directory",
+              "default": "."
+            }
+          ],
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--output-dir",
+              "type": "PATH",
+              "required": false,
+              "help": "Directory for the release ZIP",
+              "default": "dist/chrome-webstore"
+            },
+            {
+              "name": "--verify-command",
+              "type": "TEXT",
+              "required": false,
+              "help": "Command to run before packaging; repeat for multiple commands"
+            },
+            {
+              "name": "--exclude",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional package-relative glob to exclude; repeat for multiple patterns"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Package and upload extension. Run `google webstore upload-extension --help` for exact arguments and options."
+        },
+        "publish": {
+          "help": "Submit a Chrome Web Store item for publishing.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--publish-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publish type: DEFAULT_PUBLISH or STAGED_PUBLISH",
+              "default": "DEFAULT_PUBLISH"
+            },
+            {
+              "name": "--deploy-percentage",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Initial rollout percentage"
+            },
+            {
+              "name": "--skip-review",
+              "type": "bool",
+              "required": false,
+              "help": "Attempt to skip review when the item qualifies"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Submit a Chrome Web Store item for publishing. Run `google webstore publish --help` for exact arguments and options."
+        },
+        "release": {
+          "help": "Package, upload, and publish extension.",
+          "arguments": [
+            {
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
+              "required": false,
+              "help": "Unpacked extension directory",
+              "default": "."
+            }
+          ],
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--output-dir",
+              "type": "PATH",
+              "required": false,
+              "help": "Directory for the release ZIP",
+              "default": "dist/chrome-webstore"
+            },
+            {
+              "name": "--verify-command",
+              "type": "TEXT",
+              "required": false,
+              "help": "Command to run before packaging; repeat for multiple commands"
+            },
+            {
+              "name": "--exclude",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional package-relative glob to exclude; repeat for multiple patterns"
+            },
+            {
+              "name": "--publish-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publish type: DEFAULT_PUBLISH or STAGED_PUBLISH",
+              "default": "DEFAULT_PUBLISH"
+            },
+            {
+              "name": "--deploy-percentage",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Initial rollout percentage"
+            },
+            {
+              "name": "--skip-review",
+              "type": "bool",
+              "required": false,
+              "help": "Attempt to skip review when the item qualifies"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Package, upload, and publish extension. Run `google webstore release --help` for exact arguments and options."
+        },
+        "cancel-submission": {
+          "help": "Cancel the active Chrome Web Store submission for an item.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Cancel the active Chrome Web Store submission for an item. Run `google webstore cancel-submission --help` for exact arguments and options."
+        },
+        "rollout": {
+          "help": "Set a higher target deploy percentage for the published revision.",
+          "options": [
+            {
+              "name": "--publisher-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+            },
+            {
+              "name": "--item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+            },
+            {
+              "name": "--deploy-percentage",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Higher target rollout percentage"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Set a higher target deploy percentage for the published revision. Run `google webstore rollout --help` for exact arguments and options."
+        },
+        "listing": {
+          "help": "Manage Developer Dashboard store listing metadata",
+          "commands": {
+            "update": {
+              "help": "Update Store Listing overview fields and image assets through the dashboard.",
+              "options": [
+                {
+                  "name": "--listing-file",
+                  "type": "FILE",
+                  "required": false,
+                  "help": "Chrome Web Store listing markdown file",
+                  "default": "store-assets/chrome-webstore-listing.md"
+                },
+                {
+                  "name": "--publisher-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"
+                },
+                {
+                  "name": "--item-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Update Store Listing overview fields and image assets through the dashboard. Run `google webstore listing update --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Manage Developer Dashboard store listing metadata Available subcommands: update."
+        }
+      },
+      "usage_instructions": "Manage Chrome Web Store items Available subcommands: cancel-submission, get, list, listing, package, publish, release, rollout, status, upload, upload-extension."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed. Run `google cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Manage response cache Available subcommands: clear."
+    }
+  },
+  "usage_instructions": "Use the google CLI to access Google services. Run `google auth login` before API-backed commands, and use `--profile` when working with a non-default profile."
+}

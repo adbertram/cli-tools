@@ -100,8 +100,8 @@ def postprocess_html(html_content: str) -> str:
 def convert_markdown_to_html(markdown_content: str) -> str:
     """Convert markdown content to HTML matching the ATA Blog Helper Tool format.
 
-    This function mirrors the JavaScript markdownToHtml function from
-    /Users/adam/Dropbox/Business/Adam the Automator/Scripts/ata_blog_post_manager/new_blog_post.html
+    This function mirrors the JavaScript markdownToHtml function from the ATA
+    Blog Helper Tool.
 
     JavaScript showdown options mirrored:
     - noHeaderId: true -> Don't add IDs to headers

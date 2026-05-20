@@ -18,7 +18,7 @@ References:
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/dev_to
+cd <cli-tools-root>/dev_to
 uv tool install -e . --force --refresh
 ```
 

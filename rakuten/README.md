@@ -6,7 +6,7 @@ Lists advertiser programs the publisher can apply to or has joined.
 ## Installation
 
 ```bash
-uv tool install -e /Users/adam/Dropbox/GitRepos/cli-tools/rakuten
+uv tool install -e <cli-tools-root>/rakuten
 ```
 
 ## Authentication

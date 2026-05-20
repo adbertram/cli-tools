@@ -30,7 +30,7 @@ dependencies = [
     "requests>=2.31.0",
     "pydantic>=2.0.0",
     "playwright>=1.40.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.optional-dependencies]
@@ -68,3 +68,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=freshbooks_cli --cov-report=term-missing"
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

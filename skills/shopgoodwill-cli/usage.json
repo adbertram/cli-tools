@@ -1,0 +1,348 @@
+{
+  "tool": "shopgoodwill",
+  "description": "CLI interface for ShopGoodwill",
+  "discovered_at": "2026-05-20T16:14:15.567466+00:00",
+  "total_commands": 12,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use to authenticate with ShopGoodwill via browser session."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to clear stored credentials."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to check authentication status."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `shopgoodwill auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `shopgoodwill auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `shopgoodwill auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `shopgoodwill auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `shopgoodwill auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `shopgoodwill auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `shopgoodwill auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication -- login via browser session, logout, check status."
+    },
+    "search": {
+      "help": "Search listings",
+      "commands": {
+        "query": {
+          "help": "Search for items on ShopGoodwill.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Page number",
+              "short": "-p",
+              "default": "1"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Results per page (max 40)",
+              "short": "-l",
+              "default": "40"
+            },
+            {
+              "name": "--min-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum price"
+            },
+            {
+              "name": "--max-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Maximum price"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort by: ending, bids, price, newest",
+              "short": "-s",
+              "default": "ending"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Sort descending",
+              "short": "-d"
+            },
+            {
+              "name": "--buy-now",
+              "type": "bool",
+              "required": false,
+              "help": "Only buy-now items"
+            },
+            {
+              "name": "--shipping",
+              "type": "bool",
+              "required": false,
+              "help": "Only items that ship"
+            },
+            {
+              "name": "--pickup",
+              "type": "bool",
+              "required": false,
+              "help": "Only pickup items"
+            },
+            {
+              "name": "--closed",
+              "type": "bool",
+              "required": false,
+              "help": "Include closed auctions"
+            }
+          ],
+          "usage_instructions": "Use to search ShopGoodwill listings by keyword. Supports filtering by category, price range, etc."
+        },
+        "get": {
+          "help": "Get details for a specific item.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to get details of a specific listing by ID."
+        }
+      },
+      "usage_instructions": "Search ShopGoodwill listings -- query for items and get listing details."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `shopgoodwill cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `shopgoodwill cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for searching ShopGoodwill auction listings. Commands follow `shopgoodwill <group> <action>` pattern. Use `search query` to find items and `search get` for listing details. Requires browser authentication via `shopgoodwill auth login`."
+}

@@ -1,5 +1,6 @@
 """Main entry point for TutorialsDojo CLI."""
 from . import __version__
+from .commands import search
 from .config import get_config
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
@@ -8,8 +9,6 @@ from cli_tools_shared.command_registry import register_commands
 
 app = create_app(name="tutorials-dojo", help="CLI interface for TutorialsDojo (browser automation)", version=__version__)
 
-# Register command modules
-from .commands import search
 register_commands(app, get_config, search, name="search", help="Search tutorials-dojo")
 app.add_typer(create_auth_app(get_config, tool_name="tutorials-dojo"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")

@@ -21,3 +21,10 @@ def status(
             print_json(result)
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+COMMAND_CREDENTIALS = {
+    "status": [
+        "custom"
+    ]
+}

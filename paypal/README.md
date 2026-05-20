@@ -5,7 +5,7 @@ Command-line interface for PayPal using the REST API.
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/paypal
+cd <cli-tools-root>/paypal
 python3 -m venv venv
 source venv/bin/activate
 pip install -e .

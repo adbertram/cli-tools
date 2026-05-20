@@ -7,7 +7,7 @@ This CLI no longer uses Medium integration tokens. Medium's legacy API is archiv
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/medium
+cd <cli-tools-root>/medium
 uv tool install -e . --force --refresh
 ```
 

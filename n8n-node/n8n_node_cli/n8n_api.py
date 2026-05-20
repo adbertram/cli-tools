@@ -4,8 +4,9 @@ Used by the test command to create temporary workflows, trigger them via webhook
 poll for execution results, and clean up.
 """
 import requests
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from .config import get_config
 
 
 class N8nApiError(Exception):
@@ -20,25 +21,17 @@ class N8nApiClient:
         """Initialize the API client.
 
         Args:
-            base_url: n8n API base URL (default: from ~/.claude/skills/n8n/.env)
-            api_key: n8n API key (default: from ~/.claude/skills/n8n/.env)
+            base_url: n8n API base URL (default: from n8n-node CLI profile)
+            api_key: n8n API key (default: from n8n-node CLI profile)
         """
-        # Load from .env file if not provided
-        env_path = Path.home() / ".claude" / "skills" / "n8n" / ".env"
-        env_vars = {}
-        if env_path.exists():
-            for line in env_path.read_text().strip().split("\n"):
-                if "=" in line and not line.startswith("#"):
-                    key, value = line.split("=", 1)
-                    env_vars[key.strip()] = value.strip()
-
-        self.base_url = (base_url or env_vars.get("N8N_BASE", "")).rstrip("/")
-        self.api_key = api_key or env_vars.get("N8N_API_KEY", "")
+        config = get_config()
+        self.base_url = (base_url or config._get("N8N_BASE") or "").rstrip("/")
+        self.api_key = api_key or config._get("N8N_API_KEY") or ""
 
         if not self.base_url:
-            raise N8nApiError("N8N_BASE not configured. Set in ~/.claude/skills/n8n/.env")
+            raise N8nApiError("N8N_BASE not configured. Run `n8n-node auth login`.")
         if not self.api_key:
-            raise N8nApiError("N8N_API_KEY not configured. Set in ~/.claude/skills/n8n/.env")
+            raise N8nApiError("N8N_API_KEY not configured. Run `n8n-node auth login`.")
 
         self.session = requests.Session()
         self.session.headers.update({
@@ -199,18 +192,11 @@ class N8nApiClient:
         Raises:
             N8nApiError: If login fails or credentials not configured
         """
-        env_path = Path.home() / ".claude" / "skills" / "n8n" / ".env"
-        env_vars = {}
-        if env_path.exists():
-            for line in env_path.read_text().strip().split("\n"):
-                if "=" in line and not line.startswith("#"):
-                    key, value = line.split("=", 1)
-                    env_vars[key.strip()] = value.strip()
-
-        email = env_vars.get("N8N_EMAIL", "")
-        password = env_vars.get("N8N_PASSWORD", "")
+        config = get_config()
+        email = config._get("N8N_EMAIL") or ""
+        password = config._get("N8N_PASSWORD") or ""
         if not email or not password:
-            raise N8nApiError("N8N_EMAIL and N8N_PASSWORD required in ~/.claude/skills/n8n/.env")
+            raise N8nApiError("N8N_EMAIL and N8N_PASSWORD required. Run `n8n-node auth login`.")
 
         server_url = self._get_server_url()
         try:

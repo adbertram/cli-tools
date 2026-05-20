@@ -11,7 +11,7 @@ table output.
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/codex-sessions
+cd <cli-tools-root>/codex-sessions
 uv tool install -e . --force --refresh
 ```
 
@@ -62,7 +62,7 @@ codex-sessions projects get <project-name-or-path>
 ```bash
 codex-sessions sessions list
 codex-sessions sessions list --project codex-sessions --since 1d
-codex-sessions sessions list --project-path ~/Dropbox/GitRepos/cli-tools/codex-sessions
+codex-sessions sessions list --project-path <cli-tools-root>/codex-sessions
 codex-sessions sessions list --filter "has_errors:eq:false"
 codex-sessions sessions get <session-id>
 codex-sessions sessions search "rollout schema" --limit 10
@@ -158,8 +158,8 @@ for the `codex` executable on `PATH`.
 ```bash
 IS_DEFAULT_PROFILE=1
 CLI_COMMAND=codex
-CODEX_HOME=/Users/adam/.codex
-CODEX_SESSIONS_CODEX_HOME=/Users/adam/.codex
+CODEX_HOME=~/.codex
+CODEX_SESSIONS_CODEX_HOME=~/.codex
 ```
 
 `CODEX_SESSIONS_CODEX_HOME` takes precedence over `CODEX_HOME` when both are set.
@@ -200,4 +200,3 @@ Client methods return Pydantic models:
 - Python 3.9+
 - Local Codex transcripts in `~/.codex/sessions` or `~/.codex/archived_sessions`
 - Optional: `codex` CLI installed and available on `PATH`
-

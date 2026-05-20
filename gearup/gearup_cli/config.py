@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.gearupbooster.com"
     DIST_NAME = "gearup-cli"
-    SESSION_NAME = "gearup"
-    LOGIN_URL = "https://www.gearupbooster.com"
 
     def __init__(self, profile=None):
         super().__init__(

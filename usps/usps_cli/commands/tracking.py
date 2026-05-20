@@ -6,7 +6,7 @@ import typer
 
 from ..client import get_client, ClientError
 from cli_tools_shared import FilterMap
-from ..filters import apply_filters
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import (
     print_json,
     print_table,

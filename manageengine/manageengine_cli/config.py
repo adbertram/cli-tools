@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.manageengine.com/affiliate/signup.html"
     DIST_NAME = "manageengine-cli"
-    SESSION_NAME = "manageengine"
-    LOGIN_URL = "https://www.manageengine.com/affiliate/signup.html"
 
     def __init__(self, profile=None):
         super().__init__(
@@ -38,12 +36,6 @@ class Config(BaseConfig):
         return self.get_profile_data_dir()
 
 
-_config: Optional[Config] = None
-
-
 def get_config(profile=None) -> Config:
-    """Get or create the config instance."""
-    global _config
-    if _config is None or profile is not None:
-        _config = Config(profile=profile)
-    return _config
+    """Create a config instance for the requested profile."""
+    return Config(profile=profile)

@@ -297,43 +297,19 @@ coursecraft demos list --filter "fields.Name:contains:Setup"
 coursecraft demos get recXXXXXXXXXXXXXXX
 
 # Create a demo (clip-order and demo-environment are required)
-coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo" --demo-environment local-macos
+coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo"
 
 # Create multiple demos with different orders
-coursecraft demos create --clip recXXX --clip-order 1 --demo-environment local-macos --json '[{"name":"Demo 1","clip_order":1},{"name":"Demo 2","clip_order":2}]'
+coursecraft demos create --clip recXXX --clip-order 1 --json '[{"name":"Demo 1","clip_order":1},{"name":"Demo 2","clip_order":2}]'
 
 # Update a demo
 coursecraft demos update recXXX --name "New Name" --idea "Updated idea"
 coursecraft demos update recXXX --script "Updated narration script"
-coursecraft demos update recXXX --demo-walkthrough-script-path /Users/adam/courses/example/m2c3/demo_walkthrough.ps1
-coursecraft demos update recXXX --demo-environment azure-adam-the-automator
-coursecraft demos update recXXX --demo-environment azure-adam-the-automator --demo-environment local-macos
+coursecraft demos update recXXX --demo-walkthrough-script-path /path/to/course/m2c3/demo_walkthrough.ps1
 
 # Delete a demo
 coursecraft demos delete recXXX
 coursecraft demos delete recXXX --force
-```
-
-### Demo Environments
-
-Demo environment records store reusable environment-specific prep and validation
-details for CourseCraft demos. Every demo must have at least one linked
-`Demo Environment` record. Demo prep/testing agents should read those linked
-record IDs, then fetch each environment before running setup or validation.
-
-```bash
-# List all demo environments
-coursecraft environments list
-
-# List environments for a provider
-coursecraft environments list --provider Azure
-
-# Get an environment by record ID, Environment ID, or exact Name
-coursecraft environments get azure-adam-the-automator
-
-# Get only the fields needed for prep
-coursecraft environments get azure-adam-the-automator \
-  --properties "id,fields.Name,fields.Authentication Preflight,fields.Validation Commands,fields.Safe Diagnostics"
 ```
 
 ### Slides
@@ -410,9 +386,9 @@ coursecraft demo-build-products get recXXXXXXXXXXXXXXX
 coursecraft demo-build-products get "Demo Action Summary"
 
 # Sync from XML files to Airtable
-coursecraft demo-build-products sync
-coursecraft demo-build-products sync --dry-run
-coursecraft demo-build-products sync --file demo-action-summary.xml
+coursecraft demo-build-products sync --path /path/to/demo-build-products
+coursecraft demo-build-products sync --path /path/to/demo-build-products --dry-run
+coursecraft demo-build-products sync --path /path/to/demo-build-products --file demo-action-summary.xml
 
 # Update a build product
 coursecraft demo-build-products update recXXX --version "2.0"
@@ -438,8 +414,8 @@ coursecraft slide-build-products get recXXXXXXXXXXXXXXX
 coursecraft slide-build-products get "Module intro slide script"
 
 # Sync from XML files to Airtable
-coursecraft slide-build-products sync
-coursecraft slide-build-products sync --dry-run
+coursecraft slide-build-products sync --path /path/to/slide-build-products
+coursecraft slide-build-products sync --path /path/to/slide-build-products --dry-run
 
 # Update a build product
 coursecraft slide-build-products update recXXX --version "2.0"
@@ -449,16 +425,16 @@ coursecraft slide-build-products update recXXX --version "2.0"
 
 ```bash
 # Export a Descript project to the course clips folder
-coursecraft descript export "M1C2 - MCP Server" -m 1 -c 2
+coursecraft descript export "M1C2 - MCP Server" -m 1 -c 2 --clips-root /path/to/courses
 
 # Export with specific course
-coursecraft descript export "M1C2 - MCP Server" -m 1 -c 2 --course advanced-features-cursor-ai
+coursecraft descript export "M1C2 - MCP Server" -m 1 -c 2 --course advanced-features-cursor-ai --clips-root /path/to/courses
 
 # Dry run to preview without exporting
-coursecraft descript export "M2" -m 2 -c 1 --dry-run
+coursecraft descript export "M2" -m 2 -c 1 --clips-root /path/to/courses --dry-run
 
 # Export with custom resolution
-coursecraft descript export "M1C2" -m 1 -c 2 --width 3840 --height 2160 --fps 60
+coursecraft descript export "M1C2" -m 1 -c 2 --clips-root /path/to/courses --width 3840 --height 2160 --fps 60
 ```
 
 ## Delete Behavior
@@ -534,9 +510,7 @@ coursecraft courses list --filter "status:eq:Complete" --filter "active:eq:true"
 
 **Clips:** `name`, `status`, `order`, `module`, `target_length`, `story`
 
-**Demos:** `name`, `clip`, `idea`, `action_summary`, `script`, `demo_environment`, `demo_walkthrough_script_path`, `demo_walkthrough_script_created`, `dictation_recorded`, `voice_recording_id`, `voice_recording_path`, `voice_source_hash`, `elevenlabs_voice_id`, `elevenlabs_model_id`, `elevenlabs_output_format`, `elevenlabs_request_id`, `elevenlabs_history_item_id`, `voice_character_count`, `voice_generated_at`
-
-**Demo Environments:** `name`, `environment_id`, `provider`, `status`, `notes`, `tenant_name`, `tenant_id`, `subscription_name`, `subscription_id`, `cloud_name`, `default_location`, `owner_account`
+**Demos:** `name`, `clip`, `idea`, `action_summary`, `script`, `demo_walkthrough_script_path`, `demo_walkthrough_script_created`, `dictation_recorded`, `voice_recording_id`, `voice_recording_path`, `voice_source_hash`, `elevenlabs_voice_id`, `elevenlabs_model_id`, `elevenlabs_output_format`, `elevenlabs_request_id`, `elevenlabs_history_item_id`, `voice_character_count`, `voice_generated_at`
 
 **Slides:** `clip`, `template`, `dictation_recorded`, `voice_recording_id`, `voice_recording_path`, `voice_source_hash`, `elevenlabs_voice_id`, `elevenlabs_model_id`, `elevenlabs_output_format`, `elevenlabs_request_id`, `elevenlabs_history_item_id`, `voice_character_count`, `voice_generated_at`
 

@@ -7,11 +7,11 @@ This tool uses the authenticated API at `https://data.g2.com`. It does not scrap
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/g2
+cd <cli-tools-root>/g2
 uv tool install -e . --force --refresh
 ```
 
-The launcher is installed at `/Users/adam/.local/bin/g2`.
+The launcher is installed at `~/.local/bin/g2`.
 
 ## Authentication
 

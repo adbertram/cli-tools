@@ -21,7 +21,7 @@ Command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Ca
 ### 1. Install Dependencies
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/google
+cd <cli-tools-root>/google
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -53,12 +53,12 @@ pip install -e .
 
 **~/.zshrc or ~/.bashrc:**
 ```bash
-alias google="~/Dropbox/GitRepos/cli-tools/google/venv/bin/google"
+alias google="<cli-tools-root>/google/venv/bin/google"
 ```
 
 **~/.config/powershell/Microsoft.PowerShell_profile.ps1:**
 ```powershell
-function google { & "$HOME/Dropbox/GitRepos/cli-tools/google/venv/bin/google" @args }
+function google { & "<cli-tools-root>/google/venv/bin/google" @args }
 ```
 
 ### 4. Install Shell Completion
@@ -633,7 +633,7 @@ If you encounter authentication issues:
 
 If you see "Missing credentials" error:
 1. Download credentials.json from Google Cloud Console
-2. Place it in the `~/Dropbox/GitRepos/cli-tools/google/` directory
+2. Place it in the `<cli-tools-root>/google/` directory
 3. Or set `GOOGLE_CREDENTIALS_PATH` environment variable
 
 ## API Scopes

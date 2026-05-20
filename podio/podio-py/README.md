@@ -12,15 +12,8 @@ Dependencies
 
 * httplib2
 
-PyPodio is not yet available on PyPI, we're waiting to have it a bit more
-stable. Install by cloning from the GitHub repo:
-
-    $ git clone git://github.com/podio/podio-py.git
-    $ cp -r podio-py/pypodio2 path/to/destination
-
-Alternatively, install via `pip`:
-    
-    $ pip install -e git+https://github.com/podio/podio-py.git#egg=podio-py
+This copy is vendored inside the cli-tools repository and is installed through
+the parent `podio` tool's local path dependency.
 
 
 Example

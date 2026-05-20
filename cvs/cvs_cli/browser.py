@@ -8,6 +8,3 @@ class CvsBrowser(BrowserAutomation):
     AUTH_CHECK_URL = "https://www.cvs.com/account/profile"
     AUTH_URL_PATTERN = r"/account-login"
     AUTH_COOKIE_PATTERNS = ["access_token"]
-
-    def __init__(self, config):
-        super().__init__(config)

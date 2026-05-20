@@ -1,5 +1,9 @@
 """Main entry point for Airtable CLI."""
 from . import __version__
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands

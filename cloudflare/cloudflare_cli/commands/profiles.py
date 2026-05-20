@@ -2,10 +2,10 @@
 import typer
 from typing import Optional, List
 
-from cli_tools_shared.profiles import list_profiles, create_profile, set_default_profile, delete_profile
+from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
 from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
+from cli_tools_shared.profiles import list_profiles, create_profile, set_default_profile, delete_profile
 from ..config import get_config
-from ..filters import validate_filters, apply_filters, FilterValidationError
 
 
 app = typer.Typer(help="Manage profiles", no_args_is_help=True)

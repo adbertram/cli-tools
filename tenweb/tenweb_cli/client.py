@@ -5,9 +5,9 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.filters import apply_filters, apply_limit, validate_filters
 
 from .config import get_config
-from .filters import apply_filters, apply_limit, validate_filters
 from .models import (
     SubdomainCheckResult,
     Website,

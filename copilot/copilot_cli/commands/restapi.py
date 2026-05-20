@@ -101,7 +101,7 @@ def restapi_list(
         copilot restapi list --filter "name:ilike:%podio%" --table
         copilot restapi list --limit 50
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
     from cli_tools_shared.output import print_error
 
     try:

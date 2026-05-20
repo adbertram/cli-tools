@@ -1,5 +1,4 @@
 """Configuration management for Wordpress CLI."""
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -11,6 +10,13 @@ class Config(BaseConfig):
     DIST_NAME = "wordpress-cli"
     CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
     DEFAULT_BASE_URL = "https://adamtheautomator.com/wp-json/wp/v2"
+    WPCOM_REQUIRED_FIELDS = (
+        "WPCOM_CLIENT_ID",
+        "WPCOM_CLIENT_SECRET",
+        "WPCOM_USERNAME",
+        "WPCOM_PASSWORD",
+        "WPCOM_SITE",
+    )
 
     def __init__(self, profile=None):
         super().__init__(
@@ -53,21 +59,123 @@ class Config(BaseConfig):
         """Get WordPress site URL."""
         return super()._get("URL")
 
-    def test_connection(self) -> bool:
+    @property
+    def wpcom_access_token(self) -> Optional[str]:
+        """Get WordPress.com OAuth access token for Jetpack management APIs."""
+        return self._get("WPCOM_ACCESS_TOKEN")
+
+    @property
+    def wpcom_client_id(self) -> Optional[str]:
+        """Get WordPress.com OAuth client id."""
+        return self._get("WPCOM_CLIENT_ID")
+
+    @property
+    def wpcom_client_secret(self) -> Optional[str]:
+        """Get WordPress.com OAuth client secret."""
+        return self._get("WPCOM_CLIENT_SECRET")
+
+    @property
+    def wpcom_username(self) -> Optional[str]:
+        """Get WordPress.com OAuth username."""
+        return self._get("WPCOM_USERNAME")
+
+    @property
+    def wpcom_password(self) -> Optional[str]:
+        """Get WordPress.com OAuth password."""
+        return self._get("WPCOM_PASSWORD")
+
+    @property
+    def wpcom_site(self) -> Optional[str]:
+        """Get the WordPress.com site identifier for Jetpack management APIs."""
+        return self._get("WPCOM_SITE")
+
+    @property
+    def wpcom_token_type(self) -> Optional[str]:
+        """Get saved WordPress.com OAuth token type."""
+        return self._get("WPCOM_TOKEN_TYPE")
+
+    @property
+    def wpcom_scope(self) -> Optional[str]:
+        """Get saved WordPress.com OAuth scope."""
+        return self._get("WPCOM_SCOPE")
+
+    def has_wpcom_credentials(self) -> bool:
+        """Check whether the secondary WordPress.com credential bundle is complete."""
+        return all(self._get(field) for field in self.WPCOM_REQUIRED_FIELDS)
+
+    def get_missing_wpcom_credentials(self) -> list[str]:
+        """Return missing WordPress.com credential field names."""
+        return [field for field in self.WPCOM_REQUIRED_FIELDS if not self._get(field)]
+
+    def save_wpcom_credentials(
+        self,
+        *,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        site: Optional[str] = None,
+    ) -> None:
+        """Save provided WordPress.com credential fields and clear any stale token."""
+        updates = {
+            "WPCOM_CLIENT_ID": client_id,
+            "WPCOM_CLIENT_SECRET": client_secret,
+            "WPCOM_USERNAME": username,
+            "WPCOM_PASSWORD": password,
+            "WPCOM_SITE": site,
+        }
+        changed = False
+        for field, value in updates.items():
+            if value is None:
+                continue
+            self._set(field, value)
+            changed = True
+
+        if changed:
+            self.clear_wpcom_access_token()
+
+    def save_wpcom_access_token(
+        self,
+        access_token: str,
+        *,
+        token_type: Optional[str] = None,
+        scope: Optional[str] = None,
+    ) -> None:
+        """Save WordPress.com OAuth token metadata."""
+        self._set("WPCOM_ACCESS_TOKEN", access_token)
+        if token_type:
+            self._set("WPCOM_TOKEN_TYPE", token_type)
+        else:
+            self._clear("WPCOM_TOKEN_TYPE")
+        if scope:
+            self._set("WPCOM_SCOPE", scope)
+        else:
+            self._clear("WPCOM_SCOPE")
+
+    def clear_wpcom_access_token(self) -> None:
+        """Clear the saved WordPress.com OAuth token metadata."""
+        self._clear("WPCOM_ACCESS_TOKEN")
+        self._clear("WPCOM_TOKEN_TYPE")
+        self._clear("WPCOM_SCOPE")
+
+    def test_connection(self) -> dict:
         """Test WordPress API connectivity with a lightweight call."""
         import requests
         from requests.auth import HTTPBasicAuth
 
         try:
             resp = requests.get(
-                f"{self.base_url}/users/me",
+                f"{self.base_url}/posts",
                 auth=HTTPBasicAuth(self.username, self.password),
-                params={"context": "edit"},
+                headers={"Accept": "application/json", "User-Agent": "WordPressClient/1.0"},
+                params={"context": "edit", "per_page": 1},
                 timeout=10,
             )
-            return resp.ok
-        except Exception:
-            return False
+            if resp.ok:
+                return {"api_test": "passed"}
+            return {"api_test": f"failed: API request failed ({resp.status_code}): {resp.text}"}
+        except Exception as exc:
+            return {"api_test": f"failed: {exc}"}
 
 
 _configs = {}

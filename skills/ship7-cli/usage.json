@@ -1,0 +1,408 @@
+{
+  "tool": "ship7",
+  "description": "CLI interface for Ship7 (browser automation)",
+  "discovered_at": "2026-05-12T16:04:32.962516+00:00",
+  "total_commands": 15,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "search": {
+      "help": "Search ship7",
+      "commands": {
+        "query": {
+          "help": "Search for items on Ship7. Example: ship7 search query \"my search term\" --limit 20 --table ship7 search query \"keyword\" --filter \"price:lt:100\" ship7 search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `ship7 search query` when you need to search for items on ship7. Required arguments: query. Common flags: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: ship7 search item abc123 --table ship7 search item \"https://example.com/item/abc123\" ship7 search item abc123 --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `ship7 search item` when you need to get details for a specific item. Required arguments: item_id. Common flags: --table/-t, --properties/-p."
+        },
+        "list": {
+          "help": "List items from Ship7. Example: ship7 search list --limit 100 --table ship7 search list --filter \"status:active\" ship7 search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `ship7 search list` when you need to list items from ship7. Common flags: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "wildcard": {
+          "help": "Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports * wildcards)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to search"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "ship7 search wildcard \"*test*\"",
+            "ship7 search wildcard \"prefix*\"",
+            "ship7 search wildcard \"*pending*\" --fields \"status,notes\"",
+            "ship7 search wildcard \"*error*\" --properties \"id,name,status\" --table"
+          ],
+          "usage_instructions": "Use `ship7 search wildcard` when you need to search items with wildcard pattern matching. Required arguments: query. Common flags: --table/-t, --limit/-l, --properties/-p."
+        }
+      },
+      "usage_instructions": "`search` commands for `ship7`. Use this group for the search ship7 surface."
+    },
+    "auth": {
+      "help": "Manage ship7 authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `ship7 auth login` when you need to configure authentication credentials. Common flags: --profile/-p, --force/-F, --credential-type/-c."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `ship7 auth logout` when you need to clear stored credentials and browser sessions. Common flags: --profile/-p."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `ship7 auth status` when you need to check authentication status across profiles. Common flags: --profile/-p, --table/-t."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `ship7 auth refresh` when you need to refresh oauth access token using stored refresh token. Common flags: --profile/-p, --table/-t."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `ship7 auth test` when you need to test authentication by verifying credentials work across profiles. Common flags: --table/-t, --verbose/-v, --profile/-p."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ]
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            }
+          },
+          "usage_instructions": "Use `ship7 auth profiles` when you need to manage authentication profiles."
+        }
+      },
+      "usage_instructions": "Authentication commands for `ship7`. Use `ship7 auth login`, `ship7 auth status`, and nested `auth profiles` commands to manage credentials and profiles."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `ship7 cache clear` when you need to remove all cached responses."
+        }
+      },
+      "usage_instructions": "Cache management for `ship7`. Use these commands to inspect or clear cached CLI responses when you need a fresh read."
+    }
+  },
+  "usage_instructions": "Use the `ship7` CLI for cli interface for ship7 (browser automation). Commands follow `ship7 <group> <action>`; check auth first with `ship7 auth status` and prefer `--table/-t` for human review when a command supports it."
+}

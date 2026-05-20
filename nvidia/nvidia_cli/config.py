@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.nvidia.com/en-us/affiliates/"
     DIST_NAME = "nvidia-cli"
-    SESSION_NAME = "nvidia"
-    LOGIN_URL = "https://www.nvidia.com/en-us/affiliates/"
 
     def __init__(self, profile=None):
         super().__init__(

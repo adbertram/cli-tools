@@ -1,8 +1,12 @@
 """Main entry point for the Google Lighthouse CLI wrapper."""
 
 from . import __version__
-from .client import ClientError
 from cli_tools_shared import create_app, run_app
+from cli_tools_shared.auth_commands import create_auth_app
+
+from .client import ClientError
+from .commands import app as audits_app
+from .config import get_config
 
 app = create_app(
     name="google-lighthouse",
@@ -11,10 +15,8 @@ app = create_app(
     cache_support=False,
 )
 
-# Register command modules
-from .commands import audits
-
-app.add_typer(audits.app, name="audits", help="Manage Lighthouse audits")
+app.add_typer(audits_app, name="audits", help="Manage Lighthouse audits")
+app.add_typer(create_auth_app(get_config, tool_name="google-lighthouse"), name="auth")
 
 
 def main():

@@ -15,10 +15,10 @@
 ~/.claude/
 ├── history.jsonl              # Index file - metadata only
 ├── projects/                  # Full session transcripts
-│   ├── -Users-adam/           # Project folder (path encoded)
+│   ├── -path-to-project/      # Project folder (path encoded)
 │   │   ├── {uuid}.jsonl       # Session transcript
 │   │   └── {uuid}/            # Session artifacts (optional)
-│   └── -Users-adam-Dropbox-GitRepos-{project}/
+│   └── -path-to-{project}/
 ├── todos/                     # Todo files per session
 │   └── {sessionId}-agent-{agentId}.json
 ├── session-env/               # Environment per session
@@ -28,7 +28,7 @@
 
 ### Path Encoding
 
-- `/Users/adam/project` → `-Users-adam-project`
+- `/path/to/project` → `-path-to-project`
 - Forward slashes replaced with hyphens
 
 ### JSONL Session Format
@@ -207,8 +207,8 @@ claude-code-sessions todos list --project <name> [--since TIME] [--filter KEY:VA
 ```python
 class Project(CLIModel):
     name: str                    # e.g., "Agent-ATABlogger"
-    full_path: str               # e.g., "/Users/adam/.../Agent-ATABlogger"
-    encoded_path: str            # e.g., "-Users-adam-...-Agent-ATABlogger"
+    full_path: str               # e.g., "/path/to/project"
+    encoded_path: str            # e.g., "-path-to-project"
     session_count: int
     last_activity: Optional[str] = None
 ```

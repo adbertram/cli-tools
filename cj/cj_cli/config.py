@@ -32,8 +32,6 @@ class Config(BaseConfig):
         CredentialType.BROWSER_SESSION,
     ]
     DEFAULT_BASE_URL = "https://advertiser-lookup.api.cj.com"
-    SESSION_NAME = "cj"
-    LOGIN_URL = "https://members.cj.com/member/login"
     LOGIN_INSTRUCTIONS = (
         "CJ requires two credentials:\n"
         "1. Generate a Personal Access Token at\n"

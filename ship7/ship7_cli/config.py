@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.ship7.com"
     DIST_NAME = "ship7-cli"
-    SESSION_NAME = "ship7"
-    LOGIN_URL = "https://www.ship7.com"
 
     def __init__(self, profile=None):
         super().__init__(

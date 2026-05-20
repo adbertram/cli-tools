@@ -6,8 +6,8 @@ from enum import Enum
 from pydantic import BaseModel
 
 from ..client import get_client
+from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success
-from ..filters import apply_filters, apply_properties_filter
 
 
 class AccessRuleMode(str, Enum):

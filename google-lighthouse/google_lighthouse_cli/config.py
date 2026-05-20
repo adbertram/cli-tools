@@ -2,16 +2,21 @@
 
 import os
 import shutil
+from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.credentials import CredentialType
 from dotenv import set_key
 
 
 class Config(BaseConfig):
     """Configuration manager for Google Lighthouse CLI wrapper."""
 
-    CREDENTIAL_TYPES: list = []  # custom field set; managed by this subclass
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+    CUSTOM_REQUIRED_FIELDS = []
+    CUSTOM_ALL_FIELDS = ["CLI_COMMAND", "CLI_PATH", "LIGHTHOUSE_NPM_PACKAGE", "GOOGLE_LIGHTHOUSE_DATA_DIR"]
+    CUSTOM_EPHEMERAL_FIELDS = []
     DIST_NAME = "google-lighthouse-cli"
 
     def __init__(self, profile: Optional[str] = None):
@@ -74,6 +79,12 @@ class Config(BaseConfig):
             return None
         return None
 
+    def test_connection(self) -> dict:
+        """Validate the local Lighthouse launcher configuration."""
+        if not self.is_cli_available():
+            return {"api_test": f"failed: underlying CLI '{self.get_cli_executable()}' not found"}
+        return {"api_test": "passed"}
+
     def save_setting(self, key: str, value: str):
         """Save a setting to the .env file and update environment."""
         set_key(self.env_file_path, key, value)
@@ -99,6 +110,6 @@ _config: Optional[Config] = None
 def get_config(profile=None) -> Config:
     """Get or create the global config instance."""
     global _config
-    if _config is None:
-        _config = Config()
+    if _config is None or profile is not None:
+        _config = Config(profile=profile)
     return _config

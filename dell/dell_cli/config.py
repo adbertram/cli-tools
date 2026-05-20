@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.flexoffers.com/affiliate-programs/dell-home-home-office-affiliate-program/"
     DIST_NAME = "dell-cli"
-    SESSION_NAME = "dell"
-    LOGIN_URL = "https://www.flexoffers.com/affiliate-programs/dell-home-home-office-affiliate-program/"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.lenovo.com/us/en/affiliate-program/resources/index.html"
     DIST_NAME = "lenovo-cli"
-    SESSION_NAME = "lenovo"
-    LOGIN_URL = "https://www.lenovo.com/us/en/affiliate-program/resources/index.html"
 
     def __init__(self, profile=None):
         super().__init__(

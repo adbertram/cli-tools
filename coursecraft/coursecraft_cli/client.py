@@ -28,7 +28,7 @@ class CourseCraftClient:
         if not self._check_airtable_cli():
             raise ClientError(
                 "airtable CLI is not installed or not in PATH. "
-                "Install it from ~/Dropbox/GitRepos/cli-tools/airtable"
+                "Install it with `scripts/install-cli-tool.sh airtable` from the cli-tools repo root."
             )
 
     def _check_airtable_cli(self) -> bool:
@@ -210,47 +210,6 @@ class CourseCraftClient:
             msg = f"Course '{course_identifier}' not found."
             if suggestions:
                 msg += "\n\nAvailable courses:\n" + "\n".join(suggestions)
-            raise ClientError(msg)
-
-        return records[0]['id']
-
-    def resolve_environment_id(self, environment_identifier: str) -> str:
-        """
-        Resolve a demo environment identifier to a record ID.
-        Accepts a record ID, Environment ID slug, or exact Name.
-
-        Args:
-            environment_identifier: Record ID, Environment ID, or Name
-
-        Returns:
-            Record ID
-
-        Raises:
-            ClientError: If environment cannot be found
-        """
-        if environment_identifier.startswith('rec'):
-            return environment_identifier
-
-        escaped_identifier = environment_identifier.replace("'", "\\'")
-        filter_formula = (
-            f"OR({{Environment ID}}='{escaped_identifier}', "
-            f"{{Name}}='{escaped_identifier}')"
-        )
-        records = self.list_records("Demo Environments", filter_formula)
-
-        if not records:
-            all_environments = self.list_records("Demo Environments")
-            suggestions = []
-            for environment in all_environments:
-                fields = environment.get("fields", {})
-                environment_id = fields.get("Environment ID", "")
-                name = fields.get("Name", "")
-                if environment_id:
-                    suggestions.append(f"  - {environment_id} ({name})")
-
-            msg = f"Demo environment '{environment_identifier}' not found."
-            if suggestions:
-                msg += "\n\nAvailable demo environments:\n" + "\n".join(suggestions)
             raise ClientError(msg)
 
         return records[0]['id']

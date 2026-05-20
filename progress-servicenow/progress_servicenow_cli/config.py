@@ -14,8 +14,6 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://progress1.service-now.com/esc"
-    SESSION_NAME = "progress-servicenow"
-    LOGIN_URL = "https://progress1.service-now.com/esc"
 
     def __init__(self, profile=None):
         super().__init__(

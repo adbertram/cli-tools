@@ -136,7 +136,7 @@ def list_operations(
             operations = [op for op in operations if op["visibility"] != "internal"]
 
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 operations = apply_filters(operations, filter)

@@ -6,6 +6,29 @@ A collection of Python CLI tools using Typer for consistent command-line interfa
 
 All CLI tools **must** follow these standards for consistency.
 
+### CLI-Tools Secret Manager
+
+CLI tool credentials that must be shared across CLI tools live in the CLI-tools Keychain service, accessed only through:
+
+```bash
+secret-manager/secrets.sh
+```
+
+This helper is for CLI tool code and CLI-tool skills only. Non-CLI automation must use its project-owned credential store.
+
+## Fresh macOS Clone
+
+Install a CLI from this clone with the repo-owned installer:
+
+```bash
+scripts/install-cli-tool.sh <tool-name>
+```
+
+The installer resolves the repo root from its own location, installs the target
+tool with `uv`, and keeps `cli-tools-shared` editable from the sibling
+`cli-tools-shared/` folder in this checkout. It does not depend on user-level
+agent folders.
+
 ### Output Stream Standards
 
 **MANDATORY**: All CLI tools **must** use the correct output streams. This enables piping and automation.
@@ -308,7 +331,7 @@ Code or URL: https://mysite.com/?code=v%5E1.1%23i%5E1%23...&expires_in=299
 
 ### Repository Standards
 
-**MANDATORY**: `/Users/adam/Dropbox/GitRepos/cli-tools` is the only Git repository for CLI tools. Individual tool folders must not contain nested `.git` directories and must not have their own GitHub repositories.
+**MANDATORY**: `<cli-tools-root>` is the only Git repository for CLI tools. Individual tool folders must not contain nested `.git` directories and must not have their own GitHub repositories.
 
 | Requirement | Description |
 |-------------|-------------|
@@ -322,7 +345,7 @@ Code or URL: https://mysite.com/?code=v%5E1.1%23i%5E1%23...&expires_in=299
 
 **Setup Commands:**
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools
+cd <cli-tools-root>
 git status --short --branch
 ```
 
@@ -1325,13 +1348,13 @@ The `new-cli-tool` script automates the entire scaffolding process:
 
 ```bash
 # For REST API CLIs:
-~/Dropbox/GitRepos/cli-tools/new-cli-tool --name stripe --type api --base-url https://api.stripe.com/v1
+skills/cli-tool/scripts/new-cli-tool --name stripe --type api --base-url https://api.stripe.com/v1
 
 # For browser automation CLIs:
-~/Dropbox/GitRepos/cli-tools/new-cli-tool --name shopsite --type browser --base-url https://shopsite.com
+skills/cli-tool/scripts/new-cli-tool --name shopsite --type browser --base-url https://shopsite.com
 
 # For CLI wrappers (wrapping existing CLI tools):
-~/Dropbox/GitRepos/cli-tools/new-cli-tool --name lastpass --type wrapper --cli-command lpass \
+skills/cli-tool/scripts/new-cli-tool --name lastpass --type wrapper --cli-command lpass \
   --description "LastPass password manager" --docs-url https://github.com/lastpass/lastpass-cli
 ```
 
@@ -1357,7 +1380,7 @@ The script will:
 ### 1. Create Directory Structure
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools
+cd <cli-tools-root>
 mkdir -p newtool/newtool_cli/commands
 ```
 
@@ -1390,7 +1413,7 @@ EOF
 
 ### 4. Keep the Tool in the Parent Monorepo
 
-Do not run `git init` inside `newtool`. Commit the new folder from `/Users/adam/Dropbox/GitRepos/cli-tools`.
+Do not run `git init` inside `newtool`. Commit the new folder from `<cli-tools-root>`.
 
 ### 5. Create Virtual Environment and Install
 
@@ -1425,7 +1448,7 @@ EOF
 
 ```bash
 # Create symlink (run once after installing the CLI)
-ln -sf ~/Dropbox/GitRepos/cli-tools/newtool/venv/bin/newtool ~/.local/bin/newtool
+ln -sf <cli-tools-root>/newtool/venv/bin/newtool ~/.local/bin/newtool
 ```
 
 **Why symlinks instead of aliases?**
@@ -1463,13 +1486,13 @@ After installation, restart your terminal or source your profile:
 source ~/.zshrc  # or ~/.bashrc
 ```
 
-### 9. Update CLAUDE.md
+### 9. Update CLI Tools Inventory
 
-**MANDATORY**: Add a row to the CLI tools table in `~/.claude/CLAUDE.md`.
+**MANDATORY**: Add a row to the CLI tools table in `<cli-tools-root>/docs/cli_tools.md`.
 
 **Add ONLY a table row:**
 ```markdown
-| `newtool` | Service Name | API/Service Type | Brief description of what it does |
+| `newtool` | Brief description of what it does |
 ```
 
 **NEVER add:**
@@ -1477,7 +1500,7 @@ source ~/.zshrc  # or ~/.bashrc
 - Command lists or usage patterns
 - Extended documentation sections
 
-Claude discovers CLI capabilities by running `<tool> --help` at runtime. Keeping CLAUDE.md minimal ensures it stays current and reduces context window usage.
+Agents discover CLI capabilities by running `<tool> --help` at runtime. Keeping the inventory minimal ensures it stays current and reduces context window usage.
 
 ## Testing Your CLI
 
@@ -1523,7 +1546,7 @@ Aliases only work in interactive shells and fail in automation contexts.
 
 **Create symlink for a new CLI tool:**
 ```bash
-ln -sf ~/Dropbox/GitRepos/cli-tools/toolname/venv/bin/toolname ~/.local/bin/toolname
+ln -sf <cli-tools-root>/toolname/venv/bin/toolname ~/.local/bin/toolname
 ```
 
 **Verify it works:**
@@ -1543,17 +1566,17 @@ ls -la ~/.local/bin/ | grep -E 'copilot|ebay|freshbooks|manus|notion|google|dbxc
 
 | Tool | Symlink | Target |
 |------|---------|--------|
-| copilot | `~/.local/bin/copilot` | `~/Dropbox/GitRepos/cli-tools/copilot/venv/bin/copilot` |
-| ebay | `~/.local/bin/ebay` | `~/Dropbox/GitRepos/cli-tools/ebay/venv/bin/ebay` |
-| freshbooks | `~/.local/bin/freshbooks` | `~/Dropbox/GitRepos/cli-tools/freshbooks/venv/bin/freshbooks` |
-| google | `~/.local/bin/google` | `~/Dropbox/GitRepos/cli-tools/google/venv/bin/google` |
-| manus | `~/.local/bin/manus` | `~/Dropbox/GitRepos/cli-tools/manus/venv/bin/manus` |
-| notion | `~/.local/bin/notion` | `~/Dropbox/GitRepos/cli-tools/notion/venv/bin/notion` |
-| dbxcli | `~/.local/bin/dbxcli` | `~/Dropbox/GitRepos/cli-tools/dropbox/dbxcli` |
-| shopgoodwill | `~/.local/bin/shopgoodwill` | `~/Dropbox/GitRepos/cli-tools/shopgoodwill/venv/bin/shopgoodwill` |
-| shopsalvationarmy | `~/.local/bin/shopsalvationarmy` | `~/Dropbox/GitRepos/cli-tools/shopsalvationarmy/venv/bin/shopsalvationarmy` |
-| testapi | `~/.local/bin/testapi` | `~/Dropbox/GitRepos/cli-tools/testapi/venv/bin/testapi` |
-| paypal | `~/.local/bin/paypal` | `~/Dropbox/GitRepos/cli-tools/paypal/venv/bin/paypal` |
+| copilot | `~/.local/bin/copilot` | `<cli-tools-root>/copilot/venv/bin/copilot` |
+| ebay | `~/.local/bin/ebay` | `<cli-tools-root>/ebay/venv/bin/ebay` |
+| freshbooks | `~/.local/bin/freshbooks` | `<cli-tools-root>/freshbooks/venv/bin/freshbooks` |
+| google | `~/.local/bin/google` | `<cli-tools-root>/google/venv/bin/google` |
+| manus | `~/.local/bin/manus` | `<cli-tools-root>/manus/venv/bin/manus` |
+| notion | `~/.local/bin/notion` | `<cli-tools-root>/notion/venv/bin/notion` |
+| dbxcli | `~/.local/bin/dbxcli` | `<cli-tools-root>/dropbox/dbxcli` |
+| shopgoodwill | `~/.local/bin/shopgoodwill` | `<cli-tools-root>/shopgoodwill/venv/bin/shopgoodwill` |
+| shopsalvationarmy | `~/.local/bin/shopsalvationarmy` | `<cli-tools-root>/shopsalvationarmy/venv/bin/shopsalvationarmy` |
+| testapi | `~/.local/bin/testapi` | `<cli-tools-root>/testapi/venv/bin/testapi` |
+| paypal | `~/.local/bin/paypal` | `<cli-tools-root>/paypal/venv/bin/paypal` |
 
 ### Shell Completion Files
 

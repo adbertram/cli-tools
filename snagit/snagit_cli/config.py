@@ -1,5 +1,6 @@
 """Configuration management for Snagit CLI."""
 import os
+from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -51,7 +52,8 @@ class Config(BaseConfig):
     @property
     def base_url(self) -> str:
         """Get Snagit API base URL."""
-        return os.getenv("SNAGIT_BASE_URL", "file:///Users/adam/Pictures/Snagit/Autosaved Captures.localized/")
+        default_path = Path.home() / "Pictures" / "Snagit" / "Autosaved Captures.localized"
+        return os.getenv("SNAGIT_BASE_URL", default_path.as_uri() + "/")
 
     def has_credentials(self) -> bool:
         """Check if required credentials are available."""

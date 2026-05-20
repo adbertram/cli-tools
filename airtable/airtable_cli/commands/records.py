@@ -23,8 +23,8 @@ from typing import Optional, List
 
 from ..client import get_client
 from ..config import get_config
-from ..filters import validate_filters, apply_filters, FilterValidationError
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info, print_error
+from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
 from ..parsers import format_local_time
 
 app = typer.Typer(help="Manage Airtable records")
@@ -92,11 +92,6 @@ def records_list(
         if sort_field:
             sort_param = [{"field": sort_field, "direction": sort_direction}]
 
-        # Parse properties into fields list for API-level field selection
-        api_fields = None
-        if properties:
-            api_fields = [f.strip() for f in properties.split(",")]
-
         result = client.list_records(
             base_id=resolved_base_id,
             table_id=table_id,
@@ -105,7 +100,7 @@ def records_list(
             view=view,
             sort=sort_param,
             filter_by_formula=formula,
-            fields=api_fields,
+            fields=None,
             filters=filter,
         )
 

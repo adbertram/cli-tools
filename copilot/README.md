@@ -3,7 +3,7 @@
 Command-line interface for managing Microsoft Copilot Studio agents via the Dataverse API.
 
 > **Status: alpha (0.1.0).** APIs and command surface may change before 1.0.
-> Bug reports and feedback welcome at https://github.com/adbertram/copilot-cli/issues
+> Bug reports and feedback welcome at https://github.com/adbertram/cli-tools/issues
 
 ## Overview
 
@@ -27,15 +27,15 @@ The Copilot CLI provides access to:
 
 ### 1. Install the CLI
 
-From GitHub (recommended):
+From the cloned cli-tools repo:
 ```bash
-pip install git+https://github.com/adbertram/copilot-cli.git
+cd <cli-tools-root>/copilot
+uv tool install -e . --force --refresh
 ```
 
 For development (editable install):
 ```bash
-git clone https://github.com/adbertram/copilot-cli.git
-cd copilot-cli
+cd <cli-tools-root>/copilot
 pip install -e .
 ```
 

@@ -4,7 +4,7 @@ from typing import Optional, List
 import typer
 
 from ..client import get_client, ClientError
-from ..filters import validate_filters, apply_filters
+from cli_tools_shared.filters import validate_filters, apply_filters
 from cli_tools_shared import FilterMap
 from cli_tools_shared.output import print_json, print_table, print_error, handle_error
 

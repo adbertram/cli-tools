@@ -4,11 +4,10 @@ Provides offline access to catalog item form schemas so callers know
 exactly which fields are available before creating a ticket — no browser
 session or authentication required.
 """
-import json
 import typer
-from pathlib import Path
 from typing import Optional, List
 
+from ..template_data import load_ticket_template
 from cli_tools_shared.output import (
     print_json, print_table, print_info, print_error,
 )
@@ -23,18 +22,15 @@ COMMAND_CREDENTIALS = {
     "fields": ["no_auth"],
 }
 
-_TEMPLATE_PATH = Path(__file__).resolve().parent.parent.parent / "ticket_template.json"
-
-
 def _load_template() -> dict:
     """Load the ticket template JSON."""
-    if not _TEMPLATE_PATH.exists():
+    try:
+        return load_ticket_template()
+    except FileNotFoundError as exc:
         raise typer.BadParameter(
-            f"ticket_template.json not found at {_TEMPLATE_PATH}. "
+            "ticket_template.json is missing from the installed package. "
             "Re-install the CLI to restore it."
-        )
-    with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        ) from exc
 
 
 @app.command("list")

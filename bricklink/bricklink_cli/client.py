@@ -756,8 +756,7 @@ class BricklinkClient:
             Dict with authenticated, url, cookies, and details.
         """
         activity.info("Testing browser auth session")
-        from .browser import BricklinkBrowser
-        browser = BricklinkBrowser()
+        browser = get_config().get_browser()
         result = browser.test_session()
         activity.info("Browser auth test result: authenticated=%s", result.get("authenticated"))
         return result

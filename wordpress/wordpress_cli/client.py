@@ -8,6 +8,7 @@ import random
 import time
 import requests
 from requests.auth import HTTPBasicAuth
+from urllib.parse import quote
 
 from cli_tools_shared.exceptions import ClientError
 
@@ -30,6 +31,11 @@ from .models import (
     create_tag,
     create_plugin,
 )
+from .wpcom import (
+    acquire_wpcom_access_token,
+    extract_wpcom_error_message,
+    wpcom_response_indicates_invalid_token,
+)
 
 
 # Retry configuration defaults
@@ -43,6 +49,11 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # User agent for all requests
 DEFAULT_USER_AGENT = "WordPressClient/1.0"
+WPCOM_API_BASE_URL = "https://public-api.wordpress.com/rest/v1.1"
+JETPACK_PLUGIN_MANAGEMENT_ERROR = (
+    "Jetpack is not connected to a WordPress.com account that can manage plugins for this site. "
+    "Connect the current WordPress admin user to WordPress.com through Jetpack before plugin updates can run."
+)
 
 
 class WordPressClient:
@@ -279,6 +290,56 @@ class WordPressClient:
         if not base_url.endswith(suffix):
             raise ClientError(f"Expected WordPress API base URL to end with {suffix}, got {self.base_url}")
         return base_url[: -len(suffix)]
+
+    def _make_wpcom_request(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict] = None,
+    ) -> Any:
+        token = self.config.wpcom_access_token
+        if not token:
+            acquire_wpcom_access_token(self.config)
+            token = self.config.wpcom_access_token
+        if not token:
+            raise ClientError("WordPress.com token acquisition did not save WPCOM_ACCESS_TOKEN")
+
+        url = f"{WPCOM_API_BASE_URL}{endpoint}"
+        response = self._dispatch_wpcom_request(method, url, token, data)
+
+        if wpcom_response_indicates_invalid_token(response):
+            self.config.clear_wpcom_access_token()
+            acquire_wpcom_access_token(self.config)
+            token = self.config.wpcom_access_token
+            if not token:
+                raise ClientError("WordPress.com token acquisition did not save WPCOM_ACCESS_TOKEN")
+            response = self._dispatch_wpcom_request(method, url, token, data)
+
+        if not response.ok:
+            error_msg = extract_wpcom_error_message(response)
+            raise ClientError(f"WordPress.com API request failed ({response.status_code}): {error_msg}")
+
+        return response.json()
+
+    def _dispatch_wpcom_request(
+        self,
+        method: str,
+        url: str,
+        token: str,
+        data: Optional[Dict] = None,
+    ) -> requests.Response:
+        return requests.request(
+            method=method,
+            url=url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+                "User-Agent": DEFAULT_USER_AGENT,
+            },
+            json=data,
+            timeout=60,
+        )
 
     # ==================== Post Methods ====================
 
@@ -1197,6 +1258,62 @@ class WordPressClient:
             raise ClientError("Plugin update count response did not include an integer count")
         return count
 
+    def _get_jetpack_connection_data(self) -> dict:
+        response = self._make_request(
+            "GET",
+            "/jetpack/v4/connection/data",
+            base_url=self._wp_json_base_url(),
+        )
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected Jetpack connection response to be a dict, got {type(response)}")
+        return response
+
+    def _get_jetpack_site_data(self) -> dict:
+        response = self._make_request(
+            "GET",
+            "/jetpack/v4/site",
+            base_url=self._wp_json_base_url(),
+        )
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected Jetpack site response to be a dict, got {type(response)}")
+        code = response.get("code")
+        if code != "success":
+            raise ClientError(f"Expected Jetpack site response code to be success, got {code}")
+        raw_data = response.get("data")
+        if not isinstance(raw_data, str):
+            raise ClientError("Jetpack site response did not include data JSON string")
+        try:
+            site_data = json.loads(raw_data)
+        except json.JSONDecodeError as exc:
+            raise ClientError("Jetpack site response data was not valid JSON") from exc
+        if not isinstance(site_data, dict):
+            raise ClientError(f"Expected Jetpack site data to decode to a dict, got {type(site_data)}")
+        return site_data
+
+    def _assert_jetpack_plugin_management_connected(self) -> None:
+        connection = self._get_jetpack_connection_data()
+        current_user = connection.get("currentUser")
+        if not isinstance(current_user, dict):
+            raise ClientError("Jetpack connection response did not include currentUser")
+        is_connected = current_user.get("isConnected")
+        if not isinstance(is_connected, bool):
+            raise ClientError("Jetpack connection response did not include currentUser.isConnected boolean")
+        if not is_connected:
+            raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
+
+        site = self._get_jetpack_site_data()
+        user_can_manage = site.get("user_can_manage")
+        if not isinstance(user_can_manage, bool):
+            raise ClientError("Jetpack site response did not include user_can_manage boolean")
+        capabilities = site.get("capabilities")
+        if not isinstance(capabilities, dict):
+            raise ClientError("Jetpack site response did not include capabilities")
+        update_plugins = capabilities.get("update_plugins")
+        if not isinstance(update_plugins, bool):
+            raise ClientError("Jetpack site response did not include capabilities.update_plugins boolean")
+        if not user_can_manage or not update_plugins:
+            raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
+
     def get_wordpress_org_plugin_info(self, slug: str) -> dict:
         """
         Get public plugin metadata from WordPress.org.
@@ -1391,11 +1508,8 @@ class WordPressClient:
         """
         Upgrade a plugin to its latest version.
 
-        Uses the WordPress plugin update REST API endpoint. Requires the plugin
-        to have an available update and the site to support plugin updates via API.
-
-        Note: This works by reinstalling from wordpress.org. The plugin slug is
-        extracted from the plugin identifier.
+        Uses Jetpack's native WordPress.com plugin update operation, which calls
+        WordPress' plugin upgrader without deleting or reinstalling the plugin.
 
         Args:
             plugin: Plugin identifier (e.g. "mailchimp-for-wp/mailchimp-for-wp")
@@ -1403,18 +1517,30 @@ class WordPressClient:
         Returns:
             Plugin model with updated version
         """
-        # Extract slug from plugin identifier (folder name = slug)
-        slug = plugin.split("/")[0]
+        current = self.get_plugin(plugin, include_update_status=True)
+        if current.update_status != "available":
+            raise ClientError(f"Plugin {plugin} does not have an available update")
+        if not current.latest_version:
+            raise ClientError(f"Plugin {plugin} does not have a known latest version")
+        self._assert_jetpack_plugin_management_connected()
 
-        # Deactivate, delete, reinstall as active
-        current = self.get_plugin(plugin)
-        was_active = current.status == "active"
+        site = quote(self.config.wpcom_site, safe="")
+        plugin_id = quote(plugin, safe="")
+        response = self._make_wpcom_request(
+            "POST",
+            f"/sites/{site}/plugins/{plugin_id}/update/",
+        )
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected WordPress.com plugin update response to be a dict, got {type(response)}")
 
-        if was_active:
-            self.update_plugin(plugin, {"status": "inactive"})
-
-        self.delete_plugin(plugin)
-        upgraded = self.install_plugin(slug, activate=was_active)
+        upgraded = self.get_plugin(plugin, include_update_status=True)
+        if not upgraded.latest_version:
+            raise ClientError(f"Plugin {plugin} did not report a latest version after update")
+        if upgraded.version != upgraded.latest_version or upgraded.update_status != "current":
+            raise ClientError(
+                f"Plugin {plugin} update did not complete: "
+                f"installed {upgraded.version}, latest {upgraded.latest_version}, status {upgraded.update_status}"
+            )
 
         return upgraded
 

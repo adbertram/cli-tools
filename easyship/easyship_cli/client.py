@@ -7,9 +7,9 @@ import requests
 
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.filters import parse_filter_string, validate_filters
 
 from .config import get_config
-from .filters import parse_filter_string, validate_filters
 from .models import Account, Courier, CourierDetail, create_account, create_courier, create_courier_detail
 
 DEFAULT_MAX_RETRIES = 3

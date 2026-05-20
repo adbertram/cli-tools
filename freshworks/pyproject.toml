@@ -12,7 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
     "pydantic>=2.0.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.scripts]
@@ -21,3 +21,6 @@ freshworks = "freshworks_cli.main:app"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["freshworks_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

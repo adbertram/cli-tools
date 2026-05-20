@@ -7,7 +7,7 @@ from cli_tools_shared.credentials import CredentialType
 
 class Config(BaseConfig):
     DIST_NAME = "partnerstack-cli"
-    CREDENTIAL_TYPES = [CredentialType.API_KEY]
+    CREDENTIAL_TYPES = [CredentialType.API_KEY, CredentialType.CUSTOM]
     DEFAULT_BASE_URL = "https://api.partnerstack.com/api/v2"
     LOGIN_INSTRUCTIONS = (
         "Configure API_KEY for Bearer-auth Partner API commands. "

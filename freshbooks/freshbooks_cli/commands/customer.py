@@ -6,7 +6,7 @@ from cli_tools_shared.output import print_json, print_table, handle_error, print
 
 from ..client import get_client
 from ..formatters import format_client_for_display
-from ..filters import apply_filters, validate_filters, FilterValidationError
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 app = typer.Typer(help="Manage FreshBooks customers/clients")
 

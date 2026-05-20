@@ -1912,7 +1912,7 @@ def knowledge_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -2471,7 +2471,7 @@ def transcript_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -2653,7 +2653,7 @@ def topic_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -3177,7 +3177,7 @@ def trigger_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -3523,7 +3523,7 @@ def tool_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -4291,7 +4291,7 @@ def analytics_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 results = apply_filters(results, filter)
@@ -4897,7 +4897,7 @@ def auth_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -5356,7 +5356,7 @@ def model_list(
 
         # Apply filters
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 catalog = apply_filters(catalog, filter)
@@ -5770,7 +5770,7 @@ def channel_list(
         channels = channel_info.get("channels", [])
 
         if filter:
-            from ..filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
             try:
                 validate_filters(filter)
                 channels = apply_filters(channels, filter)

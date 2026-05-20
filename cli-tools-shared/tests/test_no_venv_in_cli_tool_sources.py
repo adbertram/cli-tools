@@ -1,6 +1,6 @@
 """Enforce: no virtualenv directories inside CLI tool source folders.
 
-A CLI tool's canonical source folder (e.g., ~/Dropbox/GitRepos/cli-tools/copilot/)
+A CLI tool's canonical source folder (e.g., <cli-tools-root>/copilot/)
 must NOT contain a `.venv/`, `venv/`, or `.virtualenv/` directory at its root.
 Virtualenvs must live at a user path outside the source tree, such as:
 
@@ -27,36 +27,38 @@ SKIP_DIRS = {
     "__pycache__",
 }
 FORBIDDEN_VENVS = {".venv", "venv", ".virtualenv", "env", ".env_dir"}
+SKIP_PARTS = SKIP_DIRS | {"templates"}
 
 
-def _find_cli_tools():
-    """Find all CLI tool directories that have a pyproject.toml."""
-    tools = []
-    for d in sorted(TOOLS_DIR.iterdir()):
-        if not d.is_dir() or d.name in SKIP_DIRS or d.name.startswith("."):
+def _find_cli_projects():
+    """Find repo-owned CLI project directories that have a pyproject.toml."""
+    projects = []
+    for pyproject in sorted(TOOLS_DIR.rglob("pyproject.toml")):
+        project_dir = pyproject.parent
+        rel_parts = project_dir.relative_to(TOOLS_DIR).parts
+        if any(part in SKIP_PARTS or part.startswith(".") for part in rel_parts):
             continue
-        if (d / "pyproject.toml").exists():
-            tools.append(d)
-    return tools
+        projects.append(project_dir)
+    return projects
 
 
-@pytest.fixture(params=_find_cli_tools(), ids=lambda d: d.name)
-def cli_tool(request):
+@pytest.fixture(params=_find_cli_projects(), ids=lambda d: str(d.relative_to(TOOLS_DIR)))
+def cli_project(request):
     return request.param
 
 
-def test_no_venv_in_cli_tool_source(cli_tool):
-    """A CLI tool source folder must not contain any virtualenv directory."""
+def test_no_venv_in_cli_tool_source(cli_project):
+    """A CLI project source folder must not contain any virtualenv directory."""
     offenders = []
     for name in FORBIDDEN_VENVS:
-        candidate = cli_tool / name
+        candidate = cli_project / name
         if candidate.exists():
             offenders.append(candidate)
 
     assert not offenders, (
-        f"{cli_tool.name} contains virtualenv directories inside its source folder: "
-        f"{[str(p.relative_to(cli_tool)) for p in offenders]}. "
+        f"{cli_project.relative_to(TOOLS_DIR)} contains virtualenv directories inside its source folder: "
+        f"{[str(p.relative_to(cli_project)) for p in offenders]}. "
         f"Virtualenvs must live outside the source tree (e.g., "
         f"~/.local/share/uv/tools/<tool>/ or ~/.venvs/<tool>/). "
-        f"Remove these and reinstall via `uv tool install -e {cli_tool} --force`."
+        f"Remove these and reinstall via `uv tool install -e {cli_project} --force`."
     )

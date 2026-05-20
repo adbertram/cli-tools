@@ -8,10 +8,20 @@ That file owns the LaunchAgent label, cc-connect paths, Slack app ID, bot user I
 ## Installation
 
 ```bash
-uv tool install -e /Users/adam/Dropbox/GitRepos/cli-tools/cc-connect-slack-manager --force --refresh
+uv tool install -e <cli-tools-root>/cc-connect-slack-manager --force --refresh
 ```
 
 ## Commands
+
+### auth
+
+```bash
+cc-connect-slack-manager auth status
+cc-connect-slack-manager auth status --table
+cc-connect-slack-manager auth test
+cc-connect-slack-manager auth profiles list
+cc-connect-slack-manager auth profiles get default
+```
 
 ### service
 
@@ -89,5 +99,5 @@ The CLI returns Pydantic-backed models:
 cc-connect-slack-manager service status
 cc-connect-slack-manager app verify --table
 cc-connect-slack-manager checks list --table
-/Users/adam/Dropbox/.agents/skills/cli-tool/scripts/test-cli-tool.sh --cli-name cc-connect-slack-manager
+<cli-tools-root>/skills/cli-tool/scripts/test-cli-tool.sh --cli-name cc-connect-slack-manager
 ```

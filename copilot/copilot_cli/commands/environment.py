@@ -132,7 +132,7 @@ def environment_list(
         copilot environment list --limit 50
         copilot environment list --properties "name,id,type"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

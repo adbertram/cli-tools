@@ -118,7 +118,7 @@ def flow_list(
         copilot powerautomate-flow list --limit 50
         copilot powerautomate-flow list --properties "name,id,category"
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         client = get_client()

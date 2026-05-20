@@ -15,7 +15,7 @@ Always read the README.md file first when working with this CLI tool. It contain
 
 ## n8n Node
 
-- Node package lives at `~/Dropbox/GitRepos/n8n-nodes/fitnesspal/`
+- Node package path is provided explicitly when generating or deploying.
 - Source: `nodes/Fitnesspal/Fitnesspal.node.ts`
 - Find source with: `Glob('**/*.node.ts')`, NOT `Glob('**/*.ts')` (avoids node_modules)
 - The node has a bundled CLI copy at `cli/` -- changes to the main CLI require syncing to `cli/` and redeploying with `n8n nodes deploy fitnesspal`

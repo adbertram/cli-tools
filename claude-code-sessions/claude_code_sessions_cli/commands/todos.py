@@ -2,8 +2,8 @@
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table, handle_error
-from ..filters import apply_filters
 
 app = typer.Typer(help="Query todo items from sessions", no_args_is_help=True)
 

@@ -11,7 +11,7 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import capture
+from . import commands as capture
 app.add_typer(capture.app, name="capture", help="Manage Snagit capture files")
 
 

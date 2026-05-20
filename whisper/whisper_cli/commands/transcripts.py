@@ -138,7 +138,7 @@ def transcripts_list(
     """
     import json
     import glob
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
     try:
         # Validate filters if provided

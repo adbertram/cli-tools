@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.flexoffers.com/affiliate-programs/atlassian-affiliate-program/"
     DIST_NAME = "atlassian-cli"
-    SESSION_NAME = "atlassian"
-    LOGIN_URL = "https://www.flexoffers.com/affiliate-programs/atlassian-affiliate-program/"
 
     def __init__(self, profile=None):
         super().__init__(

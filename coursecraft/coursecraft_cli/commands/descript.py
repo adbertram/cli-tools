@@ -10,10 +10,6 @@ from ..output import print_success, print_error, print_info
 
 app = typer.Typer(help="Descript video export integration")
 
-# Base path for course clips on Google Drive
-CLIPS_BASE_PATH = Path("/Users/adam/Library/CloudStorage/GoogleDrive-adbertram@gmail.com/My Drive/Adam the Automator/CourseWork/courses")
-
-
 def _run_descript_command(args: list[str], timeout: int = 60) -> dict | list | None:
     """
     Run a descript CLI command and return parsed JSON output.
@@ -121,6 +117,7 @@ def export_clip(
     module: int = typer.Option(..., "--module", "-m", help="Module number (e.g., 1, 2, 3)"),
     clip: int = typer.Option(..., "--clip", "-c", help="Clip number (e.g., 1, 2, 3)"),
     course: Optional[str] = typer.Option(None, "--course", help="Course slug (defaults to active course)"),
+    clips_root: Path = typer.Option(..., "--clips-root", help="Root directory containing <course>/clips folders"),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be done without exporting"),
 ):
     """
@@ -134,13 +131,13 @@ def export_clip(
 
     Examples:
         # Export to active course
-        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1
+        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1 --clips-root /path/to/courses
 
         # Export with specific course
-        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1 --course advanced-features-cursor-ai
+        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1 --course advanced-features-cursor-ai --clips-root /path/to/courses
 
         # Dry run to preview
-        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1 --dry-run
+        coursecraft descript export "Advanced Features of Cursor AI" -m 2 -c 1 --clips-root /path/to/courses --dry-run
     """
     try:
         # Resolve course
@@ -155,7 +152,7 @@ def export_clip(
             print_info(f"Using active course: {course}")
 
         # Build output path
-        output_dir = CLIPS_BASE_PATH / course / "clips"
+        output_dir = clips_root / course / "clips"
         if not output_dir.exists():
             raise ClientError(f"Clips folder does not exist: {output_dir}")
 

@@ -9,7 +9,10 @@ from cli_tools_shared.output import handle_error, print_json, print_table
 from ._common import extract_fields, model_to_dict, parse_properties
 
 
-COMMAND_CREDENTIALS = {}
+COMMAND_CREDENTIALS = {
+    "list": ["custom"],
+    "get": ["custom"],
+}
 COMMAND_AUTH_TYPES = {
     "list": AUTH_BASIC,
     "get": AUTH_BASIC,

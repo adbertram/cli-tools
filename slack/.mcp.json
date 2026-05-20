@@ -4,9 +4,7 @@
       "type": "stdio",
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
-        "--user-data-dir",
-        "/Users/adam/.claude/playwright-profile"
+        "@playwright/mcp@latest"
       ],
       "env": {}
     }

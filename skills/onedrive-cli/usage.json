@@ -1,0 +1,1029 @@
+{
+  "tool": "onedrive",
+  "description": "OneDrive for Business CLI via Microsoft Graph API",
+  "discovered_at": "2026-05-06T15:20:02.397943+00:00",
+  "total_commands": 27,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication via Azure CLI",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use to authenticate before any other OneDrive operations. Opens a device code flow \u2014 the user will be given a code to enter at microsoft.com/devicelogin. Must be run interactively."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to clear cached authentication tokens when switching accounts or troubleshooting auth issues."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to verify authentication is working before running other commands. Use --table/-t for formatted output. Returns account info if authenticated."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `onedrive auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `onedrive auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `onedrive auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication management for OneDrive. Use `auth login` to authenticate via device code flow before any other commands. Use `auth status` to verify you're authenticated. Use `auth logout` to clear cached tokens."
+    },
+    "drives": {
+      "help": "Manage OneDrive drives",
+      "commands": {
+        "list": {
+          "help": "List all drives accessible to the authenticated user. Shows personal OneDrive and any shared drives the user can access.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of drives to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive drives list",
+            "onedrive drives list --table",
+            "onedrive drives list --properties \"id,name,driveType\"",
+            "onedrive drives list --limit 10"
+          ],
+          "usage_instructions": "Use to discover available drives and their IDs. The drive ID is required for most items and folders commands. Use --table/-t for formatted output. Default limit is 100. Use --properties/-p to select specific fields like id, name, driveType."
+        },
+        "get": {
+          "help": "Get details for a specific drive.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive drives get DRIVE_ID",
+            "onedrive drives get DRIVE_ID --table",
+            "onedrive drives get DRIVE_ID --properties \"id,name,quota\""
+          ],
+          "usage_instructions": "Use to get detailed info about a specific drive by its ID, including quota and owner info. DRIVE_ID is a required positional argument. Use --properties/-p to select specific fields."
+        }
+      },
+      "usage_instructions": "Drive management \u2014 list accessible drives and get drive details. Use `drives list` first to find your drive ID, which is required by most item and folder commands."
+    },
+    "folders": {
+      "help": "Manage folders",
+      "commands": {
+        "create": {
+          "help": "Create a new folder in OneDrive. Creates a folder with the given name. By default creates at the root of the drive. Use --parent to specify a different parent folder. Conflict behavior options: - fail: Return error if folder already exists (default) - rename: Automatically rename the new folder - replace: Replace the existing folder",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID to create the folder in"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the new folder"
+            }
+          ],
+          "options": [
+            {
+              "name": "--parent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent folder path (default: root)",
+              "short": "-p"
+            },
+            {
+              "name": "--conflict",
+              "type": "TEXT",
+              "required": false,
+              "help": "Conflict behavior: fail, rename, or replace",
+              "short": "-c",
+              "default": "fail"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            }
+          ],
+          "examples": [
+            "onedrive folders create DRIVE_ID \"My Folder\"",
+            "onedrive folders create DRIVE_ID \"Subfolder\" --parent \"/Documents\"",
+            "onedrive folders create DRIVE_ID \"Backup\" --conflict rename",
+            "onedrive folders create DRIVE_ID \"Reports\" --table"
+          ],
+          "usage_instructions": "Use to create a new folder. Requires DRIVE_ID and NAME as positional args. Use --parent/-p to specify parent folder path (defaults to root). Use --conflict/-c to control behavior when folder exists: fail (default), rename, or replace."
+        },
+        "get": {
+          "help": "Get folder metadata by path. Returns folder metadata as JSON if the folder exists. Exits with code 1 if the folder doesn't exist (useful for existence checks in scripts). Drive resolution order: 1. --drive option if provided 2. ONEDRIVE_DRIVE_ID environment variable if set 3. User's default OneDrive drive",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Folder path (e.g., 'Documents/Reports' or '/Documents/Reports')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--drive",
+              "type": "TEXT",
+              "required": false,
+              "help": "Drive ID (uses ONEDRIVE_DRIVE_ID env var or default drive if not specified)",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive folders get \"Documents/Reports\"",
+            "onedrive folders get \"ProgressContentAutomation/WriterDrafts\"",
+            "onedrive folders get \"My Folder\" --drive DRIVE_ID",
+            "onedrive folders get \"Reports\" --table",
+            "onedrive folders get \"Reports\" --properties \"id,name,webUrl\""
+          ],
+          "usage_instructions": "Use to get folder metadata or check if a folder exists (exit code 1 = not found). PATH is a required positional arg (e.g., 'Documents/Reports'). Drive is resolved from --drive/-d, then ONEDRIVE_DRIVE_ID env var, then default drive. Use --properties/-p to select specific fields."
+        },
+        "create-link": {
+          "help": "Create a sharing link for a folder. Creates a shareable link that grants access to the folder. Returns the Permission resource with the sharing link URL. Link types: - view: Read-only access (default) - edit: Read-write access - embed: Embeddable link (OneDrive Personal only) Link scopes: - anonymous: Anyone with the link (may be disabled by admin) - organization: Only members of your organization - users: Specific users (requires additional invite step)",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Folder path (e.g., 'Documents/Reports')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--drive",
+              "type": "TEXT",
+              "required": false,
+              "help": "Drive ID (uses ONEDRIVE_DRIVE_ID env var or default drive if not specified)",
+              "short": "-d"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Link type: view (read-only), edit (read-write), or embed",
+              "short": "-t",
+              "default": "view"
+            },
+            {
+              "name": "--scope",
+              "type": "TEXT",
+              "required": false,
+              "help": "Link scope: anonymous (anyone), organization (org members), users (specific). Defaults to org setting",
+              "short": "-s"
+            },
+            {
+              "name": "--expiration",
+              "type": "TEXT",
+              "required": false,
+              "help": "Link expiration as ISO 8601 datetime (e.g., 2025-12-31T23:59:59Z)",
+              "short": "-e"
+            },
+            {
+              "name": "--password",
+              "type": "TEXT",
+              "required": false,
+              "help": "Password for the sharing link (OneDrive Personal only)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            }
+          ],
+          "examples": [
+            "onedrive folders share \"Documents/Reports\"",
+            "onedrive folders share \"Shared/Project\" --type edit",
+            "onedrive folders share \"Public\" --scope anonymous",
+            "onedrive folders share \"Temp\" --expiration 2025-12-31T23:59:59Z",
+            "onedrive folders share \"Reports\" --properties \"link.webUrl\""
+          ],
+          "usage_instructions": "Use to create a shareable link for a folder. PATH is required (e.g., 'Documents/Reports'). Use --type/-t for link type: view (default), edit, or embed. Use --scope/-s for access scope: anonymous, organization, or users. Use --expiration/-e for time-limited links (ISO 8601 format). Use --drive/-d to specify drive."
+        },
+        "invite": {
+          "help": "Invite specific people to access a folder. Sends sharing invitations to the specified email addresses, granting them access to the folder. By default sends an email notification. Roles: - read: View-only access (default) - write: Edit access",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Folder path (e.g., 'Documents/Reports')"
+            },
+            {
+              "name": "emails",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated email addresses to invite"
+            }
+          ],
+          "options": [
+            {
+              "name": "--role",
+              "type": "TEXT",
+              "required": false,
+              "help": "Permission role: read or write",
+              "short": "-r",
+              "default": "read"
+            },
+            {
+              "name": "--drive",
+              "type": "TEXT",
+              "required": false,
+              "help": "Drive ID (uses ONEDRIVE_DRIVE_ID env var or default drive if not specified)",
+              "short": "-d"
+            },
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional message to include in the invitation email",
+              "short": "-m"
+            },
+            {
+              "name": "--no-email",
+              "type": "bool",
+              "required": false,
+              "help": "Don't send email notification to recipients"
+            },
+            {
+              "name": "--expiration",
+              "type": "TEXT",
+              "required": false,
+              "help": "Permission expiration as ISO 8601 datetime (e.g., 2025-12-31T23:59:59Z)",
+              "short": "-e"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive folders invite \"Documents/Reports\" \"user@example.com\"",
+            "onedrive folders invite \"Shared/Project\" \"user1@example.com,user2@example.com\" --role write",
+            "onedrive folders invite \"Reports\" \"user@example.com\" --message \"Here's the folder\"",
+            "onedrive folders invite \"Reports\" \"user@example.com\" --no-email",
+            "onedrive folders invite \"Temp\" \"user@example.com\" --expiration 2025-12-31T23:59:59Z"
+          ],
+          "usage_instructions": "Use to share a folder with specific people via email invitation. PATH and EMAILS (comma-separated) are required positional args. Use --role/-r for permission level: read (default) or write. Use --message/-m to include a message in the invitation email. Use --no-email to grant access without sending notification. Use --expiration/-e for time-limited access."
+        }
+      },
+      "usage_instructions": "Folder management \u2014 create folders, get folder metadata, create sharing links, and invite people to folders. Some commands use drive ID as positional arg, others use --drive/-d option. Use `folders get` to check if a folder exists (exits with code 1 if not found)."
+    },
+    "items": {
+      "help": "Manage files and folders",
+      "commands": {
+        "list": {
+          "help": "List items in a drive folder. List files and folders in the specified drive. If path is omitted, lists items at the root of the drive.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID to list items from"
+            },
+            {
+              "name": "path",
+              "type": "PATH",
+              "required": false,
+              "help": "Folder path (default: root)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive items list DRIVE_ID",
+            "onedrive items list DRIVE_ID /Documents",
+            "onedrive items list DRIVE_ID --table",
+            "onedrive items list DRIVE_ID --properties \"id,name,size\"",
+            "onedrive items list DRIVE_ID /Documents --limit 50"
+          ],
+          "usage_instructions": "Use to list files and folders in a drive. DRIVE_ID is required; PATH is optional (defaults to root). Use --table/-t for formatted output. Default limit is 100; adjust with --limit/-l. Use --filter/-f for field-based filtering (field:op:value). Use --properties/-p to select specific fields."
+        },
+        "get": {
+          "help": "Get details for a specific item. Item can be specified by ID or by path.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_ref",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or path (e.g., 'ABC123' or '/Documents/file.txt')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive items get DRIVE_ID ITEM_ID",
+            "onedrive items get DRIVE_ID /Documents/report.pdf",
+            "onedrive items get DRIVE_ID ITEM_ID --table",
+            "onedrive items get DRIVE_ID ITEM_ID --properties \"id,name,size,webUrl\""
+          ],
+          "usage_instructions": "Use to get metadata for a specific file or folder. DRIVE_ID and ITEM_REF are required positional args. ITEM_REF can be an item ID or a path (e.g., '/Documents/file.txt'). Use --properties/-p to select specific fields like id, name, size, webUrl."
+        },
+        "upload": {
+          "help": "Upload a file to OneDrive. Automatically uses simple upload for files < 4MB, resumable upload for larger files.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID to upload to"
+            },
+            {
+              "name": "local_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Local file path to upload"
+            },
+            {
+              "name": "remote_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Remote path (e.g., '/Documents/file.txt')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "onedrive items upload DRIVE_ID ./report.pdf /Documents/report.pdf",
+            "onedrive items upload DRIVE_ID ./data.csv /Backups/data.csv --table"
+          ],
+          "usage_instructions": "Use to upload a local file to OneDrive. Requires three positional args: DRIVE_ID, LOCAL_PATH (local file), and REMOTE_PATH (destination, e.g., '/Documents/file.txt'). Automatically uses simple upload for files under 4MB and resumable upload for larger files."
+        },
+        "download": {
+          "help": "Download a file from OneDrive. Item can be specified by ID or by path.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_ref",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or path to download"
+            },
+            {
+              "name": "local_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Local path to save the file"
+            }
+          ],
+          "examples": [
+            "onedrive items download DRIVE_ID ITEM_ID ./downloaded.pdf",
+            "onedrive items download DRIVE_ID /Documents/report.pdf ./report.pdf"
+          ],
+          "usage_instructions": "Use to download a file from OneDrive to a local path. Requires three positional args: DRIVE_ID, ITEM_REF (item ID or path like '/Documents/file.txt'), and LOCAL_PATH (where to save)."
+        },
+        "delete": {
+          "help": "Delete a file or folder from OneDrive. Item can be specified by ID or by path. Use --force to skip the confirmation prompt.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_ref",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or path to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            }
+          ],
+          "examples": [
+            "onedrive items delete DRIVE_ID ITEM_ID",
+            "onedrive items delete DRIVE_ID /Documents/old-file.txt",
+            "onedrive items delete DRIVE_ID ITEM_ID --force"
+          ],
+          "usage_instructions": "Use to delete a file or folder. Requires DRIVE_ID and ITEM_REF (ID or path) as positional args. Use --force/-F to skip confirmation prompt. This is destructive and moves the item to the recycle bin."
+        }
+      },
+      "usage_instructions": "File and folder operations \u2014 list, get, upload, download, and delete items. Most commands require DRIVE_ID as the first positional arg. Items can be referenced by ID or path (e.g., '/Documents/file.txt'). Use `items list` to browse folder contents, `items upload` for files (auto-selects simple vs resumable upload based on size)."
+    },
+    "link": {
+      "help": "Manage sharing links",
+      "commands": {
+        "create": {
+          "help": "Create a sharing link for a file or folder. Creates a new sharing link that can be shared with others. The link type determines the permissions granted: - view: Read-only access - edit: Read-write access - embed: Embeddable link (for files that support embedding) The scope determines who can use the link: - anonymous: Anyone with the link (no sign-in required) - organization: Only members of your organization - users: Only specific people (use invite instead)",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The item ID to create a sharing link for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Link type: view, edit, or embed",
+              "short": "-t",
+              "default": "view"
+            },
+            {
+              "name": "--scope",
+              "type": "TEXT",
+              "required": false,
+              "help": "Link scope: anonymous (anyone), organization, or users",
+              "short": "-s"
+            },
+            {
+              "name": "--expiration",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expiration datetime (ISO 8601)",
+              "short": "-e"
+            },
+            {
+              "name": "--password",
+              "type": "TEXT",
+              "required": false,
+              "help": "Password for the link (OneDrive Personal only)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            }
+          ],
+          "examples": [
+            "onedrive link create DRIVE_ID ITEM_ID --scope anonymous",
+            "onedrive link create DRIVE_ID ITEM_ID --type edit --scope organization",
+            "onedrive link create DRIVE_ID ITEM_ID --scope anonymous --expiration 2025-12-31T23:59:59Z"
+          ],
+          "usage_instructions": "Use to create a shareable link for a file or folder. Requires DRIVE_ID and ITEM_ID positional args. Use --type/-t for link type: view (default), edit, or embed. Use --scope/-s for access scope: anonymous, organization, or users. Use --expiration/-e for time-limited links (ISO 8601). Use --password/-p for password-protected links (OneDrive Personal only)."
+        },
+        "list": {
+          "help": "List all sharing links and permissions on an item. Shows all permissions including sharing links, direct shares, and inherited permissions.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The item ID to list permissions for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive link list DRIVE_ID ITEM_ID",
+            "onedrive link list DRIVE_ID ITEM_ID --table"
+          ],
+          "usage_instructions": "Use to see all permissions and sharing links on an item. Requires DRIVE_ID and ITEM_ID positional args. Returns permission IDs needed for update/delete/get operations. Use --table/-t for formatted output."
+        },
+        "update": {
+          "help": "Update a sharing link's permissions. Update the roles or expiration of an existing sharing link or permission. Use 'onedrive link list' to find the permission ID. Roles: - read: View-only access - write: Edit access",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The item ID"
+            },
+            {
+              "name": "permission_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The permission ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--roles",
+              "type": "TEXT",
+              "required": false,
+              "help": "New roles: read or write",
+              "short": "-r"
+            },
+            {
+              "name": "--expiration",
+              "type": "TEXT",
+              "required": false,
+              "help": "New expiration datetime (ISO 8601)",
+              "short": "-e"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive link update DRIVE_ID ITEM_ID PERM_ID --roles write",
+            "onedrive link update DRIVE_ID ITEM_ID PERM_ID --expiration 2025-12-31T23:59:59Z",
+            "onedrive link update DRIVE_ID ITEM_ID PERM_ID --roles read --expiration 2025-06-30T00:00:00Z"
+          ],
+          "usage_instructions": "Use to modify an existing sharing link's role or expiration. Requires DRIVE_ID, ITEM_ID, and PERMISSION_ID positional args. Use `link list` first to find the permission ID. Use --roles/-r to change access level: read or write. Use --expiration/-e to set new expiration (ISO 8601)."
+        },
+        "delete": {
+          "help": "Delete a sharing link or permission. Removes access for the specified sharing link or permission. Use 'onedrive link list' to find the permission ID.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The item ID"
+            },
+            {
+              "name": "permission_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The permission ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            }
+          ],
+          "examples": [
+            "onedrive link delete DRIVE_ID ITEM_ID PERM_ID",
+            "onedrive link delete DRIVE_ID ITEM_ID PERM_ID --force"
+          ],
+          "usage_instructions": "Use to revoke a sharing link or permission. Requires DRIVE_ID, ITEM_ID, and PERMISSION_ID positional args. Use --force/-F to skip confirmation. Use `link list` first to find the permission ID."
+        },
+        "get": {
+          "help": "Get details of a specific sharing link or permission.",
+          "arguments": [
+            {
+              "name": "drive_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The drive ID"
+            },
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The item ID"
+            },
+            {
+              "name": "permission_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The permission ID to get"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "onedrive link get DRIVE_ID ITEM_ID PERM_ID",
+            "onedrive link get DRIVE_ID ITEM_ID PERM_ID --table"
+          ],
+          "usage_instructions": "Use to get details of a specific permission or sharing link. Requires DRIVE_ID, ITEM_ID, and PERMISSION_ID positional args. Use `link list` first to find the permission ID."
+        }
+      },
+      "usage_instructions": "Sharing link management \u2014 create, list, update, get, and delete sharing links and permissions on items. All commands require DRIVE_ID and ITEM_ID positional args. Use `link list` to find permission IDs needed for update/delete/get operations."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `onedrive cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `onedrive cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for managing OneDrive for Business files, folders, drives, and sharing links via Microsoft Graph API. Commands follow `onedrive <group> <action>` pattern. Most commands support --table/-t for table output, --properties/-p for field selection, and --filter/-f for filtering. Requires authentication via `onedrive auth login` first. Drive ID is required for most item operations; use `onedrive drives list` to find it."
+}

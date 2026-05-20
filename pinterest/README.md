@@ -10,7 +10,7 @@ Docs used for this CLI:
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/pinterest
+cd <cli-tools-root>/pinterest
 uv tool install -e . --force
 ```
 

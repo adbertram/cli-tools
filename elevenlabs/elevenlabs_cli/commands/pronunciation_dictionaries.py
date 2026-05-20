@@ -83,22 +83,30 @@ def print_item(item, table: bool, properties: Optional[str]):
 
 @app.command("list")
 def pronunciation_dictionaries_list(
-    page_size: int = typer.Option(30, "--page-size", min=1, max=100, help="Maximum dictionaries to return"),
+    limit: int = typer.Option(30, "--limit", "-l", min=1, max=100, help="Maximum dictionaries to return"),
     cursor: Optional[str] = typer.Option(None, "--cursor", help="Pagination cursor"),
     sort: str = typer.Option("creation_time_unix", "--sort", help="Sort field: creation_time_unix or name"),
     sort_direction: str = typer.Option("DESCENDING", "--sort-direction", help="Sort direction"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    filter: Optional[List[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+    ),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List pronunciation dictionaries."""
     try:
         page = get_client().list_pronunciation_dictionaries(
-            page_size=page_size,
+            page_size=limit,
             sort=sort,
             sort_direction=sort_direction,
             cursor=cursor,
         )
         output = apply_properties(page.pronunciation_dictionaries, properties)
+        if filter:
+            output = apply_filters(output, filter)
         if table:
             columns = properties_columns(
                 properties,
@@ -106,7 +114,7 @@ def pronunciation_dictionaries_list(
             )
             print_table(output, columns, columns)
         elif properties is None:
-            print_json(page)
+            print_json(output)
         else:
             print_json(output)
     except Exception as exc:

@@ -5,7 +5,7 @@ A browser-backed CLI for the Pluralsight Author opportunities page at `https://a
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/pluralsight-author
+cd <cli-tools-root>/pluralsight-author
 uv tool install --force -e .
 ```
 
@@ -69,8 +69,8 @@ pluralsight-author search query "security" --properties "id,title,category"
 
 ```bash
 uv run --with pytest pytest
-/Users/adam/Dropbox/.agents/skills/cli-tool/scripts/test-cli-tool.sh --cli-name pluralsight-author --verbose
-/Users/adam/Dropbox/.agents/skills/cli-tool/scripts/validate-cli-tool.sh pluralsight-author
+<cli-tools-root>/skills/cli-tool/scripts/test-cli-tool.sh --cli-name pluralsight-author --verbose
+<cli-tools-root>/skills/cli-tool/scripts/validate-cli-tool.sh pluralsight-author
 ```
 
 ## Cache

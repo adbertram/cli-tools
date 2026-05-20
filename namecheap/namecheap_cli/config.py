@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.namecheap.com/affiliates/"
     DIST_NAME = "namecheap-cli"
-    SESSION_NAME = "namecheap"
-    LOGIN_URL = "https://www.namecheap.com/affiliates/"
 
     def __init__(self, profile=None):
         super().__init__(

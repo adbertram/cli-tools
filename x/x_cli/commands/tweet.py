@@ -7,7 +7,7 @@ from typing import Optional, List
 
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, print_success, handle_error
-from ..filters import apply_filters, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_limit
 
 
 app = typer.Typer(help="Manage tweets", no_args_is_help=True)

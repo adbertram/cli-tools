@@ -24,6 +24,7 @@ from cli_tools_shared.output import (
     print_success,
     print_table,
 )
+from cli_tools_shared.repo_paths import secret_manager_script
 
 from . import __version__
 from .client import get_client
@@ -45,7 +46,7 @@ TRANSACTION_COLUMNS = [
     "note",
 ]
 
-SECRETS_SCRIPT = os.path.expanduser("~/.claude/scripts/secrets.sh")
+SECRETS_SCRIPT = str(secret_manager_script())
 
 app = create_app(name="venmo", help="CLI interface for Venmo (transaction history)", version=__version__)
 transactions_app = typer.Typer(help="Manage Venmo transactions", no_args_is_help=True)
@@ -129,7 +130,7 @@ def _header(column: str) -> str:
 
 
 def _get_secret(name: str) -> Optional[str]:
-    """Read a secret from the shared keychain. Returns None if absent."""
+    """Read a secret from the CLI-tools keychain. Returns None if absent."""
     try:
         result = subprocess.run(
             [SECRETS_SCRIPT, "get", name],
@@ -147,7 +148,7 @@ def _require_secret(name: str) -> str:
     value = _get_secret(name)
     if not value:
         raise ClientError(
-            f"Required secret '{name}' is not set in the shared keychain. "
+            f"Required secret '{name}' is not set in the CLI-tools keychain. "
             f"Store it via: {SECRETS_SCRIPT} set {name}"
         )
     return value
@@ -162,7 +163,7 @@ def venmo_login_handler(config, force: bool) -> None:
     """Authenticate against Venmo's private API using keychain credentials.
 
     Flow:
-    1. Read venmo-username and venmo-password from the shared keychain.
+    1. Read venmo-username and venmo-password from the CLI-tools keychain.
     2. POST /oauth/access_token with the credentials. If Venmo returns a
        2-factor error (code 81109), capture the venmo-otp-secret header.
     3. Trigger an SMS OTP via /account/two-factor/token.

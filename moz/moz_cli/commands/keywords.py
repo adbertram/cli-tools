@@ -53,7 +53,7 @@ def keywords_list(
 
         # Apply client-side filtering if specified
         if filter:
-            from ..filters import apply_filters
+            from cli_tools_shared.filters import apply_filters
             results = apply_filters(results, filter)
 
         # Extract specific properties if requested

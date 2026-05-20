@@ -16,22 +16,21 @@ A command-line interface for the Podio API built with Python and Typer. Automate
 
 ## Installation
 
-### Recommended: pipx (global CLI)
+### Recommended: uv tool (global CLI)
 
 ```bash
-brew install pipx               # or follow https://pypa.github.io/pipx/installation/
-pipx install git+https://github.com/adbertram/podio-cli.git
+cd <cli-tools-root>/podio
+uv tool install -e . --force --refresh
 ```
 
-This installs an isolated virtual environment at `~/.local/pipx/venvs/podio-cli` and exposes the `podio` executable on your `PATH`. Reinstall with `pipx install --force <repo>` to pick up updates, or `pipx inject podio-cli /path/to/podio-py` if you need to override bundled dependencies.
+This installs an isolated uv tool environment and exposes the `podio` executable on your `PATH`.
 
 ### Local development
 
 ```bash
-git clone https://github.com/adbertram/podio-cli.git
-cd podio-cli
-python -m venv venv && source venv/bin/activate
-pip install -e .
+cd <cli-tools-root>/podio
+UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/podio-dev uv sync
+UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/podio-dev uv run python -m pytest
 ```
 
 Use this flow when contributing changes; remember to run `pytest` from the activated environment before submitting a PR.

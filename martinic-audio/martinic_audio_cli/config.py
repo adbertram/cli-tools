@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.martinic.com/en/products"
     DIST_NAME = "martinic-audio-cli"
-    SESSION_NAME = "martinic-audio"
-    LOGIN_URL = "https://www.martinic.com/en/products"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.linkedin-learning.com/"
     DIST_NAME = "linkedin-learning-cli"
-    SESSION_NAME = "linkedin-learning"
-    LOGIN_URL = "https://www.linkedin-learning.com/"
 
     def __init__(self, profile=None):
         super().__init__(

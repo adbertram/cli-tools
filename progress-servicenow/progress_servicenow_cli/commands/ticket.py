@@ -1,12 +1,11 @@
 """Ticket commands for Progress ServiceNow CLI."""
-import json
 import typer
 from typing import Optional, List
-from pathlib import Path
 
 from pydantic import BaseModel
 
 from ..client import get_client
+from ..template_data import load_ticket_template
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.output import (
     print_json, print_table, handle_error,
@@ -14,18 +13,15 @@ from cli_tools_shared.output import (
 )
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 
-_TEMPLATE_PATH = Path(__file__).resolve().parent.parent.parent / "ticket_template.json"
-
-
 def _load_template() -> dict:
     """Load the ticket template JSON."""
-    if not _TEMPLATE_PATH.exists():
+    try:
+        return load_ticket_template()
+    except FileNotFoundError as exc:
         raise typer.BadParameter(
-            f"ticket_template.json not found at {_TEMPLATE_PATH}. "
+            "ticket_template.json is missing from the installed package. "
             "Re-install the CLI to restore it."
-        )
-    with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        ) from exc
 
 app = typer.Typer(help="Manage ServiceNow tickets", no_args_is_help=True)
 

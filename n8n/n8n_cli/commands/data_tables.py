@@ -6,7 +6,7 @@ from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client
 from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
-from ..filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage n8n Data Tables", no_args_is_help=True)
 

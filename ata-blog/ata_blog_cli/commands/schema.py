@@ -8,8 +8,8 @@ import typer
 from typing import Optional, List
 from enum import Enum
 
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table
-from ..filters import apply_filters
 
 COMMAND_CREDENTIALS = {
     "list": ["custom"],

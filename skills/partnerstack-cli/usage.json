@@ -1,0 +1,632 @@
+{
+  "tool": "partnerstack",
+  "description": "CLI interface for PartnerStack Partner API",
+  "discovered_at": "2026-05-20T16:11:23.133143+00:00",
+  "total_commands": 21,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "rewards": {
+      "help": "List PartnerStack rewards",
+      "commands": {
+        "list": {
+          "help": "List rewards from the PartnerStack Partner API.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=250]  Maximum rewards to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "API filter, e.g. payment_status:eq:withdrawn or created_at:gte:1711034344078",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            },
+            {
+              "name": "--starting-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            },
+            {
+              "name": "--ending-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack rewards list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one reward by reward key.",
+          "arguments": [
+            {
+              "name": "reward_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reward key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack rewards get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack rewards` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "marketplace": {
+      "help": "Browse PartnerStack marketplace programs (discovery)",
+      "commands": {
+        "list": {
+          "help": "List marketplace-listed programs (programs the partner has not necessarily joined).",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=250]  Maximum programs to return",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "API filter, e.g. category:eq:artificial-intelligence, created_at:gte:1711034344078, or created_at:lte:1748902440427",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            },
+            {
+              "name": "--starting-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            },
+            {
+              "name": "--ending-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack marketplace list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Retrieve a single marketplace program by company_key.",
+          "arguments": [
+            {
+              "name": "company_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace program company_key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack marketplace get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack marketplace` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "form-templates": {
+      "help": "List PartnerStack form templates using Basic auth",
+      "commands": {
+        "list": {
+          "help": "List application form templates from GET /api/v2/form-templates.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=250]  Maximum form templates to return",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "API filter. Supported equality filters: group:eq:<slug>, target_type:eq:<value>, mold_keys:eq:<value>; created_at and updated_at support gte/lte with epoch-ms values",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            },
+            {
+              "name": "--starting-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            },
+            {
+              "name": "--ending-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack form-templates list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one form template by key.",
+          "arguments": [
+            {
+              "name": "form_template_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Form template key (also exposed as 'id' on the model)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack form-templates get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack form-templates` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "applications": {
+      "help": "Create PartnerStack partner applications using Basic auth",
+      "commands": {
+        "create": {
+          "help": "Create a partner application against a target program.",
+          "options": [
+            {
+              "name": "--group-slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Slug of the group to apply to. Discover valid slugs via 'partnerstack form-templates list' (the form-template's 'group' field). Documented examples: affiliates, resellers, referral, topsellers (vendor-defined)"
+            },
+            {
+              "name": "--meta",
+              "type": "TEXT",
+              "required": false,
+              "help": "Application meta object as a JSON string. Example: '{\"first_name\":\"Jane\",\"last_name\":\"Doe\",\"email\":\"jane@example.com\",\"business_name\":\"Example LLC\"}'"
+            },
+            {
+              "name": "--meta-field",
+              "type": "TEXT",
+              "required": false,
+              "help": "Repeatable key=value pair appended to the meta object. Example: --meta-field first_name=Jane --meta-field email=jane@example.com"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack applications create` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack applications` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "partnerships": {
+      "help": "List PartnerStack partnerships (post-approval relationships)",
+      "commands": {
+        "list": {
+          "help": "List partnerships (already-joined programs).",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=250]  Maximum partnerships to return",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "API filter. Supported: order_by:eq:<value>, has_sub_id:eq:<true|false|null>, include_offers:eq:<true|false>, include_archived:eq:<true|false>",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            },
+            {
+              "name": "--starting-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            },
+            {
+              "name": "--ending-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack partnerships list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one partnership by key. PartnerStack does not document a `GET /partnerships/{key}` endpoint; this command pages through `GET /api/v2/partnerships` (the documented partner endpoint) and returns the partnership whose `key` matches.",
+          "arguments": [
+            {
+              "name": "partnership_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Partnership key (or value of the model's `id`)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include, with dot-notation support",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack partnerships get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack partnerships` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "auth": {
+      "help": "Manage partnerstack authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'api_key')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth login` with the documented arguments and options shown below."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth logout` with the documented arguments and options shown below."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth status` with the documented arguments and options shown below."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth test` with the documented arguments and options shown below."
+        },
+        "login-basic": {
+          "help": "Configure PartnerStack Basic auth public/secret keys.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save Basic credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--public-key",
+              "type": "TEXT",
+              "required": true,
+              "help": "PartnerStack Basic public key"
+            },
+            {
+              "name": "--secret-key",
+              "type": "TEXT",
+              "required": true,
+              "help": "PartnerStack Basic secret key"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth login-basic` with the documented arguments and options shown below."
+        },
+        "basic-status": {
+          "help": "Show whether PartnerStack Basic auth credentials are configured.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to inspect",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `partnerstack auth basic-status` with the documented arguments and options shown below."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `partnerstack auth profiles list` with the documented arguments and options shown below."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `partnerstack auth profiles get` with the documented arguments and options shown below."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `partnerstack auth profiles create` with the documented arguments and options shown below."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `partnerstack auth profiles set-default` with the documented arguments and options shown below."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `partnerstack auth profiles delete` with the documented arguments and options shown below."
+            }
+          },
+          "usage_instructions": "Use `partnerstack auth profiles` to access this command group. Run `--help` on a subcommand for details."
+        }
+      },
+      "usage_instructions": "Use `partnerstack auth` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `partnerstack cache clear` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `partnerstack cache` to access this command group. Run `--help` on a subcommand for details."
+    }
+  },
+  "usage_instructions": "Use `` with the documented arguments and options shown below."
+}

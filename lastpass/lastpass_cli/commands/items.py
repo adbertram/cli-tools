@@ -6,8 +6,8 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client, ClientError
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success
-from ..filters import apply_filters, validate_filters, FilterValidationError
 
 COMMAND_CREDENTIALS = {
     "create": [

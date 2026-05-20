@@ -9,7 +9,7 @@ description = "Create Medium drafts through Medium's web composer"
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.9.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.scripts]
@@ -18,3 +18,6 @@ medium = "medium_cli.main:app"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["medium_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

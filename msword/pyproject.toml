@@ -13,7 +13,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "python-docx>=1.0.0",
     "mammoth>=1.6.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.scripts]
@@ -22,3 +22,6 @@ msword = "msword_cli.main:app"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["msword_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

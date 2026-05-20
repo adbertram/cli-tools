@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the cli-tools-shared persistent-profile rollout across all consumers.
 
-For every CLI under ``~/Dropbox/GitRepos/cli-tools/`` whose ``browser.py``
+For every CLI under ``<cli-tools-root>/`` whose ``browser.py``
 imports ``cli_tools_shared``, this script runs ``<tool> auth status`` and
 classifies the result. The classification rules live in
 :data:`_CLASSIFICATIONS` as a data table — first matching predicate wins.

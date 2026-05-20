@@ -13,8 +13,8 @@ from urllib.parse import urlparse
 
 import typer
 
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table
-from ..filters import apply_filters
 
 COMMAND_CREDENTIALS = {
     "list": ["custom"],
@@ -125,12 +125,9 @@ def _normalize_domain(domain: str) -> str:
 
 def _sponsors_file_path() -> Path:
     configured = os.environ.get("ATABLOGGER_SPONSORS_FILE")
-    if configured:
-        return Path(configured)
-    cwd_config = Path.cwd() / "config" / "sponsors.json"
-    if cwd_config.exists():
-        return cwd_config
-    return Path.home() / "Dropbox" / "GitRepos" / "Agents" / "ATABlogger" / "config" / "sponsors.json"
+    if not configured:
+        raise ValueError("ATABLOGGER_SPONSORS_FILE must point to sponsors.json")
+    return Path(configured)
 
 
 def _load_sponsors() -> List[dict]:

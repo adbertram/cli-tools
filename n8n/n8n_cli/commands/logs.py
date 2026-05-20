@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.output import print_json, print_table, print_error, print_info, print_warning, handle_error
-from ..filters import apply_limit
+from cli_tools_shared.filters import apply_limit
 from ..n8n_api import get_n8n_api_client, N8nApiError
 from ..server import run_on_server
 

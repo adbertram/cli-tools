@@ -203,7 +203,7 @@ def test_node(
        connectivity, and pinData orphans.
 
     Requires:
-    - n8n API credentials in ~/.claude/skills/n8n/.env
+    - n8n API credentials configured with `n8n auth login`
     - For package mode: the node package must already be installed on the n8n server
 
     Example:

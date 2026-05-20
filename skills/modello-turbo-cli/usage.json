@@ -1,0 +1,393 @@
+{
+  "tool": "modello-turbo",
+  "description": "CLI interface for ModelloTurbo (browser automation)",
+  "discovered_at": "2026-05-20T16:13:03.148477+00:00",
+  "total_commands": 14,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "search": {
+      "help": "Search modello-turbo",
+      "commands": {
+        "query": {
+          "help": "Search for items on ModelloTurbo. Example: modello-turbo search query \"my search term\" --limit 20 --table modello-turbo search query \"keyword\" --filter \"price:lt:100\" modello-turbo search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo search query` to search for items on ModelloTurbo. QUERY is required and identifies search query. --limit/-l Maximum number of results Default is 100. --filter/-f Filter results (field:op:value)."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: modello-turbo search item abc123 --table modello-turbo search item \"https://example.com/item/abc123\" modello-turbo search item abc123 --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo search item` to get details for a specific item. ITEM_ID is required and identifies item id or url. --table/-t Display as table. --properties/-p Comma-separated fields to include (supports dot-notation)."
+        },
+        "list": {
+          "help": "List items from ModelloTurbo. Example: modello-turbo search list --limit 100 --table modello-turbo search list --filter \"status:active\" modello-turbo search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo search list` to list items from ModelloTurbo. --limit/-l Maximum number of items Default is 100. --filter/-f Filter results (field:op:value)."
+        },
+        "wildcard": {
+          "help": "Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports * wildcards)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to search"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "modello-turbo search wildcard \"*test*\"",
+            "modello-turbo search wildcard \"prefix*\"",
+            "modello-turbo search wildcard \"*pending*\" --fields \"status,notes\"",
+            "modello-turbo search wildcard \"*error*\" --properties \"id,name,status\" --table"
+          ],
+          "usage_instructions": "Use `modello-turbo search wildcard` to search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search. QUERY is required and identifies search query (supports * wildcards). --table/-t Display as table. --limit/-l Maximum number of results Default is 100."
+        }
+      },
+      "usage_instructions": "Use `modello-turbo search` for search modello-turbo. Main actions: `search query`, `search item`, `search list`, `search wildcard`."
+    },
+    "auth": {
+      "help": "Manage modello-turbo authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. --profile/-p Profile name to save credentials to. --force/-F Clear existing credentials and re-authenticate."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo auth logout` to clear stored credentials and browser sessions. --profile/-p Profile name to clear credentials from."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo auth status` to check authentication status across profiles. --profile/-p Profile name to check (defaults to all profiles). --table/-t Display as table."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `modello-turbo auth test` to test authentication by verifying credentials work across profiles. --table/-t Display as table. --verbose/-v Show detailed checks."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `modello-turbo auth profiles list` to list all profiles and show which is the default. --table/-t Display as table. --limit/-l Maximum number of profiles to return."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `modello-turbo auth profiles get` to get details for a specific profile. NAME is required and identifies profile name to get details for. --table/-t Display as table."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `modello-turbo auth profiles create` to create a new profile from .env.example template. NAME is required and identifies profile name (e.g., staging, production)."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `modello-turbo auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). NAME is required and identifies profile name to set as default."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `modello-turbo auth profiles delete` to delete a profile and its data. NAME is required and identifies profile name to delete. --force/-F Skip confirmation."
+            }
+          },
+          "usage_instructions": "Use `modello-turbo auth profiles` for manage authentication profiles. Main actions: `auth profiles list`, `auth profiles get`, `auth profiles create`, `auth profiles set-default`, `auth profiles delete`."
+        }
+      },
+      "usage_instructions": "Use `modello-turbo auth` for manage modello-turbo authentication. Main actions: `auth login`, `auth logout`, `auth status`, `auth refresh`, `auth test`, `auth profiles`."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `modello-turbo cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
+        }
+      },
+      "usage_instructions": "Use `modello-turbo cache` for manage response cache. Main actions: `cache clear`."
+    }
+  },
+  "usage_instructions": "Use `modello-turbo` for cLI interface for ModelloTurbo (browser automation). Commands follow `modello-turbo <command-group> <action>`. Primary groups are search, auth, cache."
+}

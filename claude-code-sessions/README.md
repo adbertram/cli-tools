@@ -181,7 +181,7 @@ The wrapper stores minimal configuration in `.env`:
 CLAUDE_CODE_SESSIONS_CLI_COMMAND=claude
 
 # Optional: Full path to CLI executable
-# CLAUDE_CODE_SESSIONS_CLI_PATH=/usr/local/bin/claude
+# CLAUDE_CODE_SESSIONS_CLI_PATH=
 ```
 
 ## Exit Codes

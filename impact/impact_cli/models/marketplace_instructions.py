@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import ConfigDict, Field
 
 from cli_tools_shared.models import CLIModel
+from cli_tools_shared.repo_paths import secret_manager_script
 
 
 PORTAL_LOGIN_URL = "https://app.impact.com/login.user"
@@ -33,6 +34,7 @@ PORTAL_MARKETPLACE_URL = (
 PORTAL_MARKETPLACE_SEARCH_URL_TEMPLATE = (
     PORTAL_MARKETPLACE_URL + "#joinState=all&q={keyword}"
 )
+SECRET_MANAGER_SCRIPT = str(secret_manager_script())
 
 DEFAULT_DISCLAIMER = (
     "no public Impact Publisher API endpoint exists for marketplace discovery; "
@@ -40,9 +42,9 @@ DEFAULT_DISCLAIMER = (
 )
 
 AUTH_NOTE = (
-    "Credentials live in the shared secrets store: "
-    "`~/.claude/scripts/secrets.sh get impact-username` and "
-    "`~/.claude/scripts/secrets.sh get impact-password`. (LastPass does NOT "
+    "Credentials live in the CLI-tools secret manager: "
+    f"`{SECRET_MANAGER_SCRIPT} get impact-username` and "
+    f"`{SECRET_MANAGER_SCRIPT} get impact-password`. (LastPass does NOT "
     "have an `app.impact.com` entry — do not waste a call on `lastpass items "
     "list` for impact.) An authenticated persistent profile already exists at "
     "`.playwright-cli/profiles/impact`; reuse it via "
@@ -101,8 +103,8 @@ def _common_login_steps() -> List[BrowserStep]:
                 "`playwright-cli -s=impact open --profile "
                 "`.playwright-cli/profiles/impact` --headed <target_url>`. If "
                 "the page renders the login form, fill it: read the username "
-                "from `~/.claude/scripts/secrets.sh get impact-username` and "
-                "the password from `~/.claude/scripts/secrets.sh get "
+                f"from `{SECRET_MANAGER_SCRIPT} get impact-username` and "
+                f"the password from `{SECRET_MANAGER_SCRIPT} get "
                 "impact-password`, bind them to non-conflicting shell vars "
                 "(e.g. IMPACT_USER / IMPACT_PW — never $USERNAME), fill the "
                 "Username/Email and Password textboxes, then click 'Sign In'. "
@@ -112,7 +114,7 @@ def _common_login_steps() -> List[BrowserStep]:
                 "login_url": PORTAL_LOGIN_URL,
                 "session_name": "impact",
                 "profile_path": ".playwright-cli/profiles/impact",
-                "credentials_source": "secrets.sh",
+                "credentials_source": "cli-tools-secret-manager",
                 "username_secret": "impact-username",
                 "password_secret": "impact-password",
             },
@@ -282,7 +284,7 @@ def build_search_instruction(
                 "side_effect_on_tab_switch": "Clicking 'All Brands' rewrites the URL fragment and drops q=<keyword>; the search box must be re-filled.",
             },
             "credential_source": {
-                "primary": "~/.claude/scripts/secrets.sh get impact-username|impact-password",
+                "primary": f"{SECRET_MANAGER_SCRIPT} get impact-username|impact-password",
                 "session_profile": ".playwright-cli/profiles/impact",
                 "lastpass": "no app.impact.com entry — do not query lastpass for impact creds",
             },
@@ -314,7 +316,7 @@ def build_search_instruction(
         },
         constraints=[
             "Do not attempt to call any Impact REST API for program discovery — no such endpoint exists in the Impact Publisher API.",
-            "Reuse the persistent `impact` playwright session and profile at `.playwright-cli/profiles/impact` when available. Read credentials only from `~/.claude/scripts/secrets.sh` (`impact-username` / `impact-password`); LastPass has no `app.impact.com` entry.",
+            f"Reuse the persistent `impact` playwright session and profile at `.playwright-cli/profiles/impact` when available. Read credentials only from `{SECRET_MANAGER_SCRIPT}` (`impact-username` / `impact-password`); LastPass has no `app.impact.com` entry.",
             "Do not click 'Apply' from the search flow; use the dedicated `marketplace apply` instruction for application submission.",
             "Default landing tab is 'Home' (curated, limited). Click 'All Brands' before harvesting for a complete listing — even if the URL fragment already has `joinState=all`, the SPA still renders 'Home' initially.",
             "After clicking the 'All Brands' tab the URL fragment is rewritten and the `q=<keyword>` portion is lost; always re-fill the search input when a keyword is specified.",

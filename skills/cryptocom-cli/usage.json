@@ -1,0 +1,735 @@
+{
+  "tool": "cryptocom",
+  "description": "Crypto.com Exchange API CLI",
+  "discovered_at": "2026-05-20T16:05:04.629012+00:00",
+  "total_commands": 22,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "account": {
+      "help": "Inspect authenticated account data",
+      "commands": {
+        "balance": {
+          "help": "Get account balances.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of balances to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom account balance` with the documented arguments and options shown below."
+        },
+        "open-orders": {
+          "help": "List open orders.",
+          "options": [
+            {
+              "name": "--instrument-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Instrument name",
+              "short": "-i"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of open orders to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom account open-orders` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom account` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "book": {
+      "help": "Inspect order books",
+      "commands": {
+        "list": {
+          "help": "List instruments available for order book lookups.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of instruments to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom book list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get an order book snapshot.",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--depth",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Order book depth",
+              "short": "-d",
+              "default": "10"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom book get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom book` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "candlesticks": {
+      "help": "Inspect candlesticks",
+      "commands": {
+        "list": {
+          "help": "List candlesticks for an instrument.",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of candles to return",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--timeframe",
+              "type": "TEXT",
+              "required": false,
+              "help": "Candlestick timeframe",
+              "default": "1m"
+            },
+            {
+              "name": "--start-ts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive start timestamp"
+            },
+            {
+              "name": "--end-ts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclusive end timestamp"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom candlesticks list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one recent candlestick by timestamp.",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            },
+            {
+              "name": "timestamp",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Candlestick start timestamp in milliseconds"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--timeframe",
+              "type": "TEXT",
+              "required": false,
+              "help": "Candlestick timeframe",
+              "default": "1m"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom candlesticks get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom candlesticks` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "instruments": {
+      "help": "Inspect Exchange instruments",
+      "commands": {
+        "list": {
+          "help": "List instruments.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of instruments to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom instruments list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one instrument.",
+          "arguments": [
+            {
+              "name": "symbol",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument symbol, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom instruments get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom instruments` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "ticker": {
+      "help": "Inspect ticker data",
+      "commands": {
+        "list": {
+          "help": "List tickers.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of tickers to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom ticker list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get ticker data for an instrument.",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom ticker get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom ticker` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "trades": {
+      "help": "Inspect public trades",
+      "commands": {
+        "list": {
+          "help": "List recent trades for an instrument.",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of trades to return",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--start-ts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive start timestamp"
+            },
+            {
+              "name": "--end-ts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclusive end timestamp"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom trades list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get one recent trade by ID.",
+          "arguments": [
+            {
+              "name": "trade_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trade ID from trades list"
+            },
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example BTCUSD-PERP"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom trades get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom trades` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "auth": {
+      "help": "Manage cryptocom authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom auth login` with the documented arguments and options shown below."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom auth logout` with the documented arguments and options shown below."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom auth status` with the documented arguments and options shown below."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cryptocom auth test` with the documented arguments and options shown below."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `cryptocom auth profiles list` with the documented arguments and options shown below."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `cryptocom auth profiles get` with the documented arguments and options shown below."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `cryptocom auth profiles create` with the documented arguments and options shown below."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `cryptocom auth profiles set-default` with the documented arguments and options shown below."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `cryptocom auth profiles delete` with the documented arguments and options shown below."
+            }
+          },
+          "usage_instructions": "Use `cryptocom auth profiles` to access this command group. Run `--help` on a subcommand for details."
+        }
+      },
+      "usage_instructions": "Use `cryptocom auth` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `cryptocom cache clear` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `cryptocom cache` to access this command group. Run `--help` on a subcommand for details."
+    }
+  },
+  "usage_instructions": "Use `` with the documented arguments and options shown below."
+}

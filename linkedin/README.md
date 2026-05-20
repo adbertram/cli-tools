@@ -45,7 +45,7 @@ Page commands resolve the author in this order:
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/linkedin
+cd <cli-tools-root>/linkedin
 uv tool install -e . --force --refresh
 ```
 

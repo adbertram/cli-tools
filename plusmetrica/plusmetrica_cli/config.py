@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.plusmetrica.com/"
     DIST_NAME = "plusmetrica-cli"
-    SESSION_NAME = "plusmetrica"
-    LOGIN_URL = "https://www.plusmetrica.com/"
 
     def __init__(self, profile=None):
         super().__init__(

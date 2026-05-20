@@ -5,7 +5,7 @@ A command-line interface for the [ElevenLabs API](https://elevenlabs.io/docs/api
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/elevenlabs
+cd <cli-tools-root>/elevenlabs
 uv tool install -e . --force --refresh
 ```
 

@@ -1,0 +1,488 @@
+{
+  "tool": "pinterest",
+  "description": "CLI interface for Pinterest API",
+  "discovered_at": "2026-05-09T15:35:26.992123+00:00",
+  "total_commands": 17,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "account": {
+      "help": "Inspect the authenticated Pinterest account",
+      "commands": {
+        "list": {
+          "help": "List the authenticated Pinterest account as a single-item collection.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum number of accounts to return",
+              "short": "-l",
+              "default": "1"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "Return the authenticated Pinterest account as a single-item collection so standard list flags work. Use `--properties/-p` to limit fields, `--filter/-f` for client-side filtering, and `--table/-t` for a compact summary."
+        },
+        "get": {
+          "help": "Get the authenticated Pinterest user account.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "Get the authenticated Pinterest account as a single object. Use `--properties/-p` to limit fields or `--table/-t` for a field/value view."
+        }
+      },
+      "usage_instructions": "Authenticated account operations. Use `account list` when a list-shaped result is needed for standard filtering or property selection, and `account get` when you want the single account object directly."
+    },
+    "boards": {
+      "help": "Manage Pinterest boards",
+      "commands": {
+        "list": {
+          "help": "List Pinterest boards for the authenticated user.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum number of boards to return",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (for example privacy:eq:SECRET)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "List Pinterest boards for the authenticated user. Use `--filter/-f privacy:eq:SECRET` for documented privacy filtering, `--limit/-l` to control API page size, and `--properties/-p` to narrow output fields."
+        },
+        "get": {
+          "help": "Get a specific Pinterest board by ID.",
+          "arguments": [
+            {
+              "name": "board_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pinterest board ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "Get one Pinterest board by ID. Pass the required `BOARD_ID` positional argument and use `--table/-t` or `--properties/-p` when you want a narrower view."
+        }
+      },
+      "usage_instructions": "Board reads for the authenticated Pinterest user. Use `boards list` to browse boards with filtering and field selection, then `boards get BOARD_ID` for full details on one board."
+    },
+    "pins": {
+      "help": "Manage Pinterest pins",
+      "commands": {
+        "list": {
+          "help": "List Pinterest pins for the authenticated user.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum number of pins to return",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (for example board_owner.username:contains:brand)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "List Pinterest pins for the authenticated user. Use `--limit/-l` to cap returned pins, `--filter/-f` for standard client-side filtering such as `board_owner.username:contains:value`, and `--properties/-p` to select fields."
+        },
+        "get": {
+          "help": "Get a specific Pinterest pin by ID.",
+          "arguments": [
+            {
+              "name": "pin_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pinterest pin ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--ad-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pinterest ad account ID for shared business access requests"
+            }
+          ],
+          "usage_instructions": "Get one Pinterest pin by ID. Pass the required `PIN_ID` positional argument and add `--table/-t` or `--properties/-p` to control the presentation."
+        }
+      },
+      "usage_instructions": "Pin reads for the authenticated Pinterest user. Use `pins list` to browse recent pins with standard CLI list flags, then `pins get PIN_ID` for one pin's detail object."
+    },
+    "auth": {
+      "help": "Manage pinterest authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Start Pinterest OAuth login and save credentials for the active or named profile. Use `--profile/-p` to target a profile and `--force/-F` to re-authenticate with fresh tokens."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear saved Pinterest credentials and session state for the selected profile. Use `--profile/-p` to target a non-default profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show saved Pinterest auth state across profiles in the standard auth-status JSON shape. Use `--table/-t` for a human-readable status table or `--profile/-p` to narrow to one profile."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Refresh the saved Pinterest OAuth access token using the stored refresh token. Use `--profile/-p` to target a specific profile."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run explicit Pinterest authentication verification checks. Use `--verbose/-v` for more detail, `--table/-t` for table output, and `--profile/-p` to scope the test."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all saved Pinterest auth profiles. Use `--filter/-f`, `--limit/-l`, and `--properties/-p` like any other list command, or `--table/-t` for a concise profile table."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Get one saved auth profile by name. Pass the required profile name and use `--table/-t` for field/value output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a named Pinterest auth profile from `.env.example`. Pass the required profile name, then run `pinterest auth login --profile NAME` to populate credentials."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Mark one saved Pinterest auth profile as the default profile. Pass the required profile name to switch future commands to it."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a saved Pinterest auth profile and its runtime data. Pass the required profile name and add `--force/-F` to skip confirmation."
+            }
+          },
+          "usage_instructions": "Nested authentication profile management under `auth profiles`. Use these commands to create, inspect, switch, and delete named Pinterest auth profiles."
+        }
+      },
+      "usage_instructions": "Authentication and profile management. Use these commands to log in with Pinterest OAuth, inspect saved credential state, refresh tokens, and manage named auth profiles."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Delete cached Pinterest API responses for the active profile. Use when you need the next command to fetch fresh API data instead of cached results."
+        }
+      },
+      "usage_instructions": "Response cache maintenance. Use `cache clear` when you need to remove cached Pinterest API results for the active profile."
+    }
+  },
+  "usage_instructions": "Use this tool for Pinterest API v5 reads around the authenticated account, boards, and pins. Commands follow `pinterest <group> <action>` and list-style commands support `--table/-t`, `--filter/-f`, `--limit/-l`, and `--properties/-p`. Authenticate first with `pinterest auth login` before running API-backed commands."
+}

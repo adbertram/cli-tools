@@ -13,7 +13,7 @@ npx --yes --package lighthouse@13.2.0 lighthouse --version
 ## Installation
 
 ```bash
-cd /Users/adam/Dropbox/GitRepos/cli-tools/google-lighthouse
+cd <cli-tools-root>/google-lighthouse
 uv tool install -e . --force --refresh
 ```
 
@@ -85,8 +85,8 @@ Configuration lives in `.env`.
 ```bash
 CLI_COMMAND=npx
 LIGHTHOUSE_NPM_PACKAGE=lighthouse@13.2.0
-# CLI_PATH=/opt/homebrew/bin/lighthouse
-# GOOGLE_LIGHTHOUSE_DATA_DIR=/Users/adam/Library/Application Support/cli-tools/google-lighthouse/audits
+# CLI_PATH=
+# GOOGLE_LIGHTHOUSE_DATA_DIR=~/Library/Application Support/cli-tools/google-lighthouse/audits
 ```
 
 Default audit storage:

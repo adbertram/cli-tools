@@ -1,6 +1,7 @@
 """Main entry point for Tiktok CLI."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
+from cli_tools_shared.auth_commands import create_auth_app
 from .client import ClientError
 from .config import get_config
 
@@ -12,8 +13,9 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import transcripts
-app.add_typer(transcripts.app, name="transcripts", help="Download TikTok video transcripts")
+from . import commands
+app.add_typer(commands.app, name="transcripts", help="Download TikTok video transcripts")
+app.add_typer(create_auth_app(get_config, tool_name="tiktok"), name="auth")
 
 
 def main():

@@ -9,7 +9,7 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="udemy", help="Udemy Instructor API CLI", version=__version__)
 
 # Register command modules
-from .commands import courses
+from . import commands as courses
 register_commands(app, get_config, courses, name="courses", help="Manage instructor courses", cli_name="udemy")
 
 # Register shared apps

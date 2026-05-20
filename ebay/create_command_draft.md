@@ -5,7 +5,7 @@ This workflow describes how to create a new custom command for the agent.
 
 2.  **Determine the Target Location**:
     *   Check the current working directory.
-    *   **IF** the project is located in `/Users/adam/Desktop/Devolutions/RDM` or any of its subfolders:
+    *   **IF** the project is located in `/path/to/Devolutions/RDM` or any of its subfolders:
         *   Ask the user: "Is this a **Team** command or a **Personal** command?"
         *   **If Team Command**:
             *   Set the target directory to `.claude/commands`.

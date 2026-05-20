@@ -16,7 +16,7 @@ dependencies = [
     "mammoth>=1.6.0",
     "python-docx>=1.0.0",
     "beautifulsoup4>=4.12.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
 
 [project.scripts]
@@ -28,3 +28,6 @@ dev = ["pytest>=7.0.0"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["wordpress_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../cli-tools-shared", editable = true }

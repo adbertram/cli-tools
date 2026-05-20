@@ -5,8 +5,9 @@ import random
 import time
 import requests
 
+from cli_tools_shared.filters import FilterValidationError, parse_filter_string, validate_filters
+
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 
 
 # Retry configuration defaults
@@ -364,8 +365,6 @@ class KickClient:
         Returns:
             Dict of API query parameters
         """
-        from .filters import parse_filter_string
-
         params: Dict[str, Any] = {}
         category_index = 0
 
@@ -605,8 +604,6 @@ class KickClient:
         Returns:
             Search term string or None
         """
-        from .filters import parse_filter_string
-
         for filter_str in filters:
             conditions = parse_filter_string(filter_str)
             for field, op, value in conditions:

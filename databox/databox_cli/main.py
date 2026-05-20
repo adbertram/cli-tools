@@ -9,7 +9,7 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="databox", help="CLI interface for Databox API", version=__version__)
 
 # Register command modules
-from .commands import items
+from . import items
 register_commands(app, get_config, items, name="items", help="Manage databox items")
 
 # Register shared apps

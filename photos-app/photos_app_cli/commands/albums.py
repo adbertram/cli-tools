@@ -6,7 +6,7 @@ import typer
 
 from ..client import get_client, ClientError
 from cli_tools_shared.output import print_json, print_error, print_success, print_info, print_table
-from ..filters import apply_filters, validate_filters, FilterValidationError
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 COMMAND_CREDENTIALS = {
     "add-photos": [

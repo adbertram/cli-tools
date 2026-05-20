@@ -1,0 +1,290 @@
+{
+  "tool": "imessage",
+  "description": "CLI for iMessage on macOS",
+  "discovered_at": "2026-05-06T15:17:51.962448+00:00",
+  "total_commands": 7,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "contacts": {
+      "help": "Manage contacts",
+      "commands": {
+        "list": {
+          "help": "List contacts from macOS Contacts app.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of contacts to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage contacts list",
+            "imessage contacts list --table",
+            "imessage contacts list --limit 10",
+            "imessage contacts list --filter \"name:like:%john%\"",
+            "imessage contacts list --properties \"name,phones\""
+          ],
+          "usage_instructions": "List contacts from the macOS Contacts app. Use --filter/-f for filtering (e.g., 'name:like:%john%'). Use --limit/-l (default: 100), --properties/-p, --table/-t."
+        },
+        "get": {
+          "help": "Get a specific contact by ID.",
+          "arguments": [
+            {
+              "name": "contact_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The contact ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage contacts get CONTACT_ID",
+            "imessage contacts get CONTACT_ID --table",
+            "imessage contacts get CONTACT_ID --properties \"name,phones\""
+          ],
+          "usage_instructions": "Retrieve details for a single contact. CONTACT_ID is required (positional). Use --properties/-p to select fields. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Access macOS Contacts app data. List all contacts or get details for a specific contact by ID."
+    },
+    "conversations": {
+      "help": "Manage conversations",
+      "commands": {
+        "list": {
+          "help": "List recent conversations from iMessage.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of conversations to return",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage conversations list",
+            "imessage conversations list --table",
+            "imessage conversations list --limit 20",
+            "imessage conversations list --filter \"service:iMessage\"",
+            "imessage conversations list --properties \"id,display_name,last_message_text\""
+          ],
+          "usage_instructions": "List conversation threads. Use --filter/-f for filtering (e.g., 'service:iMessage'). Use --limit/-l (default: 50), --properties/-p, --table/-t."
+        },
+        "get": {
+          "help": "Get a conversation with its recent messages.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The conversation ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage conversations get CONVERSATION_ID",
+            "imessage conversations get CONVERSATION_ID --table",
+            "imessage conversations get CONVERSATION_ID --properties \"id,display_name,message_count\""
+          ],
+          "usage_instructions": "View a specific conversation and its messages. CONVERSATION_ID is required (positional). Use --properties/-p to select fields. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "View iMessage conversation threads. List recent conversations or get a specific conversation with its messages."
+    },
+    "messages": {
+      "help": "Manage messages",
+      "commands": {
+        "list": {
+          "help": "List recent messages from iMessage.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of messages to return",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--contact",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by contact (phone/email)"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage messages list",
+            "imessage messages list --table",
+            "imessage messages list --limit 20",
+            "imessage messages list --contact \"+15551234567\"",
+            "imessage messages list --filter \"is_from_me:true\"",
+            "imessage messages list --properties \"id,text,date\""
+          ],
+          "usage_instructions": "List messages. Use --contact to filter by phone number or email. Use --filter/-f for field-based filtering (e.g., 'is_from_me:true'). Use --limit/-l (default: 50), --properties/-p, --table/-t."
+        },
+        "get": {
+          "help": "Get a specific message by ID.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "imessage messages get MESSAGE_ID",
+            "imessage messages get MESSAGE_ID --table",
+            "imessage messages get MESSAGE_ID --properties \"id,text,date\""
+          ],
+          "usage_instructions": "Retrieve a single message. MESSAGE_ID is required (positional). Use --properties/-p to select fields. Use --table/-t for formatted output."
+        },
+        "send": {
+          "help": "Send a message via iMessage. Recipient can be a phone number or email address. Phone numbers are auto-normalized (e.g., +1 prefix added for US numbers).",
+          "arguments": [
+            {
+              "name": "recipient",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient phone number or email"
+            },
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message text to send"
+            }
+          ],
+          "examples": [
+            "imessage messages send \"+15551234567\" \"Hello!\"",
+            "imessage messages send \"user@example.com\" \"Hi there\""
+          ],
+          "usage_instructions": "Send an iMessage or SMS. RECIPIENT (phone number or email) and TEXT are both required (positional). Phone numbers are auto-normalized with +1 prefix for US numbers."
+        }
+      },
+      "usage_instructions": "Read and send iMessage/SMS messages. List recent messages, view specific messages, or send new messages to phone numbers or email addresses."
+    }
+  },
+  "usage_instructions": "Use for reading and sending iMessage/SMS messages on macOS. Commands follow `imessage <group> <action>` pattern. Requires Full Disk Access for the terminal app. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+}

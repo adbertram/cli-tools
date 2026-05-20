@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error
-from ..filters import apply_filters, apply_properties_filter, apply_limit
+from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="List and inspect available CLI tools for node conversion", no_args_is_help=True)
 

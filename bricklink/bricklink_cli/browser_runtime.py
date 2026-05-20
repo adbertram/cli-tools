@@ -31,6 +31,15 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         self.confirmation = ConfirmationState(self._get_browser_data_dir())
         activity.info("BricklinkBrowser initialized")
 
+    def _is_auth_failure_page(self, url_or_page) -> bool:
+        url = getattr(url_or_page, "url", url_or_page) or ""
+        return bool(re.search(self.AUTH_FAILURE_URL_PATTERN, url))
+
+    def _check_auth(self, page) -> bool:
+        if self._is_auth_failure_page(page):
+            return False
+        return super()._check_auth(page)
+
     def _check_session_expired(self, page):
         """Check if page was redirected to login / confirmation and raise if so.
 

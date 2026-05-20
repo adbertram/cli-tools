@@ -349,7 +349,7 @@ def mcp_list(
         copilot mcp list --filter "name:ilike:%microsoft%" --table
         copilot mcp list --limit 50
     """
-    from ..filters import apply_filters, validate_filters, FilterValidationError
+    from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
     from cli_tools_shared.output import print_error
 
     try:

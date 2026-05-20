@@ -5,8 +5,8 @@ from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
 
 from . import __version__
-from .config import get_config
 from .commands import program
+from .config import get_config
 
 app = create_app(
     name="pluralsight",

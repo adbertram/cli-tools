@@ -9,8 +9,8 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="martinic-audio", help="CLI interface for MartinicAudio (browser automation)", version=__version__)
 
 # Register command modules
-from .commands import search
-register_commands(app, get_config, search, name="search", help="Search martinic-audio")
+from . import commands
+register_commands(app, get_config, commands, name="search", help="Search martinic-audio")
 app.add_typer(create_auth_app(get_config, tool_name="martinic-audio"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 

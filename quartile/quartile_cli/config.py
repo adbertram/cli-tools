@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.quartile.com/"
     DIST_NAME = "quartile-cli"
-    SESSION_NAME = "quartile"
-    LOGIN_URL = "https://www.quartile.com/"
 
     def __init__(self, profile=None):
         super().__init__(
@@ -23,7 +21,9 @@ class Config(BaseConfig):
 
     def get_browser(self):
         """Return the BrowserAutomation subclass for browser session authentication."""
+
         from .browser import QuartileBrowser
+
         return QuartileBrowser(self)
 
     def test_connection(self) -> dict:

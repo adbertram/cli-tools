@@ -4,10 +4,10 @@ import typer
 from typing import Optional, List, Dict
 from pathlib import Path
 
+from cli_tools_shared.filters import apply_properties_filter, apply_limit
 from ..client import get_client, ClientError
 from ..output import print_success, print_error, print_info, print_json, print_table, print_mandatory_review
 from ..filter_map import translate_filters
-from ..filters import apply_properties_filter, apply_limit
 from ..voice_recording_fields import get_voice_recording_invalidation_fields
 
 app = typer.Typer(help="Manage slide records")

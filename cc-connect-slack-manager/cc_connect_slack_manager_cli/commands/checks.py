@@ -64,3 +64,13 @@ def get_check(
             print_json(matches[0])
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+COMMAND_CREDENTIALS = {
+    "get": [
+        "custom"
+    ],
+    "list": [
+        "custom"
+    ]
+}

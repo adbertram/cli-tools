@@ -5,7 +5,7 @@ from typing import Optional, List
 import typer
 
 from ..client import get_client, ClientError
-from ..filters import validate_filters, apply_filters
+from cli_tools_shared.filters import validate_filters, apply_filters
 from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
 
 app = typer.Typer(help="Manage Descript project compositions", no_args_is_help=True)

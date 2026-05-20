@@ -1,0 +1,369 @@
+{
+  "tool": "n8n-cli-tool-node-converter",
+  "description": "Convert standardized CLI tools into n8n community node packages",
+  "discovered_at": "2026-05-06T15:19:32.319587+00:00",
+  "total_commands": 14,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "tools": {
+      "help": "List and inspect available CLI tools",
+      "commands": {
+        "list": {
+          "help": "List available CLI tools that can be converted to n8n nodes. Example: n8n-cli-tool-node-converter tools list n8n-cli-tool-node-converter tools list --table n8n-cli-tool-node-converter tools list --limit 10",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse all CLI tools available for conversion. Default limit is 100. Use --filter/-f for field:op:value filtering. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Inspect a CLI tool's metadata (command groups, commands, parameters, credentials). Example: n8n-cli-tool-node-converter tools get brickowl n8n-cli-tool-node-converter tools get shippo --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "CLI tool name to inspect"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to inspect a specific CLI tool before conversion. NAME is positional and required. Shows command groups, commands, parameters, and credential types. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Tool inspection -- list available CLI tools and inspect their metadata (command groups, commands, parameters, credentials) before generating n8n nodes."
+    },
+    "nodes": {
+      "help": "Generate and manage n8n node packages",
+      "commands": {
+        "generate": {
+          "help": "Generate an n8n node package from a CLI tool. Example: n8n-cli-tool-node-converter nodes generate brickowl n8n-cli-tool-node-converter nodes generate shippo --output-dir ./output n8n-cli-tool-node-converter nodes generate brickowl --force",
+          "arguments": [
+            {
+              "name": "cli_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "CLI tool name to convert"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override output directory",
+              "short": "-o"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Overwrite existing package",
+              "short": "-F"
+            }
+          ],
+          "usage_instructions": "Use to convert a CLI tool into an n8n community node package. CLI_NAME is positional and required. Use --output-dir/-o to override the default output directory. Use --force/-F to overwrite an existing package."
+        },
+        "list": {
+          "help": "List previously generated n8n node packages. Example: n8n-cli-tool-node-converter nodes list n8n-cli-tool-node-converter nodes list --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse generated n8n node packages. Default limit is 100. Use --filter/-f for filtering. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific generated n8n node package. Example: n8n-cli-tool-node-converter nodes get brickowl n8n-cli-tool-node-converter nodes get brickowl --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name or CLI tool name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to view details of a generated package by NAME. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Node package management -- generate n8n community node packages from CLI tools, list generated packages, and get package details."
+    },
+    "auth": {
+      "help": "Manage converter configuration",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `n8n-cli-tool-node-converter auth login` to configure authentication credentials. --profile/-p selects the profile to save. --force/-F clears existing credentials first. --credential-type/-c scopes authentication to one credential type."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `n8n-cli-tool-node-converter auth logout` to clear stored credentials for a profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `n8n-cli-tool-node-converter auth status` to verify converter configuration across profiles."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `n8n-cli-tool-node-converter auth test` to run live converter configuration checks."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles list` to list saved profiles."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles get` to inspect one profile."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles create` to create a new profile."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles set-default` to select the default profile."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles delete` to remove a profile."
+            }
+          },
+          "usage_instructions": "Use `n8n-cli-tool-node-converter auth profiles` to manage named profiles."
+        }
+      },
+      "usage_instructions": "Use `n8n-cli-tool-node-converter auth` to manage converter authentication and profiles."
+    }
+  },
+  "usage_instructions": "Use for converting CLI tools into n8n community node packages. Commands follow `n8n-cli-tool-node-converter <group> <action>` pattern. Configure tools/output directories via auth, inspect CLI tools via tools, and generate/manage node packages via nodes."
+}

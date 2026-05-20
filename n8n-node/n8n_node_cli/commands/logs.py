@@ -3,11 +3,11 @@ import json
 import subprocess
 import typer
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional, List
 
-from ..output import print_json, print_table, print_error, print_info, print_warning, handle_error
-from ..filters import apply_filters, apply_limit
+from cli_tools_shared.output import print_json, print_table, print_error, print_info, print_warning, handle_error
+from cli_tools_shared.filters import apply_filters, apply_limit
+from ..config import get_config
 from ..n8n_api import get_n8n_api_client, N8nApiError
 
 app = typer.Typer(help="Query n8n logs, events, and execution history", no_args_is_help=True)
@@ -18,27 +18,20 @@ app = typer.Typer(help="Query n8n logs, events, and execution history", no_args_
 # ---------------------------------------------------------------------------
 
 def _get_ssh_host() -> str:
-    """Get SSH host from n8n .env (N8N_SSH_HOST) or derive from N8N_BASE."""
-    env_path = Path.home() / ".claude" / "skills" / "n8n" / ".env"
-    env_vars = {}
-    if env_path.exists():
-        for line in env_path.read_text().strip().split("\n"):
-            if "=" in line and not line.startswith("#"):
-                key, value = line.split("=", 1)
-                env_vars[key.strip()] = value.strip()
-
-    ssh_host = env_vars.get("N8N_SSH_HOST")
+    """Get SSH host from the n8n-node CLI profile or derive it from N8N_BASE."""
+    config = get_config()
+    ssh_host = config._get("N8N_SSH_HOST")
     if ssh_host:
         return ssh_host
 
     # Derive from N8N_BASE (e.g., http://100.117.198.37:5678/api/v1)
-    base = env_vars.get("N8N_BASE", "")
+    base = config._get("N8N_BASE") or ""
     if base:
         from urllib.parse import urlparse
         parsed = urlparse(base)
         return parsed.hostname or "localhost"
 
-    raise N8nApiError("Cannot determine SSH host. Set N8N_SSH_HOST in ~/.claude/skills/n8n/.env")
+    raise N8nApiError("Cannot determine SSH host. Set N8N_SSH_HOST with `n8n-node auth login`.")
 
 
 def _ssh_run(command: str, timeout: int = 30) -> str:

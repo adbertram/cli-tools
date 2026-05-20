@@ -5,8 +5,9 @@ import random
 import time
 import requests
 
+from cli_tools_shared.filters import FilterValidationError, validate_filters
+
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 from .models import Item, ItemDetail, create_item, create_item_detail
 
 

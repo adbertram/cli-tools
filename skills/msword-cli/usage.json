@@ -1,0 +1,335 @@
+{
+  "tool": "msword",
+  "description": "Read Word docs, convert to markdown, and extract comments with context",
+  "discovered_at": "2026-05-20T15:55:04.577361+00:00",
+  "total_commands": 13,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "docs": {
+      "help": "Read, convert, and extract comments from Word documents",
+      "commands": {
+        "read": {
+          "help": "Read text content from a Word document.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the .docx file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "convert": {
+          "help": "Convert a Word document to Markdown.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the .docx file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: stdout)",
+              "short": "-o"
+            }
+          ]
+        },
+        "comments": {
+          "help": "Manage document comments",
+          "commands": {
+            "list": {
+              "help": "List comments from a Word document.",
+              "arguments": [
+                {
+                  "name": "file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Path to the .docx file"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of comments to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., author:eq:Jane)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "add": {
+              "help": "Add an inline comment to a Word document.",
+              "arguments": [
+                {
+                  "name": "file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Path to the .docx file"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text"
+                },
+                {
+                  "name": "--author",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment author name"
+                },
+                {
+                  "name": "--reference-text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Text in the document to attach the comment to"
+                },
+                {
+                  "name": "--occurrence",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Which occurrence of reference-text to target",
+                  "default": "1"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage msword authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ]
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

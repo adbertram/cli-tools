@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 
 import typer
 
-from ..filters import apply_filters, validate_filters
+from cli_tools_shared.filters import apply_filters, validate_filters
 from ..models import PostEarnings, create_post_earnings
 from cli_tools_shared.output import print_error, print_info, print_json, print_table
 

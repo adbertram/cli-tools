@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.roboshadow.com/"
     DIST_NAME = "roboshadow-cli"
-    SESSION_NAME = "roboshadow"
-    LOGIN_URL = "https://www.roboshadow.com/"
 
     def __init__(self, profile=None):
         super().__init__(

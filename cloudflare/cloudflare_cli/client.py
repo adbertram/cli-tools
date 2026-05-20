@@ -5,7 +5,7 @@ import time
 import requests
 
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, FilterValidationError
 from .models import Zone, ZoneDetail, PurgeResult, create_zone, create_zone_detail, create_purge_result
 from .models.access_rule import AccessRule, create_access_rule
 from .models.dns_record import DNSRecord, create_dns_record

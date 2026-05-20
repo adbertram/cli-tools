@@ -168,14 +168,15 @@ n8n-node logs set-level error --db-logging
 Settings are stored in `.env`:
 
 ```bash
-# Path to CLI tools directory (default: ~/Dropbox/GitRepos/cli-tools)
+# Path to CLI tools directory (default: discovered from this clone)
 N8N_CONVERTER_CLI_TOOLS_DIR=
 
-# Path for generated n8n node packages (default: ~/Dropbox/GitRepos/n8n-nodes)
+# Path for generated n8n node packages (default: profile data dir / n8n-nodes)
 N8N_CONVERTER_OUTPUT_DIR=
 ```
 
-n8n server connection is configured in `~/.claude/skills/n8n/.env`:
+n8n server connection is configured with `n8n-node auth login` and stored in the
+n8n-node CLI profile:
 
 ```bash
 N8N_API_KEY=       # API key (X-N8N-API-KEY header)

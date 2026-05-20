@@ -9,7 +9,7 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="digitalocean", help="CLI interface for Digitalocean API", version=__version__)
 
 # Register command modules
-from .commands import droplets
+from . import droplets
 register_commands(app, get_config, droplets, name="droplets", help="Manage DigitalOcean droplets")
 
 # Register shared apps

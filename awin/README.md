@@ -6,7 +6,7 @@ publisher accounts and advertiser programmes you have access to.
 ## Installation
 
 ```bash
-uv tool install -e /Users/adam/Dropbox/GitRepos/cli-tools/awin
+uv tool install -e <cli-tools-root>/awin
 ```
 
 ## Authentication

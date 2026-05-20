@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.revouninstaller.com/partners/"
     DIST_NAME = "revo-uninstaller-cli"
-    SESSION_NAME = "revo-uninstaller"
-    LOGIN_URL = "https://www.revouninstaller.com/partners/"
 
     def __init__(self, profile=None):
         super().__init__(

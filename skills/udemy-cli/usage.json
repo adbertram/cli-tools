@@ -1,0 +1,355 @@
+{
+  "tool": "udemy",
+  "description": "Udemy Instructor API CLI",
+  "discovered_at": "2026-05-06T15:22:00.710510+00:00",
+  "total_commands": 15,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "courses": {
+      "help": "Manage instructor courses",
+      "commands": {
+        "list": {
+          "help": "List instructor-taught courses.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of courses to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List courses owned by the authenticated instructor. Default limit is 100; use --limit/-l to change page size, --table/-t for table output, and --properties/-p such as `id,title,url` to reduce output. The --filter/-f flag exists for CLI consistency, but Udemy does not document server-side filters for this endpoint."
+        },
+        "get": {
+          "help": "Get one instructor-taught course by ID.",
+          "arguments": [
+            {
+              "name": "course_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Get a single course by numeric COURSE_ID from the authenticated instructor's taught course list. Use --table/-t for a key/value table or --properties/-p to return selected fields such as `id,title,rating,url`."
+        },
+        "management": {
+          "help": "Get browser-backed course management fields except curriculum.",
+          "arguments": [
+            {
+              "name": "course_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Numeric Udemy course ID"
+            }
+          ],
+          "usage_instructions": "Run `udemy courses management --help` for exact arguments and options."
+        },
+        "update": {
+          "help": "Update browser-backed course management fields except curriculum.",
+          "arguments": [
+            {
+              "name": "course_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Numeric Udemy course ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--file",
+              "type": "FILE",
+              "required": true,
+              "help": "JSON file containing course management fields to update",
+              "short": "-f"
+            }
+          ],
+          "usage_instructions": "Run `udemy courses update --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Use `udemy courses` for instructor-taught course data. Authenticate first with `udemy auth login`; the list command supports --limit/-l, --table/-t, and --properties/-p."
+    },
+    "auth": {
+      "help": "Manage udemy authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Save the Udemy Instructor API bearer token interactively. Use --profile/-p PROFILE to save credentials to a named profile, and --force/-F to clear existing ephemeral auth state before prompting."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored credentials for the active profile. Use --profile/-p PROFILE to clear a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check whether credentials are saved and see the active profile. Use --profile/-p PROFILE to inspect another profile and --table/-t for tabular output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "This command is part of the shared auth surface and is not used for Udemy personal access token auth. Prefer `udemy auth login --force` when replacing the bearer token."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Verify the saved bearer token by making a lightweight Instructor API call. Use --profile/-p PROFILE for a named profile, --verbose/-v for profile/base URL details, and --table/-t for table output."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List configured profiles and identify the default. Use --table/-t for table output, --limit/-l to cap rows, --filter/-f with field:op:value syntax, and --properties/-p to select profile fields."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show metadata for one profile by NAME. Use --table/-t for a key/value table."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a named profile file from `.env.example`. After creating NAME, run `udemy auth login --profile NAME` to save that profile's bearer token."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Make NAME the default profile used when no --profile/-p is supplied to auth commands. Use after `auth profiles create` and `auth login --profile NAME`."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named profile and its profile data. Use --force/-F to skip the confirmation prompt; the default profile cannot be deleted until another profile is selected."
+            }
+          },
+          "usage_instructions": "Use `udemy auth profiles` to manage named `.env` credential profiles. These commands are nested under `auth`; do not use a top-level `profiles` command."
+        }
+      },
+      "usage_instructions": "Use `udemy auth` to save, check, clear, and test the Udemy bearer token. Auth commands accept --profile/-p for named profiles, and `auth profiles` manages the profile files."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Clear all cached responses for the active profile. Use this when stale course data appears or after switching accounts."
+        }
+      },
+      "usage_instructions": "Use `udemy cache` for local cache maintenance. Cache commands do not contact Udemy."
+    }
+  },
+  "usage_instructions": "Use `udemy` for Udemy Instructor API work, especially listing instructor-taught courses, reading a specific course by ID, and managing bearer-token auth profiles. JSON is the default output; use --table/-t for readable tables and --properties/-p to select fields on course and profile list commands."
+}

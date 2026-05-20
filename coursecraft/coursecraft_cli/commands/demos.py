@@ -1,13 +1,13 @@
 """Demos command module."""
 import json
 import typer
-from typing import Optional, List, Dict
+from typing import Optional, List
 from pathlib import Path
 
+from cli_tools_shared.filters import apply_properties_filter, apply_limit
 from ..client import get_client, ClientError
 from ..output import print_success, print_error, print_info, print_json, print_table, print_mandatory_review
 from ..filter_map import translate_filters
-from ..filters import apply_properties_filter, apply_limit
 from ..voice_recording_fields import get_voice_recording_invalidation_fields
 
 app = typer.Typer(help="Manage demo records")
@@ -21,7 +21,6 @@ def create_demo(
     target_length: Optional[float] = typer.Option(None, "--target-length", "-l", help="Target length in minutes (e.g., 2.5)"),
     action_summary: Optional[str] = typer.Option(None, "--action-summary", "-a", help="Action summary for the demo"),
     script: Optional[str] = typer.Option(None, "--script", "-s", help="Demo script"),
-    demo_environment: Optional[List[str]] = typer.Option(None, "--demo-environment", help="Required demo environment record ID, Environment ID, or exact Name. Repeat to link multiple environments."),
     demos_json: Optional[str] = typer.Option(None, "--json", help="Inline JSON array of demos (batch mode)"),
     demos_file: Optional[Path] = typer.Option(None, "--file", help="Path to JSON file with demo definitions"),
 ):
@@ -37,24 +36,16 @@ def create_demo(
 
     Examples:
         # Single demo
-        coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo" --demo-environment local-macos
+        coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo"
 
         # Batch from inline JSON (clip_order required in each object)
-        coursecraft demos create --clip recXXX --clip-order 1 --demo-environment local-macos --json '[{"name":"Demo 1","clip_order":1},{"name":"Demo 2","clip_order":2}]'
+        coursecraft demos create --clip recXXX --clip-order 1 --json '[{"name":"Demo 1","clip_order":1},{"name":"Demo 2","clip_order":2}]'
 
         # Batch from file
         coursecraft demos create --clip recXXX --clip-order 1 --file demos.json
     """
     try:
         client = get_client()
-        if not demo_environment:
-            print_error("--demo-environment is required")
-            raise typer.Exit(1)
-        demo_environment_record_ids = [
-            client.resolve_environment_id(environment)
-            for environment in demo_environment
-        ]
-
         # Determine mode: batch or single
         if demos_file or demos_json:
             # Batch mode
@@ -89,7 +80,6 @@ def create_demo(
                         fields = {
                             "Clip": [clip],
                             "Clip Order": demo_clip_order,
-                            "Demo Environment": demo_environment_record_ids,
                         }
 
                         # Add optional fields
@@ -129,7 +119,6 @@ def create_demo(
             fields = {
                 "Clip": [clip],
                 "Clip Order": clip_order,
-                "Demo Environment": demo_environment_record_ids,
             }
 
             # Add optional fields
@@ -319,7 +308,6 @@ def update_demo(
     recap: Optional[str] = typer.Option(None, "--recap", help="Demo recap/summary"),
     script: Optional[str] = typer.Option(None, "--script", "-s", help="Demo script"),
     script_review_human: Optional[bool] = typer.Option(None, "--script-review-human/--no-script-review-human", help="Mark script human review as complete"),
-    demo_environment: Optional[List[str]] = typer.Option(None, "--demo-environment", help="Demo environment record ID, Environment ID, or exact Name. Repeat to link multiple environments."),
     demo_walkthrough_script_path: Optional[str] = typer.Option(None, "--demo-walkthrough-script-path", help="Absolute path to the demo_walkthrough.ps1 script used to execute the validated demo flow"),
     demo_walkthrough_script_created: Optional[bool] = typer.Option(None, "--demo-walkthrough-script-created/--no-demo-walkthrough-script-created", help="Mark whether the demo_walkthrough.ps1 script has been created for this demo"),
     dictation_recorded: Optional[bool] = typer.Option(None, "--dictation-recorded/--no-dictation-recorded", help="Mark demo dictation audio as recorded"),
@@ -335,9 +323,7 @@ def update_demo(
         coursecraft demos update recXXX --tested-approved --script-review-human
         coursecraft demos update recXXX --environment-prep-complete
         coursecraft demos update recXXX --dictation-recorded
-        coursecraft demos update recXXX --demo-walkthrough-script-path /Users/adam/courses/example/m2c3/demo_walkthrough.ps1
-        coursecraft demos update recXXX --demo-environment azure-adam-the-automator
-        coursecraft demos update recXXX --demo-environment azure-adam-the-automator --demo-environment local-macos
+        coursecraft demos update recXXX --demo-walkthrough-script-path /path/to/course/m2c3/demo_walkthrough.ps1
     """
     try:
         client = get_client()
@@ -377,11 +363,6 @@ def update_demo(
             fields.update(get_voice_recording_invalidation_fields())
         if script_review_human is not None:
             fields["Script Review (Human)"] = script_review_human
-        if demo_environment:
-            fields["Demo Environment"] = [
-                client.resolve_environment_id(environment)
-                for environment in demo_environment
-            ]
         if demo_walkthrough_script_path is not None:
             fields["Demo Walkthrough Script Path"] = demo_walkthrough_script_path
         if demo_walkthrough_script_created is not None:

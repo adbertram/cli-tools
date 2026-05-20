@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://devolutions.net/buy/affiliates/"
     DIST_NAME = "devolutions-cli"
-    SESSION_NAME = "devolutions"
-    LOGIN_URL = "https://devolutions.net/buy/affiliates/"
 
     def __init__(self, profile=None):
         super().__init__(

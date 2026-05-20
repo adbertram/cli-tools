@@ -13,8 +13,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.amazon-associates.com/"
     DIST_NAME = "amazon-associates-cli"
-    SESSION_NAME = "amazon-associates"
-    LOGIN_URL = "https://www.amazon-associates.com/"
 
     def __init__(self, profile=None):
         super().__init__(

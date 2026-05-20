@@ -55,11 +55,19 @@ def auth_login_basic(
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="Profile name to save Basic credentials to"
     ),
+    public_key: str = typer.Option(
+        ...,
+        "--public-key",
+        help="PartnerStack Basic public key",
+    ),
+    secret_key: str = typer.Option(
+        ...,
+        "--secret-key",
+        help="PartnerStack Basic secret key",
+    ),
 ):
     """Configure PartnerStack Basic auth public/secret keys."""
     config = get_config(profile=profile)
-    public_key = typer.prompt("Enter PartnerStack Basic public key", hide_input=False)
-    secret_key = typer.prompt("Enter PartnerStack Basic secret key", hide_input=True)
     if not public_key.strip():
         raise typer.BadParameter("PartnerStack Basic public key cannot be empty")
     if not secret_key.strip():

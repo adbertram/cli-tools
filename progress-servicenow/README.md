@@ -5,7 +5,7 @@ A command-line interface for the [Progress ServiceNow Employee Center](https://p
 ## Installation
 
 ```bash
-cd ~/Dropbox/GitRepos/cli-tools/progress-servicenow
+cd <cli-tools-root>/progress-servicenow
 ./install.sh
 ```
 

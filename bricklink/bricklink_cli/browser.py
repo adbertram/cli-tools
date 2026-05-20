@@ -1,5 +1,4 @@
 """Declarative Bricklink browser-session hooks."""
-import re
 
 from cli_tools_shared.auth import BrowserAutomation
 
@@ -31,16 +30,6 @@ class BricklinkBrowser(BrowserAutomation):
     # the Invoices comment block.
     ORDER_SEARCH_URL = "https://www.bricklink.com/orderSearch.asp?a=p"
     WANTED_NOTIFY_URL = "https://www.bricklink.com/wantedNotify.asp"
-
-    def _is_auth_failure_page(self, url_or_page) -> bool:
-        url = getattr(url_or_page, "url", url_or_page) or ""
-        return bool(re.search(self.AUTH_FAILURE_URL_PATTERN, url))
-
-    def _check_auth(self, page) -> bool:
-        if self._is_auth_failure_page(page):
-            return False
-        return super()._check_auth(page)
-
 
 def normalize_subject(subject: str) -> str:
     import re

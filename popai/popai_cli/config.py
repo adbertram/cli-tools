@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://sheets.popai.pro"
     DIST_NAME = "popai-cli"
-    SESSION_NAME = "popai"
-    LOGIN_URL = "https://sheets.popai.pro"
 
     def __init__(self, profile=None):
         super().__init__(

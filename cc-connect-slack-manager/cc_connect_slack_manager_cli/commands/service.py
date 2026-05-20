@@ -70,3 +70,22 @@ def logs(
             print_json(result)
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+COMMAND_CREDENTIALS = {
+    "logs": [
+        "custom"
+    ],
+    "restart": [
+        "custom"
+    ],
+    "start": [
+        "custom"
+    ],
+    "status": [
+        "custom"
+    ],
+    "stop": [
+        "custom"
+    ]
+}

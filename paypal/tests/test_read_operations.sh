@@ -6,7 +6,7 @@
 # Requires an active PayPal session (run `paypal auth login` first).
 #
 # Usage:
-#   cd ~/Dropbox/GitRepos/cli-tools/paypal
+#   cd <cli-tools-root>/paypal
 #   source venv/bin/activate
 #   ./tests/test_read_operations.sh
 #
