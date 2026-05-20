@@ -58,7 +58,7 @@ COMMAND_CREDENTIALS = {
         "browser_session"
     ],
     "template": [
-        "browser_session"
+        "no_auth"
     ]
 }
 
