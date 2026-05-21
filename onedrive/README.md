@@ -54,6 +54,10 @@ Authentication method depends on your profile's `AUTH_METHOD` setting:
 - `msal_device_code` - Uses MSAL device code flow (enter a code at microsoft.com/devicelogin)
 
 ```bash
+# Create a profile and choose its auth type
+onedrive auth profiles create work --auth-type az_cli
+onedrive auth profiles create lab --auth-type msal_device_code
+
 # Login (uses default profile's auth method)
 onedrive auth login
 
@@ -83,12 +87,15 @@ Manage multiple authentication profiles (e.g., different tenants or auth methods
 onedrive auth profiles list
 
 # Create a new profile
-onedrive auth profiles create my_profile
+onedrive auth profiles create my_profile --auth-type az_cli
 
 # Set default profile
 onedrive auth profiles set-default my_profile
 
-# Delete a profile
+# Remove a profile
+onedrive auth profiles remove my_profile
+
+# Delete alias
 onedrive auth profiles delete my_profile
 ```
 

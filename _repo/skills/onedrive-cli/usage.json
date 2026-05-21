@@ -2,7 +2,7 @@
   "tool": "onedrive",
   "description": "OneDrive for Business CLI via Microsoft Graph API",
   "discovered_at": "2026-05-21T00:27:30.722607+00:00",
-  "total_commands": 26,
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -170,6 +170,20 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
+              "options": [
+                {
+                  "name": "--auth-type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Authentication type for this profile. Valid values: az_cli, msal_device_code"
+                },
+                {
+                  "name": "--auth-param",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
+                }
+              ],
               "usage_instructions": "Run `onedrive auth profiles create --help` for exact arguments and options."
             },
             "set-default": {
@@ -204,6 +218,27 @@
                 }
               ],
               "usage_instructions": "Run `onedrive auth profiles delete --help` for exact arguments and options."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `onedrive auth profiles remove --help` for exact arguments and options."
             }
           },
           "usage_instructions": "Run `onedrive auth profiles --help` for exact arguments and options."

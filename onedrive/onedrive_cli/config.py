@@ -19,6 +19,11 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DEFAULT_BASE_URL = "https://graph.microsoft.com/v1.0"
+    PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+    PROFILE_AUTH_TYPES = {
+        "az_cli": [],
+        "msal_device_code": [],
+    }
 
     # CUSTOM credential type: AUTH_METHOD is the only required field
     CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD"]
