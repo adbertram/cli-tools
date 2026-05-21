@@ -1,6 +1,6 @@
 """Profile-specific validation tests.
 
-All CLI tools that expose auth/profiles must have at least a default profile.
+All CLI tools that expose auth/profiles must have at least one active profile.
 CLIs in the ``no_auth_clis`` exclusion list are local-only (no remote
 credentials, no auth subcommand) and intentionally have no profile system —
 those CLIs are skipped here.
@@ -40,8 +40,8 @@ def _skip_if_no_auth(cli_name, test_config):
         )
 
 
-def test_only_one_default_profile(cli_name, cli_dir, cli_executable, test_config):
-    """All auth-capable CLIs: exactly one profile .env has IS_DEFAULT_PROFILE=1.
+def test_each_auth_type_has_one_active_profile(cli_name, cli_dir, cli_executable, test_config):
+    """All auth-capable CLIs: exactly one profile per auth type is ACTIVE=true.
 
     Profiles live at ``~/.local/share/cli-tools/<tool>/authentication_profiles/<name>/.env``
     (XDG-compliant user data dir). The path is resolved via
@@ -50,7 +50,7 @@ def test_only_one_default_profile(cli_name, cli_dir, cli_executable, test_config
     """
     _skip_if_no_auth(cli_name, test_config)
 
-    # Invoke the CLI once so BaseConfig auto-initialises the default profile
+    # Invoke the CLI once so BaseConfig auto-initialises the active profile
     # (and migrates any legacy repo-local .env files into the user data dir).
     # This must be deterministic — no try/except, no fallback.
     import subprocess
@@ -67,7 +67,7 @@ def test_only_one_default_profile(cli_name, cli_dir, cli_executable, test_config
     profiles_dir = get_profiles_base_dir(cli_name)
     assert profiles_dir.exists(), (
         f"'{cli_name}' has no profiles directory at {profiles_dir}. "
-        f"All auth-capable CLI tools must auto-initialise a default profile "
+        f"All auth-capable CLI tools must auto-initialise an active profile "
         f"via BaseConfig on first invocation. "
         f"Fix: Ensure Config(...) is constructed in main.py / create_auth_app()."
     )
@@ -75,72 +75,82 @@ def test_only_one_default_profile(cli_name, cli_dir, cli_executable, test_config
     env_files = sorted(profiles_dir.glob("*/.env"))
     assert env_files, (
         f"'{cli_name}' has no profile .env files under {profiles_dir}. "
-        f"Expected at least {profiles_dir / 'default' / '.env'}. "
-        f"Fix: Ensure BaseConfig auto-initialises the default profile."
+        f"Expected at least one profile .env. "
+        f"Fix: Ensure BaseConfig auto-initialises the active profile."
     )
 
-    defaults = []
-    for f in env_files:
-        content = f.read_text()
-        for line in content.splitlines():
-            line = line.strip()
-            if line.startswith("IS_DEFAULT_PROFILE="):
-                value = line.split("=", 1)[1].strip().strip("\"'")
-                if value == "1":
-                    # Report as ``<profile-name>/.env`` for a useful failure message.
-                    defaults.append(f"{f.parent.name}/.env")
+    import json
+    profiles_result = subprocess.run(
+        [cli_executable, "auth", "profiles", "list"],
+        capture_output=True, text=True, timeout=15,
+    )
+    assert profiles_result.returncode == 0, (
+        f"'{cli_name} auth profiles list' failed with exit code {profiles_result.returncode}. "
+        f"Cannot verify active profiles. stderr: {profiles_result.stderr[:300]}"
+    )
+    profiles = json.loads(profiles_result.stdout)
+    active_by_type = {}
+    auth_types = set()
+    for profile in profiles:
+        auth_types.add(profile.get("auth_type"))
+        if profile.get("active") is True:
+            active_by_type.setdefault(profile.get("auth_type"), []).append(profile.get("name"))
 
-    assert len(defaults) == 1, (
-        f"'{cli_name}' should have exactly one default profile "
-        f"(IS_DEFAULT_PROFILE=1) under {profiles_dir}. "
-        f"Found {len(defaults)}: {', '.join(defaults) if defaults else 'none'}. "
-        f"Fix: Ensure exactly one profile .env has IS_DEFAULT_PROFILE=1."
+    invalid = {
+        auth_type: active_by_type.get(auth_type, [])
+        for auth_type in auth_types
+        if len(active_by_type.get(auth_type, [])) != 1
+    }
+    assert not invalid, (
+        f"'{cli_name}' should have exactly one active profile per auth type. "
+        f"Invalid auth types: {invalid}. "
+        f"Fix: Select one active profile per auth type with '{cli_name} auth profiles select <name>'."
     )
 
 
-def test_env_example_has_is_default_profile(cli_name, cli_dir, test_config):
-    """All auth-capable CLIs: .env.example includes IS_DEFAULT_PROFILE=."""
+def test_env_example_has_active_profile_marker(cli_name, cli_dir, test_config):
+    """All auth-capable CLIs: .env.example includes ACTIVE=."""
     _skip_if_no_auth(cli_name, test_config)
     env_example = cli_dir / ".env.example"
     assert env_example.exists(), (
         f"'{cli_name}' has no .env.example file. "
         f"All CLI tools must have a .env.example template. "
-        f"Fix: Create .env.example with IS_DEFAULT_PROFILE=1 and all required env vars."
+        f"Fix: Create .env.example with ACTIVE=true and all required env vars."
     )
 
     content = env_example.read_text()
-    assert "IS_DEFAULT_PROFILE=" in content, (
-        f"'{cli_name}/.env.example' missing IS_DEFAULT_PROFILE= line. "
-        f"Fix: Add IS_DEFAULT_PROFILE=1 to .env.example."
+    assert "ACTIVE=" in content, (
+        f"'{cli_name}/.env.example' missing ACTIVE= line. "
+        f"Fix: Add ACTIVE=true to .env.example."
     )
 
 
-def test_profiles_dir_gitignored(cli_name, cli_tools_root):
-    """All CLIs: authentication_profiles/ is ignored by the repo root .gitignore."""
+def test_profiles_dir_gitignored(cli_tools_root):
+    """Repo root .gitignore ignores authentication_profiles/ for every CLI."""
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (
-        f"Repo root .gitignore not found while checking '{cli_name}'. "
+        "Repo root .gitignore not found. "
         f"Fix: Create .gitignore with authentication_profiles/ and .env.* entries."
     )
 
     content = gitignore.read_text()
     assert "authentication_profiles/" in content or "authentication_profiles" in content, (
-        f"Repo root .gitignore missing authentication_profiles/ entry for '{cli_name}'. "
+        "Repo root .gitignore missing authentication_profiles/ entry. "
         f"Fix: Add 'authentication_profiles/' to .gitignore."
     )
 
 
-def test_env_star_gitignored(cli_name, cli_tools_root):
-    """All CLIs: .env.* pattern (except .env.example) is ignored by repo root .gitignore."""
+def test_env_star_gitignored(cli_tools_root):
+    """Repo root .gitignore ignores .env.* while preserving .env.example."""
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (
-        f"Repo root .gitignore not found while checking '{cli_name}'. "
+        "Repo root .gitignore not found. "
         f"Fix: Create .gitignore with authentication_profiles/ and .env.* entries."
     )
 
     content = gitignore.read_text()
     assert ".env.*" in content, (
-        f"Repo root .gitignore missing '.env.*' pattern for '{cli_name}'. "
+        "Repo root .gitignore missing '.env.*' pattern. "
         f"Fix: Add '.env.*' and '!.env.example' to .gitignore."
     )
 
@@ -195,11 +205,7 @@ def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, tes
         f"Fix: Ensure profiles are mounted under auth via create_auth_app()."
     )
 
-    # Verify exactly one profile is flagged as the default. The default
-    # profile directory may be named anything (default, adam-bertram, work,
-    # etc.); is-default-ness is determined by the `is_default: true` flag in
-    # the JSON, which is itself driven by the IS_DEFAULT_PROFILE=1 line in
-    # the profile's .env. The directory name is irrelevant.
+    # Verify exactly one profile is active per auth type.
     import json
     try:
         profiles = json.loads(result.stdout)
@@ -211,13 +217,31 @@ def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, tes
 
     assert profiles, (
         f"'{cli_name} auth profiles list' returned no profiles. "
-        f"Fix: Ensure BaseConfig auto-initialises a default profile."
+        f"Fix: Ensure BaseConfig auto-initialises an active profile."
     )
 
-    defaults = [p for p in profiles if p.get("is_default") is True]
-    profile_names = [p.get("name", "") for p in profiles]
-    assert len(defaults) == 1, (
-        f"'{cli_name} auth profiles list' should report exactly one profile with "
-        f"is_default=true. Found {len(defaults)} among {profile_names}. "
-        f"Fix: Ensure exactly one profile .env has IS_DEFAULT_PROFILE=1."
+    missing_fields = [
+        p.get("name", "<unnamed>")
+        for p in profiles
+        if "is_default" in p or not isinstance(p.get("auth_type"), str) or not isinstance(p.get("active"), bool)
+    ]
+    assert not missing_fields, (
+        f"'{cli_name} auth profiles list' must return active/auth_type schema and no is_default field. "
+        f"Profiles with invalid schema: {missing_fields}."
+    )
+
+    active_by_type = {}
+    for profile in profiles:
+        if profile.get("active") is True:
+            active_by_type.setdefault(profile["auth_type"], []).append(profile["name"])
+    auth_types = {profile["auth_type"] for profile in profiles}
+    invalid_auth_types = {
+        auth_type: active_by_type.get(auth_type, [])
+        for auth_type in auth_types
+        if len(active_by_type.get(auth_type, [])) != 1
+    }
+    assert not invalid_auth_types, (
+        f"'{cli_name} auth profiles list' should report exactly one active profile per auth type. "
+        f"Invalid auth types: {invalid_auth_types}. "
+        f"Fix: Ensure profile selection uses ACTIVE=true scoped by auth_type."
     )

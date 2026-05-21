@@ -40,7 +40,8 @@ Before asking Adam for CLI credentials, or storing any new reusable CLI credenti
   "profiles": [
     {
       "name": "default",
-      "is_default": true,
+      "auth_type": "default",
+      "active": true,
       "authenticated": true,
       "credential_types": {
         "custom": {
@@ -58,7 +59,7 @@ Before asking Adam for CLI credentials, or storing any new reusable CLI credenti
 
 - `profiles` is always a list. Single-profile CLIs still emit a one-element list.
 - stdout MUST be a single valid JSON document. No prose, info messages, or progress text may be mixed in — `print_info` / `print_success` / `print_error` must route to stderr. Mixing prose with JSON on stdout breaks every downstream JSON consumer (this is the "monarch stream-separation bug").
-- Per-profile required keys: `name` (string), `is_default` (bool), `authenticated` (bool), `credential_types` (object). Exactly one profile in the array may have `is_default: true`.
+- Per-profile required keys: `name` (string), `auth_type` (string), `active` (bool), `authenticated` (bool), `credential_types` (object). `auth status` returns active profiles only, with exactly one active profile per auth type.
 - Per-profile `authenticated` is OR-over-configured types: true when at least one credential pathway works.
 - `credential_types.<type>` is keyed by the `CredentialType.value` string. **The complete whitelist** is `custom`, `api_key`, `oauth`, `oauth_authorization_code`, `personal_access_token`, `username_password`, `browser_session`. Any other key is a schema violation. Per-type **required** keys:
   - `credentials_saved` (bool) — whether required fields for this type are present in the profile.
@@ -74,8 +75,9 @@ Before asking Adam for CLI credentials, or storing any new reusable CLI credenti
 
 **Validation gates (enforced):**
 
-- **Fleet-level gate** — `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh` runs a `auth_status_schema` phase before pytest. It executes `<cli> auth status`, validates with `jq`, and surfaces a structured `test_auth_status_schema` failure in the test result JSON when the contract above is violated. The phase auto-skips when the CLI has no `auth` or `auth status` subcommand.
-- **Unit-level gate** — `_repo/cli-tools-shared/tests/test_auth_commands.py` invokes `create_auth_app`'s `status` subcommand via Typer's `CliRunner` and asserts the same canonical shape end-to-end across single-profile, multi-profile, passing, failing, and dual-credential setups. The schema check helper is the source of truth — keep both gates in sync.
+- **Fleet-level gate** — `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh` runs an `auth status` schema preflight before the broader pytest suite. It executes `<cli> auth status`, parses stdout as JSON via the shared `tests/auth_status_schema.py` helper, prints a clear `[FAIL] auth status schema: ...` line on stderr for violations, and injects a structured `test_auth_status_schema_preflight` failure into the harness JSON summary. The phase auto-skips when the CLI has no `auth` or `auth status` subcommand.
+- **Pytest CLI gate** — `_repo/skills/cli-tool/tests/test_auth_status_schema.py` reuses the same helper for direct pytest runs and other callers that invoke the compliance tests outside the shell wrapper.
+- **Unit-level gate** — `_repo/cli-tools-shared/tests/test_auth_commands.py` invokes `create_auth_app`'s `status` subcommand via Typer's `CliRunner` and asserts the same canonical shape end-to-end across single-profile, multi-profile, passing, failing, and dual-credential setups. The shared schema helper is the source of truth — keep all three gates in sync.
 
 **Who computes what:**
 

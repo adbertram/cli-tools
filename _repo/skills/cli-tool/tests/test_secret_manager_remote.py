@@ -174,6 +174,97 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
     assert ssh_stdin == ""
 
 
+def test_remote_host_unlock_secret_unlocks_keychain_in_remote_command(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    remote_log_dir = tmp_path / "logs"
+    remote_log_dir.mkdir()
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/security_args.log"
+if [[ "${1:-}" == "find-generic-password" ]]; then
+    printf 'unlock-password'
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+    _write_executable(
+        fake_bin / "ssh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+log_dir="${FAKE_REMOTE_LOG_DIR:?}"
+count_file="$log_dir/ssh_count"
+count=0
+if [[ -f "$count_file" ]]; then
+    count="$(cat "$count_file")"
+fi
+count="$((count + 1))"
+printf '%s' "$count" >"$count_file"
+printf '%s\n' "$*" >>"$log_dir/ssh_args.log"
+if [[ "$count" == "1" ]]; then
+    printf '/tmp/fake-remote-dir\n'
+    exit 0
+fi
+cat >"$log_dir/ssh_stdin.bin"
+""",
+    )
+    _write_executable(
+        fake_bin / "scp",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+    env["FAKE_REMOTE_LOG_DIR"] = str(remote_log_dir)
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(SECRETS_SCRIPT),
+            "--remote-host",
+            "example-host",
+            "--remote-unlock-secret",
+            "adam-server-sudo",
+            "set",
+            "example-secret",
+            "topsecret",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    ssh_args = (remote_log_dir / "ssh_args.log").read_text()
+    scp_args = (remote_log_dir / "scp_args.log").read_text()
+    ssh_stdin = (remote_log_dir / "ssh_stdin.bin").read_text()
+
+    assert "security\\ unlock-keychain\\ -p" in ssh_args
+    assert "\\$keychain_password" in ssh_args
+    assert "example-host:/tmp/fake-remote-dir/keychain-password" in scp_args
+    assert "example-host:/tmp/fake-remote-dir/secret.value" in scp_args
+    assert "topsecret" not in ssh_args
+    assert "topsecret" not in scp_args
+    assert "topsecret" not in result.stdout
+    assert "topsecret" not in result.stderr
+    assert "unlock-password" not in ssh_args
+    assert "unlock-password" not in scp_args
+    assert "unlock-password" not in result.stdout
+    assert "unlock-password" not in result.stderr
+    assert ssh_stdin == ""
+
+
 def test_remote_locked_keychain_without_tty_fails_clearly(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()

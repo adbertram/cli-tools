@@ -44,7 +44,7 @@ After installation, the `{toolname}` command will be available in your terminal.
 {toolname} auth profiles list
 {toolname} auth profiles get default
 {toolname} auth profiles create PROFILE_NAME
-{toolname} auth profiles set-default PROFILE_NAME
+{toolname} auth profiles select PROFILE_NAME
 {toolname} auth profiles delete PROFILE_NAME
 ```
 
@@ -126,7 +126,7 @@ CACHE_TTL=3600
 Authentication profile variables (CLI-managed runtime auth state):
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 ACCESS_TOKEN=<managed-by-cli>
 REFRESH_TOKEN=<managed-by-cli>
 TOKEN_EXPIRES_AT=2026-01-01T00:00:00Z

@@ -247,7 +247,7 @@ class TestBaseConfigClearEphemeral:
                 lines.append(f"{key}=secret://{secret_name}")
                 continue
             lines.append(f"{key}={value}")
-        lines.append("IS_DEFAULT_PROFILE=1")
+        lines.append("ACTIVE=true")
         env_path.write_text("\n".join(lines) + "\n")
 
         def fake_run_secret_manager(command: str, secret_name: str, *, secret_value=None):

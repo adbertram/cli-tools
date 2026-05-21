@@ -413,8 +413,8 @@ Examples:
 # Show a profile
 {name} auth profiles get default
 
-# Switch the default profile
-{name} auth profiles set-default PROFILE_NAME
+# Select the active profile for its auth type
+{name} auth profiles select PROFILE_NAME
 
 # Create a profile
 {name} auth profiles create PROFILE_NAME
@@ -427,7 +427,7 @@ Examples:
         auth_config_section = f"""Authentication profile variables (CLI-managed runtime auth state):
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 ACCESS_TOKEN=<access_token_written_by_cli>
 REFRESH_TOKEN=<refresh_token_written_by_cli>
 TOKEN_EXPIRES_AT=2026-01-01T00:00:00Z
@@ -523,10 +523,10 @@ PASSWORD=secret://{name}-password
                 auth_file.unlink()
                 print_success("Removed auth.py (--auth-type none)")
 
-        # Create .env with IS_DEFAULT_PROFILE=1 (not in template since .gitignore excludes it)
+        # Create .env with ACTIVE=true (not in template since .gitignore excludes it)
         env_file = output_dir / ".env"
-        env_file.write_text("IS_DEFAULT_PROFILE=1\n")
-        print_success("Created .env with IS_DEFAULT_PROFILE=1")
+        env_file.write_text("ACTIVE=true\n")
+        print_success("Created .env with ACTIVE=true")
 
         print_success("Template files copied and processed")
     except Exception as e:

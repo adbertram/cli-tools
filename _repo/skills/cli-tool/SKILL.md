@@ -109,7 +109,7 @@ After creating a CLI tool, you MUST update `<cli-tools-root>/_repo/docs/cli_tool
 - `get` commands: `--table/-t`
 - `auth login`: `--force/-F` (when auth commands are present)
 - `auth status`: Must output JSON in the per-profile, per-credential-type shape emitted by `create_auth_app`:
-  `{"profiles":[{"name","is_default","authenticated","credential_types":{"<type>":{"credentials_saved","authenticated",...}}}]}`.
+  `{"profiles":[{"name","auth_type","active","authenticated","credential_types":{"<type>":{"credentials_saved","authenticated",...}}}]}`.
   Use the shared `cli_tools_shared.auth_commands.create_auth_app` — no custom `auth_status` function unless the CLI is genuinely exceptional (see `references/auth-standards.md`).
 - README: Must document ALL commands with examples
 

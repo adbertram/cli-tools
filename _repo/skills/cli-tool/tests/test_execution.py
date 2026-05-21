@@ -59,22 +59,35 @@ def test_list_commands_have_no_required_positional_args(cli_executable, cli_name
     # Test always passes - positional args are now warnings, not failures
 
 
-def test_list_commands_execute_successfully(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def _profile_args(auth_context, help_cache, cmd_path):
+    """Return the active profile argument for commands that expose --profile."""
+    if not isinstance(auth_context, dict):
+        return []
+    profile = auth_context.get("profile")
+    if not profile:
+        return []
+    if "--profile" not in help_cache(cmd_path):
+        return []
+    return ["--profile", profile]
+
+
+def test_list_commands_execute_successfully(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertions 29-30: List commands execute and return valid JSON."""
     list_commands, timeout = discover_list_commands(cli_executable, cli_name, test_config, command_filter)
 
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     executed_commands = []
     for cmd_path in list_commands:
         # Get fixture-based args for this command (if fixtures defined)
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
-        args = cmd_path.split() + ["--limit", "1"] + fixture_args
+        args = cmd_path.split() + ["--limit", "1"] + profile_args + fixture_args
         full_cmd = f"{cli_name} {' '.join(args)}"
         executed_commands.append(full_cmd)
         print(f"  Executing: {full_cmd}")
@@ -118,21 +131,22 @@ def test_list_commands_execute_successfully(cli_executable, cli_name, test_confi
         )
 
 
-def test_stdout_stderr_separation(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_stdout_stderr_separation(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Comprehensive: Verify all commands properly separate stdout/stderr (Decision 28)."""
     list_commands, timeout = discover_list_commands(cli_executable, cli_name, test_config, command_filter)
 
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for cmd_path in list_commands:
         # Get fixture-based args for this command (if fixtures defined)
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
-        args = cmd_path.split() + ["--limit", "1"] + fixture_args
+        args = cmd_path.split() + ["--limit", "1"] + profile_args + fixture_args
         full_cmd = f"{cli_name} {' '.join(args)}"
         print(f"  Executing: {full_cmd}")
         result = run_cli_command(cli_executable, args, timeout=timeout)
@@ -167,23 +181,24 @@ def test_stdout_stderr_separation(cli_executable, cli_name, test_config, cli_fix
         )
 
 
-def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Comprehensive: Test --properties with nested field extraction (Decision 27)."""
     list_commands, timeout = discover_list_commands(cli_executable, cli_name, test_config, command_filter)
 
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     # Use first discovered list command
     cmd_path = list_commands[0]
 
     # Get fixture-based args for this command (if fixtures defined)
     fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+    profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
     # First, discover actual field names by fetching one item without --properties
-    discovery_args = cmd_path.split() + ["--limit", "1"] + fixture_args
+    discovery_args = cmd_path.split() + ["--limit", "1"] + profile_args + fixture_args
     discovery_result = run_cli_command(cli_executable, discovery_args, timeout=timeout)
     if discovery_result.returncode != 0:
         if "required" in discovery_result.stderr.lower() or "missing" in discovery_result.stderr.lower():
@@ -205,7 +220,7 @@ def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config
     test_fields = actual_fields[:2]
     properties_value = ",".join(test_fields)
 
-    args = cmd_path.split() + ["--properties", properties_value, "--limit", "1"] + fixture_args
+    args = cmd_path.split() + ["--properties", properties_value, "--limit", "1"] + profile_args + fixture_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
     result = run_cli_command(cli_executable, args, timeout=timeout)
@@ -234,9 +249,10 @@ def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config
 
 
 
-def _run_list_command_with_limit(cli_executable, cli_name, cmd_path, limit, extra_args, fixture_args, timeout):
+def _run_list_command_with_limit(cli_executable, cli_name, cmd_path, limit, extra_args, fixture_args, timeout, profile_args=None):
     """Helper to run a list command with a specific limit and return (full_cmd, result)."""
-    args = cmd_path.split() + ["--limit", str(limit)] + extra_args + fixture_args
+    profile_args = profile_args or []
+    args = cmd_path.split() + ["--limit", str(limit)] + extra_args + profile_args + fixture_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
     result = run_cli_command(cli_executable, args, timeout=timeout)
@@ -297,7 +313,7 @@ def _is_skippable_failure(result, fixture_args):
     return missing_arg and not fixture_args
 
 
-def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertion: --limit actually restricts the number of returned items.
 
     Runs each list command with --limit 1 and verifies the response contains
@@ -309,15 +325,16 @@ def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config,
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for cmd_path in list_commands:
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
         # Run with --limit 1
         full_cmd_1, result_1 = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 1, [], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 1, [], fixture_args, timeout, profile_args
         )
         if _is_skippable_failure(result_1, fixture_args):
             continue
@@ -345,7 +362,7 @@ def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config,
 
         # Run with --limit 3
         full_cmd_3, result_3 = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 3, [], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 3, [], fixture_args, timeout, profile_args
         )
         if result_3.returncode != 0:
             continue  # Already tested limit 1, don't double-report
@@ -370,7 +387,7 @@ def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config,
         )
 
 
-def test_list_commands_with_table_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_list_commands_with_table_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertion: --table flag produces Rich table output, not JSON.
 
     Every list command must support --table/-t and produce table-formatted
@@ -382,13 +399,14 @@ def test_list_commands_with_table_flag(cli_executable, cli_name, test_config, cl
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for cmd_path in list_commands:
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
         full_cmd, result = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 1, ["--table"], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 1, ["--table"], fixture_args, timeout, profile_args
         )
 
         if _is_skippable_failure(result, fixture_args):
@@ -431,7 +449,7 @@ def test_list_commands_with_table_flag(cli_executable, cli_name, test_config, cl
         )
 
 
-def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertion: --filter accepts field:op:value syntax and reduces results.
 
     Every list command must accept --filter. A nonsense filter value should
@@ -443,15 +461,16 @@ def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, c
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for cmd_path in list_commands:
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
         # First run WITHOUT filter to get a baseline count
         full_cmd_base, result_base = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 5, [], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 5, [], fixture_args, timeout, profile_args
         )
         if _is_skippable_failure(result_base, fixture_args):
             continue
@@ -464,7 +483,7 @@ def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, c
         items_base = _extract_items(data_base)
 
         # Now run WITH a nonsense filter that should match nothing
-        args = cmd_path.split() + ["--limit", "5", "--filter", "name:eq:__zzz_nonexistent_xyzzy__"] + fixture_args
+        args = cmd_path.split() + ["--limit", "5", "--filter", "name:eq:__zzz_nonexistent_xyzzy__"] + profile_args + fixture_args
         full_cmd_filter = f"{cli_name} {' '.join(args)}"
         print(f"  Executing: {full_cmd_filter}")
         result_filter = run_cli_command(cli_executable, args, timeout=timeout)
@@ -517,7 +536,7 @@ def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, c
         )
 
 
-def test_list_commands_with_properties_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_list_commands_with_properties_flag(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertion: --properties restricts output to only requested fields.
 
     Every list command must accept --properties. When provided, the output
@@ -529,15 +548,16 @@ def test_list_commands_with_properties_flag(cli_executable, cli_name, test_confi
     if not list_commands:
         pytest.skip("No list commands found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for cmd_path in list_commands:
         fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+        profile_args = _profile_args(auth_context, help_cache, cmd_path)
 
         # First get unfiltered output to know what fields exist
         full_cmd_base, result_base = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 1, [], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 1, [], fixture_args, timeout, profile_args
         )
         if _is_skippable_failure(result_base, fixture_args):
             continue
@@ -554,7 +574,7 @@ def test_list_commands_with_properties_flag(cli_executable, cli_name, test_confi
 
         # Now run with --properties id,name
         full_cmd_props, result_props = _run_list_command_with_limit(
-            cli_executable, cli_name, cmd_path, 1, ["--properties", "id,name"], fixture_args, timeout
+            cli_executable, cli_name, cmd_path, 1, ["--properties", "id,name"], fixture_args, timeout, profile_args
         )
 
         if result_props.returncode != 0:
@@ -612,7 +632,7 @@ def test_list_commands_with_properties_flag(cli_executable, cli_name, test_confi
         )
 
 
-def test_get_commands_execute_successfully(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated):
+def test_get_commands_execute_successfully(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):
     """Assertion: Get commands return a single item (not a list).
 
     Discovers all get commands, fetches an ID from the corresponding list command,
@@ -651,14 +671,15 @@ def test_get_commands_execute_successfully(cli_executable, cli_name, test_config
     if not get_groups:
         pytest.skip("No command groups with both list and get found")
 
-    require_authenticated()
+    auth_context = require_authenticated()
 
     errors = []
     for group in get_groups:
         # First, run list --limit 1 to get an ID
         list_cmd_path = f"{group} list"
         fixture_args = get_fixture_args(cli_name, list_cmd_path, cli_fixtures, test_config)
-        list_args = list_cmd_path.split() + ["--limit", "1"] + fixture_args
+        list_profile_args = _profile_args(auth_context, help_cache, list_cmd_path)
+        list_args = list_cmd_path.split() + ["--limit", "1"] + list_profile_args + fixture_args
         print(f"  Fetching ID via: {cli_name} {' '.join(list_args)}")
         list_result = run_cli_command(cli_executable, list_args, timeout=timeout)
 
@@ -683,8 +704,9 @@ def test_get_commands_execute_successfully(cli_executable, cli_name, test_config
         # Now run get with the discovered ID
         get_cmd_path = f"{group} get"
         get_fixture_args_list = get_fixture_args(cli_name, get_cmd_path, cli_fixtures, test_config)
+        get_profile_args = _profile_args(auth_context, help_cache, get_cmd_path)
 
-        get_args = get_cmd_path.split() + get_fixture_args_list + [str(item_id)]
+        get_args = get_cmd_path.split() + get_profile_args + get_fixture_args_list + [str(item_id)]
         full_cmd = f"{cli_name} {' '.join(get_args)}"
         print(f"  Executing: {full_cmd}")
         get_result = run_cli_command(cli_executable, get_args, timeout=timeout)

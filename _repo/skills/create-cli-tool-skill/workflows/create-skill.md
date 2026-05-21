@@ -41,7 +41,7 @@ Review the output:
 - Check total_commands count is reasonable
 - Verify key commands were discovered
 - Note any commands that may have been missed
-- Verify nested command paths were preserved. If the CLI has auth profile support, confirm `auth profiles list`, `auth profiles get`, `auth profiles create`, `auth profiles set-default`, and `auth profiles delete` are present; do not replace them with top-level `profiles` commands.
+- Verify nested command paths were preserved. If the CLI has auth profile support, confirm `auth profiles list`, `auth profiles get`, `auth profiles create`, `auth profiles select`, and `auth profiles delete` are present; do not replace them with top-level `profiles` commands.
 
 ## Step 4: Add usage_instructions (AI Enrichment)
 

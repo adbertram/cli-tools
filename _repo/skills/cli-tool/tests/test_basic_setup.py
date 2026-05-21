@@ -219,7 +219,7 @@ def test_no_runtime_agent_dirs(cli_name, cli_dir, command_filter):
     )
 
 
-def test_repo_gitignore_covers_cli_source_artifacts(cli_name, cli_tools_root, command_filter):
+def test_repo_gitignore_covers_cli_source_artifacts(cli_tools_root, command_filter):
     """Assertion 7a2: repo root .gitignore covers generated CLI source artifacts."""
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
@@ -242,9 +242,42 @@ def test_repo_gitignore_covers_cli_source_artifacts(cli_name, cli_tools_root, co
         if keyword not in content
     ]
     assert not missing, (
-        f"Repo root .gitignore is missing required CLI artifact patterns for '{cli_name}': "
+        "Repo root .gitignore is missing required CLI artifact patterns: "
         f"{', '.join(missing)}. "
         f"Fix: Add these to {gitignore}"
+    )
+
+
+def test_repo_root_is_only_source_visible_gitignore(cli_tools_root, command_filter):
+    """Assertion 7a3: source-visible .gitignore policy is centralized at repo root."""
+    if command_filter:
+        pytest.skip("Skipping general setup tests (command filter active)")
+
+    generated_dirs = {
+        ".git",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+        "venv",
+    }
+    visible_gitignores = sorted(
+        path.relative_to(cli_tools_root).as_posix()
+        for path in cli_tools_root.rglob(".gitignore")
+        if not any(
+            part in generated_dirs
+            for part in path.relative_to(cli_tools_root).parts[:-1]
+        )
+    )
+
+    assert visible_gitignores == [".gitignore"], (
+        "Only the repo root .gitignore should exist in source directories. "
+        f"Found: {visible_gitignores}. "
+        "Fix: remove child .gitignore files and put ignore rules in the repo root .gitignore."
     )
 
 

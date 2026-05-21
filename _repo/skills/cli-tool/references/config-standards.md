@@ -34,7 +34,7 @@ Authentication profiles live under the `authentication_profiles` directory:
 ~/.local/share/cli-tools/<tool>/
 └── authentication_profiles/
     └── <profile-name>/
-        ├── .env              ← auth data (active profile's IS_DEFAULT_PROFILE=1)
+        ├── .env              ← auth data (active profile's ACTIVE=true)
         ├── browser-data/     ← persistent Chromium profile for browser auth
         ├── profile.json      ← auth marker
         └── cache/            ← cached responses

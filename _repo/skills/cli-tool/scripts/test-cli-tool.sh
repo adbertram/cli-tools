@@ -19,6 +19,71 @@ json_error() {
     MESSAGE="$1" python3 -c 'import json, os; print(json.dumps({"error": os.environ["MESSAGE"]}))'
 }
 
+run_auth_status_schema_preflight() {
+    PYTHONPATH="$SKILL_DIR/tests${PYTHONPATH:+:$PYTHONPATH}" \
+    CLI_NAME="$CLI_NAME" \
+    CLI_EXECUTABLE="$CLI_EXECUTABLE" \
+    python3 - <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+from auth_status_schema import parse_and_validate_stdout
+
+
+def emit(status: str, message: str) -> None:
+    label = {"passed": "PASS", "skipped": "SKIP", "failed": "FAIL"}[status]
+    print(f"[{label}] auth status schema: {message}", file=sys.stderr)
+    print(json.dumps({"status": status, "message": message}))
+
+
+def has_subcommand(help_text: str, name: str) -> bool:
+    return any(name in line.split() for line in help_text.splitlines() if name in line)
+
+
+def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, capture_output=True, text=True)
+
+
+cli_name = os.environ["CLI_NAME"]
+cli_executable = os.environ["CLI_EXECUTABLE"]
+
+root_help = run_command([cli_executable, "--help"])
+if root_help.returncode != 0:
+    detail = root_help.stderr.strip() or root_help.stdout.strip()
+    emit("failed", f"'{cli_name} --help' exited {root_help.returncode}: {detail[:300]}")
+    raise SystemExit(0)
+
+if not has_subcommand(root_help.stdout, "auth"):
+    emit("skipped", f"{cli_name} has no auth subcommand")
+    raise SystemExit(0)
+
+auth_help = run_command([cli_executable, "auth", "--help"])
+if auth_help.returncode != 0:
+    detail = auth_help.stderr.strip() or auth_help.stdout.strip()
+    emit("failed", f"'{cli_name} auth --help' exited {auth_help.returncode}: {detail[:300]}")
+    raise SystemExit(0)
+
+if not has_subcommand(auth_help.stdout, "status"):
+    emit("skipped", f"{cli_name} has no 'auth status' subcommand")
+    raise SystemExit(0)
+
+status_result = run_command([cli_executable, "auth", "status"])
+if status_result.returncode != 0:
+    detail = status_result.stderr.strip() or status_result.stdout.strip()
+    emit("failed", f"'{cli_name} auth status' exited {status_result.returncode}: {detail[:300]}")
+    raise SystemExit(0)
+
+_, errors = parse_and_validate_stdout(status_result.stdout)
+if errors:
+    emit("failed", "; ".join(errors))
+    raise SystemExit(0)
+
+emit("passed", f"'{cli_name} auth status' matches canonical schema")
+PY
+}
+
 CLI_NAME=""
 COMMAND=""
 VERBOSE=false
@@ -116,6 +181,17 @@ PY
     fi
 fi
 
+CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
+if [[ -x "$CANONICAL_UV_LAUNCHER" ]]; then
+    CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
+else
+    CLI_EXECUTABLE="$(command -v "$CLI_NAME" 2>/dev/null || true)"
+fi
+if [[ -z "$CLI_EXECUTABLE" ]]; then
+    json_error "CLI executable not found on PATH: $CLI_NAME" >&2
+    exit 1
+fi
+
 FORBIDDEN_ROOT_ENV_FILES=()
 for env_file in "$CLI_DIR"/.env "$CLI_DIR"/.env.*; do
     [[ "$(basename "$env_file")" == ".env.example" || ! -f "$env_file" ]] && continue
@@ -155,13 +231,33 @@ RAW_OUTPUT_FILE=$(mktemp -t cli-tool-tests-raw-XXXXXX.log)
 trap 'rm -f "$JUNIT" "$RAW_OUTPUT_FILE"' EXIT
 export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/.cache/uv/project-envs/cli-tool-skill-tests}"
 
+PRECHECK_JSON="$(
+    run_auth_status_schema_preflight 2> >(tee -a "$RAW_OUTPUT_FILE" >&2)
+)"
+PRECHECK_STATUS="$(PRECHECK_JSON="$PRECHECK_JSON" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["PRECHECK_JSON"])["status"])
+PY
+)"
+PRECHECK_MESSAGE="$(PRECHECK_JSON="$PRECHECK_JSON" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["PRECHECK_JSON"])["message"])
+PY
+)"
+
 PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")
+PYTEST_ARGS+=(-k "not test_auth_status_schema")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
-uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee "$RAW_OUTPUT_FILE" >&2
+uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
 EXIT_CODE=$?
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \
     EXIT_CODE="$EXIT_CODE" RAW_OUTPUT_FILE="$RAW_OUTPUT_FILE" \
+    PRECHECK_STATUS="$PRECHECK_STATUS" PRECHECK_MESSAGE="$PRECHECK_MESSAGE" \
     python3 "$SKILL_DIR/scripts/junit_to_json.py"

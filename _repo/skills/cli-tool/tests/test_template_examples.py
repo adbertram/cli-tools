@@ -78,7 +78,7 @@ def test_template_source_uses_output_contract_language():
     ]
     hits = []
     for path in TEMPLATES.rglob("*"):
-        if not path.is_file():
+        if not path.is_file() or any(part.startswith(".") for part in path.parts):
             continue
         text = path.read_text()
         for phrase in forbidden:

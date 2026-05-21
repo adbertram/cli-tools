@@ -41,7 +41,15 @@ printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh 
 SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh set <name>
 ```
 
-For remote hosts, run the same command with `--remote-host <host>`. The secret-manager copies `set` payloads to a private temp file on the remote host instead of placing them in the SSH command line or streaming them over SSH stdin. That keeps `/dev/tty` available when the remote login keychain needs an unlock prompt before retrying the canonical Keychain command.
+For remote hosts, run the same command with `--remote-host <host>`. The secret-manager copies `set` payloads to a private temp file on the remote host instead of placing them in the SSH command line or streaming them over SSH stdin.
+
+For non-interactive remote sessions where the remote login keychain can be locked, include `--remote-unlock-secret <local-secret-name>`. The value of that local secret is copied to a private remote temp file and used to unlock the remote keychain in the same SSH command before the requested secret operation runs:
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret adam-server-sudo set <name>
+```
+
+Use the explicit unlock option instead of running `security unlock-keychain` in a separate SSH command. macOS Keychain access can be session-scoped, so a separate SSH unlock does not reliably apply to the later secret-manager command.
 
 ## Required Workflow
 

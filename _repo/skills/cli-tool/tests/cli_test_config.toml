@@ -206,10 +206,10 @@ list_commands = [
 
 [cli_specific.linkedin]
 # LinkedIn member post reads require the restricted `r_member_social` scope.
-# The repo's verified default LinkedIn profile supports member writes plus page
+# The repo's verified active LinkedIn profile supports member writes plus page
 # reads/writes, but not member-read list/get/search. Exclude `user posts list`
 # from generic live list-command tests and keep coverage on commands that are
-# supported by the verified default profile.
+# supported by the verified active profile.
 list_commands = [
     "page posts list",
     "auth profiles list",

@@ -147,8 +147,7 @@ def test_auth_status_outputs_json_with_profiles(cli_executable, cli_name, help_c
     )
     assert data["profiles"], (
         f"'{cli_name} auth status' returned an empty 'profiles' array. "
-        f"Expected at least one profile entry (default profile if no "
-        f"others exist)."
+        f"Expected at least one active profile entry."
     )
     for entry in data["profiles"]:
         assert "name" in entry, "profile entry missing 'name'"
@@ -296,7 +295,7 @@ def test_auth_status_credential_types_match_config(
 def test_auth_status_lists_all_profiles_by_default(
     cli_executable, cli_name, help_cache, test_config, command_filter, is_browser_cli
 ):
-    """auth status with no --profile must return every profile from auth profiles list."""
+    """auth status with no --profile must return active profiles only."""
     skip_reason = _should_skip_profiles(cli_name, help_cache, test_config, command_filter)
     if skip_reason:
         pytest.skip(skip_reason)
@@ -314,12 +313,12 @@ def test_auth_status_lists_all_profiles_by_default(
     valid, data = validate_json_output(status_result.stdout)
     assert valid, "auth status must output valid JSON"
 
-    expected_names = {p["name"] for p in p_data if "name" in p}
+    expected_names = {p["name"] for p in p_data if p.get("active") is True}
     actual_names = {entry.get("name") for entry in data.get("profiles", [])}
     assert actual_names == expected_names, (
         f"'{cli_name} auth status' returned profiles {sorted(actual_names)} but "
-        f"'auth profiles list' reports {sorted(expected_names)}. "
-        f"Fix: Ensure auth_commands.py iterates every profile when --profile is not set."
+        f"'auth profiles list' reports active profiles {sorted(expected_names)}. "
+        f"Fix: Ensure auth_commands.py iterates only active profiles when --profile is not set."
     )
 
 
@@ -382,12 +381,10 @@ def test_auth_logout_has_profile_flag(cli_name, cli_dir, help_cache, test_config
 # ==================== Environment & Profiles Conventions ====================
 
 
-def test_env_has_is_default_profile(cli_name, cli_dir, cli_executable, help_cache, test_config, command_filter):
-    """All auth-capable CLIs: exactly one profile under
+def test_env_has_active_profile(cli_name, cli_dir, cli_executable, help_cache, test_config, command_filter):
+    """All auth-capable CLIs: at least one profile under
     ``~/.local/share/cli-tools/<tool>/authentication_profiles/<name>/.env`` has
-    ``IS_DEFAULT_PROFILE=1``. The default-profile directory may be named
-    anything (``default``, ``adam-bertram``, ``work``, etc.); the ``IS_DEFAULT_PROFILE=1``
-    line in the .env is what makes a profile the default, NOT the directory name.
+    ``ACTIVE=true``. Profile activity is scoped by auth type.
 
     Profile base path resolved via ``cli_tools_shared.config.get_profiles_base_dir``
     — the single source of truth — so this test never hardcodes the location.
@@ -408,7 +405,7 @@ def test_env_has_is_default_profile(cli_name, cli_dir, cli_executable, help_cach
     from cli_tools_shared.config import get_profiles_base_dir
     import subprocess
 
-    # Invoke the CLI once so BaseConfig auto-initialises the default profile
+    # Invoke the CLI once so BaseConfig auto-initialises the active profile
     # (and migrates any legacy repo-local .env files into the user data dir).
     result = subprocess.run(
         [cli_executable, "--help"],
@@ -416,14 +413,14 @@ def test_env_has_is_default_profile(cli_name, cli_dir, cli_executable, help_cach
     )
     assert result.returncode == 0, (
         f"'{cli_name} --help' failed with exit code {result.returncode}. "
-        f"Cannot verify default profile without a working CLI install. "
+        f"Cannot verify active profile without a working CLI install. "
         f"stderr: {result.stderr[:300]}"
     )
 
     profiles_dir = get_profiles_base_dir(cli_name)
     assert profiles_dir.exists(), (
         f"'{cli_name}' has no profiles directory at {profiles_dir}. "
-        f"All auth-capable CLI tools must auto-initialise a default profile "
+        f"All auth-capable CLI tools must auto-initialise an active profile "
         f"via BaseConfig on first invocation. "
         f"Fix: Ensure Config(...) is constructed in main.py / create_auth_app()."
     )
@@ -431,31 +428,27 @@ def test_env_has_is_default_profile(cli_name, cli_dir, cli_executable, help_cach
     env_files = sorted(profiles_dir.glob("*/.env"))
     assert env_files, (
         f"'{cli_name}' has no profile .env files under {profiles_dir}. "
-        f"Fix: Ensure BaseConfig auto-initialises a default profile (any name) on first invocation."
+        f"Fix: Ensure BaseConfig auto-initialises an active profile on first invocation."
     )
 
-    # Find the profile whose .env declares IS_DEFAULT_PROFILE=1. The default
-    # profile directory may be named anything — what makes it the default is
-    # this env-var line, not the directory name. (Exactly-one-default-ness is
-    # enforced separately by test_only_one_default_profile in test_profiles.py.)
-    default_envs = []
+    active_envs = []
     for env_file in env_files:
         content = env_file.read_text()
         for line in content.splitlines():
             stripped = line.strip()
-            if stripped.startswith("IS_DEFAULT_PROFILE="):
+            if stripped.startswith("ACTIVE="):
                 value = stripped.split("=", 1)[1].strip().strip("\"'")
-                if value == "1":
-                    default_envs.append(env_file)
+                if value == "true":
+                    active_envs.append(env_file)
                 break
 
-    assert default_envs, (
+    assert active_envs, (
         f"'{cli_name}' has profile(s) under {profiles_dir} but none have "
-        f"IS_DEFAULT_PROFILE=1 in their .env. Checked: "
+        f"ACTIVE=true in their .env. Checked: "
         f"{[str(f.parent.name) + '/.env' for f in env_files]}. "
-        f"Fix: Set IS_DEFAULT_PROFILE=1 in exactly one profile .env, or "
+        f"Fix: Select an active profile with '{cli_name} auth profiles select <name>', or "
         f"reinitialise by removing the profiles dir and running any CLI command "
-        f"(BaseConfig auto-creates a default profile)."
+        f"(BaseConfig auto-creates an active profile)."
     )
 
 
@@ -580,16 +573,20 @@ def test_profiles_create_subcommand(cli_name, help_cache, test_config, command_f
     )
 
 
-def test_profiles_set_default_subcommand(cli_name, help_cache, test_config, command_filter):
-    """All auth CLIs: 'auth profiles set-default' subcommand exists."""
+def test_profiles_select_subcommand(cli_name, help_cache, test_config, command_filter):
+    """All auth CLIs: 'auth profiles select' subcommand exists and set-default is removed."""
     skip_reason = _should_skip_profiles(cli_name, help_cache, test_config, command_filter)
     if skip_reason:
         pytest.skip(skip_reason)
 
     help_text = help_cache("auth profiles")
-    assert _help_has_command(help_text, "set-default"), (
-        f"'{cli_name} auth profiles' missing 'set-default' subcommand. "
+    assert _help_has_command(help_text, "select"), (
+        f"'{cli_name} auth profiles' missing 'select' subcommand. "
         f"Fix: mount the standard profiles app under auth."
+    )
+    assert not _help_has_command(help_text, "set-default"), (
+        f"'{cli_name} auth profiles' still exposes removed 'set-default' subcommand. "
+        f"Fix: replace it with '{cli_name} auth profiles select'."
     )
 
 

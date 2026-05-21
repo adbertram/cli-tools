@@ -34,6 +34,17 @@ def _get_output_path(cli_dir, cli_name):
     return cli_dir / f"{cli_name.replace('-', '_')}_cli" / "output.py"
 
 
+def _profile_args(auth_context, help_cache, cmd_path):
+    if not isinstance(auth_context, dict):
+        return []
+    profile = auth_context.get("profile")
+    if not profile:
+        return []
+    if "--profile" not in help_cache(cmd_path):
+        return []
+    return ["--profile", profile]
+
+
 def test_output_imports_from_cli_tools_shared(cli_dir, cli_name, command_filter):
     """output.py must import standard functions from cli_tools_shared.output.
 
@@ -114,7 +125,7 @@ def test_output_imports_all_standard_functions(cli_dir, cli_name, command_filter
     )
 
 
-def test_print_table_execution_smoke_test(cli_executable, cli_name, test_config, authenticated, command_filter, cli_fixtures):
+def test_print_table_execution_smoke_test(cli_executable, cli_name, test_config, authenticated, command_filter, cli_fixtures, help_cache):
     """Comprehensive: Verify print_table actually executes with --table flag (Decision 30)."""
     list_commands, timeout = discover_list_commands(cli_executable, cli_name, test_config, command_filter)
 
@@ -126,8 +137,9 @@ def test_print_table_execution_smoke_test(cli_executable, cli_name, test_config,
 
     # Get fixture-based args for this command (if fixtures defined)
     fixture_args = get_fixture_args(cli_name, cmd_path, cli_fixtures, test_config)
+    profile_args = _profile_args(authenticated, help_cache, cmd_path)
 
-    args = cmd_path.split() + fixture_args + ["--table", "--limit", "1"]
+    args = cmd_path.split() + profile_args + fixture_args + ["--table", "--limit", "1"]
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
     result = run_cli_command(cli_executable, args, timeout=timeout)

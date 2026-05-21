@@ -26,3 +26,11 @@ def test_test_script_validates_auth_profile_secret_placeholders():
 
     assert "validate_auth_profile_secret_placeholders" in script_text
     assert 'PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}"' in script_text
+
+
+def test_test_script_runs_auth_status_schema_preflight():
+    script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
+
+    assert "run_auth_status_schema_preflight" in script_text
+    assert "parse_and_validate_stdout" in script_text
+    assert 'auth status schema:' in script_text

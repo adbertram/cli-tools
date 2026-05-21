@@ -413,17 +413,17 @@ uv tool install -e <cli-tools-root>/myservice --force --refresh
 
 ---
 
-## Issue: `test_env_has_is_default_profile` / `test_only_one_default_profile` Fail After Adding a CLI
+## Issue: `test_env_has_active_profile` / `test_each_auth_type_has_one_active_profile` Fail After Adding a CLI
 
 **Symptom:**
 ```
-'<cli>' has no default profile .env at
+'<cli>' has no active profile .env at
   /Users/<user>/.local/share/cli-tools/<cli>/authentication_profiles/default/.env.
-All auth-capable CLI tools must auto-initialise the default profile
+All auth-capable CLI tools must auto-initialise the active profile
 via BaseConfig on first invocation.
 ```
 
-**Cause:** `BaseConfig.__init__` is responsible for auto-initialising the default profile under
+**Cause:** `BaseConfig.__init__` is responsible for auto-initialising the first active profile under
 `~/.local/share/cli-tools/<tool>/authentication_profiles/default/.env` (inside the tool user profile folder) on first
 invocation. If `Config(...)` is never constructed when the CLI runs — for example because
 `create_auth_app(get_config_fn=...)` is not wired up, or `main.py` skips the standard auth app
@@ -438,11 +438,11 @@ from `cli_tools_shared.auth_commands`, and that `get_config()` returns the CLI's
 instance. Then either:
 
 1. Run any command (e.g. `<cli> auth status`) once — this constructs `Config()` and triggers
-   `BaseConfig` to auto-initialise the default profile, OR
+   `BaseConfig` to auto-initialise the active profile, OR
 2. Run `<cli> auth login` to capture real credentials.
 
 Both paths produce the same on-disk result: `~/.local/share/cli-tools/<cli>/authentication_profiles/default/.env`
-with `IS_DEFAULT_PROFILE=1`.
+with `ACTIVE=true`.
 
 **Verification:**
 ```bash

@@ -273,17 +273,20 @@ def test_filter_help_describes_standard_syntax(cli_executable, cli_name, cli_dir
         )
 
 
-def test_filter_translation_smoke_test(cli_name, test_config, authenticated, command_filter):
+def test_filter_translation_smoke_test(cli_name, test_config, authenticated, command_filter, help_cache):
     """Comprehensive: Verify filter actually translates to API params (Decision 29)."""
     # This test is skipped when command_filter is set since it uses a generic "list" command
     if command_filter:
         pytest.skip("Skipping generic filter smoke test (command filter active)")
 
     timeout = test_config["general"]["command_timeout"]
+    profile_args = []
+    if isinstance(authenticated, dict) and authenticated.get("profile") and "--profile" in help_cache("list"):
+        profile_args = ["--profile", authenticated["profile"]]
 
     # Try to run a list command with a simple filter
     # This is a smoke test - just verify it doesn't crash
-    args = ["list", "--filter", "name:eq:test", "--limit", "1"]
+    args = ["list", "--filter", "name:eq:test", "--limit", "1"] + profile_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
     result = run_cli_command(

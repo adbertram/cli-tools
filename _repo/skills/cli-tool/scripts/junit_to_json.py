@@ -28,6 +28,8 @@ def main() -> int:
     junit_path = os.environ.get("JUNIT", "")
     exit_code = int(os.environ.get("EXIT_CODE", "1"))
     raw_output_file = os.environ.get("RAW_OUTPUT_FILE", "")
+    precheck_status = os.environ.get("PRECHECK_STATUS", "")
+    precheck_message = os.environ.get("PRECHECK_MESSAGE", "")
     raw_output = ""
     if raw_output_file:
         try:
@@ -73,6 +75,23 @@ def main() -> int:
                     },
                 })
 
+    if precheck_status == "passed":
+        summary["passed"] += 1
+    elif precheck_status == "skipped":
+        summary["skipped"] += 1
+    elif precheck_status == "failed":
+        summary["failed"] += 1
+        failures.insert(0, {
+            "test_name": "test_auth_status_schema_preflight",
+            "file": "test-cli-tool.sh",
+            "message": precheck_message[:300] or "auth status schema preflight failed",
+            "todo": {
+                "content": f"Fix: {precheck_message[:145] or 'auth status schema preflight failed'}",
+                "activeForm": "Fixing auth status schema preflight",
+                "status": "pending",
+            },
+        })
+
     auth_required = bool(re.search(
         r"not authenticated|not fully authenticated|authentication required|"
         r"complete live list-command testing|missing authenticated credential types|"
@@ -82,7 +101,7 @@ def main() -> int:
     auth_cmd_match = re.search(r"Run '([^']+)'", raw_output)
     auth_command = auth_cmd_match.group(1) if auth_cmd_match else (f"{cli_name} auth login" if auth_required else None)
 
-    success = exit_code == 0
+    success = exit_code == 0 and precheck_status != "failed"
 
     json.dump({
         "success": success,

@@ -145,6 +145,27 @@ def _auth_required_message(cli_name: str, auth_command: str) -> str:
     )
 
 
+def _profile_has_required_credentials(profile: dict, required_credential_types: list[str]) -> bool:
+    credential_statuses = profile.get("credential_types", {})
+    if not isinstance(credential_statuses, dict):
+        return False
+    return all(
+        credential_statuses.get(credential_type, {}).get("authenticated") is True
+        for credential_type in required_credential_types
+    )
+
+
+def _missing_credential_types(profile: dict, required_credential_types: list[str]) -> list[str]:
+    credential_statuses = profile.get("credential_types", {})
+    if not isinstance(credential_statuses, dict):
+        return list(required_credential_types)
+    return [
+        credential_type
+        for credential_type in required_credential_types
+        if credential_statuses.get(credential_type, {}).get("authenticated") is not True
+    ]
+
+
 def pytest_addoption(parser):
     """Add custom command line options."""
     parser.addoption(
@@ -374,32 +395,40 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
         pytest.fail(
             f"{cli_name} auth status did not return valid JSON.\n"
             f"{_auth_required_message(cli_name, auth_command)}"
-        )
+    )
 
     profiles = status.get("profiles", [])
-    default_profile = next(
-        (profile for profile in profiles if isinstance(profile, dict) and profile.get("is_default") is True),
-        profiles[0] if profiles else None,
-    )
-    if not isinstance(default_profile, dict):
-        pytest.fail(
-            f"{cli_name} auth status did not report a default profile.\n"
-            f"{_auth_required_message(cli_name, auth_command)}"
-        )
-
-    credential_statuses = default_profile.get("credential_types", {})
-    if not isinstance(credential_statuses, dict):
-        pytest.fail(
-            f"{cli_name} auth status did not include credential_types for the default profile.\n"
-            f"{_auth_required_message(cli_name, auth_command)}"
-        )
-
-    missing_credential_types = [
-        credential_type
-        for credential_type in required_credential_types
-        if credential_statuses.get(credential_type, {}).get("authenticated") is not True
+    active_profiles = [
+        profile
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("active") is True
     ]
-    if missing_credential_types:
+    if not active_profiles:
+        pytest.fail(
+            f"{cli_name} auth status did not report an active profile.\n"
+            f"{_auth_required_message(cli_name, auth_command)}"
+        )
+
+    matching_profile = next(
+        (
+            profile
+            for profile in active_profiles
+            if _profile_has_required_credentials(profile, required_credential_types)
+        ),
+        None,
+    )
+    if matching_profile is None:
+        profile_missing = {
+            profile.get("name", "<unnamed>"): _missing_credential_types(profile, required_credential_types)
+            for profile in active_profiles
+        }
+        missing_credential_types = sorted(
+            {
+                credential_type
+                for missing in profile_missing.values()
+                for credential_type in missing
+            }
+        )
         if (
             len(missing_credential_types) == 1
             and len(credential_types or []) > 1
@@ -410,11 +439,15 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
             f"{cli_name} is not fully authenticated for complete live list-command testing.\n"
             f"Discovered list commands require authenticated credential types: "
             f"{', '.join(required_credential_types)}.\n"
-            f"Default profile is missing: {', '.join(missing_credential_types)}.\n"
+            f"No active profile satisfies the required credential types. "
+            f"Missing by profile: {profile_missing}.\n"
             f"{_auth_required_message(cli_name, auth_command)}"
         )
 
-    return True
+    return {
+        "profile": matching_profile.get("name"),
+        "auth_type": matching_profile.get("auth_type"),
+    }
 
 
 @pytest.fixture(scope="session")

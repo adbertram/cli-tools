@@ -401,6 +401,94 @@ def test_all_commands_have_credential_mapping(
     assert not errors, "\n\n".join(errors)
 
 
+def test_credentialed_commands_expose_profile_option(
+    cli_name, cli_dir, test_config, cli_executable, help_cache, command_filter
+):
+    """Credential-gated commands must expose --profile at the real command surface."""
+    no_auth_clis = test_config["exclusions"].get("no_auth_clis", [])
+    if cli_name in no_auth_clis:
+        pytest.skip(f"{cli_name} does not require authentication")
+
+    help_text = help_cache("")
+    if " auth " not in help_text and "│ auth" not in help_text:
+        pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
+
+    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    module_entries = _command_module_entries(cli_dir, cli_pkg)
+    if not module_entries:
+        pytest.skip(f"{cli_name} has no command modules")
+
+    all_commands = discover_nested_commands(
+        cli_executable, max_depth=2, skip_list=list(SKIP_GROUPS)
+    )
+    leaf_commands = []
+    for cmd_path in all_commands:
+        parts = cmd_path.split()
+        if len(parts) != 2:
+            continue
+        group, cmd = parts
+        if group in SKIP_GROUPS:
+            continue
+        if command_filter and group != command_filter:
+            continue
+        leaf_commands.append((group, cmd, cmd_path))
+
+    if not leaf_commands:
+        pytest.skip("No leaf commands found to validate")
+
+    from cli_test_utils import get_uv_tool_venv_dir
+    uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
+    if uv_venv is None:
+        pytest.skip(f"{cli_name} uv tool venv not found")
+    venv_python = str(uv_venv / "bin" / "python")
+
+    module_entries_by_stem = {entry[0]: entry for entry in module_entries}
+    flat_entry = (
+        module_entries[0]
+        if len(module_entries) == 1 and module_entries[0][0] == "commands"
+        else None
+    )
+
+    missing_profile = []
+    for group, cmd, cmd_path in leaf_commands:
+        module_entry = flat_entry or module_entries_by_stem.get(group)
+        if module_entry is None:
+            module_entry = module_entries_by_stem.get(group.replace("-", "_"))
+        if module_entry is None:
+            continue
+
+        _entry_name, _module_file, import_path = module_entry
+        result = subprocess.run(
+            [
+                venv_python,
+                "-c",
+                f"import json; "
+                f"from {import_path} import COMMAND_CREDENTIALS; "
+                f"print(json.dumps(COMMAND_CREDENTIALS))",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(cli_dir),
+        )
+        if result.returncode != 0:
+            continue
+
+        cred_map = json.loads(result.stdout.strip())
+        cred_types = cred_map.get(cmd)
+        if not cred_types or cred_types == ["no_auth"]:
+            continue
+
+        command_help = help_cache(cmd_path)
+        if "--profile" not in command_help:
+            missing_profile.append(f"  {cmd_path}")
+
+    assert not missing_profile, (
+        "Credential-gated commands must accept --profile so command routing can "
+        "validate explicit profile auth types.\nMissing --profile:\n"
+        + "\n".join(missing_profile)
+    )
+
+
 def test_command_aliases_have_credential_mapping(
     cli_name, cli_dir, test_config, cli_executable, help_cache, command_filter
 ):
