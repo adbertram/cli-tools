@@ -16,6 +16,7 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.PERSONAL_ACCESS_TOKEN]
     DEFAULT_BASE_URL = "https://api.airtable.com/v0"
+    ROOT_CONFIG_FIELDS = ("BASE_ID",)
 
     def __init__(self, profile=None):
         super().__init__(

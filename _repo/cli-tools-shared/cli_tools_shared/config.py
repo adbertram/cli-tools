@@ -2,21 +2,24 @@
 
 import json
 import os
+import subprocess
 import shutil
 import sys
 import time
 from pathlib import Path
 from typing import Optional
 
-from dotenv import dotenv_values, load_dotenv, set_key
+from dotenv import dotenv_values, set_key
 
 from .credentials import (
     CredentialType,
     combined_all_fields,
     combined_login_prompts,
     combined_required_fields,
+    combined_sensitive_fields,
 )
 from .exceptions import ConfigError
+from .repo_paths import secret_manager_script
 
 
 # ==================== File Write Utilities ====================
@@ -128,26 +131,10 @@ def list_env_files(tool_name: str) -> list:
     return files
 
 
-def _set_is_default_in_file(env_path: Path, is_default: bool) -> None:
-    value = "1" if is_default else "0"
-    content = env_path.read_text()
-    lines = content.splitlines()
-    updated = []
-    found = False
-    for line in lines:
-        if line.strip().startswith("IS_DEFAULT_PROFILE="):
-            updated.append(f"IS_DEFAULT_PROFILE={value}")
-            found = True
-        else:
-            updated.append(line)
-    if not found:
-        updated.insert(0, f"IS_DEFAULT_PROFILE={value}")
-    env_path.write_text("\n".join(updated) + "\n")
-
-
 _AUTH_METADATA_FIELDS = {"IS_DEFAULT_PROFILE"}
 _AUTH_FIELD_PREFIXES = ("AUTH_", "OAUTH_")
 _AUTH_FIELD_NAMES = {"AUTHORIZATION_CODE", "REDIRECT_URI"}
+_SECRET_PLACEHOLDER_PREFIX = "secret://"
 _DEFAULT_ROOT_CONFIG_FIELDS = {
     "BASE_URL",
     "CACHE_ENABLED",
@@ -158,6 +145,179 @@ _DEFAULT_ROOT_CONFIG_FIELDS = {
     "CLI_COMMAND",
     "CLI_PATH",
 }
+
+
+def _secret_name_from_placeholder(value: str) -> Optional[str]:
+    if not value.startswith(_SECRET_PLACEHOLDER_PREFIX):
+        return None
+    secret_name = value[len(_SECRET_PLACEHOLDER_PREFIX) :]
+    if not secret_name:
+        raise ConfigError(
+            f"Invalid secret placeholder {value!r}. "
+            f"Expected {_SECRET_PLACEHOLDER_PREFIX}<secret-name>."
+        )
+    return secret_name
+
+
+def _run_secret_manager(
+    command: str,
+    secret_name: str,
+    *,
+    secret_value: Optional[str] = None,
+) -> subprocess.CompletedProcess[str]:
+    script_path = secret_manager_script()
+    try:
+        return subprocess.run(
+            [str(script_path), command, secret_name],
+            input=secret_value,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ConfigError(
+            f"Failed to run CLI-tools secret manager at {script_path}."
+        ) from exc
+
+
+def _get_secret_value(secret_name: str, profile_path: Path) -> str:
+    result = _run_secret_manager("get", secret_name)
+    if result.returncode != 0:
+        raise ConfigError(
+            f"Missing secret '{secret_name}' referenced by {profile_path}."
+        )
+    value = result.stdout
+    if value.endswith("\n"):
+        value = value[:-1]
+    if value.endswith("\r"):
+        value = value[:-1]
+    return value
+
+
+def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
+    result = _run_secret_manager("set", secret_name, secret_value=value)
+    if result.returncode != 0:
+        raise ConfigError(
+            f"Failed to store secret '{secret_name}' for {profile_path}."
+        )
+
+
+def _delete_secret_value(secret_name: str, profile_path: Path) -> None:
+    result = _run_secret_manager("delete", secret_name)
+    if result.returncode != 0:
+        raise ConfigError(
+            f"Failed to delete secret '{secret_name}' for {profile_path}."
+        )
+
+
+def _secret_exists(secret_name: str) -> bool:
+    result = _run_secret_manager("has", secret_name)
+    if result.returncode not in (0, 1):
+        raise ConfigError(
+            f"Failed to check whether secret '{secret_name}' exists."
+        )
+    return result.returncode == 0
+
+
+def _secret_placeholder(secret_name: str) -> str:
+    return f"{_SECRET_PLACEHOLDER_PREFIX}{secret_name}"
+
+
+def _normalize_secret_name_part(value: str) -> str:
+    return value.lower().replace("_", "-")
+
+
+def auth_profile_secret_placeholders(tool_name: str) -> list[tuple[Path, str, str]]:
+    """Return ``(env_path, field_name, secret_name)`` for profile placeholders."""
+    references: list[tuple[Path, str, str]] = []
+    for env_path in list_env_files(tool_name):
+        for field_name, value in _read_env_values(env_path).items():
+            if not value:
+                continue
+            try:
+                secret_name = _secret_name_from_placeholder(value)
+            except ConfigError as exc:
+                raise ConfigError(
+                    f"{env_path} field '{field_name}' has invalid secret placeholder: {exc}"
+                ) from exc
+            if secret_name is None:
+                continue
+            references.append((env_path, field_name, secret_name))
+    return references
+
+
+def _optional_secret_fields_for_tool(tool_name: str) -> set[str]:
+    """Return optional secret-managed auth fields declared by the tool config."""
+    try:
+        from importlib import import_module
+        from importlib.metadata import PackageNotFoundError, distribution
+    except ImportError:  # pragma: no cover
+        return set()
+
+    dist_candidates = [f"{tool_name}-cli", tool_name]
+    dist = None
+    for dist_name in dist_candidates:
+        try:
+            dist = distribution(dist_name)
+            break
+        except PackageNotFoundError:
+            continue
+    if dist is None:
+        package_candidates = [
+            f"{tool_name.replace('-', '_')}_cli",
+            f"{tool_name.replace('-', '')}_cli",
+        ]
+        for package_name in package_candidates:
+            try:
+                module = import_module(f"{package_name}.config")
+            except ImportError:
+                continue
+            config_cls = getattr(module, "Config", None)
+            if config_cls is None:
+                continue
+            return set(getattr(config_cls, "OPTIONAL_SECRET_FIELDS", ()) or ())
+        return set()
+
+    top_level_text = dist.read_text("top_level.txt") or ""
+    top_levels = [line.strip() for line in top_level_text.splitlines() if line.strip()]
+    if not top_levels:
+        top_levels = [tool_name.replace("-", "_")]
+
+    for top_level in top_levels:
+        try:
+            module = import_module(f"{top_level}.config")
+        except ImportError:
+            continue
+        config_cls = getattr(module, "Config", None)
+        if config_cls is None:
+            continue
+        return set(getattr(config_cls, "OPTIONAL_SECRET_FIELDS", ()) or ())
+
+    return set()
+
+
+def validate_auth_profile_secret_placeholders(tool_name: str) -> None:
+    """Fail when any auth-profile secret placeholder has no matching secret."""
+    optional_fields = _optional_secret_fields_for_tool(tool_name)
+    missing: list[tuple[Path, str, str]] = []
+    for env_path, field_name, secret_name in auth_profile_secret_placeholders(tool_name):
+        if field_name in optional_fields and not _secret_exists(secret_name):
+            continue
+        if _secret_exists(secret_name):
+            continue
+        missing.append((env_path, field_name, secret_name))
+
+    if not missing:
+        return
+
+    detail_lines = [
+        f"- {env_path} field '{field_name}' references missing secret '{secret_name}'"
+        for env_path, field_name, secret_name in missing
+    ]
+    raise ConfigError(
+        "Missing CLI-tools secrets referenced by authentication profiles:\n"
+        + "\n".join(detail_lines)
+    )
 
 
 def _is_auth_env_field(name: str, auth_fields: set[str]) -> bool:
@@ -181,6 +341,24 @@ def _write_env_values(env_path: Path, values: dict[str, str]) -> None:
     env_path.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
 
 
+def _merge_config_values(config_path: Path, config_values: dict[str, str]) -> None:
+    """Fill missing root config values when creating canonical profiles."""
+    if not config_values:
+        return
+    existing_values = _read_env_values(config_path) if config_path.exists() else {}
+    merged_values = dict(existing_values)
+    changed = False
+    for key, value in config_values.items():
+        if key in merged_values and merged_values[key] != "":
+            continue
+        if merged_values.get(key) == value:
+            continue
+        merged_values[key] = value
+        changed = True
+    if changed:
+        _write_env_values(config_path, merged_values)
+
+
 def _split_env_values(
     values: dict[str, str],
     auth_fields: set[str],
@@ -196,19 +374,25 @@ def _split_env_values(
     return auth_values, config_values
 
 
-def _merge_config_values(config_path: Path, values: dict[str, str]) -> None:
-    if not values:
+def _validate_no_legacy_profile_layout(tool_dir: Path, tool_name: str) -> None:
+    legacy_paths = [
+        tool_dir / ".env",
+        tool_dir / "authentication_profiles",
+        get_tool_data_dir(tool_name) / ".profiles",
+    ]
+    legacy_paths.extend(
+        path for path in sorted(tool_dir.glob(".env.*")) if path.name != ".env.example"
+    )
+    existing_paths = [path for path in legacy_paths if path.exists()]
+    if not existing_paths:
         return
-    existing = _read_env_values(config_path) if config_path.exists() else {}
-    merged = dict(existing)
-    for key, value in values.items():
-        if key in existing and existing[key] != value:
-            raise ConfigError(
-                f"Conflicting non-auth configuration value for {key} in {config_path}. "
-                "Non-auth configuration is tool-wide; remove the conflicting profile value."
-            )
-        merged[key] = value
-    _write_env_values(config_path, merged)
+
+    details = "\n".join(f"- {path}" for path in existing_paths)
+    raise ConfigError(
+        "Unsupported legacy profile layout detected. Perform the profile cutover "
+        "outside runtime before starting the CLI. Canonical auth profiles must "
+        f"live under {get_profiles_base_dir(tool_name)}/<profile>/.\n{details}"
+    )
 
 
 def _initialize_default_profile(
@@ -238,6 +422,60 @@ def _initialize_default_profile(
     target = env_path_for_profile(tool_name, "default")
     auth_values["IS_DEFAULT_PROFILE"] = "1"
     _write_env_values(target, auth_values)
+
+
+def _validate_profile_env_files(
+    tool_name: str,
+    auth_fields: set[str],
+    root_config_fields: set[str],
+) -> None:
+    """Fail when profile env files still contain tool-wide config fields."""
+    config_path = config_env_path_for_tool(tool_name)
+    violations: list[tuple[Path, list[str]]] = []
+    for env_file in list_env_files(tool_name):
+        _auth_values, config_values = _split_env_values(
+            _read_env_values(env_file),
+            auth_fields,
+            root_config_fields,
+        )
+        if config_values:
+            violations.append((env_file, sorted(config_values)))
+
+    if not violations:
+        return
+
+    details = [
+        f"- {env_file}: {', '.join(fields)}"
+        for env_file, fields in violations
+    ]
+    raise ConfigError(
+        "Authentication profile .env files contain non-authentication "
+        f"configuration fields. Move these fields to {config_path}:\n"
+        + "\n".join(details)
+    )
+
+
+def _validate_root_config_env_file(
+    tool_name: str,
+    auth_fields: set[str],
+) -> None:
+    """Fail when the canonical root config file stores auth fields."""
+    config_path = config_env_path_for_tool(tool_name)
+    if not config_path.exists():
+        return
+
+    auth_values = _read_env_values(config_path)
+    violations = sorted(
+        key for key in auth_values if _is_auth_env_field(key, auth_fields)
+    )
+    if not violations:
+        return
+
+    raise ConfigError(
+        "Root config .env contains authentication fields. Move these fields to "
+        f"{get_profiles_base_dir(tool_name)}/<profile>/.env:\n"
+        + "\n".join(f"- {config_path}: {field_name}" for field_name in violations)
+    )
 
 
 def _read_toml_project_name(pyproject_path: Path) -> Optional[str]:
@@ -403,108 +641,6 @@ def get_profiles_base_dir(tool_name: str) -> Path:
     return get_tool_data_dir(tool_name) / "authentication_profiles"
 
 
-def _migrate_legacy_profiles_dir(tool_dir: Path, tool_name: str) -> None:
-    """Move source-tree authentication profile data into user data.
-
-    Per-profile runtime data (browser cookies, cache) belongs under
-    ``~/.local/share/cli-tools/<tool>/authentication_profiles/`` so the
-    source tree stays generic and the on-disk layout is consistent.
-    """
-    old_dir = tool_dir / "authentication_profiles"
-    if not old_dir.exists():
-        return
-    new_dir = get_profiles_base_dir(tool_name)
-    if new_dir.exists() and any(new_dir.iterdir()):
-        shutil.rmtree(old_dir)
-        return
-    new_dir.parent.mkdir(parents=True, exist_ok=True)
-    if new_dir.exists():
-        shutil.rmtree(new_dir)
-    shutil.move(str(old_dir), str(new_dir))
-    print(
-        f"[cli-tools-shared] migrated profile data: {old_dir} -> {new_dir}",
-        file=sys.stderr,
-    )
-
-
-def _migrate_env_files(
-    tool_dir: Path,
-    tool_name: str,
-    auth_fields: set[str],
-    root_config_fields: set[str],
-) -> None:
-    """Move legacy source-tree env files into user data.
-
-    The legacy layout stored credentials inside the cli-tools source repo
-    (``tool_dir/.env`` for the default profile, ``tool_dir/.env.<name>``
-    for named profiles). Split each file so auth-related fields stay in
-    ``authentication_profiles/<profile>/.env`` and non-auth configuration
-    moves into the tool-level config file::
-
-        ~/.local/share/cli-tools/<tool>/.env
-
-    Idempotent. Once a tool has been migrated, subsequent calls do nothing.
-    """
-    tool_data_dir = get_tool_data_dir(tool_name)
-    tool_data_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_env_path_for_tool(tool_name)
-
-    bare = tool_dir / ".env"
-    if bare.exists():
-        auth_values, config_values = _split_env_values(
-            _read_env_values(bare),
-            auth_fields,
-            root_config_fields,
-        )
-        auth_values.setdefault("IS_DEFAULT_PROFILE", "1")
-        _merge_config_values(config_path, config_values)
-        target = env_path_for_profile(tool_name, "default")
-        if auth_values and not target.exists():
-            _write_env_values(target, auth_values)
-            print(
-                f"[cli-tools-shared] migrated {bare} -> {target}",
-                file=sys.stderr,
-            )
-        bare.unlink()
-
-    for src in sorted(tool_dir.glob(".env.*")):
-        if src.name == ".env.example":
-            continue
-        profile_name = src.name[len(".env."):]
-        auth_values, config_values = _split_env_values(
-            _read_env_values(src),
-            auth_fields,
-            root_config_fields,
-        )
-        auth_values.setdefault("IS_DEFAULT_PROFILE", "0")
-        _merge_config_values(config_path, config_values)
-        target = env_path_for_profile(tool_name, profile_name)
-        if auth_values and not target.exists():
-            _write_env_values(target, auth_values)
-            print(
-                f"[cli-tools-shared] migrated {src} -> {target}",
-                file=sys.stderr,
-            )
-        src.unlink()
-
-
-def _normalize_profile_env_files(tool_name: str, auth_fields: set[str], root_config_fields: set[str]) -> None:
-    """Move non-auth fields out of profile env files into root config."""
-    config_path = config_env_path_for_tool(tool_name)
-    for env_file in list_env_files(tool_name):
-        values = _read_env_values(env_file)
-        auth_values, config_values = _split_env_values(
-            values,
-            auth_fields,
-            root_config_fields,
-        )
-        if not config_values:
-            continue
-        auth_values.setdefault("IS_DEFAULT_PROFILE", "0")
-        _merge_config_values(config_path, config_values)
-        _write_env_values(env_file, auth_values)
-
-
 class BaseConfig:
     """Base configuration with profile-aware env loading.
 
@@ -559,6 +695,10 @@ class BaseConfig:
     CUSTOM_EPHEMERAL_FIELDS: list = []
     CUSTOM_SENSITIVE_FIELDS: list = []
     ROOT_CONFIG_FIELDS: tuple = ()
+    ADDITIONAL_AUTH_FIELDS: tuple = ()
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS: tuple = ()
+    OPTIONAL_SECRET_FIELDS: tuple = ()
+    SECRET_NAME_OVERRIDES: dict = {}
 
     def _auth_field_names(self) -> set[str]:
         fields = set(combined_all_fields(self.CREDENTIAL_TYPES, config=self))
@@ -571,12 +711,82 @@ class BaseConfig:
             )
         )
         fields.update(_AUTH_METADATA_FIELDS)
+        fields.update(getattr(self, "ADDITIONAL_AUTH_FIELDS", ()) or ())
         return fields
 
     def _root_config_field_names(self) -> set[str]:
         fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
         fields.update(getattr(self, "ROOT_CONFIG_FIELDS", ()) or ())
         return fields
+
+    def _sensitive_auth_field_names(self) -> set[str]:
+        fields = set(combined_sensitive_fields(self.CREDENTIAL_TYPES, config=self))
+        fields.update(getattr(self, "ADDITIONAL_SENSITIVE_AUTH_FIELDS", ()) or ())
+        return fields
+
+    def _secret_managed_auth_field_names(self) -> set[str]:
+        return self._sensitive_auth_field_names()
+
+    def _optional_secret_field_names(self) -> set[str]:
+        return set(getattr(self, "OPTIONAL_SECRET_FIELDS", ()) or ())
+
+    def _resolve_env_values(
+        self,
+        values: dict[str, str],
+        env_path: Path,
+        placeholder_fields: Optional[set[str]] = None,
+    ) -> dict[str, str]:
+        resolved: dict[str, str] = {}
+        optional_secret_fields = self._optional_secret_field_names()
+        for key, value in values.items():
+            secret_name = (
+                _secret_name_from_placeholder(value)
+                if value and (placeholder_fields is None or key in placeholder_fields)
+                else None
+            )
+            if secret_name is None:
+                resolved[key] = value
+                continue
+            if key in optional_secret_fields and not _secret_exists(secret_name):
+                resolved[key] = ""
+                continue
+            resolved[key] = _get_secret_value(secret_name, env_path)
+        return resolved
+
+    def _secret_name_for_field_in_profile(self, name: str, env_path: Path) -> str:
+        overrides = getattr(self, "SECRET_NAME_OVERRIDES", {}) or {}
+        override = overrides.get(name)
+        if override:
+            return override
+        tool_name = _normalize_secret_name_part(self._tool_name)
+        field_name = _normalize_secret_name_part(name)
+        prefix = f"{tool_name}-"
+        if field_name.startswith(prefix):
+            field_name = field_name[len(prefix) :]
+        profile_name = _normalize_secret_name_part(profile_name_from_path(env_path))
+        if profile_name == "default":
+            return f"{tool_name}-{field_name}"
+        return f"{tool_name}-{profile_name}-{field_name}"
+
+    def _secret_name_for_field(self, name: str) -> str:
+        return self._secret_name_for_field_in_profile(name, self.env_file_path)
+
+    def _validate_sensitive_placeholders(self) -> None:
+        secret_managed_auth_fields = self._secret_managed_auth_field_names()
+        for field_name in secret_managed_auth_fields:
+            target_env = self._env_file_for_field(field_name)
+            if not target_env.exists():
+                continue
+            current_value = _read_env_values(target_env).get(field_name, "")
+            if not current_value:
+                continue
+            if _secret_name_from_placeholder(current_value) is not None:
+                continue
+            raise ConfigError(
+                f"{target_env} field '{field_name}' contains a plain-text "
+                "sensitive value. Store the value with the CLI-tools secret "
+                "manager and set the field to secret://<secret-name>."
+            )
 
     def __init__(self, tool_dir: Path, profile: str = None):
         """Initialize config by resolving the profile and loading the env file.
@@ -600,24 +810,25 @@ class BaseConfig:
         auth_fields = self._auth_field_names()
         root_config_fields = self._root_config_field_names()
 
-        # One-shot migrations from legacy in-repo layout to user-data layout.
-        # Order matters: move profile state first so the env migration can
-        # strip ``.env`` out of any migrated per-profile directories.
-        # Idempotent — both helpers no-op once migration has completed.
-        _migrate_legacy_profiles_dir(self.tool_dir, self._tool_name)
-        _migrate_env_files(self.tool_dir, self._tool_name, auth_fields, root_config_fields)
+        _validate_no_legacy_profile_layout(self.tool_dir, self._tool_name)
         _initialize_default_profile(
             self.tool_dir,
             self._tool_name,
             auth_fields,
             root_config_fields,
         )
-        _normalize_profile_env_files(self._tool_name, auth_fields, root_config_fields)
+        _validate_root_config_env_file(self._tool_name, auth_fields)
+        _validate_profile_env_files(self._tool_name, auth_fields, root_config_fields)
 
         self.env_file_path = self._resolve_env_file(profile)
+        self._validate_sensitive_placeholders()
 
         if self.config_env_file_path.exists():
-            load_dotenv(self.config_env_file_path, override=True)
+            for key, value in self._resolve_env_values(
+                _read_env_values(self.config_env_file_path),
+                self.config_env_file_path,
+            ).items():
+                os.environ[key] = value
 
         if self.env_file_path.exists():
             # Clear standard credential env vars before loading to prevent
@@ -625,7 +836,12 @@ class BaseConfig:
             for field in auth_fields:
                 os.environ.pop(field, None)
             os.environ.pop("IS_DEFAULT_PROFILE", None)
-            load_dotenv(self.env_file_path, override=True)
+            for key, value in self._resolve_env_values(
+                _read_env_values(self.env_file_path),
+                self.env_file_path,
+                auth_fields,
+            ).items():
+                os.environ[key] = value
         # If no .env file exists, keep current env vars intact — supports
         # running with credentials injected via environment (e.g., n8n nodes)
 
@@ -673,12 +889,6 @@ class BaseConfig:
                 "Only one .env file should have IS_DEFAULT_PROFILE=1."
             )
 
-        # No IS_DEFAULT_PROFILE=1 marker on any profile — fall back to the
-        # default profile env file if it exists.
-        default_path = env_path_for_profile(self._tool_name, "default")
-        if default_path.exists():
-            return default_path
-
         raise ConfigError(
             "No default profile found. Set IS_DEFAULT_PROFILE=1 in one .env file."
         )
@@ -697,12 +907,47 @@ class BaseConfig:
 
     def _set(self, name: str, value: str):
         """Set an env var in the owning env file and os.environ."""
+        auth_fields = self._auth_field_names()
+        secret_managed_auth_fields = self._secret_managed_auth_field_names()
+        if name in secret_managed_auth_fields and _is_auth_env_field(name, auth_fields):
+            existing_value = _read_env_values(self.env_file_path).get(name, "")
+            existing_secret_name = (
+                _secret_name_from_placeholder(existing_value)
+                if existing_value
+                else None
+            )
+            secret_name = existing_secret_name or self._secret_name_for_field(name)
+            _set_secret_value(secret_name, value, self.env_file_path)
+            _set_key_with_retry(
+                str(self.env_file_path),
+                name,
+                _secret_placeholder(secret_name),
+            )
+            os.environ[name] = value
+            return
+
         _set_key_with_retry(str(self._env_file_for_field(name)), name, value)
         os.environ[name] = value
 
     def _clear(self, name: str):
         """Clear an env var from the owning env file and os.environ."""
-        _set_key_with_retry(str(self._env_file_for_field(name)), name, "")
+        env_path = self._env_file_for_field(name)
+        auth_fields = self._auth_field_names()
+        secret_managed_auth_fields = self._secret_managed_auth_field_names()
+        if name in secret_managed_auth_fields and _is_auth_env_field(name, auth_fields):
+            existing_value = _read_env_values(env_path).get(name, "")
+            existing_secret_name = (
+                _secret_name_from_placeholder(existing_value)
+                if existing_value
+                else None
+            )
+            secret_name = existing_secret_name or self._secret_name_for_field(name)
+            if _secret_exists(secret_name):
+                _delete_secret_value(secret_name, env_path)
+            _set_key_with_retry(str(env_path), name, "")
+            os.environ.pop(name, None)
+            return
+        _set_key_with_retry(str(env_path), name, "")
         os.environ.pop(name, None)
 
     # ==================== Standard Properties ====================
@@ -915,8 +1160,7 @@ class BaseConfig:
     # ==================== Profile Discovery Hooks ====================
     #
     # Subclasses that store profiles outside the shared cli-tools layout
-    # (e.g., XDG ``~/.config/<app>/profiles/<name>.env``) override these to
-    # teach the shared profiles/auth machinery where to look.
+    # override these to teach the shared profiles/auth machinery where to look.
 
     def list_profile_paths(self) -> list:
         """Return all profile env-file paths managed by this Config."""
@@ -933,8 +1177,7 @@ class BaseConfig:
     def profile_data_dir_name(self) -> str:
         """Return the directory name used under ``get_profiles_base_dir`` for
         per-profile runtime data. Defaults to ``tool_dir.name``; subclasses
-        with a non-standard ``tool_dir`` (e.g. Copilot's ``~/.config/copilot``)
-        override to produce a stable scope key.
+        with a non-standard ``tool_dir`` override to produce a stable scope key.
         """
         return self._tool_name
 

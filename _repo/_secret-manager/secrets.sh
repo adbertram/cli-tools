@@ -4,10 +4,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+if REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+    :
+else
+    REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
 . "$REPO_ROOT/_repo/_scripts/lib/log.sh"
 
 SERVICE="cli-tools"
+KEYCHAIN="${CLI_TOOLS_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
+KEYCHAIN_ARGS=()
+if [[ -f "$KEYCHAIN" ]]; then
+    KEYCHAIN_ARGS=("$KEYCHAIN")
+fi
 
 die() {
     log_error "$*"
@@ -48,7 +57,7 @@ cmd_set() {
     fi
 
     log_info "security add-generic-password (service=$SERVICE account=$name)"
-    security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value"
+    security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}"
     log_info "security add-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -57,7 +66,7 @@ cmd_get() {
     [[ -n "$name" ]] || die "get requires <name>"
 
     log_info "security find-generic-password (service=$SERVICE account=$name)"
-    security find-generic-password -s "$SERVICE" -a "$name" -w
+    security find-generic-password -s "$SERVICE" -a "$name" -w "${KEYCHAIN_ARGS[@]}"
     log_info "security find-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -66,7 +75,7 @@ cmd_delete() {
     [[ -n "$name" ]] || die "delete requires <name>"
 
     log_info "security delete-generic-password (service=$SERVICE account=$name)"
-    security delete-generic-password -s "$SERVICE" -a "$name" >/dev/null
+    security delete-generic-password -s "$SERVICE" -a "$name" "${KEYCHAIN_ARGS[@]}" >/dev/null
     log_info "security delete-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -75,7 +84,7 @@ cmd_has() {
     [[ -n "$name" ]] || die "has requires <name>"
 
     log_info "security find-generic-password check (service=$SERVICE account=$name)"
-    if security find-generic-password -s "$SERVICE" -a "$name" >/dev/null 2>&1; then
+    if security find-generic-password -s "$SERVICE" -a "$name" "${KEYCHAIN_ARGS[@]}" >/dev/null 2>&1; then
         log_info "secret exists (service=$SERVICE account=$name)"
         return 0
     fi
@@ -85,7 +94,7 @@ cmd_has() {
 
 cmd_list() {
     log_info "security dump-keychain list (service=$SERVICE)"
-    security dump-keychain 2>/dev/null | awk -v svc="$SERVICE" '
+    security dump-keychain "${KEYCHAIN_ARGS[@]}" 2>/dev/null | awk -v svc="$SERVICE" '
         /^keychain:/ { svc_match=0; acct="" }
         /"svce"<blob>=/ {
             line=$0

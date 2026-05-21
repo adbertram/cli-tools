@@ -13,6 +13,10 @@ class Config(BaseConfig):
     DEFAULT_BASE_URL = "https://api.notion.com/v1"
     CUSTOM_REQUIRED_FIELDS = ["NOTION_API_TOKEN"]
     CUSTOM_SENSITIVE_FIELDS = ["NOTION_API_TOKEN"]
+    ROOT_CONFIG_FIELDS = ("NOTION_API_VERSION",)
+    SECRET_NAME_OVERRIDES = {
+        "NOTION_API_TOKEN": "notion-api-token",
+    }
 
     LOGIN_INSTRUCTIONS = (
         "To get your Notion integration token:\n"

@@ -67,7 +67,7 @@ def keyring_available() -> bool:
 
     Returns False if keyring isn't installed OR if the active backend is the
     null/fail backend (which silently no-ops). Used by tools to decide whether
-    to prompt for migration vs. defer to the user.
+    the current host can store secrets.
     """
     try:
         keyring = _import_keyring()

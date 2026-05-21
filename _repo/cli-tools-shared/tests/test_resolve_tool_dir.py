@@ -1,7 +1,7 @@
 """Tests for cli_tools_shared.config.resolve_tool_dir.
 
 These tests enforce the invariant that a CLI tool's `tool_dir` — and therefore
-profile `.env.*` file lookups — resolve from the canonical CLI tool source
+    profile bootstrap lookups — resolve from the canonical CLI tool source
 folder registered in the installed distribution, NOT from whichever copy of
 the package Python happens to import (e.g., a stray editable copy sitting in
 an unrelated repository).
@@ -11,7 +11,7 @@ The historical bug these tests prevent:
     (ProgressAutomationProject/). Because its pyproject.toml also declared
     `name = "copilot-cli"`, `uv tool install` silently redirected the canonical
     `copilot-cli` editable install at that fork's source folder. The installed
-    `copilot auth profiles list` then read `.env.*` files from ProgressAutomationProject
+    config bootstrap then read source files from ProgressAutomationProject
     instead of from `cli-tools/copilot/`.
 
     The old Config class used `tool_dir=Path(__file__).resolve().parent.parent`,
@@ -41,7 +41,7 @@ from cli_tools_shared.exceptions import ConfigError
 # ---------------------------------------------------------------------------
 
 def _make_tool_folder(base: Path, name: str, dist_name: str) -> Path:
-    """Create a minimal CLI tool source folder containing pyproject.toml + env files."""
+    """Create a minimal CLI tool source folder containing pyproject.toml."""
     tool_dir = base / name
     tool_dir.mkdir(parents=True)
     (tool_dir / "pyproject.toml").write_text(textwrap.dedent(f"""
@@ -49,8 +49,6 @@ def _make_tool_folder(base: Path, name: str, dist_name: str) -> Path:
         name = "{dist_name}"
         version = "0.0.1"
     """).strip() + "\n")
-    (tool_dir / ".env").write_text("IS_DEFAULT_PROFILE=1\n")
-    (tool_dir / ".env.staging").write_text("BASE_URL=https://staging.example.com\n")
     return tool_dir
 
 
@@ -132,19 +130,18 @@ def test_stray_package_copy_does_not_redirect_tool_dir(tmp_path, monkeypatch):
 
     The resolved `tool_dir` MUST come from the canonical folder (registered
     in direct_url.json), regardless of where a stray package copy exists.
-    Profile credentials migrate from the canonical folder into the
-    user-data layout — never from the stray copy.
+    BaseConfig must still resolve against the canonical folder. Source-tree
+    profile files are intentionally ignored because runtime migration is not
+    part of the package contract.
     """
-    # Isolate user-data writes so the migration does not pollute the
+    # Isolate user-data writes so the test does not pollute the
     # developer's real ``~/.local/share/cli-tools/`` tree.
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
 
     canonical = _make_tool_folder(tmp_path / "canonical", "example_cli", "example-cli")
     stray = _make_tool_folder(tmp_path / "stray", "example_cli", "example-cli")
-    # Add distinguishing profile files so we can see which folder won
-    (canonical / ".env.canonical_profile").write_text(
-        "IS_DEFAULT_PROFILE=0\nORIGIN=canonical\n"
-    )
+    # Add a distinguishing source-tree profile in the stray copy. Runtime
+    # config must read only the canonical user-data profile below.
     (stray / ".env.stray_profile").write_text(
         "IS_DEFAULT_PROFILE=0\nORIGIN=stray\n"
     )
@@ -166,23 +163,25 @@ def test_stray_package_copy_does_not_redirect_tool_dir(tmp_path, monkeypatch):
     assert resolved == canonical.resolve()
     assert resolved != stray.resolve()
 
-    # Confirm BaseConfig migrates profiles from the canonical folder
-    # (NOT from the stray copy) into the user-data layout.
     from cli_tools_shared.config import get_profiles_base_dir
 
+    profiles_dir = get_profiles_base_dir(resolved.name)
+    user_profile = profiles_dir / "canonical_profile" / ".env"
+    user_profile.parent.mkdir(parents=True)
+    user_profile.write_text("IS_DEFAULT_PROFILE=0\nORIGIN=canonical-user-data\n")
+
     class _ExampleConfig(BaseConfig):
-        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+        CREDENTIAL_TYPES = [CredentialType.NO_AUTH]
         DIST_NAME = "example-cli"
 
         def __init__(self):
             super().__init__(tool_dir=resolved, profile="canonical_profile")
 
     config = _ExampleConfig()
-    expected = get_profiles_base_dir(resolved.name) / "canonical_profile" / ".env"
-    assert config.env_file_path == expected
-    assert config._get("ORIGIN") == "canonical"
-    # Stray's named profile must NOT have been migrated.
-    stray_profile = get_profiles_base_dir(resolved.name) / "stray_profile" / ".env"
+    assert config.env_file_path == user_profile
+    assert config._get("ORIGIN") == "canonical-user-data"
+    # Stray's named profile must NOT have been copied into user data.
+    stray_profile = profiles_dir / "stray_profile" / ".env"
     assert not stray_profile.exists()
 
 

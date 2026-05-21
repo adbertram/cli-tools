@@ -20,7 +20,7 @@ Use `$agentsmd-expert` before editing this file or any nested `AGENTS.md` file.
 - Install or refresh one tool: `_repo/_scripts/install-cli-tool.sh <tool-folder>`.
 - Create, validate, test, list, or remove tools through the repo-owned CLI lifecycle scripts under `_repo/skills/cli-tool/scripts/`.
 - Validate a single tool with `_repo/skills/cli-tool/scripts/validate-cli-tool.sh <tool-name>` or `_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <tool-name>` as appropriate.
-- Test shared runtime changes from `_repo/cli-tools-shared/` with `uv run pytest`.
+- Test shared runtime changes from `_repo/cli-tools-shared/` with `UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-shared-tests uv run pytest`.
 - Refresh the catalog after tool metadata changes with `_repo/_scripts/refresh_readme.sh`.
 
 ## CLI Tool Work

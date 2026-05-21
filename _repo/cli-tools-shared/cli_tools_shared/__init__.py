@@ -48,7 +48,6 @@ from .http_session import (
 )
 from .auth_commands import create_auth_app
 from .cache_commands import create_cache_app
-from .profiles_commands import create_profiles_app
 from .command_registry import register_commands
 from .oauth import oauth_login, extract_code_from_input, generate_pkce_pair, build_token_auth_headers, parse_and_save_tokens
 from .token_manager import TokenManager
@@ -79,6 +78,9 @@ def __getattr__(name):
             "AuthResult": AuthResult,
         }
         return _browser_exports[name]
+    if name == "create_profiles_app":
+        from .profiles_commands import create_profiles_app
+        return create_profiles_app
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

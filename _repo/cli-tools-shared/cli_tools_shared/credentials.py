@@ -64,7 +64,7 @@ _CONFIGS = {
             ("USERNAME", "Username", False),
             ("PASSWORD", "Password", True),
         ),
-        sensitive_fields=("PASSWORD",),
+        sensitive_fields=("USERNAME", "PASSWORD"),
     ),
     "browser_session": _CredentialConfig(),
     "custom": _CredentialConfig(),

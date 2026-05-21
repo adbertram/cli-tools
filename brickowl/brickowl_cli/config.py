@@ -21,6 +21,8 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.API_KEY, CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://api.brickowl.com/v1"
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
 
     def __init__(self, profile=None):
         super().__init__(

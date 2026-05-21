@@ -1,21 +1,11 @@
-"""Profile CRUD operations for CLI tools.
-
-Profile discovery is delegated to the active ``Config`` instance via the
-hooks defined on :class:`cli_tools_shared.config.BaseConfig`. This lets
-subclasses with non-default layouts (e.g., XDG ``~/.config/<app>/profiles/``)
-participate without forking the public CLI surface.
-
-For backward compatibility every function accepts EITHER a ``Config``
-instance OR a legacy ``tool_dir`` path. Internally the path is wrapped in
-a thin shim that delegates to the standard layout helpers so no caller
-has to migrate at once.
-"""
+"""Profile CRUD operations for canonical CLI-tool auth profiles."""
 
 import shutil
 from pathlib import Path
 from typing import Union
 
 from .config import (
+    _DEFAULT_ROOT_CONFIG_FIELDS,
     _merge_config_values,
     _read_env_values,
     _split_env_values,
@@ -31,14 +21,7 @@ from .exceptions import ConfigError
 
 
 class _ToolDirShim:
-    """Adapter exposing the BaseConfig profile-discovery hooks for a bare path.
-
-    Lets ``list_profiles(tool_dir)`` / ``create_profile(tool_dir, ...)`` etc.
-    keep working on tools that pass a path instead of a Config. The shim
-    derives ``tool_name`` from the directory name; authentication profile
-    state lives under
-    ``~/.local/share/cli-tools/<tool_name>/authentication_profiles/``.
-    """
+    """Adapter exposing canonical profile paths for callers that pass a tool dir."""
 
     def __init__(self, tool_dir: Path):
         self.tool_dir = tool_dir
@@ -58,11 +41,7 @@ class _ToolDirShim:
 
 
 def _adapt(config_or_dir) -> "_ToolDirShim":
-    """Return something that exposes the profile-discovery hooks.
-
-    Accepts a Config instance (uses its hooks directly) or a Path/PathLike
-    (wraps it with the legacy shim). Anything else is a programming error.
-    """
+    """Return something that exposes the canonical profile-discovery hooks."""
     if hasattr(config_or_dir, "list_profile_paths"):
         return config_or_dir
     return _ToolDirShim(Path(config_or_dir))
@@ -88,9 +67,9 @@ def list_profiles(config_or_dir: Union["BaseConfig", Path]) -> list:
 def create_profile(config_or_dir, name: str) -> Path:
     """Create a new profile by copying ``.env.example``.
 
-    Raises ``ConfigError`` if the profile already exists. Falls back to a
-    minimal ``IS_DEFAULT_PROFILE=0`` stub when no ``.env.example`` template
-    is available next to the tool dir.
+    Raises ``ConfigError`` if the profile already exists. Non-authentication
+    config fields from ``.env.example`` are written to the canonical root
+    config file, while auth fields are written to the canonical profile env.
     """
     adapter = _adapt(config_or_dir)
     target = adapter.profile_path_for(name)
@@ -103,23 +82,29 @@ def create_profile(config_or_dir, name: str) -> Path:
     tool_dir = getattr(adapter, "tool_dir", None)
     example = (tool_dir / ".env.example") if tool_dir else None
     if example is not None and example.exists():
-        if hasattr(adapter, "_auth_field_names"):
-            auth_values, config_values = _split_env_values(
-                _read_env_values(example),
-                adapter._auth_field_names(),
-                adapter._root_config_field_names(),
-            )
-            auth_values["IS_DEFAULT_PROFILE"] = "0"
-            config_path = getattr(
-                adapter,
-                "config_env_file_path",
-                config_env_path_for_tool(adapter.profile_data_dir_name()),
-            )
-            _merge_config_values(config_path, config_values)
-            _write_env_values(target, auth_values)
-        else:
-            shutil.copy2(example, target)
-            _set_is_default_in_file(target, False)
+        auth_fields = (
+            adapter._auth_field_names()
+            if hasattr(adapter, "_auth_field_names")
+            else set()
+        )
+        root_config_fields = (
+            adapter._root_config_field_names()
+            if hasattr(adapter, "_root_config_field_names")
+            else set(_DEFAULT_ROOT_CONFIG_FIELDS)
+        )
+        auth_values, config_values = _split_env_values(
+            _read_env_values(example),
+            auth_fields,
+            root_config_fields,
+        )
+        auth_values["IS_DEFAULT_PROFILE"] = "0"
+        config_path = getattr(
+            adapter,
+            "config_env_file_path",
+            config_env_path_for_tool(adapter.profile_data_dir_name()),
+        )
+        _merge_config_values(config_path, config_values)
+        _write_env_values(target, auth_values)
     else:
         target.write_text("IS_DEFAULT_PROFILE=0\n")
 

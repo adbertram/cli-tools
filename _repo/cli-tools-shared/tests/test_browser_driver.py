@@ -188,7 +188,7 @@ def _prepare_open_success(service, monkeypatch):
         def goto_url(self, _url):
             return None
 
-        def wait_for_load(self, _timeout):
+        def wait_for_load(self, timeout):
             return None
 
     service._bh = type("_BH", (), {"h": _Helpers()})()
@@ -441,6 +441,12 @@ def test_browser_open_uses_persistent_profile_dir_as_chrome_user_data_dir(tmp_pa
 
     class _Helpers:
         def cdp(self, *_a, **_k):
+            pass
+
+        def goto_url(self, _url):
+            pass
+
+        def wait_for_load(self, timeout):
             pass
 
     service._bh = type("_BH", (), {"h": _Helpers()})()

@@ -429,7 +429,11 @@ def create_auth_app(
         if effective_handler is not None:
             # Custom or built-in OAuth login flow
             # Ensure setup fields (CLIENT_ID, etc.) are configured first
-            _prompt_and_save(config, combined_login_prompts(active_types, config=config))
+            _prompt_and_save(
+                config,
+                combined_login_prompts(active_types, config=config),
+                skip_if_set=not force,
+            )
             _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=not force)
 
             # Delegate to handler for token acquisition

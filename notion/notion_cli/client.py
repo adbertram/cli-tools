@@ -46,7 +46,7 @@ class NotionClient:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
-                "Please configure your .env file or run 'notion auth login'."
+                "Run 'notion auth login' to configure credentials."
             )
 
         self.base_url = "https://api.notion.com/v1"

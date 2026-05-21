@@ -16,6 +16,8 @@ class Config(BaseConfig):
     DIST_NAME = "ahrefs-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://app.ahrefs.com"
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
 
     def __init__(self, profile=None):
         super().__init__(

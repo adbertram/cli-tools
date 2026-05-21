@@ -12,6 +12,8 @@ Use it for any token, API key, username, password, or other secret that:
 
 Do not use it for Cody, CourseCraft, generic agent workflows, project-specific automation outside `cli-tools`, or non-CLI secrets.
 
+For CLI-tool work, reusable human-supplied secrets must be stored and retrieved through the CLI-tools secret manager. Do not tell users or agents to place those secrets in any `.env` file.
+
 ## Canonical Store
 
 The secret manager lives at:
@@ -84,6 +86,12 @@ The tool user profile folder is `~/.local/share/cli-tools/<tool>`. Non-authentic
 
 Use the secret manager as the cross-session source for reusable raw credentials that an agent or script needs before or during a CLI auth flow. Let the CLI's normal auth flow persist runtime tokens and sessions through `BaseConfig`.
 
+This is the boundary:
+- Secret manager: reusable raw credentials supplied by a human or another external system
+- `.env` files under `~/.local/share/cli-tools/...`: non-secret config and CLI-managed runtime auth state written by the tool itself
+
+Agents must not ask users to edit `.env` files with passwords, API keys, client secrets, refresh tokens, or other reusable secrets.
+
 ## Prohibited Stores
 
 Do not store CLI-tool secrets in:
@@ -93,6 +101,7 @@ Do not store CLI-tool secrets in:
 - general agent instructions;
 - project docs outside `cli-tools`;
 - repo-local `.env` files under `<cli-tools-root>/<tool>`;
+- user-data `.env` files under `~/.local/share/cli-tools/<tool>/` or `authentication_profiles/<profile>/` when the value is a reusable raw credential;
 - committed `.env.example` files.
 
 Service-specific CLIs still own their own auth behavior. Do not shadow a service CLI's saved runtime state in the secret manager unless an agent or script genuinely needs raw reusable access outside that CLI's auth state.

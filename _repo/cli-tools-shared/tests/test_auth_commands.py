@@ -4,8 +4,58 @@ from unittest.mock import MagicMock
 import pytest
 from typer.testing import CliRunner
 
+import cli_tools_shared.config as config_module
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.credentials import CredentialType
+
+
+_SENSITIVE_TEST_FIELDS = {
+    "API_KEY",
+    "PERSONAL_ACCESS_TOKEN",
+    "CLIENT_SECRET",
+    "ACCESS_TOKEN",
+    "REFRESH_TOKEN",
+    "PASSWORD",
+    "AZURE_CLIENT_SECRET",
+    "M365_SDK_CLIENT_SECRET",
+    "DIRECTLINE_SECRET",
+}
+
+
+def _test_secret_name(tool_name: str, profile_name: str, field_name: str) -> str:
+    field_part = field_name.lower().replace("_", "-")
+    if profile_name == "default":
+        return f"{tool_name}-{field_part}"
+    return f"{tool_name}-{profile_name}-{field_part}"
+
+
+def _canonicalize_secret_profile_body(
+    tool_name: str,
+    profile_name: str,
+    body: str,
+) -> str:
+    lines = []
+    for line in body.splitlines():
+        if "=" not in line:
+            lines.append(line)
+            continue
+        key, value = line.split("=", 1)
+        clean_value = value.strip().strip("'\"")
+        if (
+            key in _SENSITIVE_TEST_FIELDS
+            and clean_value
+            and not clean_value.startswith("secret://")
+        ):
+            secret_name = _test_secret_name(tool_name, profile_name, key)
+            config_module._run_secret_manager(
+                "set",
+                secret_name,
+                secret_value=clean_value,
+            )
+            lines.append(f"{key}='secret://{secret_name}'")
+            continue
+        lines.append(line)
+    return "\n".join(lines) + ("\n" if body.endswith("\n") else "")
 
 
 def _make_config(browser: MagicMock, profile_path: Path):
@@ -286,7 +336,7 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     assert env_file.exists(), f"Expected default profile env file at {env_file}"
     content = env_file.read_text()
     assert "IS_DEFAULT_PROFILE=1" in content
-    assert "test-key" in content
+    assert "API_KEY='secret://tool-api-key'" in content
     assert "API_KEY=" in content
 
 
@@ -339,7 +389,14 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
     # Pre-create a "default" profile so the new "staging" should NOT become default
     default_dir = base_profiles_dir / "default"
     default_dir.mkdir(parents=True)
-    (default_dir / ".env").write_text("IS_DEFAULT_PROFILE=1\nAPI_KEY=existing\n")
+    (default_dir / ".env").write_text(
+        "IS_DEFAULT_PROFILE=1\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "API_KEY=existing\n",
+        )
+    )
 
     def get_config(profile=None):
         return _Cfg(tool_dir=tool_dir, profile=profile)
@@ -351,12 +408,12 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
     staging_env = base_profiles_dir / "staging" / ".env"
     assert staging_env.exists()
     staging_content = staging_env.read_text()
-    assert "staging-key" in staging_content
+    assert "API_KEY='secret://tool-staging-api-key'" in staging_content
     assert "IS_DEFAULT_PROFILE=0" in staging_content
     # Default unchanged
     default_content = (default_dir / ".env").read_text()
     assert "IS_DEFAULT_PROFILE=1" in default_content
-    assert "existing" in default_content
+    assert "API_KEY='secret://tool-api-key'" in default_content
 
 
 def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
@@ -383,7 +440,12 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     default_dir = base_profiles_dir / "default"
     default_dir.mkdir(parents=True)
     (default_dir / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\nAPI_KEY=preserved\n"
+        "IS_DEFAULT_PROFILE=1\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "API_KEY=preserved\n",
+        )
     )
 
     def get_config(profile=None):
@@ -396,7 +458,7 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     # Profile preserved exactly
     content = (default_dir / ".env").read_text()
-    assert "API_KEY=preserved" in content
+    assert "API_KEY='secret://tool-api-key'" in content
 
 
 def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeypatch):
@@ -437,12 +499,16 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
     default_dir.mkdir(parents=True)
     (default_dir / ".env").write_text(
         "IS_DEFAULT_PROFILE=1\n"
-        "CLIENT_ID=old-client\n"
-        "CLIENT_SECRET=old-secret\n"
-        "REDIRECT_URI=https://old.example/callback\n"
-        "ACCESS_TOKEN=old-access-token\n"
-        "REFRESH_TOKEN=old-refresh-token\n"
-        "TOKEN_EXPIRES_AT=1\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "CLIENT_ID=old-client\n"
+            "CLIENT_SECRET=old-secret\n"
+            "REDIRECT_URI=https://old.example/callback\n"
+            "ACCESS_TOKEN=old-access-token\n"
+            "REFRESH_TOKEN=old-refresh-token\n"
+            "TOKEN_EXPIRES_AT=1\n",
+        )
     )
 
     handler_values = {}
@@ -479,7 +545,7 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
 
     content = (default_dir / ".env").read_text()
     assert "CLIENT_ID='new-client'" in content
-    assert "CLIENT_SECRET='new-secret'" in content
+    assert "CLIENT_SECRET='secret://tool-client-secret'" in content
     assert "REDIRECT_URI='https://new.example/callback'" in content
     assert "ACCESS_TOKEN=''" in content
     assert "old-client" not in content
@@ -632,7 +698,11 @@ def _seed_profile(base_profiles_dir, name, *, is_default, env_body):
     """Create a profile env file on disk with the given body."""
     pdir = base_profiles_dir / name
     pdir.mkdir(parents=True, exist_ok=True)
-    body = f"IS_DEFAULT_PROFILE={1 if is_default else 0}\n{env_body}"
+    tool_name = base_profiles_dir.parent.name
+    body = (
+        f"IS_DEFAULT_PROFILE={1 if is_default else 0}\n"
+        + _canonicalize_secret_profile_body(tool_name, name, env_body)
+    )
     (pdir / ".env").write_text(body)
 
 

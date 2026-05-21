@@ -53,13 +53,15 @@ This handles: directory structure, uv tool installation (isolated venv + symlink
 </principle>
 
 <principle name="CLI-Tools Secret Manager">
-**Any secret that must be stored or retrieved for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials.
+**Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
 </principle>
 
 <principle name="User Profile Folder">
 The tool user profile folder is `~/.local/share/cli-tools/<tool>`. Non-authentication configuration lives in `~/.local/share/cli-tools/<tool>/.env`, never in the source tree.
 
-Authentication-related data lives under `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/`, including the profile `.env`, credentials, tokens, browser session data, auth markers, and auth-tied cache/state; see `references/config-standards.md`.
+Authentication-related runtime state lives under `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/`, including the profile `.env`, tokens, browser session data, auth markers, and auth-tied cache/state; see `references/config-standards.md`.
+
+Agents must not tell users to manually place reusable credentials in those `.env` files. Use the CLI-tools secret manager for raw credentials and let the CLI persist only its own runtime state.
 </principle>
 
 <principle name="Browser Parser Validation (MANDATORY)">
@@ -226,11 +228,6 @@ Omit local models when parsed/API records can flow straight to the documented ou
 **Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `uv tool install -e . --force --refresh` so it resolves the new `cli-tools-shared` commit.
 </topic>
 
-<topic name="No Virtualenvs in CLI Source Trees">
-**Context:** Use this when running ANY `uv` command (`uv run`, `uv sync`, `uv lock`, `uv add`, `uv pip install` without VIRTUAL_ENV pinned, `uv venv`) from inside a CLI tool source dir under `<cli-tools-root>/`. Applies to every CLI repo — both shared packages (`cli-tools-shared`) and every individual CLI (`cj`, `notion`, `slack`, etc.).
-**Key Facts:** Any bare `uv` invocation from inside a CLI source tree creates a `.venv/` (or `venv/`, `.virtualenv/`, `env/`, `.env_dir/`) in that source tree. Those directories get Dropbox-synced, shadow the real uv tool venv at `~/.local/share/uv/tools/<pkg>/`, break editable-install resolution, and fail the cli-tools-shared compliance test `tests/test_no_venv_in_cli_tool_sources.py::test_no_venv_in_cli_tool_source[<name>]`. To run CLI-local tests, use `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>` or set `UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/<repo-name>-tests` so uv puts the venv outside the source tree.
-**Gotchas:** `install-cli-tool.sh` now removes any forbidden source-tree venv before installing (reported in `source_venvs_removed` in its JSON), `validate-cli-tool.sh` fails the `no_source_venv` check when one is present, and `test-cli-tool.sh` pins `UV_PROJECT_ENVIRONMENT` outside the repo before invoking pytest. Those guardrails do not absolve you of the rule — they exist because the rule was historically violated. If you find a `.venv` in a CLI source tree, delete it and reinstall the CLI via `<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh <name>` so the source tree and uv tool venv re-sync.
-</topic>
 </domain_knowledge>
 
 <success_criteria>

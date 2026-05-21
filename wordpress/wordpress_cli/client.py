@@ -85,7 +85,7 @@ class WordPressClient:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
-                "Configure credentials in .env file. See .env.example for required variables."
+                "Run 'wordpress auth login' to configure credentials."
             )
 
         self.base_url = self.config.base_url

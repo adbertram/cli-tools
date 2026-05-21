@@ -13,6 +13,8 @@ class Config(BaseConfig):
     DIST_NAME = "udemy-cli"
     CREDENTIAL_TYPES = [CredentialType.PERSONAL_ACCESS_TOKEN, CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.udemy.com/instructor-api/v1"
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
     LOGIN_INSTRUCTIONS = (
         "Create a Udemy Instructor API client before logging in:\n"
         "1. Open https://www.udemy.com/user/edit-api-clients/\n"

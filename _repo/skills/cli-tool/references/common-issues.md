@@ -21,10 +21,9 @@ ls -la /opt/homebrew/bin/<tool> /usr/local/bin/<tool> 2>/dev/null
 head -3 /opt/homebrew/bin/<tool> 2>/dev/null
 ```
 
-A stale launcher typically points to: a different Python interpreter
-(`#!/opt/homebrew/opt/python@3.14/bin/python3.14`), an old Node.js
-package (`/lib/node_modules/.../bin/<tool>.js`), or a `.venv` inside the
-source repo (`<cli-tools-root>/<tool>/.venv/bin/<tool>`).
+A stale launcher typically points to a different Python interpreter
+(`#!/opt/homebrew/opt/python@3.14/bin/python3.14`) or an old Node.js
+package (`/lib/node_modules/.../bin/<tool>.js`).
 
 ### Fix
 Remove every non-uv launcher so `~/.local/bin/<tool>` (the uv tool

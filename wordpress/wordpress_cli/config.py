@@ -10,6 +10,30 @@ class Config(BaseConfig):
     DIST_NAME = "wordpress-cli"
     CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
     DEFAULT_BASE_URL = "https://adamtheautomator.com/wp-json/wp/v2"
+    ROOT_CONFIG_FIELDS = ("URL",)
+    ADDITIONAL_AUTH_FIELDS = (
+        "APP_PASSWORD",
+        "WPCOM_CLIENT_ID",
+        "WPCOM_CLIENT_SECRET",
+        "WPCOM_SITE",
+        "WPCOM_REDIRECT_URI",
+        "WPCOM_ACCESS_TOKEN",
+        "WPCOM_TOKEN_TYPE",
+        "WPCOM_SCOPE",
+    )
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = (
+        "APP_PASSWORD",
+        "WPCOM_CLIENT_SECRET",
+    )
+    OPTIONAL_SECRET_FIELDS = (
+        "WPCOM_CLIENT_SECRET",
+    )
+    SECRET_NAME_OVERRIDES = {
+        "USERNAME": "wordpress-username",
+        "PASSWORD": "wordpress-app-password",
+        "APP_PASSWORD": "wordpress-app-password",
+        "WPCOM_CLIENT_SECRET": "wordpress-wpcom-client-secret",
+    }
     WPCOM_REQUIRED_FIELDS = (
         "WPCOM_CLIENT_ID",
         "WPCOM_CLIENT_SECRET",
@@ -149,6 +173,21 @@ class Config(BaseConfig):
         self._clear("WPCOM_ACCESS_TOKEN")
         self._clear("WPCOM_TOKEN_TYPE")
         self._clear("WPCOM_SCOPE")
+
+    def clear_credentials(self) -> None:
+        """Clear primary WordPress auth plus saved WordPress.com auth state."""
+        super().clear_credentials()
+        for field in (
+            "APP_PASSWORD",
+            "WPCOM_CLIENT_ID",
+            "WPCOM_CLIENT_SECRET",
+            "WPCOM_SITE",
+            "WPCOM_REDIRECT_URI",
+            "WPCOM_ACCESS_TOKEN",
+            "WPCOM_TOKEN_TYPE",
+            "WPCOM_SCOPE",
+        ):
+            self._clear(field)
 
     def test_connection(self) -> dict:
         """Test WordPress API connectivity with a lightweight call."""
