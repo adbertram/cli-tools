@@ -40,7 +40,7 @@
               "short": "-F"
             }
           ],
-          "usage_instructions": "Use to authenticate before any other OneDrive operations. Opens a device code flow — the user will be given a code to enter at microsoft.com/devicelogin. Must be run interactively."
+          "usage_instructions": "Use to authenticate before any other OneDrive operations. Opens a device code flow \u2014 the user will be given a code to enter at microsoft.com/devicelogin. Must be run interactively."
         },
         "logout": {
           "help": "Clear stored credentials.",
@@ -56,7 +56,7 @@
           "usage_instructions": "Use to clear cached authentication tokens when switching accounts or troubleshooting auth issues."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -186,17 +186,17 @@
               ],
               "usage_instructions": "Run `onedrive auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `onedrive auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -280,6 +280,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -314,6 +320,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -324,7 +336,7 @@
           "usage_instructions": "Use to get detailed info about a specific drive by its ID, including quota and owner info. DRIVE_ID is a required positional argument. Use --properties/-p to select specific fields."
         }
       },
-      "usage_instructions": "Drive management — list accessible drives and get drive details. Use `drives list` first to find your drive ID, which is required by most item and folder commands."
+      "usage_instructions": "Drive management \u2014 list accessible drives and get drive details. Use `drives list` first to find your drive ID, which is required by most item and folder commands."
     },
     "folders": {
       "help": "Manage folders",
@@ -373,6 +385,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -414,6 +432,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -483,6 +507,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -559,6 +589,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -571,7 +607,7 @@
           "usage_instructions": "Use to share a folder with specific people via email invitation. PATH and EMAILS (comma-separated) are required positional args. Use --role/-r for permission level: read (default) or write. Use --message/-m to include a message in the invitation email. Use --no-email to grant access without sending notification. Use --expiration/-e for time-limited access."
         }
       },
-      "usage_instructions": "Folder management — create folders, get folder metadata, create sharing links, and invite people to folders. Some commands use drive ID as positional arg, others use --drive/-d option. Use `folders get` to check if a folder exists (exits with code 1 if not found)."
+      "usage_instructions": "Folder management \u2014 create folders, get folder metadata, create sharing links, and invite people to folders. Some commands use drive ID as positional arg, others use --drive/-d option. Use `folders get` to check if a folder exists (exits with code 1 if not found)."
     },
     "items": {
       "help": "Manage files and folders",
@@ -621,6 +657,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -662,6 +704,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -701,6 +749,12 @@
               "required": false,
               "help": "Display result as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -729,6 +783,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Local path to save the file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -760,6 +822,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -770,7 +838,7 @@
           "usage_instructions": "Use to delete a file or folder. Requires DRIVE_ID and ITEM_REF (ID or path) as positional args. Use --force/-F to skip confirmation prompt. This is destructive and moves the item to the recycle bin."
         }
       },
-      "usage_instructions": "File and folder operations — list, get, upload, download, and delete items. Most commands require DRIVE_ID as the first positional arg. Items can be referenced by ID or path (e.g., '/Documents/file.txt'). Use `items list` to browse folder contents, `items upload` for files (auto-selects simple vs resumable upload based on size)."
+      "usage_instructions": "File and folder operations \u2014 list, get, upload, download, and delete items. Most commands require DRIVE_ID as the first positional arg. Items can be referenced by ID or path (e.g., '/Documents/file.txt'). Use `items list` to browse folder contents, `items upload` for files (auto-selects simple vs resumable upload based on size)."
     },
     "link": {
       "help": "Manage sharing links",
@@ -832,6 +900,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -871,6 +945,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -929,6 +1009,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -967,6 +1053,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1011,6 +1103,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1020,7 +1118,7 @@
           "usage_instructions": "Use to get details of a specific permission or sharing link. Requires DRIVE_ID, ITEM_ID, and PERMISSION_ID positional args. Use `link list` first to find the permission ID."
         }
       },
-      "usage_instructions": "Sharing link management — create, list, update, get, and delete sharing links and permissions on items. All commands require DRIVE_ID and ITEM_ID positional args. Use `link list` to find permission IDs needed for update/delete/get operations."
+      "usage_instructions": "Sharing link management \u2014 create, list, update, get, and delete sharing links and permissions on items. All commands require DRIVE_ID and ITEM_ID positional args. Use `link list` to find permission IDs needed for update/delete/get operations."
     },
     "cache": {
       "help": "Manage response cache",

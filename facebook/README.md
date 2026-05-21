@@ -203,8 +203,8 @@ facebook auth profiles list
 # Create a new profile
 facebook auth profiles create work
 
-# Set default profile
-facebook auth profiles set-default work
+# Select active profile
+facebook auth profiles select work
 
 # Delete a profile
 facebook auth profiles delete work
@@ -254,8 +254,8 @@ Supported operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `startswi
 The CLI stores configuration in `.env`:
 
 ```bash
-# Required: Default profile marker
-IS_DEFAULT_PROFILE=1
+# Required: active profile marker
+ACTIVE=true
 
 # Base URL
 BASE_URL=https://www.facebook.com/marketplace

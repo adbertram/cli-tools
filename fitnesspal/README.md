@@ -176,8 +176,8 @@ fitnesspal auth profiles list
 # Create a new profile
 fitnesspal auth profiles create myprofile
 
-# Set default profile
-fitnesspal auth profiles set-default myprofile
+# Select active profile
+fitnesspal auth profiles select myprofile
 
 # Delete a profile
 fitnesspal auth profiles delete myprofile

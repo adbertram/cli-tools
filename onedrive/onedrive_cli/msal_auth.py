@@ -123,7 +123,8 @@ def _get_az_cli_token() -> str:
 def _verify_drive_access(token: str) -> None:
     """Verify the token can access the OneDrive API surface this CLI uses."""
     response = requests.get(
-        "https://graph.microsoft.com/v1.0/me/drive",
+        "https://graph.microsoft.com/v1.0/me/drives",
+        params={"$top": 1},
         headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
         timeout=30,
     )

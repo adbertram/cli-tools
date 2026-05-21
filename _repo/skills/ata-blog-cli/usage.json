@@ -2,7 +2,7 @@
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
   "discovered_at": "2026-05-21T15:12:27.796418+00:00",
-  "total_commands": 68,
+  "total_commands": 69,
   "global_options": [
     {
       "name": "--version",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -172,19 +172,40 @@
               ],
               "usage_instructions": "Use `ata-blog auth profiles create` with the documented arguments and options shown below."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use `ata-blog auth profiles set-default` with the documented arguments and options shown below."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `ata-blog auth profiles delete` with the documented arguments and options shown below."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -262,6 +283,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-P"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -290,6 +317,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog notion-page get` with the documented arguments and options shown below."
@@ -340,6 +373,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Notion template ID (defaults to Standard ATA Tutorial AI-Created Idea)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -404,6 +443,12 @@
               "required": false,
               "help": "Force republish even if already published",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog notion-page publish` with the documented arguments and options shown below."
@@ -432,6 +477,12 @@
               "required": false,
               "help": "Property update (Name:value)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -474,6 +525,12 @@
               "help": "Maximum results",
               "short": "-l",
               "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -492,6 +549,12 @@
               "required": false,
               "help": "Output as JSON array",
               "short": "-j"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -520,6 +583,12 @@
                   "required": false,
                   "help": "Output file path (default: stdout)",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -545,6 +614,12 @@
                   "required": true,
                   "help": "Markdown file to set as content",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -569,6 +644,12 @@
                   "required": true,
                   "help": "Markdown file to append",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -606,6 +687,12 @@
                   "required": true,
                   "help": "Property type. Supported (empty-config types only): rich_text, url, checkbox, number, date, email, phone_number, files. (select/multi_select require options and are out of scope for this command.)",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -666,6 +753,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Exclude parent block context"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -694,6 +787,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -719,6 +818,12 @@
                   "required": true,
                   "help": "Comment body text",
                   "short": "-b"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -806,6 +911,12 @@
               "required": false,
               "help": "Max seconds per check",
               "default": "30"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post list` with the documented arguments and options shown below."
@@ -855,6 +966,12 @@
               "required": false,
               "help": "Max seconds per check",
               "default": "30"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post get` with the documented arguments and options shown below."
@@ -928,6 +1045,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Post excerpt"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post create` with the documented arguments and options shown below."
@@ -940,6 +1063,14 @@
               "type": "INTEGER",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post update` with the documented arguments and options shown below."
@@ -967,6 +1098,12 @@
               "type": "bool",
               "required": false,
               "help": "Auto-find next available slot"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post schedule` with the documented arguments and options shown below."
@@ -979,6 +1116,14 @@
               "type": "INTEGER",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-post delete` with the documented arguments and options shown below."
@@ -1014,6 +1159,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1059,6 +1210,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-page list` with the documented arguments and options shown below."
@@ -1080,6 +1237,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-page get` with the documented arguments and options shown below."
@@ -1153,6 +1316,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Page excerpt"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-page create` with the documented arguments and options shown below."
@@ -1167,6 +1336,14 @@
               "help": ""
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use `ata-blog wordpress-page update` with the documented arguments and options shown below."
         },
         "delete": {
@@ -1177,6 +1354,14 @@
               "type": "INTEGER",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog wordpress-page delete` with the documented arguments and options shown below."
@@ -1227,6 +1412,12 @@
                   "required": false,
                   "help": "Comma-separated fields to display",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins list` with the documented arguments and options shown below."
@@ -1255,6 +1446,12 @@
                   "required": false,
                   "help": "Comma-separated fields to display",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins get` with the documented arguments and options shown below."
@@ -1269,6 +1466,14 @@
                   "help": "Plugin identifier"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins activate` with the documented arguments and options shown below."
             },
             "deactivate": {
@@ -1281,6 +1486,14 @@
                   "help": "Plugin identifier"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins deactivate` with the documented arguments and options shown below."
             },
             "delete": {
@@ -1291,6 +1504,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins delete` with the documented arguments and options shown below."
@@ -1312,6 +1533,12 @@
                   "required": false,
                   "help": "Activate after installation",
                   "short": "-a"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins install` with the documented arguments and options shown below."
@@ -1324,6 +1551,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `ata-blog wordpress-admin plugins upgrade` with the documented arguments and options shown below."
@@ -1367,6 +1602,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog media list` with the documented arguments and options shown below."
@@ -1388,6 +1629,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog media get` with the documented arguments and options shown below."
@@ -1402,6 +1649,14 @@
               "help": ""
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use `ata-blog media upload` with the documented arguments and options shown below."
         },
         "delete": {
@@ -1412,6 +1667,14 @@
               "type": "INTEGER",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog media delete` with the documented arguments and options shown below."
@@ -1452,6 +1715,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog categories list` with the documented arguments and options shown below."
@@ -1473,6 +1742,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog categories get` with the documented arguments and options shown below."
@@ -1485,6 +1760,14 @@
               "type": "TEXT",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog categories create` with the documented arguments and options shown below."
@@ -1525,6 +1808,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog tags list` with the documented arguments and options shown below."
@@ -1546,6 +1835,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog tags get` with the documented arguments and options shown below."
@@ -1558,6 +1853,14 @@
               "type": "TEXT",
               "required": true,
               "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog tags create` with the documented arguments and options shown below."
@@ -1612,6 +1915,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Auto re-enable on date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1638,7 +1947,7 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "--no-all      Enable ALL ads (default)",
+              "help": "--no-all          Enable ALL ads (default)",
               "default": "all"
             },
             {
@@ -1654,6 +1963,12 @@
               "required": false,
               "help": "Enable only video auto-insert",
               "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1680,6 +1995,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1690,6 +2011,14 @@
         },
         "fields": {
           "help": "List all Raptive post meta field names. Useful for manual debugging or direct API calls.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use `ata-blog raptive fields` with the documented arguments and options shown below."
         }
       },
@@ -1729,6 +2058,12 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1740,6 +2075,14 @@
         },
         "types": {
           "help": "List available schema types.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use `ata-blog schema types` with the documented arguments and options shown below."
         },
         "set": {
@@ -1786,6 +2129,12 @@
               "required": false,
               "help": "Prerequisites/dependencies for TechArticle",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1819,6 +2168,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog schema get` with the documented arguments and options shown below."
@@ -1831,6 +2186,14 @@
               "type": "INTEGER",
               "required": true,
               "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `ata-blog schema remove` with the documented arguments and options shown below."
@@ -1885,6 +2248,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1965,6 +2334,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2028,6 +2403,12 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2068,6 +2449,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2100,6 +2487,12 @@
               "type": "TEXT",
               "required": true,
               "help": "Shoutout HTML content"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2125,6 +2518,12 @@
               "required": true,
               "help": "Position of the shoutout to remove",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [

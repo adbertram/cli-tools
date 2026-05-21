@@ -2,7 +2,7 @@
   "tool": "slack",
   "description": "CLI interface for Slack API",
   "discovered_at": "2026-05-06T14:41:13.251388+00:00",
-  "total_commands": 48,
+  "total_commands": 49,
   "global_options": [
     {
       "name": "--version",
@@ -49,7 +49,7 @@
           "usage_instructions": "Authenticate with Slack. Uses OAuth flow (opens browser). Use --profile/-p to save to a named profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate only a specific credential type."
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "options": [
             {
               "name": "--profile",
@@ -62,7 +62,7 @@
           "usage_instructions": "Clear stored Slack credentials. Use --profile/-p to clear a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -112,7 +112,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -132,7 +132,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -143,7 +143,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "List all profiles and show which is the default. Use --filter/-f (e.g., is_default:eq:True), --limit/-l, --properties/-p, --table/-t."
+              "usage_instructions": "List all profiles and show their auth types and active state. Use --filter/-f (e.g., active:eq:True), --limit/-l, --properties/-p, --table/-t."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -178,17 +178,17 @@
               ],
               "usage_instructions": "Create a new profile from .env.example template. NAME is required (positional, e.g., staging, production)."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Set a profile as the default (IS_DEFAULT_PROFILE=1). NAME is required (positional)."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -210,9 +210,30 @@
                 }
               ],
               "usage_instructions": "Delete a profile and its data by NAME (required). Use --force/-F to skip confirmation."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and its data by NAME (required). Use --force/-F to skip confirmation."
             }
           },
-          "usage_instructions": "Manage authentication profiles for multiple Slack workspaces. Create, list, switch default, and delete profiles."
+          "usage_instructions": "Manage authentication profiles for multiple Slack workspaces. Create, list, select active, and delete profiles."
         }
       },
       "usage_instructions": "Manage Slack API authentication. Login, logout, check status, and test credentials. Supports multiple profiles via --profile/-p."
@@ -269,9 +290,15 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "List canvases in the workspace or a specific channel. CHANNEL_ID is optional — omit for all canvases. Use --limit/-l (default 100), --filter/-f, --properties/-p. Use --table/-t for formatted output."
+          "usage_instructions": "List canvases in the workspace or a specific channel. CHANNEL_ID is optional \u2014 omit for all canvases. Use --limit/-l (default 100), --filter/-f, --properties/-p. Use --table/-t for formatted output."
         },
         "get": {
           "help": "Get canvas content. Example: slack canvas get F1234567890 slack canvas get F1234567890 --table slack canvas get F1234567890 --html",
@@ -296,6 +323,12 @@
               "type": "bool",
               "required": false,
               "help": "Output raw HTML instead of text"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get canvas content by CANVAS_ID (required, e.g. F1234567890). Use --html to get raw HTML instead of text. Use --table/-t for formatted output."
@@ -357,6 +390,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List channels in the workspace. Use --types to filter (public_channel, private_channel, mpim, im; default: public_channel,private_channel). Use --unread/-u for channels with unread messages only. Use --include-archived for archived channels. Use --filter/-f (e.g., name:ilike:%general%), --limit/-l, --properties/-p."
@@ -378,6 +417,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get info about a specific channel by CHANNEL_ID (required). Use --table/-t for formatted output."
@@ -398,6 +443,12 @@
               "type": "bool",
               "required": false,
               "help": "Create a private channel"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a new channel. NAME is required (positional). Use --private to create a private channel."
@@ -412,6 +463,14 @@
               "help": "Channel ID to archive"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Archive a channel by CHANNEL_ID (required, positional)."
         },
         "join": {
@@ -424,6 +483,14 @@
               "help": "Channel ID to join"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Join a channel by CHANNEL_ID (required, positional)."
         },
         "leave": {
@@ -434,6 +501,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Channel ID to leave"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Leave a channel by CHANNEL_ID (required, positional)."
@@ -477,6 +552,12 @@
               "required": false,
               "help": "Filter results (field:op:value). Only applies when --resolve is used",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List members of a channel by CHANNEL_ID (required). Returns user IDs by default; use --resolve/-r to get full user info. Use --filter/-f (only with --resolve, e.g., is_bot:eq:false). Use --limit/-l, --table/-t."
@@ -532,6 +613,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List DM conversations. Use --unread/-u for DMs with unread messages only. Use --filter/-f, --limit/-l, --properties/-p, --table/-t."
@@ -553,9 +640,15 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Get DM conversation info for a USER (required — user ID, email, or @username). Use --table/-t for formatted output."
+          "usage_instructions": "Get DM conversation info for a USER (required \u2014 user ID, email, or @username). Use --table/-t for formatted output."
         },
         "send": {
           "help": "Send a direct message to a user or group DM. For 1:1 DMs, specify the user: - User ID (U1234567890) - Email address (user@example.com) - Username (@john.doe or john.doe) For group DMs, specify the channel ID directly: - Channel ID (C01U109E658) - Find channel IDs with: slack dm list --include-group --table Example: slack dm send U1234567890 \"Hello!\" slack dm send user@example.com \"Hello via email lookup!\" slack dm send @john.doe \"Hello John!\" slack dm send C01U109E658 \"Hello group!\"  # group DM by channel ID",
@@ -579,6 +672,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Thread timestamp for replies"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Send a DM to a user. USER (user ID, email, or @username) and TEXT are both required positional args. Use --thread-ts to reply in a thread. Remember: Slack uses mrkdwn, not standard markdown."
@@ -627,9 +726,15 @@
               "required": false,
               "help": "Client-side filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Read DM history with a USER (required — user ID, email, or @username). Use --limit/-l (default 50), --oldest/--latest for time range, --filter/-f for client-side filtering, --table/-t."
+          "usage_instructions": "Read DM history with a USER (required \u2014 user ID, email, or @username). Use --limit/-l (default 50), --oldest/--latest for time range, --filter/-f for client-side filtering, --table/-t."
         }
       },
       "usage_instructions": "Manage direct messages: list DM conversations, get DM info, send DMs, and read DM history. Users can be specified by user ID, email, or @username."
@@ -714,6 +819,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List files in the workspace. API filters (server-side): --channel/-c, --user/-u, --types (images, pdfs, etc.), --ts-from, --ts-to. Client-side: --filter/-f (e.g., filetype:eq:pdf, size:gt:1000000). Use --limit/-l, --count, --page, --properties/-p, --table/-t."
@@ -748,6 +859,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Initial comment"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Upload a file. FILE_PATH is required (positional). Use --channels/-c for comma-separated channel IDs to share to. Use --title/-t for file title, --comment for initial comment."
@@ -769,6 +886,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get info about a file by FILE_ID (required, e.g. F1234567890). Use --table/-t for formatted output."
@@ -781,6 +904,14 @@
               "type": "TEXT",
               "required": true,
               "help": "File ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a file by FILE_ID (required, positional)."
@@ -802,6 +933,12 @@
               "required": false,
               "help": "Output path (defaults to current directory with original filename)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Download a file by FILE_ID (required). Use --output/-o to specify output path (defaults to current directory with original filename)."
@@ -840,6 +977,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Bot username override"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Send a message to a channel. CHANNEL (ID or name) and TEXT are required positional args. Use --thread-ts to reply in a thread. Use --username for bot username override. Use @Name or @First Last in text for auto-mention. Remember: Slack uses mrkdwn formatting."
@@ -867,6 +1010,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get a specific message by CHANNEL and TS (timestamp). Both are required positional args. Use --table/-t for formatted output."
@@ -922,6 +1071,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List messages from a channel. CHANNEL is required (positional). API filters: --oldest, --latest (timestamps). Client-side: --filter/-f (e.g., user:eq:U1234567890). Use --limit/-l (default 100), --properties/-p, --table/-t."
@@ -966,6 +1121,12 @@
               "required": false,
               "help": "Client-side filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Search messages across the workspace. QUERY is required (uses Slack search syntax, e.g., 'from:@user in:#channel'). Use --count/-c (default 20), --page/-p, --filter/-f for client-side filtering, --table/-t."
@@ -984,6 +1145,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Message timestamp"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a message by CHANNEL and TS (timestamp). Both are required positional args."
@@ -1012,6 +1181,12 @@
               "required": false,
               "help": "Client-side filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List messages that mention you (@you) across all channels. Use --count/-c (default 20), --filter/-f, --table/-t."
@@ -1066,6 +1241,12 @@
               "required": false,
               "help": "Client-side filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List replies in a thread. CHANNEL and THREAD_TS (parent message timestamp) are required positional args. API filters: --oldest, --latest. Client-side: --filter/-f. Use --limit/-l (default 100), --table/-t."
@@ -1093,6 +1274,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get notification details for a specific CHANNEL_ID (required). Use --table/-t for formatted output."
@@ -1106,6 +1293,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Show notification badge counts (unread DMs, channel mentions, thread replies). Uses fast client.counts API. Requires xoxc session token. Use --table/-t."
@@ -1169,12 +1362,26 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List all notifications contributing to your Slack badge. Use --no-dms, --no-threads, --no-mentions, --no-saved to exclude categories. Use --limit/-l, --filter/-f, --properties/-p, --table/-t."
         },
         "summary": {
           "help": "Show a quick summary of notification counts. Uses the fast client.counts API when available. Shows the actual badge counts that Slack uses for the app icon badge. Example: slack notifications summary",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Quick summary of notification counts (badge counts). Uses fast client.counts API when available."
         }
       },
@@ -1220,6 +1427,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List workspace users. Deleted users are hidden by default; use --include-deleted to show them. Use --filter/-f (e.g., is_admin:eq:true, name:eq:john), --limit/-l (default 100), --properties/-p, --table/-t."
@@ -1241,12 +1454,18 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get info about a specific user by USER_ID (required, e.g. U1234567890). Use --table/-t."
         },
         "set-status": {
-          "help": "Set your status. Example: slack users set-status \"In a meeting\" --emoji 📆 slack users set-status \"Away\" --emoji 🌴 --expiration 1640000000",
+          "help": "Set your status. Example: slack users set-status \"In a meeting\" --emoji \ud83d\udcc6 slack users set-status \"Away\" --emoji \ud83c\udf34 --expiration 1640000000",
           "arguments": [
             {
               "name": "text",
@@ -1260,7 +1479,7 @@
               "name": "--emoji",
               "type": "TEXT",
               "required": false,
-              "help": "Status emoji (e.g., ☕)",
+              "help": "Status emoji (e.g., \u2615)",
               "short": "-e"
             },
             {
@@ -1268,6 +1487,12 @@
               "type": "INTEGER",
               "required": false,
               "help": "Unix timestamp when status expires"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Set your Slack status. TEXT is required (positional). Use --emoji/-e for status emoji. Use --expiration for Unix timestamp when status expires."
@@ -1280,6 +1505,14 @@
               "type": "PATH",
               "required": true,
               "help": "Path to the profile image file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Set the authenticated Slack user profile photo from IMAGE_PATH. Use this when changing your own avatar; combine with top-level --profile to target a specific workspace/profile."
@@ -1370,6 +1603,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get a specific reminder by REMINDER_ID (required, e.g. Rm12345678). Use --table/-t."
@@ -1391,6 +1630,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Mark a reminder as complete by REMINDER_ID (required). Use --table/-t."
@@ -1425,6 +1670,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Save a message for later with optional reminder time. CHANNEL and TS are required positional args. Use --due/-d for reminder time (e.g., '30 min', '2 hours', '3 days', '1 week'). Use --table/-t."
@@ -1446,6 +1697,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a reminder by REMINDER_ID (required). Use --table/-t."

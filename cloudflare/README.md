@@ -55,13 +55,13 @@ cloudflare auth profiles list --table
 cloudflare auth profiles get default
 
 # Filter profiles
-cloudflare auth profiles list --filter "is_default:eq:true"
+cloudflare auth profiles list --filter "active:eq:true"
 
 # Create a new profile
 cloudflare auth profiles create staging
 
-# Set default profile
-cloudflare auth profiles set-default staging
+# Select active profile
+cloudflare auth profiles select staging
 
 # Delete a profile
 cloudflare auth profiles delete staging --force

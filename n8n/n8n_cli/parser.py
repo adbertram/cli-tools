@@ -508,7 +508,7 @@ def _parse_env_fields(
     env_comments: Dict[str, str] = {}
 
     # Internal vars to skip
-    SKIP_VARS = {"IS_DEFAULT_PROFILE"}
+    SKIP_VARS = {"ACTIVE"}
 
     # Detect which env vars are auth credentials (supports multiple types)
     cred_types = _detect_credential_types(pkg_dir)

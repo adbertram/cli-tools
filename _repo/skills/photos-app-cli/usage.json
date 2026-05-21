@@ -2,7 +2,7 @@
   "tool": "photos-app",
   "description": "Query and export photos from macOS Photos library",
   "discovered_at": "2026-05-20T16:16:22.959327+00:00",
-  "total_commands": 22,
+  "total_commands": 23,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Use to clear stored credentials. Use --profile/-p to target a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -137,7 +137,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use to list all profiles and see which is the default. Use --table/-t for formatted output."
+              "usage_instructions": "Use to list all profiles and see auth type and active state. Use --table/-t for formatted output."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -172,19 +172,40 @@
               ],
               "usage_instructions": "Use to create a new profile. NAME is a required positional arg."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use to switch the active profile. NAME is a required positional arg."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to permanently delete a profile. NAME is a required positional arg. Use --force/-F to skip confirmation."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -277,6 +298,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -306,6 +333,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -360,6 +393,12 @@
               "required": false,
               "help": "Include videos",
               "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -371,6 +410,14 @@
         },
         "count": {
           "help": "Show total number of photos in the library.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use to get the total photo count in the library. No arguments or options needed."
         }
       },
@@ -381,6 +428,14 @@
       "commands": {
         "open": {
           "help": "Open the Photos app to the Albums view. Launches Photos.app and navigates to My Albums in the sidebar.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "examples": [
             "photos-app albums open"
           ],
@@ -430,6 +485,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Exclude albums in folder"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -460,6 +521,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -476,6 +543,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Name for the new album"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -501,6 +576,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -533,6 +614,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -542,7 +629,7 @@
           "usage_instructions": "Use to organize albums into folders. NAME is a required positional arg. --folder/-f is required to specify the target folder (auto-created if missing). Use --yes/-y to skip confirmation."
         },
         "enhance": {
-          "help": "Auto-enhance all photos in an album. Applies the built-in Auto Enhance (Cmd+E) to each photo in the album sequentially via UI automation. Your computer will be unusable during the batch — Photos.app must stay in the foreground. Note: Auto-enhance is a toggle. Running on already-enhanced photos will REMOVE the enhancement. Requires Accessibility permissions for System Events.",
+          "help": "Auto-enhance all photos in an album. Applies the built-in Auto Enhance (Cmd+E) to each photo in the album sequentially via UI automation. Your computer will be unusable during the batch \u2014 Photos.app must stay in the foreground. Note: Auto-enhance is a toggle. Running on already-enhanced photos will REMOVE the enhancement. Requires Accessibility permissions for System Events.",
           "arguments": [
             {
               "name": "name",
@@ -574,6 +661,12 @@
               "required": false,
               "help": "Skip confirmation",
               "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -599,6 +692,12 @@
               "required": true,
               "help": "Comma-separated photo UUIDs",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [

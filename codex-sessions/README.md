@@ -156,7 +156,7 @@ Configuration is optional. By default, the CLI reads from `~/.codex` and checks
 for the `codex` executable on `PATH`.
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 CLI_COMMAND=codex
 CODEX_HOME=~/.codex
 CODEX_SESSIONS_CODEX_HOME=~/.codex

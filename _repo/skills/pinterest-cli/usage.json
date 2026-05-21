@@ -2,7 +2,7 @@
   "tool": "pinterest",
   "description": "CLI interface for Pinterest API",
   "discovered_at": "2026-05-21T00:33:05.726572+00:00",
-  "total_commands": 17,
+  "total_commands": 18,
   "global_options": [
     {
       "name": "--version",
@@ -59,6 +59,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Return the authenticated Pinterest account as a single-item collection so standard list flags work. Use `--properties/-p` to limit fields, `--filter/-f` for client-side filtering, and `--table/-t` for a compact summary."
@@ -85,6 +91,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get the authenticated Pinterest account as a single object. Use `--properties/-p` to limit fields or `--table/-t` for a field/value view."
@@ -132,6 +144,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List Pinterest boards for the authenticated user. Use `--filter/-f privacy:eq:SECRET` for documented privacy filtering, `--limit/-l` to control API page size, and `--properties/-p` to narrow output fields."
@@ -166,6 +184,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get one Pinterest board by ID. Pass the required `BOARD_ID` positional argument and use `--table/-t` or `--properties/-p` when you want a narrower view."
@@ -213,6 +237,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List Pinterest pins for the authenticated user. Use `--limit/-l` to cap returned pins, `--filter/-f` for standard client-side filtering such as `board_owner.username:contains:value`, and `--properties/-p` to select fields."
@@ -247,6 +277,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Pinterest ad account ID for shared business access requests"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get one Pinterest pin by ID. Pass the required `PIN_ID` positional argument and add `--table/-t` or `--properties/-p` to control the presentation."
@@ -288,10 +324,10 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "Clear saved Pinterest credentials and session state for the selected profile. Use `--profile/-p` to target a non-default profile."
+          "usage_instructions": "Clear saved Pinterest credentials and session state for the selected profile. Use `--profile/-p` to target a named profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -361,7 +397,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -381,7 +417,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -427,19 +463,40 @@
               ],
               "usage_instructions": "Create a named Pinterest auth profile from `.env.example`. Pass the required profile name, then run `pinterest auth login --profile NAME` to populate credentials."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Mark one saved Pinterest auth profile as the default profile. Pass the required profile name to switch future commands to it."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a saved Pinterest auth profile and its runtime data. Pass the required profile name and add `--force/-F` to skip confirmation."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {

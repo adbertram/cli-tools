@@ -4,7 +4,7 @@ from typing import Optional, List
 
 from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
 from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
-from cli_tools_shared.profiles import list_profiles, create_profile, set_default_profile, delete_profile
+from cli_tools_shared.profiles import list_profiles, create_profile, select_profile, delete_profile
 from ..config import get_config
 
 
@@ -18,7 +18,7 @@ def profiles_list(
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ):
-    """List all profiles and show which is the default."""
+    """List all profiles and show auth type and active state."""
     try:
         config = get_config()
         profiles = list_profiles(config.tool_dir)
@@ -51,8 +51,8 @@ def profiles_list(
             else:
                 print_table(
                     profiles,
-                    ["name", "file", "is_default"],
-                    ["Name", "File", "Default"],
+                    ["name", "file", "auth_type", "active"],
+                    ["Name", "File", "Auth Type", "Active"],
                 )
         else:
             print_json(profiles)
@@ -109,15 +109,15 @@ def profiles_create(
         raise typer.Exit(handle_error(e))
 
 
-@app.command("set-default")
-def profiles_set_default(
-    name: str = typer.Argument(..., help="Profile name to set as default"),
+@app.command("select")
+def profiles_select(
+    name: str = typer.Argument(..., help="Profile name to activate within its auth type"),
 ):
-    """Set a profile as the default (IS_DEFAULT_PROFILE=1)."""
+    """Activate a profile within its auth type."""
     try:
         config = get_config()
-        set_default_profile(config.tool_dir, name)
-        print_success(f"Profile '{name}' is now the default")
+        select_profile(config.tool_dir, name)
+        print_success(f"Profile '{name}' is now active for its auth type")
 
     except typer.Exit:
         raise

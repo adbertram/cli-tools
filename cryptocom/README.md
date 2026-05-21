@@ -53,7 +53,7 @@ Profiles are available under the standard `auth profiles` command:
 cryptocom auth profiles list
 cryptocom auth profiles get default
 cryptocom auth profiles create sandbox
-cryptocom auth profiles set-default sandbox
+cryptocom auth profiles select sandbox
 cryptocom auth profiles delete sandbox
 ```
 
@@ -173,7 +173,7 @@ cryptocom trades list BTCUSD-PERP --limit 5 --properties "p,q,s,t"
 Credentials are stored in profile-aware `.env` files.
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 API_KEY=your_exchange_api_key
 API_SECRET=your_exchange_api_secret
 BASE_URL=https://api.crypto.com/exchange/v1
@@ -183,7 +183,7 @@ Sandbox profile example:
 
 ```bash
 cryptocom auth profiles create sandbox
-cryptocom auth profiles set-default sandbox
+cryptocom auth profiles select sandbox
 ```
 
 Then set `BASE_URL=https://uat-api.3ona.co/exchange/v1` in that profile.

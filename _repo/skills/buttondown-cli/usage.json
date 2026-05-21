@@ -2,7 +2,7 @@
   "tool": "buttondown",
   "description": "CLI interface for Buttondown API",
   "discovered_at": "2026-05-20T16:14:04.304624+00:00",
-  "total_commands": 40,
+  "total_commands": 41,
   "global_options": [
     {
       "name": "--version",
@@ -62,7 +62,7 @@
           "usage_instructions": "Run `buttondown auth logout` to clear stored credentials. Common options: `--profile/-p`."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -79,7 +79,7 @@
               "short": "-t"
             }
           ],
-          "usage_instructions": "Run `buttondown auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+          "usage_instructions": "Run `buttondown auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
@@ -112,7 +112,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -132,7 +132,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -143,7 +143,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Run `buttondown auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+              "usage_instructions": "Run `buttondown auth profiles list` to list all profiles and show their auth types and active state. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -178,17 +178,17 @@
               ],
               "usage_instructions": "Run `buttondown auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `buttondown auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -210,9 +210,30 @@
                 }
               ],
               "usage_instructions": "Run `buttondown auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `buttondown auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
             }
           },
-          "usage_instructions": "Use `buttondown auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+          "usage_instructions": "Use `buttondown auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `select`, `delete`."
         }
       },
       "usage_instructions": "Use `buttondown auth` for manage authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
@@ -261,6 +282,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown automations list` to list automations. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
@@ -289,6 +316,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown automations get` to get a single automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -353,6 +386,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown automations create` to create an automation. Common options: `--table/-t`, `--properties/-p`."
@@ -431,6 +470,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown automations update` to update an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -459,6 +504,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown automations delete` to delete an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--force/-F`."
@@ -500,6 +551,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails list` to list emails. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
@@ -528,6 +585,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails get` to get an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -609,6 +672,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails create` to create an email. Common options: `--table/-t`, `--properties/-p`."
@@ -698,6 +767,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails update` to update an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -726,6 +801,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails delete` to delete an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--force/-F`."
@@ -761,6 +842,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails send-draft` to send a draft email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`."
@@ -795,6 +882,12 @@
               "type": "bool",
               "required": false,
               "help": "Open the rendered HTML in the default browser"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown emails render` to retrieve the rendered HTML of an email from the Buttondown API. Required arguments: `EMAIL_ID`. Options: `--target`, `--output/-o`, `--open`."
@@ -836,6 +929,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown feeds list` to list external RSS feeds. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
@@ -864,6 +963,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown feeds get` to get a single RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -954,6 +1059,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown feeds create` to create a new RSS feed. Common options: `--table/-t`, `--properties/-p`."
@@ -1051,6 +1162,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown feeds update` to update an existing RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -1079,6 +1196,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown feeds delete` to delete an RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--force/-F`."
@@ -1120,6 +1243,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers list` to list subscribers. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
@@ -1148,6 +1277,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers get` to get a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`."
@@ -1199,6 +1334,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers create` to create a subscriber. Common options: `--table/-t`, `--properties/-p`."
@@ -1264,6 +1405,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers update` to update a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`."
@@ -1292,6 +1439,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers delete` to delete a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--force/-F`."
@@ -1313,6 +1466,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers send-link` to send a subscriber magic link. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`."
@@ -1334,6 +1493,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown subscribers remind` to send a subscriber reminder. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`."
@@ -1375,6 +1540,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags list` to list tags. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
@@ -1403,6 +1574,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags get` to get a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -1455,6 +1632,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags create` to create a tag. Common options: `--table/-t`, `--properties/-p`."
@@ -1515,6 +1698,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags update` to update a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."
@@ -1543,6 +1732,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags delete` to delete a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--force/-F`."
@@ -1571,6 +1766,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `buttondown tags analytics` to get tag analytics. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."

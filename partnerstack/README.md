@@ -31,7 +31,7 @@ partnerstack auth logout
 ```bash
 partnerstack auth profiles list
 partnerstack auth profiles get default
-partnerstack auth profiles set-default PROFILE_NAME
+partnerstack auth profiles select PROFILE_NAME
 partnerstack auth profiles create PROFILE_NAME
 ```
 

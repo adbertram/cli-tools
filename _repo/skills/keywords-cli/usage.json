@@ -2,7 +2,7 @@
   "tool": "keywords",
   "description": "Query autocomplete suggestions from search engines for keyword research",
   "discovered_at": "2026-05-20T17:46:58.133561+00:00",
-  "total_commands": 12,
+  "total_commands": 13,
   "global_options": [
     {
       "name": "--version",
@@ -84,6 +84,12 @@
               "required": false,
               "help": "Max suggestions to recurse into per level (default: 5)",
               "default": "5"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get keyword suggestions from search engine autocomplete. QUERY is required (positional). Use --source/-s to select engines (google, youtube, bing, amazon, ddg -- can repeat for multiple). Use --filter/-f to only show suggestions containing specific text. Use --recurse/-r with --depth/-d to recursively expand suggestions (default depth: 1, limit: 5 per level). Use --limit/-l (default: 100), --table/-t."
@@ -97,6 +103,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Show which search engines are available as autocomplete sources. Use --table/-t for formatted output."
@@ -106,11 +118,9 @@
     },
     "auth": {
       "help": "Manage keywords authentication",
-      "usage_instructions": "Authentication and profile management for the Keywords CLI. Use `auth status` or `auth test` to verify the shared auth contract, and use `auth profiles` when you need to inspect or switch saved profile state.",
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Initialize or refresh the shared auth profile state for Keywords. Use `--profile/-p` to target a specific profile and `--force/-F` to clear ephemeral state before re-authenticating.",
           "options": [
             {
               "name": "--profile",
@@ -126,11 +136,11 @@
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
             }
-          ]
+          ],
+          "usage_instructions": "Initialize or refresh the shared auth profile state for Keywords. Use `--profile/-p` to target a specific profile and `--force/-F` to clear ephemeral state before re-authenticating."
         },
         "logout": {
           "help": "Clear stored credentials.",
-          "usage_instructions": "Clear stored auth state for a profile. Use `--profile/-p` when you need to remove a non-default profile's saved state.",
           "options": [
             {
               "name": "--profile",
@@ -139,11 +149,11 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ]
+          ],
+          "usage_instructions": "Clear stored auth state for a profile. Use `--profile/-p` when you need to remove a named profile's saved state."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "usage_instructions": "Check auth status across profiles using the shared live-verification flow. Use `--table/-t` for readable output or `--profile/-p` to inspect one profile.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -159,11 +169,11 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ]
+          ],
+          "usage_instructions": "Check auth status across profiles using the shared live-verification flow. Use `--table/-t` for readable output or `--profile/-p` to inspect one profile."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
-          "usage_instructions": "Run the shared auth verification explicitly. Use `--verbose/-v` for per-check detail and `--profile/-p` to scope the test to one profile.",
           "options": [
             {
               "name": "--table",
@@ -186,14 +196,14 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ]
+          ],
+          "usage_instructions": "Run the shared auth verification explicitly. Use `--verbose/-v` for per-check detail and `--profile/-p` to scope the test to one profile."
         },
         "profiles": {
           "help": "Manage authentication profiles",
-          "usage_instructions": "Inspect and manage named auth profiles for Keywords. Use this group to list, inspect, create, delete, or set the default profile backing the shared auth contract.",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -213,7 +223,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -256,16 +266,17 @@
                 }
               ]
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
-              ]
+              ],
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -286,10 +297,32 @@
                   "short": "-F"
                 }
               ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
             }
-          }
+          },
+          "usage_instructions": "Inspect and manage named auth profiles for Keywords. Use this group to list, inspect, create, delete, or set the active profile backing the shared auth contract."
         }
-      }
+      },
+      "usage_instructions": "Authentication and profile management for the Keywords CLI. Use `auth status` or `auth test` to verify the shared auth contract, and use `auth profiles` when you need to inspect or switch saved profile state."
     },
     "cache": {
       "help": "Manage response cache",

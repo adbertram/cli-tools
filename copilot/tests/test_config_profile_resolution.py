@@ -7,12 +7,12 @@ from copilot_cli.config import Config, _reset_config
 from copilot_cli.commands.mcp import _acquire_mcp_token
 
 
-def _write_profile(path, *, is_default, dataverse_url):
+def _write_profile(path, *, active, dataverse_url):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(
             [
-                f"IS_DEFAULT_PROFILE={1 if is_default else 0}",
+                f"ACTIVE={'true' if active else 'false'}",
                 f"DATAVERSE_URL={dataverse_url}",
             ]
         )
@@ -35,7 +35,7 @@ def _setup_profiles_dir(tmp_path, monkeypatch):
 def test_config_uses_active_profile_and_ignores_profile_environment_overrides(tmp_path, monkeypatch):
     """The active-profile selection must not be diverted by stray env vars
     such as ``COPILOT_CLI_TOOL_PROFILE`` or ``CLI_TOOLS_PROFILE`` — only an
-    explicit ``profile`` argument or the ``IS_DEFAULT_PROFILE=1`` marker
+    explicit ``profile`` argument or the ``ACTIVE=true`` marker
     should switch profiles. This is the core invariant the public CLI
     relies on for predictable credential lookup.
     """
@@ -45,9 +45,9 @@ def test_config_uses_active_profile_and_ignores_profile_environment_overrides(tm
     env_override_profile = profiles / "env_override" / ".env"
     cli_override_profile = profiles / "cli_override" / ".env"
 
-    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
-    _write_profile(env_override_profile, is_default=False, dataverse_url="https://env.example.crm.dynamics.com")
-    _write_profile(cli_override_profile, is_default=False, dataverse_url="https://cli.example.crm.dynamics.com")
+    _write_profile(active_profile, active=True, dataverse_url="https://active.example.crm.dynamics.com")
+    _write_profile(env_override_profile, active=False, dataverse_url="https://env.example.crm.dynamics.com")
+    _write_profile(cli_override_profile, active=False, dataverse_url="https://cli.example.crm.dynamics.com")
 
     monkeypatch.setenv("COPILOT_CLI_TOOL_PROFILE", "env_override")
     monkeypatch.setenv("CLI_TOOLS_PROFILE", "cli_override")
@@ -64,8 +64,8 @@ def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch):
     active_profile = profiles / "active" / ".env"
     explicit_profile = profiles / "explicit" / ".env"
 
-    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
-    _write_profile(explicit_profile, is_default=False, dataverse_url="https://explicit.example.crm.dynamics.com")
+    _write_profile(active_profile, active=True, dataverse_url="https://active.example.crm.dynamics.com")
+    _write_profile(explicit_profile, active=False, dataverse_url="https://explicit.example.crm.dynamics.com")
 
     monkeypatch.setenv("COPILOT_CLI_TOOL_PROFILE", "active")
     monkeypatch.setenv("CLI_TOOLS_PROFILE", "active")
@@ -84,7 +84,7 @@ def test_expected_azure_cli_user_does_not_hide_saved_credentials(tmp_path, monke
     profile.write_text(
         "\n".join(
             [
-                "IS_DEFAULT_PROFILE=1",
+                "ACTIVE=true",
                 "DATAVERSE_URL=https://different-user.example.crm.dynamics.com",
                 "AZURE_CLI_EXPECTED_USER=different@example.com",
             ]
@@ -108,12 +108,12 @@ def test_mcp_token_acquisition_uses_only_active_profile(tmp_path, monkeypatch):
     active_profile = profiles / "active" / ".env"
     old_service_principal_profile = profiles / "legacy_tenant_service_principal" / ".env"
 
-    _write_profile(active_profile, is_default=True, dataverse_url="https://active.example.crm.dynamics.com")
+    _write_profile(active_profile, active=True, dataverse_url="https://active.example.crm.dynamics.com")
     old_service_principal_profile.parent.mkdir(parents=True, exist_ok=True)
     old_service_principal_profile.write_text(
         "\n".join(
             [
-                "IS_DEFAULT_PROFILE=0",
+                "ACTIVE=false",
                 "DATAVERSE_URL=https://sp.example.crm.dynamics.com",
                 "AZURE_CLIENT_ID=service-principal-client-id",
                 "AZURE_CLIENT_SECRET=service-principal-secret",

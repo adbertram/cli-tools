@@ -42,7 +42,7 @@ copilot config set-secret AZURE_CLIENT_SECRET            # prompts (hidden)
 copilot config set-secret AZURE_CLIENT_SECRET --value '…' --profile staging
 ```
 
-For the default profile, that command writes a profile reference like:
+For the active profile, that command writes a profile reference like:
 
 ```dotenv
 AZURE_CLIENT_SECRET=secret://copilot-azure-client-secret

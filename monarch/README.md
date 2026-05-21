@@ -50,7 +50,7 @@ MFA_SECRET=your-totp-secret  # Optional
 ```bash
 monarch auth profiles list                   # List all profiles
 monarch auth profiles create staging         # Create a new profile
-monarch auth profiles set-default staging    # Set default profile
+monarch auth profiles select staging    # Select active profile
 monarch auth profiles get staging            # Get profile details
 monarch auth profiles delete staging         # Delete a profile
 ```
@@ -185,7 +185,7 @@ Action flags:
 | `USERNAME` | Monarch Money email |
 | `PASSWORD` | Monarch Money password |
 | `MFA_SECRET` | TOTP secret for automatic MFA |
-| `IS_DEFAULT_PROFILE` | Set to `1` to mark as default profile |
+| `ACTIVE` | Set to `true` for the active profile within its auth type |
 
 ## Exit Codes
 

@@ -61,8 +61,8 @@ n8n auth profiles list
 # Create a new profile
 n8n auth profiles create staging
 
-# Set default profile
-n8n auth profiles set-default staging
+# Select active profile
+n8n auth profiles select staging
 
 # Get profile details
 n8n auth profiles get default
@@ -314,7 +314,7 @@ n8n cache clear
 Settings are stored in `.env` (managed by `n8n auth login`):
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 API_KEY=           # n8n API key (X-N8N-API-KEY header)
 BASE_URL=          # API base URL (e.g., http://100.117.198.37:5678/api/v1)
 EMAIL=             # UI login email (for internal REST API)

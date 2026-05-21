@@ -136,7 +136,7 @@ lastpass auth profiles list
 lastpass auth profiles create work
 
 # Set a profile as default
-lastpass auth profiles set-default work
+lastpass auth profiles select work
 
 # Delete a profile
 lastpass auth profiles delete work --force

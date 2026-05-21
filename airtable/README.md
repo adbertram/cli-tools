@@ -103,8 +103,8 @@ airtable auth profiles get staging
 # Create a new profile
 airtable auth profiles create staging
 
-# Set default profile
-airtable auth profiles set-default staging
+# Select active profile
+airtable auth profiles select staging
 
 # Delete a profile
 airtable auth profiles delete staging

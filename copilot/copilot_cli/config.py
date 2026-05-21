@@ -42,9 +42,9 @@ def get_config_root() -> Path:
 
 
 def get_cache_root() -> Path:
-    """Resolve the active/default profile cache directory."""
-    default_profile = find_default_profile_file()
-    profile_name = profile_name_from_xdg_path(default_profile) if default_profile else "default"
+    """Resolve the active profile cache directory."""
+    active_profile = find_active_profile_file()
+    profile_name = profile_name_from_xdg_path(active_profile) if active_profile else "default"
     return get_profiles_base_dir(APP_NAME) / profile_name / "cache"
 
 
@@ -76,25 +76,25 @@ def profile_name_from_xdg_path(path: Path) -> str:
     return path.stem
 
 
-def _read_is_default(path: Path) -> Optional[bool]:
-    """Return True/False/None for IS_DEFAULT_PROFILE in a profile file."""
+def _read_active(path: Path) -> Optional[bool]:
+    """Return True/False/None for ACTIVE in a profile file."""
     try:
         with open(path) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith("IS_DEFAULT_PROFILE="):
+                if line.startswith("ACTIVE="):
                     value = line.split("=", 1)[1].strip().strip("\"'")
-                    return value == "1"
+                    return value == "true"
     except (OSError, UnicodeDecodeError):
         pass
     return None
 
 
-def find_default_profile_file() -> Optional[Path]:
-    """Find the canonical profile file marked IS_DEFAULT_PROFILE=1."""
+def find_active_profile_file() -> Optional[Path]:
+    """Find the canonical profile file marked ACTIVE=true."""
     matches = []
     for f in list_profile_files():
-        if _read_is_default(f) is True:
+        if _read_active(f) is True:
             matches.append(f)
     if len(matches) == 1:
         return matches[0]
@@ -102,8 +102,8 @@ def find_default_profile_file() -> Optional[Path]:
         names = ", ".join(profile_name_from_xdg_path(p) for p in matches)
         from cli_tools_shared.exceptions import ConfigError
         raise ConfigError(
-            f"Multiple default profiles found: {names}. "
-            "Only one profile should have IS_DEFAULT_PROFILE=1."
+            f"Multiple active profiles found: {names}. "
+            "Only one profile should have ACTIVE=true for the copilot auth type."
         )
     return None
 
@@ -156,9 +156,8 @@ class Config(BaseConfig):
 
         Profile resolution order:
             1. Explicit ``profile`` argument
-            2. ``IS_DEFAULT_PROFILE=1`` marker inside a canonical profile file
-            3. ``authentication_profiles/default/.env`` if it exists
-            4. ``authentication_profiles/default/.env`` for future writes
+            2. ``ACTIVE=true`` marker inside a canonical profile file
+            3. ``authentication_profiles/default/.env`` for future writes when no profiles exist
         """
         # Make sure the config root exists before BaseConfig touches it.
         config_root = resolve_tool_dir(self.DIST_NAME)
@@ -176,22 +175,24 @@ class Config(BaseConfig):
     def _resolve_env_file(self, profile: str = None):
         """Resolve which .env file to load.
 
-        Order: explicit profile arg → canonical default → canonical default path.
+        Order: explicit profile arg → active profile → canonical default path when no profiles exist.
         """
         if profile:
             return self._env_file_for_profile(profile)
 
-        default = find_default_profile_file()
-        if default is not None:
-            return default
+        active = find_active_profile_file()
+        if active is not None:
+            return active
 
-        # Implicit default profile path.
+        from cli_tools_shared.exceptions import ConfigError
+        if list_profile_files():
+            raise ConfigError(
+                "No active profile found. Select one with "
+                "'copilot auth profiles select <name>'."
+            )
+
+        # Initial profile path for first writes.
         implicit = profile_env_path("default")
-        if implicit.exists():
-            return implicit
-
-        # Nothing found yet — return the implicit default path so subsequent
-        # writes (login flows) create it in the right place.
         return implicit
 
     def _env_file_for_profile(self, name: str):

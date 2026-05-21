@@ -129,7 +129,7 @@ def test_default_profile_loaded_from_xdg(xdg_dirs, fake_secret_manager):
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\nDATAVERSE_URL=https://default.example/\n"
+        "ACTIVE=true\nDATAVERSE_URL=https://default.example/\n"
     )
 
     from copilot_cli.config import Config
@@ -143,11 +143,11 @@ def test_explicit_profile_argument_wins(xdg_dirs, fake_secret_manager):
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\nDATAVERSE_URL=https://default.example/\n"
+        "ACTIVE=true\nDATAVERSE_URL=https://default.example/\n"
     )
     (profiles / "staging").mkdir(parents=True, exist_ok=True)
     (profiles / "staging" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=0\nDATAVERSE_URL=https://staging.example/\n"
+        "ACTIVE=false\nDATAVERSE_URL=https://staging.example/\n"
     )
 
     from copilot_cli.config import Config
@@ -156,16 +156,16 @@ def test_explicit_profile_argument_wins(xdg_dirs, fake_secret_manager):
     assert config.dataverse_url == "https://staging.example/"
 
 
-def test_is_default_profile_marker_picks_winner(xdg_dirs, fake_secret_manager):
+def test_active_profile_marker_picks_winner(xdg_dirs, fake_secret_manager):
     cfg_root, _ = xdg_dirs
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=0\nDATAVERSE_URL=https://default.example/\n"
+        "ACTIVE=false\nDATAVERSE_URL=https://default.example/\n"
     )
     (profiles / "staging").mkdir(parents=True, exist_ok=True)
     (profiles / "staging" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\nDATAVERSE_URL=https://staging.example/\n"
+        "ACTIVE=true\nDATAVERSE_URL=https://staging.example/\n"
     )
 
     from copilot_cli.config import Config
@@ -173,13 +173,13 @@ def test_is_default_profile_marker_picks_winner(xdg_dirs, fake_secret_manager):
     assert config.env_file_path == profiles / "staging" / ".env"
 
 
-def test_multiple_default_profiles_raises(xdg_dirs, fake_secret_manager):
+def test_multiple_active_profiles_raises(xdg_dirs, fake_secret_manager):
     cfg_root, _ = xdg_dirs
     profiles = cfg_root / "authentication_profiles"
     (profiles / "a").mkdir(parents=True, exist_ok=True)
     (profiles / "b").mkdir(parents=True, exist_ok=True)
-    (profiles / "a" / ".env").write_text("IS_DEFAULT_PROFILE=1\nDATAVERSE_URL=https://a/\n")
-    (profiles / "b" / ".env").write_text("IS_DEFAULT_PROFILE=1\nDATAVERSE_URL=https://b/\n")
+    (profiles / "a" / ".env").write_text("ACTIVE=true\nDATAVERSE_URL=https://a/\n")
+    (profiles / "b" / ".env").write_text("ACTIVE=true\nDATAVERSE_URL=https://b/\n")
 
     from cli_tools_shared.exceptions import ConfigError
     from copilot_cli.config import Config
@@ -196,7 +196,7 @@ def test_sensitive_field_read_from_profile_secret_placeholder(xdg_dirs, fake_sec
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "DATAVERSE_URL=https://default.example/\n"
         "AZURE_TENANT_ID=tenant-id\n"
         "AZURE_CLIENT_ID=client-id\n"
@@ -214,7 +214,7 @@ def test_sensitive_field_write_routes_to_profile_secret_placeholder(xdg_dirs, fa
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "DATAVERSE_URL=https://default.example/\n"
     )
 
@@ -233,7 +233,7 @@ def test_sensitive_field_clear_removes_secret_placeholder(xdg_dirs, fake_secret_
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "DATAVERSE_URL=https://default.example/\n"
         "AZURE_CLIENT_SECRET=secret://copilot-azure-client-secret\n"
     )
@@ -251,7 +251,7 @@ def test_plaintext_sensitive_profile_value_fails_fast(xdg_dirs, fake_secret_mana
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "DATAVERSE_URL=https://default.example/\n"
         "AZURE_CLIENT_SECRET=legacy-from-dotenv\n"
     )
@@ -272,7 +272,7 @@ def test_sensitive_process_env_value_is_ignored_when_profile_field_empty(
     profiles = cfg_root / "authentication_profiles"
     (profiles / "default").mkdir(parents=True, exist_ok=True)
     (profiles / "default" / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "DATAVERSE_URL=https://default.example/\n"
     )
     monkeypatch.setenv("AZURE_CLIENT_SECRET", "process-secret")

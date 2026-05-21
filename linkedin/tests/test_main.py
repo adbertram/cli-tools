@@ -364,8 +364,8 @@ def test_auth_readiness_reports_oauth_scope_matrix(monkeypatch):
     monkeypatch.setattr(
         "linkedin_cli.main.list_profiles",
         lambda config: [
-            {"name": "default", "file": ".env", "is_default": True},
-            {"name": "affiliate-magic-page", "file": ".env", "is_default": False},
+            {"name": "default", "file": ".env", "auth_type": "default", "active": True},
+            {"name": "affiliate-magic-page", "file": ".env", "auth_type": "default", "active": False},
         ],
     )
     monkeypatch.setattr(

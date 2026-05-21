@@ -32,6 +32,12 @@
               "required": false,
               "help": "Path to Snagit captures folder",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -58,13 +64,19 @@
               "required": false,
               "help": "Path to Snagit captures folder",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
             "snagit capture view capture.snagx",
             "snagit capture view /full/path/to/capture.snagx"
           ],
-          "usage_instructions": "Extract a .snagx file and get the path to its main PNG image. FILENAME is required (positional) — can be just the filename or full path. Use --path/-p to specify captures folder. Extracted files are kept in a temp directory."
+          "usage_instructions": "Extract a .snagx file and get the path to its main PNG image. FILENAME is required (positional) \u2014 can be just the filename or full path. Use --path/-p to specify captures folder. Extracted files are kept in a temp directory."
         },
         "export": {
           "help": "Export the main PNG image from a .snagx capture file. Extracts only the main PNG image from the .snagx archive. If no output path is specified, saves to current directory with capture name.",
@@ -97,6 +109,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [

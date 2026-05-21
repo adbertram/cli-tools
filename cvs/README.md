@@ -74,8 +74,8 @@ cvs cache status
 # List all profiles
 cvs auth profiles list
 
-# Switch default profile
-cvs auth profiles set-default PROFILE_NAME
+# Select active profile
+cvs auth profiles select PROFILE_NAME
 
 # Create a new profile
 cvs auth profiles create PROFILE_NAME

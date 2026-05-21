@@ -159,10 +159,10 @@ manus auth profiles list
 manus auth profiles create staging
 ```
 
-### Set Default Profile
+### Select Active Profile
 
 ```bash
-manus auth profiles set-default staging
+manus auth profiles select staging
 ```
 
 ### Delete Profile

@@ -51,7 +51,7 @@ elevenlabs auth test
 elevenlabs auth profiles list
 elevenlabs auth profiles get default
 elevenlabs auth profiles create production
-elevenlabs auth profiles set-default production
+elevenlabs auth profiles select production
 elevenlabs auth profiles delete production
 ```
 

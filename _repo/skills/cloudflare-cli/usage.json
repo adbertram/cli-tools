@@ -56,7 +56,7 @@
           "usage_instructions": "Run `cloudflare auth logout` to clear stored credentials. Common options: `--profile/-p`."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -73,7 +73,7 @@
               "short": "-t"
             }
           ],
-          "usage_instructions": "Run `cloudflare auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+          "usage_instructions": "Run `cloudflare auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show auth type and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -138,7 +138,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Run `cloudflare auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+              "usage_instructions": "Run `cloudflare auth profiles list` to list all profiles and show their auth types and active state. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -173,17 +173,17 @@
               ],
               "usage_instructions": "Run `cloudflare auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `cloudflare auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -207,7 +207,7 @@
               "usage_instructions": "Run `cloudflare auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
             }
           },
-          "usage_instructions": "Use `cloudflare auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+          "usage_instructions": "Use `cloudflare auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `select`, `delete`."
         }
       },
       "usage_instructions": "Use `cloudflare auth` for manage authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
@@ -246,6 +246,12 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -281,6 +287,12 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -307,6 +319,12 @@
               "required": false,
               "help": "[off|essentially_off|low|medium|high|under_attack]  Set security level (off, essentially_off, low, medium, high, under_attack)",
               "short": "-s"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -419,6 +437,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Filter by configuration value"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -453,6 +477,12 @@
               "required": false,
               "help": "Display as key-value table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -505,6 +535,12 @@
               "type": "bool",
               "required": false,
               "help": "Display result as table"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -545,6 +581,12 @@
               "required": false,
               "help": "New notes/description",
               "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -577,6 +619,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -639,6 +687,12 @@
                   "required": false,
                   "help": "Filter by status (active, pending, etc.)",
                   "short": "-s"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -667,6 +721,12 @@
                   "required": false,
                   "help": "Display as key-value table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -676,7 +736,15 @@
               "usage_instructions": "Run `cloudflare dns zones get` to get details for a specific DNS zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`."
             }
           },
-          "usage_instructions": "Use `cloudflare dns zones` for list and inspect dns zones. Available subcommands here are `list`, `get`."
+          "usage_instructions": "Use `cloudflare dns zones` for list and inspect dns zones. Available subcommands here are `list`, `get`.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "records": {
           "help": "Manage DNS records",
@@ -746,6 +814,12 @@
                   "required": false,
                   "help": "Filter by proxied status",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -780,6 +854,12 @@
                   "required": false,
                   "help": "Display as key-value table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -852,6 +932,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -925,6 +1011,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "New comment"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -957,6 +1049,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -966,7 +1064,15 @@
               "usage_instructions": "Run `cloudflare dns records delete` to delete a DNS record. Required arguments: `ZONE_ID`, `RECORD_ID`. Common options: `--force/-f`."
             }
           },
-          "usage_instructions": "Use `cloudflare dns records` for manage dns records. Available subcommands here are `list`, `get`, `create`, `update`, `delete`."
+          "usage_instructions": "Use `cloudflare dns records` for manage dns records. Available subcommands here are `list`, `get`, `create`, `update`, `delete`.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Use `cloudflare dns` for manage dns records. Available subcommands here are `zones`, `records`."

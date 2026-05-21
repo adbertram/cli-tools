@@ -21,7 +21,7 @@ def _configure_temp_profile_store(monkeypatch, tmp_path):
     tool_dir = tmp_path / "youtube"
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text(
-        "AUTH_TYPE=\nCLIENT_ID=\nCLIENT_SECRET=\nIS_DEFAULT_PROFILE=1\n"
+        "AUTH_TYPE=\nCLIENT_ID=\nCLIENT_SECRET=\nACTIVE=true\n"
     )
 
     profiles_dir = tmp_path / "data" / "youtube" / "authentication_profiles"

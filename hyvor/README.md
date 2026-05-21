@@ -64,8 +64,8 @@ hyvor auth profiles list
 # Create a new profile
 hyvor auth profiles create work
 
-# Set default profile
-hyvor auth profiles set-default work
+# Select active profile
+hyvor auth profiles select work
 
 # Delete a profile
 hyvor auth profiles delete work

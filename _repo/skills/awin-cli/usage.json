@@ -2,7 +2,7 @@
   "tool": "awin",
   "description": "Awin Publisher API CLI",
   "discovered_at": "2026-05-20T15:24:39.545884+00:00",
-  "total_commands": 14,
+  "total_commands": 15,
   "global_options": [
     {
       "name": "--version",
@@ -53,6 +53,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List publisher accounts tied to the saved token. Use `--table/-t` for readable output, `--limit/-l` to cap rows, `--filter/-f` for field filters, and `--properties/-p` to keep only selected fields."
@@ -74,6 +80,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Fetch one publisher account by `PUBLISHER_ID`. Use this after `publishers list` when you need a single record, and add `--table/-t` for formatted output."
@@ -129,6 +141,12 @@
               "help": "joined | notjoined | pending",
               "short": "-r",
               "default": "joined"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List advertiser programmes for the current publisher. Use `--relationship/-r` to switch between `joined`, `pending`, and `notjoined`; use `--publisher-id` to override the saved publisher id; and use `--table/-t`, `--limit/-l`, `--filter/-f`, and `--properties/-p` for result shaping."
@@ -156,6 +174,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Fetch one advertiser programme by `PROGRAMME_ID`. Use `--publisher-id` when you need a non-default publisher context, and add `--table/-t` for formatted output."
@@ -197,10 +221,10 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "Clear stored Awin credentials. Use `--profile/-p` to remove a specific profile instead of the default profile."
+          "usage_instructions": "Clear stored Awin credentials. Use `--profile/-p` to remove a specific profile instead of the active profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -250,7 +274,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -270,7 +294,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -316,19 +340,40 @@
               ],
               "usage_instructions": "Create a new named auth profile from `NAME`. Run this before `auth login --profile NAME` when you want to separate multiple Awin accounts."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Set `NAME` as the default auth profile. Use this when future `awin` commands should resolve credentials from a different saved profile without passing `--profile`."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a saved auth profile by `NAME`. Use `--force` to skip the confirmation prompt."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {

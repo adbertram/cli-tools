@@ -128,7 +128,7 @@ pinterest auth profiles create sandbox
 pinterest auth profiles get sandbox
 
 # Make a profile the default
-pinterest auth profiles set-default sandbox
+pinterest auth profiles select sandbox
 
 # Delete a profile
 pinterest auth profiles delete sandbox --force
@@ -153,7 +153,7 @@ pinterest cache clear
 The CLI stores profile env files in the standard cli-tools profile location. Start from `.env.example` or let `pinterest auth login` populate credentials.
 
 ```dotenv
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 CLIENT_ID=
 CLIENT_SECRET=
 REDIRECT_URI=http://localhost/

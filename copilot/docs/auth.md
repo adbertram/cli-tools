@@ -109,10 +109,10 @@ copilot auth profiles get my-tenant --table  # Get profile as table
 copilot auth profiles create staging         # Create a new profile from template
 ```
 
-### Set Default Profile
+### Select Active Profile
 
 ```bash
-copilot auth profiles set-default staging    # Set a profile as the default
+copilot auth profiles select staging    # Select the active profile
 ```
 
 ### Delete Profile

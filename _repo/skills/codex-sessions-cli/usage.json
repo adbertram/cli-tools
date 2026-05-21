@@ -2,7 +2,7 @@
   "tool": "codex-sessions",
   "description": "Query and analyze OpenAI Codex session data from ~/.codex",
   "discovered_at": "2026-05-06T15:14:15.295208+00:00",
-  "total_commands": 27,
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -14,10 +14,10 @@
   ],
   "commands": {
     "auth": {
-      "help": "Manage codex-sessions authentication",
+      "help": "Check local Codex access",
       "commands": {
         "login": {
-          "help": "Configure authentication credentials.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "options": [
             {
               "name": "--profile",
@@ -36,8 +36,21 @@
           ],
           "usage_instructions": "Use `codex-sessions auth login` only when a shared workflow expects auth-profile initialization. Add `--profile`/`-p` to target a named profile and `--force`/`-F` to clear saved state before re-checking local transcript access."
         },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `codex-sessions auth logout` only when a shared workflow requires clearing the current profile state. Add `--profile`/`-p` to target a named profile."
+        },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -55,19 +68,6 @@
             }
           ],
           "usage_instructions": "Use `codex-sessions auth status` to verify the local Codex transcript store. By default it returns every profile in a `profiles` array; add `--profile`/`-p` to scope the check or `--table`/`-t` for a compact table."
-        },
-        "logout": {
-          "help": "Clear stored credentials.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions auth logout` only when a shared workflow requires clearing the current profile state. Add `--profile`/`-p` to target a named profile."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
@@ -100,7 +100,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -120,7 +120,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -164,21 +164,19 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "options": [],
               "usage_instructions": "Use `codex-sessions auth profiles create <name>` to initialize a named profile."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "options": [],
-              "usage_instructions": "Use `codex-sessions auth profiles set-default <name>` to switch the default profile."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -200,9 +198,30 @@
                 }
               ],
               "usage_instructions": "Use `codex-sessions auth profiles delete <name>` to remove a profile and its runtime data. Add `--force`/`-F` to skip the confirmation prompt."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `codex-sessions auth profiles remove <name>` to remove a profile and its runtime data. Add `--force`/`-F` to skip the confirmation prompt."
             }
           },
-          "usage_instructions": "Use `codex-sessions auth profiles ...` to list, inspect, create, delete, and switch default auth profiles."
+          "usage_instructions": "Use `codex-sessions auth profiles ...` to list, inspect, create, delete, and switch auth profiles."
         }
       },
       "usage_instructions": "Use auth commands to manage the local profile wrapper around Codex transcript access checks. `auth status` and `auth test` operate across profiles; `auth profiles` manages named profile records."
@@ -241,6 +260,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions projects list` to find project names, paths, session counts, and last activity. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` to narrow or format results."
@@ -269,6 +294,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions projects get <name-or-path>` when the exact project name or path is known. Add `--properties`/`-p` to return selected fields or `--table`/`-t` for table output."
@@ -372,6 +403,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions sessions list` to find recent sessions and ids. Filter by `--project`/`-p`, exact `--project-path`, age with `--since`/`-s`, or fields with `--filter`/`-f`; default limit is 100."
@@ -400,6 +437,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions sessions get <session-id>` when a session id is known and full raw records, messages, and tool calls are needed. Add `--properties`/`-p` for selected fields or `--table`/`-t` for a summary table."
@@ -462,6 +505,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions sessions search <query>` to locate sessions containing prompt text, tool arguments, or outputs. Combine with `--project`/`-p`, `--project-path`, `--since`/`-s`, and `--limit`/`-l` to keep searches scoped."
@@ -528,6 +577,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions conversations list` to inspect turns by project, path, session id, or age. Use `--session-id`/`-S` when known; default limit is 100."
@@ -556,6 +611,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions conversations get <session-id>:<number>` for one turn summary. Add `--properties`/`-p` or `--table`/`-t` for output shaping."
@@ -623,6 +684,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions subagent-activity list` to see subagent type, name, prompt, status, and output. Combine `--session-id`/`-S`, `--project`/`-p`, `--since`/`-s`, `--filter`/`-f`, and `--properties`."
@@ -651,6 +718,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions subagent-activity get <subagent-tool-call-id>` for one subagent launch. The id is the underlying tool call id from transcript records."
@@ -725,6 +798,12 @@
               "required": false,
               "help": "Accepted for CLI parity",
               "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions tool-calls list` to inspect tool usage. Scope with `--session-id`/`-S`, `--project`/`-p`, or `--since`/`-s`; use `--filter`/`-f 'name:eq:exec_command'` for a tool name."
@@ -753,6 +832,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions tool-calls get <tool-call-id>` for one tool call's arguments and output. Add `--properties`/`-p` or `--table`/`-t` to shape output."
@@ -820,6 +905,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions todos list` to list plan items. Scope by `--session-id`/`-S`, project, path, or age; filter statuses with `--filter`/`-f 'status:eq:completed'`."
@@ -848,6 +939,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions todos get <todo-id>` for one plan item. Todo ids are emitted by `todos list`."
@@ -915,6 +1012,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions skills list` to find skill or agent mentions by project, session, or age. Filter by name with `--filter`/`-f 'name:eq:cli-tool'`."
@@ -943,6 +1046,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions skills get <skill-invocation-id>` for one detected skill or agent mention. Skill ids are emitted by `skills list`."
@@ -1017,6 +1126,12 @@
               "required": false,
               "help": "Show only error events",
               "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions timeline list` for timeline events across sessions. Scope with `--session-id`/`-S`, `--project`/`-p`, `--project-path`, or `--since`/`-s`; add `--errors-only`/`-e` for failed/error events."
@@ -1066,6 +1181,12 @@
               "required": false,
               "help": "--hide-agent-tools             Accepted for CLI parity",
               "default": "show-agent-tools"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions timeline consolidated --session-id <id>` to show all parsed events for one session. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` for output shaping."
@@ -1094,6 +1215,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `codex-sessions timeline get <event-id>` to fetch one event returned by `timeline list` or `timeline consolidated`. Add `--properties`/`-p` or `--table`/`-t` as needed."

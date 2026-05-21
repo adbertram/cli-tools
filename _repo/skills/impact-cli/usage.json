@@ -2,7 +2,7 @@
   "tool": "impact",
   "description": "Impact.com Publisher API CLI",
   "discovered_at": "2026-05-08T19:40:42.859851+00:00",
-  "total_commands": 84,
+  "total_commands": 85,
   "global_options": [
     {
       "name": "--version",
@@ -31,6 +31,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact account get` when you need to get account/company information. Important options: --table/-t."
@@ -50,6 +56,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact account update` when you need to update account/company information. Important options: --json-file, --table/-t."
@@ -85,6 +97,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact account list` when you need to list the current account as a single account record. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -123,6 +141,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account users list` when you need to list account users. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -144,12 +168,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account users get` when you need to get one account user. Required positional arguments: USER_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact account users` for manage account users. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact account users` for manage account users. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "invoices": {
           "help": "Manage invoices",
@@ -185,6 +223,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account invoices list` when you need to list invoices. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -206,6 +250,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account invoices get` when you need to get one invoice. Required positional arguments: INVOICE_ID. Important options: --table/-t."
@@ -227,12 +277,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account invoices download` when you need to download invoice content. Required positional arguments: INVOICE_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact account invoices` for manage invoices. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact account invoices` for manage invoices. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "tax-documents": {
           "help": "Manage tax documents",
@@ -268,6 +332,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account tax-documents list` when you need to list tax documents. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -289,6 +359,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account tax-documents get` when you need to get one tax document. Required positional arguments: TAX_DOCUMENT_ID. Important options: --table/-t."
@@ -302,6 +378,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account tax-documents latest` when you need to get the latest saved tax document. Important options: --table/-t."
@@ -321,6 +403,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account tax-documents create` when you need to create a tax document. Important options: --json-file, --table/-t."
@@ -340,12 +428,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account tax-documents complete` when you need to complete tax document submission. Important options: --json-file, --table/-t."
             }
           },
-          "usage_instructions": "Use `impact account tax-documents` for manage tax documents. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact account tax-documents` for manage tax documents. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "withdrawal-settings": {
           "help": "Manage withdrawal settings",
@@ -359,6 +461,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account withdrawal-settings get` when you need to get withdrawal settings. Important options: --table/-t."
@@ -394,6 +502,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account withdrawal-settings list` when you need to list withdrawal settings as a single record. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -413,6 +527,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account withdrawal-settings update` when you need to update withdrawal settings. Important options: --json-file, --table/-t."
@@ -432,12 +552,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact account withdrawal-settings required-fields` when you need to retrieve required banking fields for a country. Important options: --bank-country, --table/-t."
             }
           },
-          "usage_instructions": "Use `impact account withdrawal-settings` for manage withdrawal settings. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact account withdrawal-settings` for manage withdrawal settings. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Use `impact account` for manage account data. Check child command help for required IDs; use --table/-t for compact human review where available."
@@ -476,6 +610,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact campaigns list` when you need to list programs. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -497,6 +637,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact campaigns get` when you need to get one program. Required positional arguments: CAMPAIGN_ID. Important options: --table/-t."
@@ -518,6 +664,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact campaigns logo` when you need to download a program logo. Required positional arguments: CAMPAIGN_ID. Important options: --table/-t."
@@ -545,6 +697,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact campaigns tracking-link` when you need to create a program tracking link. Required positional arguments: PROGRAM_ID. Important options: --json-file, --table/-t."
@@ -583,6 +741,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns contracts list` when you need to list contracts. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -604,6 +768,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns contracts get` when you need to get one contract. Required positional arguments: CONTRACT_ID. Important options: --table/-t."
@@ -625,6 +795,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns contracts active` when you need to download a program's active contract. Required positional arguments: CAMPAIGN_ID. Important options: --table/-t."
@@ -646,12 +822,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns contracts public-terms` when you need to download public terms for a program. Required positional arguments: CAMPAIGN_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact campaigns contracts` for manage contracts. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact campaigns contracts` for manage contracts. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "promotions": {
           "help": "Manage promotions",
@@ -687,6 +877,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns promotions list` when you need to list promotions. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -708,12 +904,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns promotions get` when you need to get one promotion. Required positional arguments: PROMOTION_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact campaigns promotions` for manage promotions. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact campaigns promotions` for manage promotions. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "deals": {
           "help": "Manage deals",
@@ -757,6 +967,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns deals list` when you need to list deals for a program. Required positional arguments: CAMPAIGN_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -784,12 +1000,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact campaigns deals get` when you need to get one program deal. Required positional arguments: CAMPAIGN_ID, DEAL_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact campaigns deals` for manage deals. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact campaigns deals` for manage deals. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Use `impact campaigns` for manage programs and program assets. Check child command help for required IDs; use --table/-t for compact human review where available."
@@ -828,6 +1058,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact ads list` when you need to list ads. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -849,6 +1085,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact ads get` when you need to get one ad. Required positional arguments: AD_ID. Important options: --table/-t."
@@ -870,6 +1112,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact ads code` when you need to retrieve ad code. Required positional arguments: AD_ID. Important options: --table/-t."
@@ -891,6 +1139,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact ads iframe-code` when you need to retrieve ad iframe code. Required positional arguments: AD_ID. Important options: --table/-t."
@@ -912,6 +1166,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact ads tracking-link` when you need to retrieve an ad tracking link. Required positional arguments: AD_ID. Important options: --table/-t."
@@ -953,6 +1213,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact actions list` when you need to list actions. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -974,6 +1240,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact actions get` when you need to get one action. Required positional arguments: ACTION_ID. Important options: --table/-t."
@@ -1017,6 +1289,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact actions items` when you need to list items for an action. Required positional arguments: ACTION_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1044,6 +1322,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact actions item` when you need to get one action item. Required positional arguments: ACTION_ID, SKU. Important options: --table/-t."
@@ -1082,6 +1366,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact actions updates list` when you need to list action updates. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1103,12 +1393,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact actions updates get` when you need to get one action update. Required positional arguments: UPDATE_ID. Important options: --table/-t."
             }
           },
-          "usage_instructions": "Use `impact actions updates` for manage action updates. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact actions updates` for manage action updates. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "inquiries": {
           "help": "Manage action inquiries",
@@ -1144,6 +1448,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact actions inquiries list` when you need to list action inquiries. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1165,6 +1475,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact actions inquiries get` when you need to get one action inquiry. Required positional arguments: INQUIRY_ID. Important options: --table/-t."
@@ -1184,12 +1500,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact actions inquiries create` when you need to create an action inquiry. Important options: --json-file, --table/-t."
             }
           },
-          "usage_instructions": "Use `impact actions inquiries` for manage action inquiries. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact actions inquiries` for manage action inquiries. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Use `impact actions` for manage actions. Check child command help for required IDs; use --table/-t for compact human review where available."
@@ -1228,6 +1558,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact catalogs list` when you need to list catalogs. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1249,6 +1585,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact catalogs get` when you need to get one catalog. Required positional arguments: CATALOG_ID. Important options: --table/-t."
@@ -1292,6 +1634,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact catalogs items` when you need to list catalog items. Required positional arguments: CATALOG_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1319,6 +1667,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact catalogs item` when you need to get one catalog item. Required positional arguments: CATALOG_ID, ITEM_ID. Important options: --table/-t."
@@ -1354,6 +1708,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact catalogs search` when you need to search catalog items. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1392,6 +1752,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs stores list` when you need to list stores. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1413,6 +1779,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs stores get` when you need to get one store. Required positional arguments: STORE_ID. Important options: --table/-t."
@@ -1462,12 +1834,26 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs stores items` when you need to list store group items. Required positional arguments: STORE_ID, GROUP_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
             }
           },
-          "usage_instructions": "Use `impact catalogs stores` for manage stores. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact catalogs stores` for manage stores. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "exception-lists": {
           "help": "Manage exception lists",
@@ -1489,6 +1875,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs exception-lists show` when you need to get one exception list. Required positional arguments: EXCEPTION_LIST_ID. Important options: --table/-t."
@@ -1532,12 +1924,26 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs exception-lists items` when you need to list exception list items. Required positional arguments: EXCEPTION_LIST_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
             }
           },
-          "usage_instructions": "Use `impact catalogs exception-lists` for manage exception lists. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact catalogs exception-lists` for manage exception lists. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "promo-code-exception-lists": {
           "help": "Manage promo code exception lists",
@@ -1559,6 +1965,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs promo-code-exception-lists show` when you need to exception_list_id get one promo code exception list. Required positional arguments: EXCEPTION_LIST_ID. Important options: --table/-t."
@@ -1602,12 +2014,26 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Use `impact catalogs promo-code-exception-lists items` when you need to exception_list_id list promo code exception list items. Required positional arguments: EXCEPTION_LIST_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
             }
           },
-          "usage_instructions": "Use `impact catalogs promo-code-exception-lists` for manage promo code exception lists. Check child command help for required IDs; use --table/-t for compact human review where available."
+          "usage_instructions": "Use `impact catalogs promo-code-exception-lists` for manage promo code exception lists. Check child command help for required IDs; use --table/-t for compact human review where available.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Use `impact catalogs` for manage catalogs. Check child command help for required IDs; use --table/-t for compact human review where available."
@@ -1646,6 +2072,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact reports list` when you need to list reports. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1667,6 +2099,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact reports get` when you need to get report metadata. Required positional arguments: REPORT_ID. Important options: --table/-t."
@@ -1710,6 +2148,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact reports run` when you need to run a report. Required positional arguments: REPORT_ID. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1731,6 +2175,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact reports metadata` when you need to get report metadata. Required positional arguments: REPORT_ID. Important options: --table/-t."
@@ -1758,6 +2208,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact reports export` when you need to export a report. Required positional arguments: REPORT_ID. Important options: --json-file, --table/-t."
@@ -1785,6 +2241,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact clicks retrieve` when you need to get one click. Required positional arguments: CLICK_ID. Important options: --table/-t."
@@ -1804,6 +2266,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact clicks export` when you need to export clicks. Important options: --json-file, --table/-t."
@@ -1845,6 +2313,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact jobs history` when you need to list jobs. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1866,6 +2340,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact jobs status` when you need to get job status. Required positional arguments: JOB_ID. Important options: --table/-t."
@@ -1887,6 +2367,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact jobs download` when you need to download job result content. Required positional arguments: JOB_ID. Important options: --table/-t."
@@ -1915,6 +2401,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact jobs replay` when you need to replay a job. Required positional arguments: JOB_ID. Important options: --force/-F, --table/-t."
@@ -1956,6 +2448,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact websites list` when you need to list websites/media properties. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1977,6 +2475,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact websites get` when you need to get one website/media property. Required positional arguments: WEBSITE_ID. Important options: --table/-t."
@@ -1996,6 +2500,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact websites create` when you need to create a website/media property. Important options: --json-file, --table/-t."
@@ -2023,6 +2533,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact websites update` when you need to update a website/media property. Required positional arguments: WEBSITE_ID. Important options: --json-file, --table/-t."
@@ -2051,12 +2567,98 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `impact websites delete` when you need to delete a website/media property. Required positional arguments: WEBSITE_ID. Important options: --force/-F, --table/-t."
         }
       },
       "usage_instructions": "Use `impact websites` for manage websites. Check child command help for required IDs; use --table/-t for compact human review where available."
+    },
+    "marketplace": {
+      "help": "Generate browser-automation instructions for Impact marketplace discovery (no public API)",
+      "commands": {
+        "search": {
+          "help": "Emit playwright-cli instructions to discover Impact marketplace programs.",
+          "options": [
+            {
+              "name": "--keyword",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional search keyword to type into the marketplace search box"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional category label to apply as a filter"
+            },
+            {
+              "name": "--text",
+              "type": "bool",
+              "required": false,
+              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Emit playwright-cli instructions to discover Impact marketplace programs. Optional --keyword and --category narrow the search; the keyword is embedded in the marketplace SPA's URL fragment (#joinState=all&q=...) so the agent can navigate directly. The agent receiving the JSON should: (1) ensure an authenticated playwright-cli session for app.impact.com (use lastpass for credentials), (2) navigate to target_url (the new Brand Marketplace SPA at /secure/mediapartner/marketplace/new-campaign-marketplace-flow.ihtml \u2014 the legacy /secure/marketplace/brand-listings.ihtml path returns 404), (3) click the 'All Brands' tab (the default 'Home' tab is curated/limited), (4) snapshot the page, (5) apply keyword/category filters if not already in URL, (6) harvest one record per `.brands-card` element with fields: program_name, advertiser, category, terms_summary, program_id (parsed from `display-logo-via-campaign/<id>.gif` in the card's logo URL), join_state. The grid is virtualised \u2014 scroll to load more rows. Pass --text for human-readable output."
+        },
+        "apply": {
+          "help": "Emit playwright-cli instructions to apply to a specific Impact program.",
+          "arguments": [
+            {
+              "name": "program_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Impact program identifier discovered via `marketplace search`"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "bool",
+              "required": false,
+              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Emit playwright-cli instructions to apply to a specific Impact program identified by PROGRAM_ID (the Impact campaign id, e.g. '394' for Shoebacca). The marketplace SPA has NO per-program deep link \u2014 the apply flow is inline. The agent receiving the JSON should: (1) ensure an authenticated playwright-cli session, (2) navigate to the marketplace landing page (target_url), (3) click 'All Brands', (4) locate the `.brands-card` whose logo URL contains `display-logo-via-campaign/<PROGRAM_ID>.gif` (scrolling or narrowing by brand-name search since the grid is virtualised), (5) click the inline 'Apply' button on that card to open the application drawer, (6) snapshot the form, (7) fill required fields from the partner's stored profile data, (8) submit, (9) capture confirmation text. Pass --text for human-readable output."
+        },
+        "list-categories": {
+          "help": "Emit playwright-cli instructions to harvest Impact marketplace category labels.",
+          "options": [
+            {
+              "name": "--text",
+              "type": "bool",
+              "required": false,
+              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Emit playwright-cli instructions to harvest the Impact marketplace category labels. The agent should: (1) navigate to the marketplace landing page, (2) click 'All Brands' (the default 'Home' tab hides or partials the Categories filter), (3) click the 'Categories' filter chip above the result grid to open its dropdown, (4) read every category label inside the expanded dropdown exactly as displayed (the dropdown is virtualised \u2014 scroll inside it until no new labels appear). Pass --text for human-readable output."
+        }
+      },
+      "usage_instructions": "Generate browser-automation instructions for Impact marketplace flows. Impact's Publisher API has NO marketplace/discovery endpoint \u2014 every documented /Mediapartners/{AccountSID}/... endpoint is post-approval/operational. These commands return structured JSON that another agent (using the playwright-cli skill) can follow to drive the partner-portal browser UI. Default output is machine-parseable JSON; pass --text for a human-readable rendering. The JSON has a top-level 'disclaimer' field flagging the no-API constraint, plus 'target_url', 'auth_note', 'steps', 'extraction_target', 'constraints', 'success_criteria', and 'next_actions'. The auth_note directs the consumer to use the lastpass CLI for app.impact.com credentials before driving the browser session \u2014 credentials are never embedded in the instruction."
     },
     "auth": {
       "help": "Manage impact authentication",
@@ -2082,7 +2684,7 @@
           "usage_instructions": "Use `impact auth login` when you need to configure authentication credentials. prompts for required credentials based on the tool's authentication type. for oauth authorization code flows, opens a browser for user consent. Important options: --profile/-p, --force/-F, --credential-type/-c."
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "options": [
             {
               "name": "--profile",
@@ -2095,7 +2697,7 @@
           "usage_instructions": "Use `impact auth logout` when you need to clear stored credentials and browser sessions. Important options: --profile/-p."
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -2145,7 +2747,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -2165,7 +2767,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -2176,7 +2778,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use `impact auth profiles list` when you need to list all profiles and show which is the default. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+              "usage_instructions": "Use `impact auth profiles list` when you need to list all profiles and show their auth types and active state. Important options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -2211,19 +2813,40 @@
               ],
               "usage_instructions": "Use `impact auth profiles create` when you need to create a new profile from .env.example template. Required positional arguments: NAME."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use `impact auth profiles set-default` when you need to set a profile as the default (is_default_profile=1). Required positional arguments: NAME."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `impact auth profiles delete` when you need to delete a profile and its data. Required positional arguments: NAME. Important options: --force/-F."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -2259,68 +2882,6 @@
         }
       },
       "usage_instructions": "Use `impact cache` for manage response cache. Check child command help for required IDs; use --table/-t for compact human review where available."
-    },
-    "marketplace": {
-      "help": "Generate browser-automation instructions for Impact marketplace discovery (no public API)",
-      "commands": {
-        "search": {
-          "help": "Emit playwright-cli instructions to discover Impact marketplace programs.",
-          "options": [
-            {
-              "name": "--keyword",
-              "type": "TEXT",
-              "required": false,
-              "help": "Optional search keyword to type into the marketplace search box"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Optional category label to apply as a filter"
-            },
-            {
-              "name": "--text",
-              "type": "bool",
-              "required": false,
-              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
-            }
-          ],
-          "usage_instructions": "Emit playwright-cli instructions to discover Impact marketplace programs. Optional --keyword and --category narrow the search; the keyword is embedded in the marketplace SPA's URL fragment (#joinState=all&q=...) so the agent can navigate directly. The agent receiving the JSON should: (1) ensure an authenticated playwright-cli session for app.impact.com (use lastpass for credentials), (2) navigate to target_url (the new Brand Marketplace SPA at /secure/mediapartner/marketplace/new-campaign-marketplace-flow.ihtml — the legacy /secure/marketplace/brand-listings.ihtml path returns 404), (3) click the 'All Brands' tab (the default 'Home' tab is curated/limited), (4) snapshot the page, (5) apply keyword/category filters if not already in URL, (6) harvest one record per `.brands-card` element with fields: program_name, advertiser, category, terms_summary, program_id (parsed from `display-logo-via-campaign/<id>.gif` in the card's logo URL), join_state. The grid is virtualised — scroll to load more rows. Pass --text for human-readable output."
-        },
-        "apply": {
-          "help": "Emit playwright-cli instructions to apply to a specific Impact program.",
-          "arguments": [
-            {
-              "name": "program_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Impact program identifier discovered via `marketplace search`"
-            }
-          ],
-          "options": [
-            {
-              "name": "--text",
-              "type": "bool",
-              "required": false,
-              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
-            }
-          ],
-          "usage_instructions": "Emit playwright-cli instructions to apply to a specific Impact program identified by PROGRAM_ID (the Impact campaign id, e.g. '394' for Shoebacca). The marketplace SPA has NO per-program deep link — the apply flow is inline. The agent receiving the JSON should: (1) ensure an authenticated playwright-cli session, (2) navigate to the marketplace landing page (target_url), (3) click 'All Brands', (4) locate the `.brands-card` whose logo URL contains `display-logo-via-campaign/<PROGRAM_ID>.gif` (scrolling or narrowing by brand-name search since the grid is virtualised), (5) click the inline 'Apply' button on that card to open the application drawer, (6) snapshot the form, (7) fill required fields from the partner's stored profile data, (8) submit, (9) capture confirmation text. Pass --text for human-readable output."
-        },
-        "list-categories": {
-          "help": "Emit playwright-cli instructions to harvest Impact marketplace category labels.",
-          "options": [
-            {
-              "name": "--text",
-              "type": "bool",
-              "required": false,
-              "help": "Emit a human-readable plain-text rendering instead of the default machine-parseable JSON"
-            }
-          ],
-          "usage_instructions": "Emit playwright-cli instructions to harvest the Impact marketplace category labels. The agent should: (1) navigate to the marketplace landing page, (2) click 'All Brands' (the default 'Home' tab hides or partials the Categories filter), (3) click the 'Categories' filter chip above the result grid to open its dropdown, (4) read every category label inside the expanded dropdown exactly as displayed (the dropdown is virtualised — scroll inside it until no new labels appear). Pass --text for human-readable output."
-        }
-      },
-      "usage_instructions": "Generate browser-automation instructions for Impact marketplace flows. Impact's Publisher API has NO marketplace/discovery endpoint — every documented /Mediapartners/{AccountSID}/... endpoint is post-approval/operational. These commands return structured JSON that another agent (using the playwright-cli skill) can follow to drive the partner-portal browser UI. Default output is machine-parseable JSON; pass --text for a human-readable rendering. The JSON has a top-level 'disclaimer' field flagging the no-API constraint, plus 'target_url', 'auth_note', 'steps', 'extraction_target', 'constraints', 'success_criteria', and 'next_actions'. The auth_note directs the consumer to use the lastpass CLI for app.impact.com credentials before driving the browser session — credentials are never embedded in the instruction."
     }
   },
   "usage_instructions": "Use the impact CLI for Impact.com Publisher API work: account data, programs, ads, actions, catalogs, reports, clicks, jobs, and websites. Commands follow `impact <group> <action>`; list-style commands support --limit/-l, --filter/-f, --properties/-p, and --table/-t when shown in help. Use `impact auth login` before API calls and prefer JSON output for scripting. The marketplace group is special: Impact has no public discovery API, so those commands emit structured JSON instructions for browser automation via playwright-cli."

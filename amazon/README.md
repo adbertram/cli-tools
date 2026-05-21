@@ -25,7 +25,7 @@ amazon auth logout
 amazon auth profiles list
 amazon auth profiles get default
 amazon auth profiles create work
-amazon auth profiles set-default work
+amazon auth profiles select work
 amazon auth profiles delete work
 ```
 

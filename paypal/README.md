@@ -50,10 +50,10 @@ paypal auth logout
 # List all profiles
 paypal auth profiles list -t
 
-# Set default profile
-paypal auth profiles set-default business
+# Select active profile
+paypal auth profiles select business
 
-# Show default profile
+# Show active profile
 paypal auth profiles get default
 ```
 

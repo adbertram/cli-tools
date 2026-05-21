@@ -30,7 +30,7 @@ Profile management:
 medium auth profiles list
 medium auth profiles get default
 medium auth profiles create work
-medium auth profiles set-default work
+medium auth profiles select work
 ```
 
 `medium auth login` opens Medium's sign-in flow in a browser window. After you complete sign-in, return to the terminal and press Enter so the CLI can save the browser session.
@@ -103,7 +103,7 @@ Profile env files live under the shared cli-tools profile storage managed by `cl
 Example profile fields:
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 BASE_URL=https://medium.com
 BROWSER_USER_AGENT=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36
 BROWSER_WINDOW_SIZE=1280,900

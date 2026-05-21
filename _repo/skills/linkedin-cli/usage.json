@@ -2,7 +2,7 @@
   "tool": "linkedin",
   "description": "Create and manage LinkedIn member and page posts",
   "discovered_at": "2026-05-18T20:50:10.452320+00:00",
-  "total_commands": 24,
+  "total_commands": 25,
   "global_options": [
     {
       "name": "--version",
@@ -32,7 +32,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -101,7 +101,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -148,7 +148,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -207,7 +207,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -240,7 +240,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -273,7 +273,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--person",
@@ -332,7 +332,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -401,7 +401,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -448,7 +448,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -507,7 +507,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -540,7 +540,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -573,7 +573,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth profile name. Defaults to the active default profile"
+                  "help": "Auth profile name. Defaults to the active profile"
                 },
                 {
                   "name": "--page",
@@ -653,10 +653,10 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "Clear stored LinkedIn OAuth credentials for the selected profile. Use `--profile/-p` to target a named profile instead of the active default profile."
+          "usage_instructions": "Clear stored LinkedIn OAuth credentials for the selected profile. Use `--profile/-p` to target a named profile instead of the active profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -746,7 +746,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -766,7 +766,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -777,7 +777,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "List all configured LinkedIn auth profiles and show which one is the default. Use --limit/-l, --filter/-f, --table/-t, and --properties/-p to shape the result."
+              "usage_instructions": "List all configured LinkedIn auth profiles and show auth type and active state. Use --limit/-l, --filter/-f, --table/-t, and --properties/-p to shape the result."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -812,19 +812,40 @@
               ],
               "usage_instructions": "Create a new profile named NAME from the LinkedIn .env template. Use this before configuring separate staging or alternate LinkedIn app credentials."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Set the named profile as the CLI default used when --profile is omitted from other commands."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete the named profile and its stored data. Use --force/-F to skip the confirmation prompt."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {

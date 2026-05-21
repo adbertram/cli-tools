@@ -96,7 +96,7 @@ venmo transactions get 4418053612741823878 --table
 venmo auth profiles list
 venmo auth profiles get default
 venmo auth profiles create work
-venmo auth profiles set-default work
+venmo auth profiles select work
 ```
 
 Each profile keeps its own access token, device id, and cache directory.

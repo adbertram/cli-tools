@@ -221,8 +221,8 @@ brickfreedom auth profiles list
 # Create a new profile
 brickfreedom auth profiles create staging
 
-# Set default profile
-brickfreedom auth profiles set-default staging
+# Select active profile
+brickfreedom auth profiles select staging
 
 # Delete a profile
 brickfreedom auth profiles delete staging

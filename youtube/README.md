@@ -144,7 +144,7 @@ youtube auth profiles create myprofile --auth-type google_oauth_desktop
 youtube auth profiles create myprofile --auth-type google_oauth_desktop \
   --auth-param CLIENT_ID=your-client-id \
   --auth-param CLIENT_SECRET=your-client-secret
-youtube auth profiles set-default myprofile
+youtube auth profiles select myprofile
 youtube auth profiles delete myprofile
 ```
 

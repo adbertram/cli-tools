@@ -82,7 +82,8 @@ def auth_status(
             "profiles": [
                 {
                     "name": profile_name,
-                    "is_default": profile_name == "default",
+                    "auth_type": "default",
+                    "active": True,
                     "authenticated": authenticated,
                     "credential_types": {
                         "custom": {

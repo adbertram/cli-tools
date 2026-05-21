@@ -97,7 +97,7 @@ Manage authentication profiles.
 ```bash
 ahrefs auth profiles list
 ahrefs auth profiles create <profile-name>
-ahrefs auth profiles set-default <profile-name>
+ahrefs auth profiles select <profile-name>
 ahrefs auth profiles delete <profile-name>
 ```
 

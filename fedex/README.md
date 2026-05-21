@@ -77,8 +77,8 @@ fedex auth profiles list
 # Create a new profile
 fedex auth profiles create work
 
-# Set default profile
-fedex auth profiles set-default work
+# Select active profile
+fedex auth profiles select work
 
 # Delete a profile
 fedex auth profiles delete old-profile

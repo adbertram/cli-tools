@@ -168,7 +168,7 @@ Manage authentication profiles.
 bricklink auth profiles list
 bricklink auth profiles get <profile-name>
 bricklink auth profiles create <profile-name>
-bricklink auth profiles set-default <profile-name>
+bricklink auth profiles select <profile-name>
 bricklink auth profiles delete <profile-name>
 ```
 

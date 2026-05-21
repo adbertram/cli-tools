@@ -37,7 +37,7 @@ capture the request.
 apple auth profiles list
 apple auth profiles get default
 apple auth profiles create work
-apple auth profiles set-default work
+apple auth profiles select work
 apple auth profiles delete work
 ```
 

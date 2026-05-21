@@ -2,7 +2,7 @@
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
   "discovered_at": "2026-05-21T14:32:26.494022+00:00",
-  "total_commands": 94,
+  "total_commands": 95,
   "global_options": [
     {
       "name": "--version",
@@ -63,7 +63,7 @@
           "usage_instructions": "Clear stored Google OAuth2 tokens."
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "options": [
             {
               "name": "--profile",
@@ -113,7 +113,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -133,7 +133,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -144,7 +144,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "List all profiles and show which is the default. Run `google auth profiles list --help` for exact arguments and options."
+              "usage_instructions": "List all profiles and show their auth types and active state. Run `google auth profiles list --help` for exact arguments and options."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -179,17 +179,17 @@
               ],
               "usage_instructions": "Create a new profile from .env.example template. Run `google auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Set a profile as the default (IS_DEFAULT_PROFILE=1). Run `google auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -211,9 +211,30 @@
                 }
               ],
               "usage_instructions": "Delete a profile and its data. Run `google auth profiles delete --help` for exact arguments and options."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and its data. Run `google auth profiles remove --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Manage authentication profiles Available subcommands: create, delete, get, list, set-default."
+          "usage_instructions": "Manage authentication profiles Available subcommands: create, delete, get, list, select."
         }
       },
       "usage_instructions": "OAuth2 authentication for Google APIs. Use `auth login` to authenticate, `auth status` to verify, `auth logout` to clear tokens."
@@ -737,7 +758,15 @@
               "usage_instructions": "Get details of a specific Chat space. Run `google chat spaces get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Manage Chat spaces Available subcommands: get, list."
+          "usage_instructions": "Manage Chat spaces Available subcommands: get, list.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "messages": {
           "help": "Manage Chat messages",
@@ -826,7 +855,15 @@
               "usage_instructions": "Get a specific Chat message. Run `google chat messages get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Manage Chat messages Available subcommands: get, list."
+          "usage_instructions": "Manage Chat messages Available subcommands: get, list.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Access Google Chat messages Available subcommands: messages, send, spaces."
@@ -995,7 +1032,15 @@
               "usage_instructions": "Delete a Google Cloud project."
             }
           },
-          "usage_instructions": "Nested group for GCP project operations."
+          "usage_instructions": "Nested group for GCP project operations.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "credentials": {
           "help": "Manage project credentials (service accounts, API keys, OAuth clients)",
@@ -1185,7 +1230,15 @@
               "usage_instructions": "Update a project credential."
             }
           },
-          "usage_instructions": "Nested group for service account credential management."
+          "usage_instructions": "Nested group for service account credential management.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "services": {
           "help": "Manage Google Cloud API services",
@@ -1330,7 +1383,15 @@
               "usage_instructions": "Get details of an API service for a project. Run `google cloud services get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Manage Google Cloud API services Available subcommands: disable, enable, get, list."
+          "usage_instructions": "Manage Google Cloud API services Available subcommands: disable, enable, get, list.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Google Cloud resource management -- projects and credentials."
@@ -1614,7 +1675,15 @@
               "usage_instructions": "Update table cells in a Google Doc. Supports two modes: 1. Single cell update: Use --table, --row (or --label), --col, and --content 2. Batch updates: Use --data or --file with array of updates For batch updates, JSON format: [ {\"table\": 0, \"row\": 1, \"col\": 1, \"content\": \"New value\"}, {\"table\": 0, \"label\": \"Course Title\", \"col\": 1, \"content\": \"My Course\"} ] When using --label, it finds the row where the first column matches the label."
             }
           },
-          "usage_instructions": "Nested group for managing tables within Google Docs."
+          "usage_instructions": "Nested group for managing tables within Google Docs.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Google Docs document management -- create, read, update, export, and manage tables."
@@ -2348,7 +2417,15 @@
               "usage_instructions": "Remove labels from a message."
             }
           },
-          "usage_instructions": "Nested group for Gmail label management."
+          "usage_instructions": "Nested group for Gmail label management.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Gmail message management -- list, read, search, send, reply, archive, and manage labels."
@@ -2557,6 +2634,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Generate a Looker Studio Linking API URL from a report ID. Use --data-source alias.key=value for generic parameters or --ga-* options for Google Analytics data sources."
@@ -2656,6 +2739,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Generate a Looker Studio Linking API URL that updates data source parameters when a new report is created from the report ID. This does not mutate the source report."
@@ -2900,7 +2989,15 @@
               "usage_instructions": "Get details for a specific Search Console site."
             }
           },
-          "usage_instructions": "Nested group for site management."
+          "usage_instructions": "Nested group for site management.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "urls": {
           "help": "Query indexed URLs and search analytics",
@@ -3025,7 +3122,15 @@
               "usage_instructions": "Get indexing status and details for a specific URL. Uses the URL Inspection API to retrieve indexing information including: - Index status and verdict - Crawl information - Mobile usability - Rich results status"
             }
           },
-          "usage_instructions": "Nested group for URL inspection."
+          "usage_instructions": "Nested group for URL inspection.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Google Search Console access -- manage sites, URL inspection, and index status."
@@ -3280,6 +3385,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a Chrome Web Store ZIP package for an unpacked extension. Run `google webstore package --help` for exact arguments and options."
@@ -3751,5 +3862,5 @@
       "usage_instructions": "Manage response cache Available subcommands: clear."
     }
   },
-  "usage_instructions": "Use the google CLI to access Google services. Run `google auth login` before API-backed commands, and use `--profile` when working with a non-default profile."
+  "usage_instructions": "Use the google CLI to access Google services. Run `google auth login` before API-backed commands, and use `--profile` when working with a named profile."
 }

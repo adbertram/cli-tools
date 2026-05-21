@@ -302,7 +302,7 @@ def list_user_posts(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -351,7 +351,7 @@ def get_user_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -392,7 +392,7 @@ def create_user_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -439,7 +439,7 @@ def update_user_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -468,7 +468,7 @@ def delete_user_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -496,7 +496,7 @@ def search_user_posts(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     person: Optional[str] = typer.Option(
         None,
@@ -537,7 +537,7 @@ def list_page_posts(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,
@@ -586,7 +586,7 @@ def get_page_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,
@@ -627,7 +627,7 @@ def create_page_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,
@@ -674,7 +674,7 @@ def update_page_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,
@@ -703,7 +703,7 @@ def delete_page_post(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,
@@ -731,7 +731,7 @@ def search_page_posts(
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
-        help="Auth profile name. Defaults to the active default profile.",
+        help="Auth profile name. Defaults to the active profile.",
     ),
     page: Optional[str] = typer.Option(
         None,

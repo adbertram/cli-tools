@@ -60,8 +60,8 @@ leanpub auth profiles get default
 # Create a profile
 leanpub auth profiles create work
 
-# Set the default profile
-leanpub auth profiles set-default work
+# Select the active profile
+leanpub auth profiles select work
 
 # Delete a profile
 leanpub auth profiles delete work
@@ -133,7 +133,7 @@ leanpub author stats list --slug my-book --table
 Credentials and defaults are stored in the active profile `.env` file.
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 API_KEY=your_api_key
 BOOK_SLUGS=my-book,another-book
 BASE_URL=https://leanpub.com

@@ -2,7 +2,7 @@
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp) plus channel management (Data API v3)",
   "discovered_at": "2026-05-21T16:33:24.567812+00:00",
-  "total_commands": 22,
+  "total_commands": 23,
   "global_options": [
     {
       "name": "--version",
@@ -12,7 +12,6 @@
       "short": "-v"
     }
   ],
-  "usage_instructions": "Use the `youtube` CLI for public video/transcript downloads plus authenticated owned-channel and channel-video management. Commands follow `youtube <group> <action>` or `youtube channel videos <action>`. Consult `usage.json` before execution instead of guessing flags or argument order.",
   "commands": {
     "auth": {
       "help": "Manage authentication",
@@ -101,7 +100,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -121,7 +120,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -176,22 +175,22 @@
                   "name": "--auth-param",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values."
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
                 }
               ],
               "usage_instructions": "Create a new profile. NAME is required. You must pass `--auth-type google_oauth_desktop`. Provide `CLIENT_ID` and `CLIENT_SECRET` either interactively when prompted or up front with repeated `--auth-param FIELD=VALUE` options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Set a profile as the default. NAME is required (positional). Only one profile can be default at a time."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -213,9 +212,30 @@
                 }
               ],
               "usage_instructions": "Delete a profile. NAME is required (positional). Use --force/-F to skip confirmation."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile. NAME is required (positional). Use --force/-F to skip confirmation."
             }
           },
-          "usage_instructions": "Manage profile files under `youtube auth profiles`. Use list to inspect profiles, create to add one, set-default to switch active profile, and delete to remove one."
+          "usage_instructions": "Manage profile files under `youtube auth profiles`. Use list to inspect profiles, create to add one, select to switch active profile, and delete to remove one."
         }
       },
       "usage_instructions": "Manage YouTube OAuth authentication for channel-management commands. Use `auth login` to enter Client ID/Secret and complete the browser consent flow, `auth status` to inspect, `auth test` to verify the token can read your channel, and `auth profiles` to manage multiple accounts."
@@ -277,6 +297,12 @@
               "required": false,
               "help": "Display results as a table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Download transcripts for YouTube videos. URLS is required (one or more YouTube video URLs, positional). Use --output-dir/-o to set output directory (default: current dir). Use --format/-f for subtitle format (srt, vtt, txt; default: srt). Use --lang/-l for language (default: en). Auto-generated subtitles are included by default; use --no-auto-sub to exclude them, or --manual-sub to prefer manual subtitles. Use --table/-t for formatted output."
@@ -332,6 +358,12 @@
               "type": "bool",
               "required": false,
               "help": "Exclude YouTube Shorts from results"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List videos from a channel without downloading them. CHANNEL is required and can be a handle or URL. Use --limit/-l to cap results, --filter/-f and --properties/-p to narrow output, --table/-t for formatted output, and --exclude-shorts to omit Shorts."
@@ -353,6 +385,12 @@
               "required": false,
               "help": "Display as a table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get metadata for one YouTube video URL. Use --table/-t for formatted output when you need a compact human-readable view."
@@ -437,6 +475,12 @@
               "help": "Max videos to download (0 = all, applies to --channel)",
               "short": "-l",
               "default": "0"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Download YouTube videos. Provide one or more video URLs as positional args, OR use --channel/-c with a channel handle (e.g., 'myclassroom') or full URL to download all videos from that channel. Use --output-dir/-o to set output directory (default: current dir). Use --format/-f for container format (mp4, mkv, webm; default: mp4). Use --quality/-q for quality selection (best, worst, or yt-dlp format code; default: best). Use --table/-t for formatted output."
@@ -489,7 +533,7 @@
                   "help": "Profile name"
                 }
               ],
-              "usage_instructions": "List videos on the authenticated user's channel by paging through the uploads playlist. Use --limit/-l to cap results (default 50). Use --filter/-f for field:op:value filters (e.g., privacy_status:eq:public, title:contains:vlog). Use --properties/-p to narrow output fields and --table/-t for a formatted table. Use --profile to target a non-default profile."
+              "usage_instructions": "List videos on the authenticated user's channel by paging through the uploads playlist. Use --limit/-l to cap results (default 50). Use --filter/-f for field:op:value filters (e.g., privacy_status:eq:public, title:contains:vlog). Use --properties/-p to narrow output fields and --table/-t for a formatted table. Use --profile to target a named profile."
             },
             "get": {
               "help": "Get full metadata for a single video by ID.",
@@ -587,7 +631,7 @@
                   "help": "Profile name"
                 }
               ],
-              "usage_instructions": "Upload a local video file to the authenticated user's channel. FILE is required (positional path). --title is required. Use --description, --tag (repeatable), --category-id (default 22 = People & Blogs), --privacy (private|unlisted|public, default private), --publish-at (RFC 3339 timestamp; requires --privacy private to schedule), --made-for-kids/--not-made-for-kids, and --thumbnail (jpg/png path) to set a custom thumbnail after upload. Use --profile to target a non-default profile."
+              "usage_instructions": "Upload a local video file to the authenticated user's channel. FILE is required (positional path). --title is required. Use --description, --tag (repeatable), --category-id (default 22 = People & Blogs), --privacy (private|unlisted|public, default private), --publish-at (RFC 3339 timestamp; requires --privacy private to schedule), --made-for-kids/--not-made-for-kids, and --thumbnail (jpg/png path) to set a custom thumbnail after upload. Use --profile to target a named profile."
             },
             "update": {
               "help": "Update title, description, tags, privacy, or thumbnail of an existing video.",
@@ -643,7 +687,7 @@
                   "help": "Profile name"
                 }
               ],
-              "usage_instructions": "Update an existing video. VIDEO_ID is required (positional). Provide one or more of --title, --description, --tag (repeatable; replaces existing tags), --category-id, --privacy (private|unlisted|public), or --thumbnail (jpg/png path). At least one field must be supplied. Use --profile to target a non-default profile."
+              "usage_instructions": "Update an existing video. VIDEO_ID is required (positional). Provide one or more of --title, --description, --tag (repeatable; replaces existing tags), --category-id, --privacy (private|unlisted|public), or --thumbnail (jpg/png path). At least one field must be supplied. Use --profile to target a named profile."
             },
             "delete": {
               "help": "Delete a video by ID. Requires confirmation unless --yes is passed.",
@@ -670,10 +714,18 @@
                   "help": "Profile name"
                 }
               ],
-              "usage_instructions": "Permanently delete a video. VIDEO_ID is required (positional). Prompts for confirmation unless --yes/-y is passed. Use --profile to target a non-default profile."
+              "usage_instructions": "Permanently delete a video. VIDEO_ID is required (positional). Prompts for confirmation unless --yes/-y is passed. Use --profile to target a named profile."
             }
           },
-          "usage_instructions": "Manage videos on the authenticated user's YouTube channel. Use `channel videos list|get|upload|update|delete` for the active OAuth profile."
+          "usage_instructions": "Manage videos on the authenticated user's YouTube channel. Use `channel videos list|get|upload|update|delete` for the active OAuth profile.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Manage the authenticated user's own YouTube channel through the nested `channel videos ...` commands."
@@ -683,6 +735,14 @@
       "commands": {
         "create": {
           "help": "Explain how to create a YouTube channel when the API does not support it.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Explain the supported manual web flow for creating a YouTube channel. This command is intentionally non-mutating because the API does not expose channel creation."
         },
         "list": {
@@ -758,7 +818,7 @@
               "help": "Profile name"
             }
           ],
-          "usage_instructions": "Get one owned YouTube channel by ID from the active OAuth profile. CHANNEL_ID is required (positional). Use --properties/-p to trim output fields, --table/-t for formatted output, and --profile to target a non-default profile."
+          "usage_instructions": "Get one owned YouTube channel by ID from the active OAuth profile. CHANNEL_ID is required (positional). Use --properties/-p to trim output fields, --table/-t for formatted output, and --profile to target a named profile."
         },
         "update": {
           "help": "Update one owned YouTube channel.",
@@ -803,5 +863,6 @@
       },
       "usage_instructions": "Inspect and update YouTube channels available to the authenticated account. Use `channels list` and `channels get` to inspect owned channels, `channels update` to upload/apply a banner image with pre-upload validation and normalization, and `channels create` for the non-mutating manual-flow explanation."
     }
-  }
+  },
+  "usage_instructions": "Use the `youtube` CLI for public video/transcript downloads plus authenticated owned-channel and channel-video management. Commands follow `youtube <group> <action>` or `youtube channel videos <action>`. Consult `usage.json` before execution instead of guessing flags or argument order."
 }

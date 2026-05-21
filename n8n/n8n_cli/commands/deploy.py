@@ -13,7 +13,7 @@ from cli_tools_shared.config import (
     config_env_path_for_tool,
     get_profiles_base_dir,
     list_env_files,
-    read_is_default_profile,
+    read_profile_active,
 )
 
 from ..config import get_config
@@ -49,24 +49,24 @@ def _read_env_file(env_path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         key = key.strip()
         value = value.strip().strip("\"'")
-        if key and key != "IS_DEFAULT_PROFILE":
+        if key and key != "ACTIVE":
             env_vars[key] = value
     return env_vars
 
 
-def _find_default_auth_env_file(cli_tool_name: str) -> Path | None:
-    """Find the default auth profile env file for a CLI tool."""
+def _find_active_auth_env_file(cli_tool_name: str) -> Path | None:
+    """Find the active auth profile env file for a CLI tool."""
     env_files = list_env_files(cli_tool_name)
     for env_file in env_files:
-        if read_is_default_profile(env_file) is True:
+        if read_profile_active(env_file) is True:
             return env_file
     return None
 
 
 def _read_cli_tool_env_values(cli_tool_name: str) -> dict[str, str]:
-    """Read root config values plus default auth profile values."""
+    """Read root config values plus active auth profile values."""
     env_values = _read_env_file(config_env_path_for_tool(cli_tool_name))
-    auth_env = _find_default_auth_env_file(cli_tool_name)
+    auth_env = _find_active_auth_env_file(cli_tool_name)
     if auth_env:
         env_values.update(_read_env_file(auth_env))
     return env_values

@@ -47,7 +47,7 @@ ring auth logout
 # Profiles
 ring auth profiles list
 ring auth profiles create work
-ring auth profiles set-default work
+ring auth profiles select work
 ```
 
 `--force` clears the cached OAuth token so the next login re-runs the Ring account + 2FA challenge.

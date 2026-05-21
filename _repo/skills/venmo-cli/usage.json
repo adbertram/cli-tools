@@ -2,7 +2,7 @@
   "tool": "venmo",
   "description": "CLI interface for Venmo (transaction history)",
   "discovered_at": "2026-05-21T00:31:21.765692+00:00",
-  "total_commands": 12,
+  "total_commands": 13,
   "global_options": [
     {
       "name": "--version",
@@ -61,7 +61,7 @@
               "help": "Return transactions older than this story id (pagination)"
             }
           ],
-          "usage_instructions": "List recent Venmo transactions. Default limit 50, JSON output. By design, each record is the FULL raw Venmo API payload (top-level keys include `id`, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment` (nested object with `id`/`status`/`action`/`amount`/`audience`/`note`/`actor`/`target`/`date_completed`/`date_authorized`/`date_reminded`/`external_wallet_payment_info`/`participants`/`merchant_split_purchase`), `app`, `likes`, `reactions`, `comments`, `mentions`, `transfer`, `authorization`) plus a CLI-injected `payment_id` top-level convenience field. `--filter` and `--properties` BOTH support dotted paths into the nested record (e.g. `--filter payment.amount:gt:100`, `--filter payment.status:eq:settled`, `--filter payment.action:eq:pay`, `--filter note:contains:lego`, `--properties payment_id,payment.amount,payment.actor.display_name,payment.target.user.display_name,note`). `--before-id <payment_id>` paginates to older transactions. `--table` renders a curated subset of columns; pass `--properties` to override the column set. The output envelope is `{\"cache_hit\": bool, \"results\": [...]}` — iterate via `jq '.results[]'`."
+          "usage_instructions": "List recent Venmo transactions. Default limit 50, JSON output. By design, each record is the FULL raw Venmo API payload (top-level keys include `id`, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment` (nested object with `id`/`status`/`action`/`amount`/`audience`/`note`/`actor`/`target`/`date_completed`/`date_authorized`/`date_reminded`/`external_wallet_payment_info`/`participants`/`merchant_split_purchase`), `app`, `likes`, `reactions`, `comments`, `mentions`, `transfer`, `authorization`) plus a CLI-injected `payment_id` top-level convenience field. `--filter` and `--properties` BOTH support dotted paths into the nested record (e.g. `--filter payment.amount:gt:100`, `--filter payment.status:eq:settled`, `--filter payment.action:eq:pay`, `--filter note:contains:lego`, `--properties payment_id,payment.amount,payment.actor.display_name,payment.target.user.display_name,note`). `--before-id <payment_id>` paginates to older transactions. `--table` renders a curated subset of columns; pass `--properties` to override the column set. The output envelope is `{\"cache_hit\": bool, \"results\": [...]}` \u2014 iterate via `jq '.results[]'`."
         },
         "get": {
           "help": "Look up a single transaction by payment id from recent history. Default output is the raw Venmo API payload (full nested shape, identical to one entry from `transactions list`). `--table` renders the curated columns; `--properties` (dotted paths) overrides the column set.",
@@ -89,10 +89,10 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "Look up a single transaction by `payment_id` (the CLI-injected top-level field; also at `payment.id`). NOTE: top-level `id` in the raw payload is Venmo's `story_id` which is null for items returned by /stories/target-or-actor — always use `payment_id` here. Searches the most recent 500 transactions. Returns the same full raw record shape as one entry from `transactions list`. `--table` and `--properties` (dotted paths) behave the same as on `list`. Example: `venmo transactions get 4418053612741823878 --table`."
+          "usage_instructions": "Look up a single transaction by `payment_id` (the CLI-injected top-level field; also at `payment.id`). NOTE: top-level `id` in the raw payload is Venmo's `story_id` which is null for items returned by /stories/target-or-actor \u2014 always use `payment_id` here. Searches the most recent 500 transactions. Returns the same full raw record shape as one entry from `transactions list`. `--table` and `--properties` (dotted paths) behave the same as on `list`. Example: `venmo transactions get 4418053612741823878 --table`."
         }
       },
-      "usage_instructions": "Read-only transaction history. Each record is the FULL raw Venmo API payload (the unmodified `Transaction._json` from venmo-api) plus a CLI-injected top-level `payment_id` for convenience. The shape is nested — scalar fields live both at the top level (`id`/story_id, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment_id`) and inside the nested `payment` object (`payment.id`, `payment.status`, `payment.action`, `payment.amount`, `payment.actor.*` user object, `payment.target.user.*` user object, `payment.target.merchant`, `payment.date_completed`). Related collections include `likes`, `reactions`, `comments`, `mentions`, `app`, `transfer`, `authorization`. Both `--filter` and `--properties` accept dotted paths (`payment.amount:gt:100`, `payment.actor.username:eq:Adam-Bertram`)."
+      "usage_instructions": "Read-only transaction history. Each record is the FULL raw Venmo API payload (the unmodified `Transaction._json` from venmo-api) plus a CLI-injected top-level `payment_id` for convenience. The shape is nested \u2014 scalar fields live both at the top level (`id`/story_id, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment_id`) and inside the nested `payment` object (`payment.id`, `payment.status`, `payment.action`, `payment.amount`, `payment.actor.*` user object, `payment.target.user.*` user object, `payment.target.merchant`, `payment.date_completed`). Related collections include `likes`, `reactions`, `comments`, `mentions`, `app`, `transfer`, `authorization`. Both `--filter` and `--properties` accept dotted paths (`payment.amount:gt:100`, `payment.actor.username:eq:Adam-Bertram`)."
     },
     "auth": {
       "help": "Manage venmo authentication",
@@ -131,7 +131,7 @@
           "usage_instructions": "Clear stored access token and device id for the active profile. Does not remove the keychain-stored username/password."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -181,7 +181,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -201,7 +201,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -212,7 +212,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "List all configured profiles. Shows which one is the default and whether each is authenticated."
+              "usage_instructions": "List all configured profiles. Shows each profile's auth type, active state, and authentication status."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -247,19 +247,40 @@
               ],
               "usage_instructions": "Create a new profile. After creation, run `venmo auth login --profile <name>` to authenticate it."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Switch the default profile that commands use when no `--profile` flag is passed."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and all its stored credentials."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -284,7 +305,7 @@
           "usage_instructions": "Manage named authentication profiles. Each profile has its own access token, device id, and cache directory. Useful for switching between multiple Venmo accounts."
         }
       },
-      "usage_instructions": "Manage Venmo authentication. The CLI does NOT prompt for username/password — both are read from the CLI-tools keychain (`venmo-username`, `venmo-password`). On first login, Venmo sends an SMS OTP; pass it via the `VENMO_OTP` env var for non-interactive use, or type it at the interactive prompt. After login, an access token and device id are saved to the per-profile .env; future logins skip OTP because the device is trusted."
+      "usage_instructions": "Manage Venmo authentication. The CLI does NOT prompt for username/password \u2014 both are read from the CLI-tools keychain (`venmo-username`, `venmo-password`). On first login, Venmo sends an SMS OTP; pass it via the `VENMO_OTP` env var for non-interactive use, or type it at the interactive prompt. After login, an access token and device id are saved to the per-profile .env; future logins skip OTP because the device is trusted."
     },
     "cache": {
       "help": "Manage response cache",
@@ -297,5 +318,5 @@
       "usage_instructions": "Inspect and clear the response cache used by the shared `@cached` decorator. Cache files live under `~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/cache/`."
     }
   },
-  "usage_instructions": "Use the `venmo` CLI to retrieve Venmo transaction history. Venmo has no public API; this tool wraps the reverse-engineered `venmo-api` Python library (private mobile API at api.venmo.com). Commands follow `venmo <group> <action>` pattern. The CLI is read-only by design — only `transactions list` and `transactions get` are exposed. Authentication is username+password+SMS-OTP; credentials are pulled from the CLI-tools keychain (`venmo-username`, `venmo-password`). After `venmo auth login`, a long-lived access token is saved and re-used. RECORD SHAPE: transaction records are the FULL raw Venmo API payload (unmodified `Transaction._json`) plus a CLI-injected top-level `payment_id` convenience field. Top-level keys are nested objects; use dotted paths for both `--filter` and `--properties` (e.g. `--filter payment.amount:gt:100`, `--properties payment_id,payment.amount,payment.actor.display_name,note`). Default output is JSON wrapped in {\"cache_hit\": bool, \"results\": [...]} for list commands. Use `--table` for human-readable output (curated columns: payment_id, date_created, type, payment.action, payment.amount, payment.status, payment.actor.display_name, payment.target.user.display_name, note). Pagination via `--before-id`."
+  "usage_instructions": "Use the `venmo` CLI to retrieve Venmo transaction history. Venmo has no public API; this tool wraps the reverse-engineered `venmo-api` Python library (private mobile API at api.venmo.com). Commands follow `venmo <group> <action>` pattern. The CLI is read-only by design \u2014 only `transactions list` and `transactions get` are exposed. Authentication is username+password+SMS-OTP; credentials are pulled from the CLI-tools keychain (`venmo-username`, `venmo-password`). After `venmo auth login`, a long-lived access token is saved and re-used. RECORD SHAPE: transaction records are the FULL raw Venmo API payload (unmodified `Transaction._json`) plus a CLI-injected top-level `payment_id` convenience field. Top-level keys are nested objects; use dotted paths for both `--filter` and `--properties` (e.g. `--filter payment.amount:gt:100`, `--properties payment_id,payment.amount,payment.actor.display_name,note`). Default output is JSON wrapped in {\"cache_hit\": bool, \"results\": [...]} for list commands. Use `--table` for human-readable output (curated columns: payment_id, date_created, type, payment.action, payment.amount, payment.status, payment.actor.display_name, payment.target.user.display_name, note). Pagination via `--before-id`."
 }

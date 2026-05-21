@@ -273,7 +273,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -293,7 +293,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -339,18 +339,6 @@
               ],
               "usage_instructions": "Create a named `pipedrive` profile from the template config. Use when you need a separate saved session for another Pipedrive account or environment."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Mark one `pipedrive` profile as the default profile. Use when future auth and data commands should use that profile unless `--profile/-p` is passed explicitly."
-            },
             "delete": {
               "help": "Delete a profile and its data.",
               "arguments": [
@@ -371,6 +359,39 @@
                 }
               ],
               "usage_instructions": "Delete a named `pipedrive` profile and its stored data. Use when a saved session is no longer needed or must be recreated cleanly."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named `pipedrive` profile and its stored data. Use when a saved session is no longer needed or must be recreated cleanly."
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             }
           },
           "usage_instructions": "Manage named authentication profiles for `pipedrive`. Use these commands when you need separate saved sessions for different Pipedrive accounts or environments."

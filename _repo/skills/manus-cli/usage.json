@@ -2,7 +2,7 @@
   "tool": "manus",
   "description": "CLI interface for Manus AI API",
   "discovered_at": "2026-05-20T16:15:14.664578+00:00",
-  "total_commands": 15,
+  "total_commands": 16,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Use to clear stored API credentials. Use --profile/-p to clear credentials for a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -137,7 +137,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use to browse all profiles. Use --filter/-f to find specific profiles (e.g., is_default:eq:True). Use --table/-t for formatted output."
+              "usage_instructions": "Use to browse all profiles. Use --filter/-f to find specific profiles (e.g., active:eq:True). Use --table/-t for formatted output."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -172,17 +172,17 @@
               ],
               "usage_instructions": "Use to create a new profile. NAME is positional and required (e.g., 'staging', 'production'). Creates from .env.example template."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use to switch the default profile. NAME is positional and required. The default profile is used when --profile is not specified in other commands."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -204,9 +204,30 @@
                 }
               ],
               "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt."
             }
           },
-          "usage_instructions": "Profile management -- list, get, create, set-default, and delete configuration profiles. Profiles allow multiple environments (e.g., staging, production) with separate credentials."
+          "usage_instructions": "Profile management -- list, get, create, select, and delete configuration profiles. Profiles allow multiple environments (e.g., staging, production) with separate credentials."
         }
       },
       "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p. Always check `auth status` before running task operations."
@@ -317,7 +338,7 @@
             "manus task create \"Research AI trends\" --share --profile manus-1.5",
             "manus task create --prompt-file /path/to/prompt.txt"
           ],
-          "usage_instructions": "Use to submit a new task to Manus AI. PROMPT is positional and optional (use --prompt-file/-f to read from file instead). Default mode is 'agent'; change with --mode/-m (chat, adaptive, agent). Default profile is 'manus-1.5'; change with --profile/-p. By default waits for completion (up to 900s); use --no-wait for async. Use --share/-s to get a shareable link. Use --hide to exclude from webapp."
+          "usage_instructions": "Use to submit a new task to Manus AI. PROMPT is positional and optional (use --prompt-file/-f to read from file instead). Default mode is 'agent'; change with --mode/-m (chat, adaptive, agent). Profile 'manus-1.5' is commonly used; change with --profile/-p. By default waits for completion (up to 900s); use --no-wait for async. Use --share/-s to get a shareable link. Use --hide to exclude from webapp."
         },
         "continue": {
           "help": "Continue an existing Manus AI task conversation.",
@@ -384,6 +405,12 @@
               "required": false,
               "help": "Suppress status messages",
               "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -424,6 +451,12 @@
               "required": false,
               "help": "Directory for downloaded files (default: current dir)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to retrieve the status and result of a task by TASK_ID. Use --download-files/-d to download output files. Use --output-dir/-o to specify download directory (defaults to current dir). Use --table/-t for formatted output."
@@ -459,6 +492,12 @@
               "required": false,
               "help": "Suppress status messages",
               "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to block until a task completes. TASK_ID is required. Default timeout is 900s; change with --timeout. Polls every 2s by default; change with --poll. Use --quiet/-q to suppress progress messages."
@@ -494,6 +533,12 @@
               "required": false,
               "help": "Comma-separated list of properties to include (supports dot notation)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse recent tasks. Default returns 10; change with --limit/-l. Use --filter/-f with field:op:value syntax (e.g., status:eq:completed). Use --properties/-p to select specific fields. Use --table/-t for formatted output."

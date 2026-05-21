@@ -13,14 +13,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 source .venv/bin/activate
 
-ORIGINAL_DEFAULT=""
+ORIGINAL_ACTIVE=""
 FAILED=0
 
-# Capture which profile is currently the default
-ORIGINAL_DEFAULT=$(slack auth profiles list 2>/dev/null | python3 -c "
+# Capture which profile is currently active
+ORIGINAL_ACTIVE=$(slack auth profiles list 2>/dev/null | python3 -c "
 import sys, json
 for p in json.load(sys.stdin):
-    if p.get('is_default'):
+    if p.get('active'):
         print(p['name'])
         break
 ")
@@ -35,16 +35,16 @@ display_name() {
 }
 
 echo "=== Reminders List - All Workspaces ==="
-echo "Original default profile: $ORIGINAL_DEFAULT"
+echo "Original active profile: $ORIGINAL_ACTIVE"
 echo ""
 
 for PROFILE in default ps-authors devolutions; do
     DISPLAY=$(display_name "$PROFILE")
     echo "--- $DISPLAY ($PROFILE) ---"
 
-    # Set this profile as default
-    if ! slack auth profiles set-default "$PROFILE" > /dev/null 2>&1; then
-        echo "  SKIP: Could not set profile '$PROFILE' as default (not authenticated?)"
+    # Select this profile as active
+    if ! slack auth profiles select "$PROFILE" > /dev/null 2>&1; then
+        echo "  SKIP: Could not select profile '$PROFILE' as active (not authenticated?)"
         echo ""
         continue
     fi
@@ -75,10 +75,10 @@ print(f'  Reminders API total: {counts.get(\"reminder_count\", 0)}')
     echo ""
 done
 
-# Restore original default
-if [ -n "$ORIGINAL_DEFAULT" ]; then
-    slack auth profiles set-default "$ORIGINAL_DEFAULT" > /dev/null 2>&1
-    echo "Restored default profile: $ORIGINAL_DEFAULT"
+# Restore original active profile
+if [ -n "$ORIGINAL_ACTIVE" ]; then
+    slack auth profiles select "$ORIGINAL_ACTIVE" > /dev/null 2>&1
+    echo "Restored active profile: $ORIGINAL_ACTIVE"
 fi
 
 exit $FAILED

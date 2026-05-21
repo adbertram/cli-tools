@@ -153,7 +153,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show auth type and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -220,17 +220,17 @@
               ],
               "usage_instructions": "Run `ebay auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `ebay auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -359,6 +359,12 @@
               "required": false,
               "help": "Include required/recommended item aspects",
               "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -407,6 +413,12 @@
               "type": "bool",
               "required": false,
               "help": "Flatten hierarchy into a single list"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -443,6 +455,12 @@
               "help": "eBay marketplace ID (EBAY_US, EBAY_GB, EBAY_AU, etc.)",
               "short": "-m",
               "default": "EBAY_US"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -581,6 +599,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `ebay seller list --help` for exact arguments and options."
@@ -602,6 +626,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `ebay seller get --help` for exact arguments and options."
@@ -754,7 +784,15 @@
               "usage_instructions": "Run `ebay seller orders fulfillments --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller orders --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller orders --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "shipping-labels": {
           "help": "Manage eBay shipping labels",
@@ -947,6 +985,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -972,6 +1016,12 @@
                   "required": false,
                   "help": "Output file path (default: label_<shipment_id>.pdf)",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -981,7 +1031,15 @@
               "usage_instructions": "Run `ebay seller shipping-labels download --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller shipping-labels --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller shipping-labels --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "shipping-quote": {
           "help": "Manage eBay shipping quotes",
@@ -1138,7 +1196,15 @@
               "usage_instructions": "Run `ebay seller shipping-quote create --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller shipping-quote --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller shipping-quote --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "inventory": {
           "help": "Manage eBay inventory items",
@@ -1182,6 +1248,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1209,6 +1281,12 @@
                   "required": false,
                   "help": "Display summary as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1288,6 +1366,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1384,6 +1468,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1410,6 +1500,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1419,7 +1515,15 @@
               "usage_instructions": "Run `ebay seller inventory delete --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller inventory --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller inventory --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "listings": {
           "help": "Manage eBay listings (drafts and active)",
@@ -1469,6 +1573,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1498,6 +1608,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1685,6 +1801,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1787,6 +1909,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1819,6 +1947,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Keep inventory item, only delete offer"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1852,6 +1986,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1884,6 +2024,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1909,6 +2055,12 @@
                   "required": false,
                   "help": "Save HTML to file instead of opening browser",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1918,7 +2070,15 @@
               "usage_instructions": "Run `ebay seller listings preview --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller listings --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller listings --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "templates": {
           "help": "Manage listing templates",
@@ -1954,6 +2114,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1981,6 +2147,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2098,6 +2270,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Overwrite existing template"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2181,6 +2359,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Merchant location key"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2206,6 +2390,12 @@
                   "required": false,
                   "help": "Skip confirmation",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2224,6 +2414,14 @@
                   "help": "Path to JSON template file to validate"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "examples": [
                 "ebay templates validate ./my-template.json",
                 "ebay templates validate ~/templates/lego-bulk.json"
@@ -2231,7 +2429,15 @@
               "usage_instructions": "Run `ebay seller templates validate --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller templates --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller templates --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "policies": {
           "help": "Manage eBay fulfillment policies",
@@ -2275,6 +2481,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2302,6 +2514,12 @@
                   "required": false,
                   "help": "Display summary as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2399,6 +2617,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2457,6 +2681,12 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2483,6 +2713,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2492,7 +2728,15 @@
               "usage_instructions": "Run `ebay seller policies delete --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller policies --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller policies --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "payment-policies": {
           "help": "Manage eBay payment policies",
@@ -2536,6 +2780,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2563,6 +2813,12 @@
                   "required": false,
                   "help": "Display summary as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2572,7 +2828,15 @@
               "usage_instructions": "Run `ebay seller payment-policies get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller payment-policies --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller payment-policies --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "return-policies": {
           "help": "Manage eBay return policies",
@@ -2616,6 +2880,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2643,6 +2913,12 @@
                   "required": false,
                   "help": "Display summary as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2652,7 +2928,15 @@
               "usage_instructions": "Run `ebay seller return-policies get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller return-policies --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller return-policies --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "images": {
           "help": "Manage eBay images",
@@ -2680,6 +2964,12 @@
                   "required": false,
                   "help": "Display results as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2721,6 +3011,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2749,6 +3045,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2758,7 +3060,15 @@
               "usage_instructions": "Run `ebay seller images get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller images --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller images --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "locations": {
           "help": "Manage eBay merchant locations",
@@ -2794,6 +3104,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2821,6 +3137,12 @@
                   "required": false,
                   "help": "Display summary as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2901,6 +3223,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display result as table"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2926,6 +3254,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2944,6 +3278,14 @@
                   "help": "The merchant location key to enable"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "examples": [
                 "ebay locations enable my-warehouse"
               ],
@@ -2959,13 +3301,29 @@
                   "help": "The merchant location key to disable"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "examples": [
                 "ebay locations disable old-warehouse"
               ],
               "usage_instructions": "Run `ebay seller locations disable --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller locations --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller locations --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "messages": {
           "help": "Manage eBay seller messages",
@@ -3021,6 +3379,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3049,6 +3413,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3093,6 +3463,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Send email copy to seller"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3103,7 +3479,15 @@
               "usage_instructions": "Run `ebay seller messages reply --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller messages --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller messages --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "store": {
           "help": "Manage eBay store",
@@ -3147,6 +3531,12 @@
                       "required": false,
                       "help": "Maximum number of categories to return (client-side truncation)",
                       "short": "-l"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -3174,6 +3564,12 @@
                       "required": false,
                       "help": "Display as table",
                       "short": "-t"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -3186,7 +3582,15 @@
               "usage_instructions": "Run `ebay seller store categories --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `ebay seller store --help` for exact arguments and options."
+          "usage_instructions": "Run `ebay seller store --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `ebay seller --help` for exact arguments and options."

@@ -2,7 +2,7 @@
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
   "discovered_at": "2026-05-21T00:26:56.550348+00:00",
-  "total_commands": 51,
+  "total_commands": 52,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Run `notion auth logout --help` for exact arguments and options."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -172,17 +172,17 @@
               ],
               "usage_instructions": "Run `notion auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `notion auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -204,6 +204,27 @@
                 }
               ],
               "usage_instructions": "Run `notion auth profiles delete --help` for exact arguments and options."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `notion auth profiles remove --help` for exact arguments and options."
             }
           },
           "usage_instructions": "Run `notion auth profiles --help` for exact arguments and options."
@@ -237,6 +258,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Specific data_source ID to use when the database container holds multiple data sources"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -269,6 +296,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Specific data_source ID when the database container holds multiple data sources"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -315,6 +348,12 @@
               "required": false,
               "help": "Comma-separated fields to display (id,title,parent_type,parent_id,url,last_edited)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -379,6 +418,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Specific data_source ID when the database container holds multiple data sources"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `notion database page list --help` for exact arguments and options."
@@ -414,6 +459,12 @@
                   "required": false,
                   "help": "Write markdown content to file (requires --include-blocks --markdown)",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -484,6 +535,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "--restore          Archive or restore the page"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `notion database page update --help` for exact arguments and options."
@@ -544,6 +601,12 @@
                   "required": false,
                   "help": "Raw JSON properties object (Notion API format)",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -575,6 +638,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -617,6 +686,12 @@
                       "required": false,
                       "help": "Add a simple paragraph block",
                       "short": "-p"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -657,6 +732,12 @@
                       "type": "TEXT",
                       "required": false,
                       "help": "File containing Notion JSON blocks to set (from 'export --format notion-json')"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -683,6 +764,12 @@
                       "required": false,
                       "help": "Skip confirmation prompt",
                       "short": "-F"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -695,7 +782,15 @@
               "usage_instructions": "Run `notion database page content --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `notion database page --help` for exact arguments and options."
+          "usage_instructions": "Run `notion database page --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "template": {
           "help": "Manage database page templates",
@@ -745,6 +840,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -770,13 +871,29 @@
                   "help": "The template ID to retrieve"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "examples": [
                 "notion database template get DB_ID TEMPLATE_ID"
               ],
               "usage_instructions": "Run `notion database template get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `notion database template --help` for exact arguments and options."
+          "usage_instructions": "Run `notion database template --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `notion database --help` for exact arguments and options."
@@ -822,6 +939,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output (e.g., name,type)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -855,6 +978,12 @@
               "required": false,
               "help": "Display as formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -911,6 +1040,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Format for number type (number, number_with_commas, percent, dollar, etc.)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -945,6 +1080,14 @@
               "help": "New name for the field"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "examples": [
             "notion field rename DB_ID \"Old Name\" \"New Name\""
           ],
@@ -973,6 +1116,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1023,6 +1172,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Expression for formula type"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1064,6 +1219,12 @@
                   "required": false,
                   "help": "Color for the option (default, gray, brown, orange, yellow, green, blue, purple, pink, red)",
                   "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1073,7 +1234,15 @@
               "usage_instructions": "Run `notion field option add --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `notion field option --help` for exact arguments and options."
+          "usage_instructions": "Run `notion field option --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `notion field --help` for exact arguments and options."
@@ -1112,6 +1281,12 @@
               "help": "Maximum number of results to return",
               "short": "-l",
               "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1158,6 +1333,12 @@
               "required": false,
               "help": "Comma-separated fields to display (id,type,title,parent_type,parent_id,url,last_edited)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1208,6 +1389,12 @@
               "required": false,
               "help": "Write markdown content to file (requires --include-blocks --markdown)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1255,6 +1442,12 @@
               "type": "bool",
               "required": false,
               "help": "Make all heading_1/2/3 blocks generated from --content-file into toggle headings"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1266,7 +1459,7 @@
           "usage_instructions": "Run `notion pages create --help` for exact arguments and options."
         },
         "import": {
-          "help": "Import a Word document (.docx) as a new Notion page. Converts Word document content to Notion blocks: - Headings → Heading blocks - Paragraphs → Paragraph blocks with formatting (bold, italic, etc.) - Bullet lists → Bulleted list items - Numbered lists → Numbered list items - Tables → Table blocks",
+          "help": "Import a Word document (.docx) as a new Notion page. Converts Word document content to Notion blocks: - Headings \u2192 Heading blocks - Paragraphs \u2192 Paragraph blocks with formatting (bold, italic, etc.) - Bullet lists \u2192 Bulleted list items - Numbered lists \u2192 Numbered list items - Tables \u2192 Table blocks",
           "arguments": [
             {
               "name": "file_path",
@@ -1295,12 +1488,18 @@
               "type": "TEXT",
               "required": false,
               "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
             "notion pages import document.docx --parent PARENT_PAGE_ID",
             "notion pages import report.docx -p PARENT_PAGE_ID --title \"Q4 Report\"",
-            "notion pages import notes.docx -p PARENT_PAGE_ID --icon \"emoji:📄\""
+            "notion pages import notes.docx -p PARENT_PAGE_ID --icon \"emoji:\ud83d\udcc4\""
           ],
           "usage_instructions": "Run `notion pages import --help` for exact arguments and options."
         },
@@ -1329,6 +1528,12 @@
               "help": "Export format: pdf, html, md, or notion-json",
               "short": "-f",
               "default": "pdf"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1377,6 +1582,12 @@
               "required": false,
               "help": "Find/replace in block text (format: 'old:new'). Can be used multiple times",
               "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1417,6 +1628,12 @@
               "type": "bool",
               "required": false,
               "help": "--restore          Archive or restore the page"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1444,6 +1661,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1621,7 +1844,15 @@
               "usage_instructions": "Run `notion pages content clear --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `notion pages content --help` for exact arguments and options."
+          "usage_instructions": "Run `notion pages content --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "blocks": {
           "help": "Manage individual blocks",
@@ -1878,7 +2109,15 @@
               "usage_instructions": "Run `notion pages blocks append --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `notion pages blocks --help` for exact arguments and options."
+          "usage_instructions": "Run `notion pages blocks --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `notion pages --help` for exact arguments and options."
@@ -1945,6 +2184,12 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., text:contains:bug, parent_type:eq:page_id)",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1972,6 +2217,12 @@
               "required": false,
               "help": "Display as formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2017,6 +2268,12 @@
               "required": false,
               "help": "Display result as formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [

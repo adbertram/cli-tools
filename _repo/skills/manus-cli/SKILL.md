@@ -22,7 +22,7 @@ manus <command-group> <action> [arguments] [options]
 | Get task result | `manus task get TASK_ID` |
 | List recent tasks | `manus task list --table` |
 | List profiles | `manus auth profiles list --table` |
-| Set default profile | `manus auth profiles set-default PROFILE_NAME` |
+| Set default profile | `manus auth profiles select PROFILE_NAME` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 </quick_start>

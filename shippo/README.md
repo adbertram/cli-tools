@@ -64,8 +64,8 @@ shippo auth profiles list --table
 # Create a new profile
 shippo auth profiles create staging
 
-# Set default profile
-shippo auth profiles set-default staging
+# Select active profile
+shippo auth profiles select staging
 
 # Delete a profile
 shippo auth profiles delete staging
@@ -284,7 +284,7 @@ shippo labels list --table
 Credentials are stored in a `.env` file in the package directory:
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 
 # API Key (get from https://apps.goshippo.com/settings/api)
 API_KEY=shippo_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

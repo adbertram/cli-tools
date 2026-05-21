@@ -2,7 +2,7 @@
   "tool": "copilot",
   "description": "CLI interface for Microsoft Copilot Studio agents via Dataverse API",
   "discovered_at": "2026-05-21T16:34:32.744198+00:00",
-  "total_commands": 178,
+  "total_commands": 179,
   "global_options": [
     {
       "name": "--version",
@@ -63,7 +63,7 @@
           "usage_instructions": "Run `copilot auth logout --help` for exact arguments and options."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -113,7 +113,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -133,7 +133,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -179,17 +179,17 @@
               ],
               "usage_instructions": "Run `copilot auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `copilot auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -211,6 +211,27 @@
                 }
               ],
               "usage_instructions": "Run `copilot auth profiles delete --help` for exact arguments and options."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `copilot auth profiles remove --help` for exact arguments and options."
             }
           },
           "usage_instructions": "Run `copilot auth profiles --help` for exact arguments and options."
@@ -325,6 +346,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -361,6 +388,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -394,6 +427,12 @@
               "required": false,
               "help": "Delete all dependent components (topics, tools, etc.) before deleting the agent",
               "short": "-c"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -411,6 +450,14 @@
               "type": "TEXT",
               "required": true,
               "help": "The agent's unique identifier (GUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -497,6 +544,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Path to file containing response formatting instructions"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -583,6 +636,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Path to file containing response formatting instructions"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -693,6 +752,12 @@
               "required": false,
               "help": "Path to a file to attach (Word, PDF, text, markdown, etc.)",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -705,7 +770,15 @@
         },
         "permissions": {
           "help": "Manage agent permissions (coming soon)",
-          "usage_instructions": "Run `copilot agent permissions --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent permissions --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "knowledge": {
           "help": "Manage knowledge sources for an agent",
@@ -762,6 +835,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -795,6 +874,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -828,6 +913,12 @@
                   "required": true,
                   "help": "The knowledge source component ID to associate",
                   "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -882,6 +973,12 @@
                   "required": false,
                   "help": "Replace existing knowledge source with the same name",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -899,6 +996,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The knowledge source component's unique identifier (GUID)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -923,6 +1028,12 @@
                   "required": false,
                   "help": "Output file path (defaults to original filename in current directory)",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -986,6 +1097,12 @@
                       "required": false,
                       "help": "Description for the knowledge source",
                       "short": "-d"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -998,7 +1115,15 @@
               "usage_instructions": "Run `copilot agent knowledge azure-ai-search --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent knowledge --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent knowledge --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "transcript": {
           "help": "View conversation transcripts for troubleshooting",
@@ -1041,6 +1166,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1068,6 +1199,12 @@
                   "required": false,
                   "help": "Output as formatted conversation instead of JSON",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1077,7 +1214,15 @@
               "usage_instructions": "Run `copilot agent transcript get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent transcript --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent transcript --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "topic": {
           "help": "Manage agent topics",
@@ -1134,6 +1279,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1152,6 +1303,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The topic's component ID (GUID)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1176,6 +1335,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1201,6 +1366,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1226,6 +1397,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1258,6 +1435,12 @@
                   "required": false,
                   "help": "Write YAML content to a file",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1311,6 +1494,12 @@
                   "required": false,
                   "help": "Optional description for the topic",
                   "short": "-d"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1364,6 +1553,12 @@
                   "required": false,
                   "help": "New description for the topic",
                   "short": "-d"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1375,7 +1570,15 @@
               "usage_instructions": "Run `copilot agent topic update --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent topic --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent topic --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "trigger": {
           "help": "Manage agent triggers (external event triggers)",
@@ -1418,6 +1621,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1443,6 +1652,12 @@
                   "required": false,
                   "help": "Include the underlying workflow definition",
                   "short": "-w"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1461,6 +1676,14 @@
                   "help": "The trigger's component ID (GUID)"
                 }
               ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ],
               "examples": [
                 "copilot agent trigger enable <trigger-id>"
               ],
@@ -1474,6 +1697,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The trigger's component ID (GUID)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1504,6 +1735,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Keep the underlying Power Automate flow (don't delete it)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1536,6 +1773,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Keep the underlying Power Automate flow (don't delete it)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1546,7 +1789,15 @@
               "usage_instructions": "Run `copilot agent trigger delete --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent trigger --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent trigger --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "tool": {
           "help": "Manage agent tools (connected agents)",
@@ -1596,6 +1847,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1630,6 +1887,12 @@
                   "required": false,
                   "help": "Show the tool's YAML definition",
                   "short": "-Y"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1733,6 +1996,12 @@
                   "required": false,
                   "help": "Force adding tool even if operation has internal visibility (may not work correctly)",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1763,6 +2032,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1828,6 +2103,12 @@
                   "required": false,
                   "help": "Credential mode for connector tools: 'maker-provided' (use maker's auth) or 'end-user' (prompt user to auth)",
                   "short": "-C"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1846,7 +2127,15 @@
               "usage_instructions": "Run `copilot agent tool update --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent tool --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent tool --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "analytics": {
           "help": "Manage Application Insights telemetry for agents",
@@ -1882,6 +2171,12 @@
                   "required": false,
                   "help": "Comma-separated fields",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1900,6 +2195,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The agent's unique identifier (GUID)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1938,6 +2241,12 @@
                   "required": false,
                   "help": "Enable logging of sensitive properties (userid, name, text, speak)",
                   "short": "-s"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1964,6 +2273,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1987,13 +2302,19 @@
                   "name": "--log-activities",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-log-activities      Enable/disable logging of messages and events"
+                  "help": "--no-log-activities          Enable/disable logging of messages and events"
                 },
                 {
                   "name": "--log-sensitive",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-log-sensitive       Enable/disable logging of sensitive properties"
+                  "help": "--no-log-sensitive           Enable/disable logging of sensitive properties"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2043,6 +2364,12 @@
                   "help": "Maximum number of rows to display",
                   "short": "-l",
                   "default": "100"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2054,7 +2381,15 @@
               "usage_instructions": "Run `copilot agent analytics query --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent analytics --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent analytics --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "auth": {
           "help": "Manage agent authentication configuration",
@@ -2067,6 +2402,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The agent's unique identifier (GUID)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2097,6 +2440,12 @@
                   "type": "INTEGER",
                   "required": false,
                   "help": "Authentication trigger: 0=As Needed, 1=Always"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2137,6 +2486,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2146,7 +2501,15 @@
               "usage_instructions": "Run `copilot agent auth list --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent auth --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent auth --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "model": {
           "help": "Manage agent AI model configuration",
@@ -2182,6 +2545,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2199,6 +2568,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "Agent ID (GUID) or model name"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2239,8 +2616,14 @@
                   "name": "--publish",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-publish      Publish the agent after updating (default: True)",
+                  "help": "--no-publish          Publish the agent after updating (default: True)",
                   "default": "publish"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2251,7 +2634,15 @@
               "usage_instructions": "Run `copilot agent model set --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent model --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent model --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "channel": {
           "help": "Manage agent channels",
@@ -2273,6 +2664,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2320,6 +2717,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2351,6 +2754,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2360,7 +2769,15 @@
               "usage_instructions": "Run `copilot agent channel get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent channel --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent channel --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot agent --help` for exact arguments and options."
@@ -2419,6 +2836,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2448,6 +2871,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2472,7 +2901,13 @@
               "name": "--preferred",
               "type": "bool",
               "required": false,
-              "help": "--no-preferred      Set or unset this solution as the preferred solution for the current user"
+              "help": "--no-preferred          Set or unset this solution as the preferred solution for the current user"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2519,6 +2954,12 @@
               "required": false,
               "help": "Optional description for the solution",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2545,6 +2986,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2570,6 +3017,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2610,6 +3063,12 @@
               "help": "Maximum time to wait for export in seconds (default: 300)",
               "short": "-T",
               "default": "300"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2675,6 +3134,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2708,6 +3173,12 @@
               "required": true,
               "help": "Output file path for the settings JSON",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -2749,6 +3220,12 @@
                   "required": false,
                   "help": "--no-required            Add required dependent components (default: True)",
                   "default": "add-required"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2781,6 +3258,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2790,7 +3273,15 @@
               "usage_instructions": "Run `copilot solution agent remove --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot solution agent --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot solution agent --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "connection-reference": {
           "help": "Manage connection references",
@@ -2833,6 +3324,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2859,6 +3356,12 @@
                   "required": false,
                   "help": "Display output as a formatted table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2868,7 +3371,15 @@
               "usage_instructions": "Run `copilot solution connection-reference get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot solution connection-reference --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot solution connection-reference --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "custom-connector": {
           "help": "Manage custom connectors in solutions",
@@ -2901,6 +3412,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip validation for solution composition rules"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2940,6 +3457,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -2950,7 +3473,15 @@
               "usage_instructions": "Run `copilot solution custom-connector remove --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot solution custom-connector --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot solution custom-connector --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "component": {
           "help": "List and inspect solution components",
@@ -3007,6 +3538,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3035,6 +3572,12 @@
                   "required": false,
                   "help": "Display output as a formatted table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3052,6 +3595,12 @@
                   "required": false,
                   "help": "Display output as a formatted table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3097,6 +3646,12 @@
                   "required": false,
                   "help": "--no-required          Add required dependent components (default: True)",
                   "default": "add-required"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3145,6 +3700,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3155,7 +3716,15 @@
               "usage_instructions": "Run `copilot solution component remove --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot solution component --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot solution component --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "publisher": {
           "help": "Manage publishers",
@@ -3191,6 +3760,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3207,6 +3782,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The publisher's unique name or GUID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3252,6 +3835,12 @@
                   "required": false,
                   "help": "Optional description for the publisher",
                   "short": "-d"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3277,6 +3866,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3302,6 +3897,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3311,7 +3912,15 @@
               "usage_instructions": "Run `copilot solution publisher delete --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot solution publisher --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot solution publisher --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot solution --help` for exact arguments and options."
@@ -3364,6 +3973,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3401,6 +4016,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3453,6 +4074,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3527,6 +4154,12 @@
               "required": false,
               "help": "Overwrite existing file when using --output",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3557,6 +4190,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3589,6 +4228,12 @@
               "required": false,
               "help": "New description for the agent flow",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3642,6 +4287,12 @@
               "type": "bool",
               "required": false,
               "help": "Export the draft version instead of published (for solution-aware flows with drafts)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3697,6 +4348,12 @@
               "required": false,
               "help": "Treat validation warnings as errors",
               "short": "-W"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3731,6 +4388,12 @@
               "type": "bool",
               "required": false,
               "help": "List all available validation rules"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3805,6 +4468,12 @@
               "required": false,
               "help": "Deprecated for this command; JSON is always returned",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3834,6 +4503,12 @@
               "required": false,
               "help": "Skip confirmation prompt and delete immediately",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3852,6 +4527,14 @@
               "help": "The agent flow's unique identifier (GUID)"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "examples": [
             "copilot agent-flow enable <flow-id>"
           ],
@@ -3865,6 +4548,14 @@
               "type": "TEXT",
               "required": true,
               "help": "The agent flow's unique identifier (GUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3889,6 +4580,12 @@
               "required": false,
               "help": "Display output as a formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -3899,7 +4596,15 @@
         },
         "permissions": {
           "help": "Manage agent flow permissions (coming soon)",
-          "usage_instructions": "Run `copilot agent-flow permissions --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent-flow permissions --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "runs": {
           "help": "Manage agent flow run history",
@@ -3951,6 +4656,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -3974,6 +4685,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "The run's unique identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4004,6 +4723,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt (for non-interactive use)",
                   "short": "-y"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4013,7 +4738,15 @@
               "usage_instructions": "Run `copilot agent-flow runs cancel --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent-flow runs --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent-flow runs --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "scaffold": {
           "help": "Manage agent flow scaffold templates",
@@ -4049,6 +4782,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4074,6 +4813,12 @@
                   "required": false,
                   "help": "Display output as a formatted table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4083,7 +4828,15 @@
               "usage_instructions": "Run `copilot agent-flow scaffold get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot agent-flow scaffold --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot agent-flow scaffold --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot agent-flow --help` for exact arguments and options."
@@ -4176,6 +4929,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4213,6 +4972,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4246,6 +5011,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4293,6 +5064,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4344,6 +5121,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4378,6 +5161,12 @@
                   "required": false,
                   "help": "Output format: json (default) or table",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4387,7 +5176,15 @@
               "usage_instructions": "Run `copilot tool restapi get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot tool restapi --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot tool restapi --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "mcp": {
           "help": "Manage MCP servers",
@@ -4430,6 +5227,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4464,6 +5267,12 @@
                   "required": false,
                   "help": "Output format: json (default) or table",
                   "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4521,6 +5330,12 @@
                   "required": false,
                   "help": "Display output as a formatted table instead of JSON",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4547,6 +5362,12 @@
                   "required": false,
                   "help": "Skip confirmation prompt and delete immediately",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4570,6 +5391,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Azure AD app client ID to authenticate with (defaults to AZURE_CLIENT_ID from config)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -4618,6 +5445,12 @@
                       "required": false,
                       "help": "Display output as a formatted table instead of JSON",
                       "short": "-t"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -4670,6 +5503,12 @@
                       "type": "TEXT",
                       "required": false,
                       "help": "Path to a session file. Saves/restores the MCP session ID across invocations"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -4702,6 +5541,12 @@
                       "required": false,
                       "help": "Display output as a formatted table instead of JSON",
                       "short": "-t"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
                     }
                   ],
                   "examples": [
@@ -4713,7 +5558,15 @@
               "usage_instructions": "Run `copilot tool mcp tools --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot tool mcp --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot tool mcp --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot tool --help` for exact arguments and options."
@@ -4773,6 +5626,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4859,6 +5718,12 @@
               "help": "Response format (text or json)",
               "short": "-r",
               "default": "text"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4886,6 +5751,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4924,6 +5795,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -4991,6 +5868,12 @@
               "type": "bool",
               "required": false,
               "help": "Skip republishing after update (changes won't be live)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5014,6 +5897,14 @@
               "type": "TEXT",
               "required": true,
               "help": "The prompt's unique identifier (GUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5080,6 +5971,12 @@
               "type": "bool",
               "required": false,
               "help": "Show the prompt's expected inputs and exit (no execution)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5120,6 +6017,12 @@
                   "help": "Access level: read, write, delete, share, assign, full",
                   "short": "-l",
                   "default": "read"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `copilot prompt permissions grant --help` for exact arguments and options."
@@ -5141,6 +6044,12 @@
                   "required": true,
                   "help": "User ID (GUID) to revoke access from",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `copilot prompt permissions revoke --help` for exact arguments and options."
@@ -5184,6 +6093,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `copilot prompt permissions list --help` for exact arguments and options."
@@ -5211,12 +6126,26 @@
                   "required": false,
                   "help": "Output as formatted table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Run `copilot prompt permissions get --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot prompt permissions --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot prompt permissions --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot prompt --help` for exact arguments and options."
@@ -5268,6 +6197,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5303,6 +6238,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5321,6 +6262,14 @@
               "help": "The model's unique identifier (GUID)"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "examples": [
             "copilot model enable 12345678-1234-1234-1234-123456789abc"
           ],
@@ -5334,6 +6283,14 @@
               "type": "TEXT",
               "required": true,
               "help": "The model's unique identifier (GUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5392,6 +6349,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5449,6 +6412,12 @@
               "required": false,
               "help": "Write OpenAPI definition to file (use with --openapi)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5483,6 +6452,12 @@
               "required": false,
               "help": "Show detailed validation information",
               "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5536,6 +6511,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5592,6 +6573,12 @@
               "required": false,
               "help": "Write OpenAPI definition to file (use with --openapi)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5695,6 +6682,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Path to a pre-captured MCP tools/list JSON response (for offline/CI use with --expand-tools)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5774,6 +6767,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated list of operationIds that use the script"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5807,6 +6806,12 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5838,6 +6843,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5873,6 +6884,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5915,6 +6932,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -5969,6 +6992,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6016,6 +7045,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6074,6 +7109,12 @@
               "required": false,
               "help": "JSON string of connection parameters. Required parameters depend on the auth type",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6115,6 +7156,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6156,6 +7203,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6197,6 +7250,12 @@
               "required": false,
               "help": "Skip confirmation prompts and don't wait for OAuth authentication to complete",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6230,6 +7289,12 @@
               "type": "TEXT",
               "required": true,
               "help": "The connection's unique identifier (GUID)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6268,6 +7333,12 @@
                   "help": "Azure AD tenant ID (required with --password)",
                   "short": "-t",
                   "env_var": "AZURE_TENANT_ID"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -6277,7 +7348,15 @@
               "usage_instructions": "Run `copilot connections onedrive check-drive --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot connections onedrive --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot connections onedrive --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "operations": {
           "help": "List, inspect, and invoke connector operations via APIM",
@@ -6332,6 +7411,12 @@
                   "type": "bool",
                   "required": false,
                   "help": "Include internal-visibility operations"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -6348,6 +7433,14 @@
                   "type": "TEXT",
                   "required": true,
                   "help": "Operation ID (e.g., ListAccountSummaries)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -6372,6 +7465,12 @@
                   "required": false,
                   "help": "Parameter as key=value (repeatable). Values are classified as path/query/body based on swagger",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -6381,7 +7480,15 @@
               "usage_instructions": "Run `copilot connections operations invoke --help` for exact arguments and options."
             }
           },
-          "usage_instructions": "Run `copilot connections operations --help` for exact arguments and options."
+          "usage_instructions": "Run `copilot connections operations --help` for exact arguments and options.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Run `copilot connections --help` for exact arguments and options."
@@ -6412,6 +7519,12 @@
               "required": false,
               "help": "Description for the connection reference",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6459,6 +7572,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6494,6 +7613,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6526,6 +7651,12 @@
               "required": false,
               "help": "New display name for the connection reference",
               "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6552,6 +7683,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6604,6 +7741,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6639,6 +7782,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6658,11 +7807,19 @@
               "help": "The environment's unique identifier (e.g., Default-<tenant-id> or GUID)"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "examples": [
             "copilot environment select 12345678-1234-1234-1234-123456789012",
             "copilot environment select Default-12345678-1234-1234-1234-123456789012"
           ],
-          "usage_instructions": "Run `copilot environment select --help` for exact arguments and options."
+          "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
         },
         "current": {
           "help": "Show the currently selected environment. Displays the environment that CLI commands will target. This is set via 'environment select' and stored in the local .env file.",
@@ -6680,6 +7837,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6740,6 +7903,12 @@
               "required": false,
               "help": "Dataverse currency code (default: USD)",
               "default": "USD"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6782,6 +7951,12 @@
               "help": "Maximum seconds to wait for deletion when using --wait (default: 300)",
               "short": "-T",
               "default": "300"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6822,6 +7997,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6839,6 +8020,12 @@
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6878,6 +8065,12 @@
               "required": false,
               "help": "Output format: json (default) or table",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6904,6 +8097,12 @@
               "required": true,
               "help": "Setting to update as key=value (repeatable). Values are auto-typed: true/false -> bool, digits -> int",
               "short": "-s"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -6965,6 +8164,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `copilot user-licenses list --help` for exact arguments and options."
@@ -7000,6 +8205,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Run `copilot user-licenses get --help` for exact arguments and options."

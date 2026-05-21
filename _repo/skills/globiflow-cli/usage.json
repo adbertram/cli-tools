@@ -2,7 +2,7 @@
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
   "discovered_at": "2026-05-21T00:32:46.653118+00:00",
-  "total_commands": 24,
+  "total_commands": 25,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation. Use --profile/-p to clear a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -172,17 +172,17 @@
               ],
               "usage_instructions": "Run `globiflow auth profiles create --help` for exact arguments and options."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Run `globiflow auth profiles set-default --help` for exact arguments and options."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -204,6 +204,27 @@
                 }
               ],
               "usage_instructions": "Run `globiflow auth profiles delete --help` for exact arguments and options."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles remove --help` for exact arguments and options."
             }
           },
           "usage_instructions": "Run `globiflow auth profiles --help` for exact arguments and options."
@@ -253,6 +274,12 @@
               "required": false,
               "help": "Comma-separated fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Search by keyword. QUERY is required (positional). Use --filter/-f with field:op:value syntax for filtering. Use --limit/-l to control result count (default: 100). Use --properties/-p to select specific fields. Use --table/-t for formatted output."
@@ -281,6 +308,12 @@
               "required": false,
               "help": "Comma-separated fields to display (supports dot-notation)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Retrieve details for a single item by ID or URL. ITEM_ID is required (positional). Use --output/-o to select specific fields (supports dot-notation). Use --table/-t for formatted output."
@@ -316,6 +349,12 @@
               "required": false,
               "help": "Comma-separated fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Browse all items. Use --filter/-f for filtering, --limit/-l for result count (default: 100), --properties/-p to select fields. Use --table/-t for formatted output."
@@ -357,6 +396,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List all flows by traversing the entire app tree. Use --filter/-f for client-side filtering (e.g., 'enabled:eq:true', 'org_name:contains:My Org'). Use --limit/-l (default: 100), --properties/-p, --table/-t."
@@ -412,6 +457,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a flow. Requires --app-id/-a (Podio app ID), --trigger/-T (trigger code from `triggers list`), and --name/-n. Optionally pass --steps/-s as JSON array or @filepath. Use --disabled to create in disabled state (default: enabled)."
@@ -440,6 +491,12 @@
               "required": false,
               "help": "Include step details",
               "short": "-s"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Retrieve flow details including notes, time savings, and log status. FLOW_ID is required (positional). Use --include-steps/-s to also retrieve configured steps. Use --table/-t for formatted output."
@@ -461,6 +518,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "View execution history for a flow including timestamps, triggered items, status, duration, and messages. FLOW_ID is required (positional). Use --table/-t for formatted output."
@@ -482,6 +545,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Permanently delete a flow. FLOW_ID is required (positional). Use --force/-F to skip confirmation. This action cannot be undone."
@@ -526,6 +595,12 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Show steps with number, action type, and key parameters. Use --flow-id to scope to a single flow (omit to list steps from all flows). Supports --filter/-f, --limit/-l, --properties/-p, --table/-t."
@@ -553,6 +628,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Retrieve a single step's action type and all configured parameters. FLOW_ID and STEP_NUMBER (1-based) are both required (positional). Use --table/-t for formatted output."
@@ -710,6 +791,12 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Add a step to a flow. FLOW_ID is required (positional). --action/-a is required (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call'). Other options depend on the action type: use --variable-name/-v and --code/-c for Custom Variable steps, --url/--method/-m for HTTP calls, --to/--subject/--body for email steps, --comment for Add Comment steps."
@@ -866,12 +953,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Modify an existing step's parameters. FLOW_ID and STEP_NUMBER (1-based) are required (positional). Auto-detects step type and validates fields. Same options as `steps add` for the specific action type."
             }
           },
-          "usage_instructions": "CRUD operations for individual steps within flows. List steps across flows, get step details, add new steps, or update existing step parameters."
+          "usage_instructions": "CRUD operations for individual steps within flows. List steps across flows, get step details, add new steps, or update existing step parameters.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Full CRUD for Globiflow automation flows. List, create, get details, view logs, delete flows, and manage individual flow steps. Flows are identified by numeric IDs."
@@ -910,6 +1011,12 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Show all trigger types with code and description. Use trigger codes with `flows create --trigger`. Supports --filter/-f, --limit/-l, --properties/-p, --table/-t."
@@ -931,6 +1038,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Look up a single trigger type. CODE is required (positional, e.g., C, U, M). Use --table/-t for formatted output."

@@ -124,7 +124,7 @@ raptive auth profiles list
 raptive auth profiles create staging
 
 # Set a profile as default
-raptive auth profiles set-default staging
+raptive auth profiles select staging
 
 # Get profile details
 raptive auth profiles get default

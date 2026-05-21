@@ -117,8 +117,8 @@ roomba auth profiles list
 # Create a new profile
 roomba auth profiles create work
 
-# Set default profile
-roomba auth profiles set-default work
+# Select active profile
+roomba auth profiles select work
 
 # Delete a profile
 roomba auth profiles delete work

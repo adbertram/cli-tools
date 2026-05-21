@@ -570,10 +570,10 @@ wordpress auth profiles list --table
 wordpress auth profiles create staging
 ```
 
-### Set Default Profile
+### Select Active Profile
 
 ```bash
-wordpress auth profiles set-default staging
+wordpress auth profiles select staging
 ```
 
 ### Delete Profile

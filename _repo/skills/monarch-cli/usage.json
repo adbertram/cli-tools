@@ -2,7 +2,7 @@
   "tool": "monarch",
   "description": "CLI for Monarch Money personal finance",
   "discovered_at": "2026-05-21T00:27:20.815308+00:00",
-  "total_commands": 39,
+  "total_commands": 40,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -137,7 +137,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use to browse profiles. Use --filter/-f to find specific profiles (e.g., is_default:eq:True). Use --table/-t for formatted output."
+              "usage_instructions": "Use to browse profiles. Use --filter/-f to find specific profiles (e.g., active:eq:True). Use --table/-t for formatted output."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -172,17 +172,17 @@
               ],
               "usage_instructions": "Use to create a new profile. NAME is positional and required."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use to switch the default profile used by all commands."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -204,9 +204,30 @@
                 }
               ],
               "usage_instructions": "Use to permanently delete a profile. Use --force/-F to skip confirmation."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to permanently delete a profile. Use --force/-F to skip confirmation."
             }
           },
-          "usage_instructions": "Profile management -- list, get, create, set-default, and delete configuration profiles for multiple environments."
+          "usage_instructions": "Profile management -- list, get, create, select, and delete configuration profiles for multiple environments."
         }
       },
       "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p."
@@ -251,6 +272,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse financial accounts. Use --hidden to include hidden accounts. Filter with --filter/-f (e.g., type:Checking, balance:gte:1000). Default limit is 100. Use --table/-t for formatted output."
@@ -272,6 +299,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get full details of an account by ACCOUNT_ID. Use --table/-t for formatted output."
@@ -301,6 +334,12 @@
               "help": "Number of history entries",
               "short": "-l",
               "default": "30"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to view balance history over time for a specific account. Default returns 30 entries; change with --limit/-l. Use --table/-t for formatted output."
@@ -322,6 +361,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to view investment holdings for a brokerage account by ACCOUNT_ID. Use --table/-t for formatted output."
@@ -343,6 +388,12 @@
               "required": false,
               "help": "Wait for sync to complete",
               "short": "-w"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to refresh account data from financial institutions. Optionally provide specific ACCOUNT_IDS; syncs all if empty. Use --wait/-w to wait for sync completion."
@@ -438,6 +489,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse transactions. Filter by date range with --start/-s and --end/-e (YYYY-MM-DD) or --days/-d for last N days. Filter by --account/-a, --category/-c, or --search/-q. Filter by review status with --needs-review (only needsReview==true) or --reviewed (only needsReview==false); these two flags are mutually exclusive and applied server-side. Output rows include needs_review and reviewed_at fields. Use --filter/-f for advanced filtering (amount:gte:100, merchant:like:%Amazon%). Default limit is 500. Use --table/-t for formatted output."
@@ -459,6 +516,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get full details of a transaction by TRANSACTION_ID. Use --table/-t for formatted output."
@@ -527,6 +590,12 @@
               "type": "bool",
               "required": false,
               "help": "Mark as needs review"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -563,6 +632,12 @@
               "required": false,
               "help": "End date (YYYY-MM-DD)",
               "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to view recurring transaction patterns. Optionally filter by date range with --start/-s and --end/-e. Use --table/-t for formatted output."
@@ -625,6 +700,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse budgets. Filter with --filter/-f (category:Groceries, budgeted:gte:100, remaining:lt:0). View specific month with --month/-m (YYYY-MM) or date range with --start/-s and --end/-e. Default limit is 100. Use --table/-t for formatted output."
@@ -653,6 +734,12 @@
               "required": false,
               "help": "Month (YYYY-MM)",
               "short": "-m"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get details for a specific budget by BUDGET_ID. Optionally specify --month/-m."
@@ -694,6 +781,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse categories. Filter with --filter/-f (group:Income, name:like:%food%). Default limit is 100. Use --table/-t for formatted output."
@@ -715,6 +808,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get category details by CATEGORY_ID."
@@ -756,6 +855,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -783,6 +888,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -828,6 +939,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse tags. Filter with --filter/-f (name:like:%work%). Default limit is 100. Use --table/-t for formatted output."
@@ -849,6 +966,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get tag details by TAG_ID."
@@ -868,6 +991,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get a high-level cashflow overview showing income, expenses, and savings. Use --table/-t for formatted output."
@@ -917,6 +1046,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to view detailed cashflow breakdown. Filter with --filter/-f (group:Income, sum:gte:1000). Use --start/-s and --end/-e for date ranges. Default limit is 100. Use --table/-t for formatted output."
@@ -952,6 +1087,12 @@
               "required": false,
               "help": "End date (YYYY-MM-DD)",
               "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to view cashflow for a specific category group by GROUP_ID. Use --start/-s and --end/-e for date ranges. Use --table/-t for formatted output."
@@ -993,6 +1134,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse linked institutions. Filter with --filter/-f (name:like:%Chase%, update_required:true). Default limit is 100. Use --table/-t for formatted output."
@@ -1014,6 +1161,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to get institution details by INSTITUTION_ID."
@@ -1055,6 +1208,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use to browse merchants. Filter with --filter/-f (name:ilike:%amazon%, sumExpense:lt:-100). Default limit is 10000. Use --table/-t for formatted output."
@@ -1076,6 +1235,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1120,6 +1285,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List all transaction rules. Use --table/-t for tabular view. Filter with --filter/-f 'field:op:value' (e.g., id:eq:RULE_ID). Use --properties/-p to select fields. JSON by default."
@@ -1141,6 +1312,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get full details for a single transaction rule by ID. Use --table/-t for field/value table view. JSON by default."
@@ -1216,6 +1393,12 @@
               "required": false,
               "help": "Display created rule as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1304,6 +1487,12 @@
               "required": false,
               "help": "Display updated rule as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1330,6 +1519,12 @@
               "required": false,
               "help": "Skip confirmation",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [

@@ -30,7 +30,7 @@ venmo auth test
 # Multi-account profiles
 venmo auth profiles list
 venmo auth profiles create staging
-venmo auth profiles set-default adam-bertram
+venmo auth profiles select adam-bertram
 venmo transactions list --profile staging          # any command accepts --profile via the underlying client
 
 # Transaction history (data plane is read-only — records are the FULL raw Venmo API payload)

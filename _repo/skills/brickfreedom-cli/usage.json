@@ -2,7 +2,7 @@
   "tool": "brickfreedom",
   "description": "CLI interface for Brickfreedom dashboard automation",
   "discovered_at": "2026-05-15T19:08:30.493026+00:00",
-  "total_commands": 21,
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Use `auth logout` for clear stored credentials and browser sessions.."
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -137,7 +137,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use `auth profiles list` for list all profiles and show which is the default.."
+              "usage_instructions": "Use `auth profiles list` for list all profiles and show their auth types and active state.."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -172,19 +172,40 @@
               ],
               "usage_instructions": "Use `auth profiles create` for create a new profile from .env.example template.."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use `auth profiles set-default` for set a profile as the default (is_default_profile=1).."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles delete` for delete a profile and its data.."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -274,6 +295,12 @@
               "type": "bool",
               "required": false,
               "help": "Print raw task rows that did not match any known missing-part format (to stderr, prefixed with ' ')"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `task list` for list tasks from my tasks section on dashboard. example: brickfreedom task list brickfreedom task list --table brickfreedom task list --filter completed:eq:false brickfreedom task list --type customer-replacement-part brickfreedom task list --type customer-replacement-part --order-id 30176576."
@@ -295,6 +322,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `task get` for get a specific task by index. example: brickfreedom task get 1 brickfreedom task get 2 --table."
@@ -366,12 +399,18 @@
               "type": "TEXT",
               "required": false,
               "help": "Bin location (required for customer-replacement-part)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `task create` for create a new task in my tasks. example: brickfreedom task create \"ship pending orders\" brickfreedom task add \"reply to customer\" # create structured replacement part task: brickfreedom task create --type customer-replacement-part \\ --platform bricklink \\ --customer-name \"john doe\" \\ --order-id \"30176576\" \\ --item-no \"3024\" \\ --item-name \"plate 1 x 1\" \\ --color \"light bluish gray\" \\ --qty 10 \\ --location \"i-bb001\" # create structured missing part task: brickfreedom task create --type missing-part \\ --platform bricklink \\ --order-id \"30823995\" \\ --item-no \"75270-1\" \\ --item-name \"instruction book\" \\ --qty 1 \\ --location \"f-ins\" # missing part with color: brickfreedom task create --type missing-part \\ --platform bricklink \\ --order-id \"30823995\" \\ --item-no \"3008\" \\ --item-name \"brick 1 x 8\" \\ --color \"light aqua\" \\ --qty 2 \\ --location \"c-0961\"."
         },
         "complete": {
-          "help": "Mark a task as complete by 1-based index, by content match, or --bulk. Three modes: 1. Positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. Bulk: brickfreedom task complete --bulk 3. Match by missing-part attributes (stable for scripts — re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 Add --match-quantity to disambiguate if multiple rows match. Exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches OR multiple matches (ambiguous). JSON error printed to stdout describing the failure; resolve by passing more --match-* flags.",
+          "help": "Mark a task as complete by 1-based index, by content match, or --bulk. Three modes: 1. Positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. Bulk: brickfreedom task complete --bulk 3. Match by missing-part attributes (stable for scripts \u2014 re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 Add --match-quantity to disambiguate if multiple rows match. Exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches OR multiple matches (ambiguous). JSON error printed to stdout describing the failure; resolve by passing more --match-* flags.",
           "arguments": [
             {
               "name": "index",
@@ -411,9 +450,15 @@
               "type": "INTEGER",
               "required": false,
               "help": "Match a missing-part task by quantity (use to disambiguate when multiple rows match). Cannot be combined with positional index"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Use `task complete` for mark a task as complete by 1-based index, by content match, or --bulk. three modes: 1. positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. bulk: brickfreedom task complete --bulk 3. match by missing-part attributes (stable for scripts — re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 add --match-quantity to disambiguate if multiple rows match. exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches or multiple matches (ambiguous). json error printed to stdout describing the failure; resolve by passing more --match-* flags.."
+          "usage_instructions": "Use `task complete` for mark a task as complete by 1-based index, by content match, or --bulk. three modes: 1. positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. bulk: brickfreedom task complete --bulk 3. match by missing-part attributes (stable for scripts \u2014 re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 add --match-quantity to disambiguate if multiple rows match. exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches or multiple matches (ambiguous). json error printed to stdout describing the failure; resolve by passing more --match-* flags.."
         },
         "delete": {
           "help": "Delete a completed task by index, or all completed tasks with --completed. Task must be completed before it can be deleted. Example: brickfreedom task delete 1 brickfreedom task delete --completed",
@@ -432,6 +477,12 @@
               "required": false,
               "help": "Delete all completed tasks",
               "short": "-c"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `task delete` for delete a completed task by index, or all completed tasks with --completed. task must be completed before it can be deleted. example: brickfreedom task delete 1 brickfreedom task delete --completed."
@@ -499,6 +550,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `order list` for list orders from brickfreedom orders page. example: brickfreedom order list brickfreedom order list --status paid brickfreedom order list --platform bricklink --table brickfreedom order list --picked true brickfreedom order list --filter status:eq:paid."
@@ -520,6 +577,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `order get` for get a specific order by marketplace order id. example: brickfreedom order get 30070421."
@@ -555,6 +618,12 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `order processed` for list processed orders ready for shipping (from order-postage page). example: brickfreedom order processed brickfreedom order processed --table."
@@ -569,6 +638,14 @@
               "help": "ORDER_IDS...  Marketplace order IDs to mark as processed"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Use `order process` for mark one or more orders as processed by marketplace order id. example: brickfreedom order process 30070421 brickfreedom order process 30070421 30070422 30070423."
         },
         "post": {
@@ -579,6 +656,14 @@
               "type": "TEXT",
               "required": true,
               "help": "ORDER_IDS...  Marketplace order IDs to post (mark as shipped)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `order post` for post one or more orders (mark as shipped on marketplace). all orders must have tracking numbers before posting. example: brickfreedom order post 30070421 brickfreedom order post 30070421 30070422."
@@ -597,6 +682,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Tracking number to set"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Use `order tracking` for set tracking number for an order on order-postage page. example: brickfreedom order tracking 30070421 9400111899223847012345."

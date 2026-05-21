@@ -273,7 +273,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -293,7 +293,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -304,7 +304,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "Use `roboshadow auth profiles list` to List all profiles and show which is the default. Useful options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+              "usage_instructions": "Use `roboshadow auth profiles list` to List all profiles and show their auth types and active state. Useful options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -339,19 +339,40 @@
               ],
               "usage_instructions": "Use `roboshadow auth profiles create` to Create a new profile from .env.example template. Provide positional arguments: name."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use `roboshadow auth profiles set-default` to Set a profile as the default (IS_DEFAULT_PROFILE=1). Provide positional arguments: name."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `roboshadow auth profiles delete` to Delete a profile and its data. Provide positional arguments: name. Useful options: --force/-F."
+            },
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {

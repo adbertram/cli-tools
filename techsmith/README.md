@@ -62,15 +62,15 @@ techsmith auth login --profile work
 # Use named profile for status check
 techsmith auth status --profile work
 
-# Set default profile via environment variable
-export TECHSMITH_DEFAULT_PROFILE=work
-techsmith auth status  # Uses 'work' profile
+# Select active profile
+techsmith auth profiles select work
+techsmith auth status
 
 # Logout specific profile
 techsmith auth logout --profile work
 
 # Profiles stored as:
-# - profile.json (default profile)
+# - profile.json (active profile)
 # - profile-work.json (named profile 'work')
 # - profile-adam.json (named profile 'adam')
 ```
@@ -81,11 +81,11 @@ techsmith auth logout --profile work
 # List all profiles
 techsmith auth profiles list
 
-# Show default profile
+# Show active profile
 techsmith auth profiles get default
 
-# Switch default profile
-techsmith auth profiles set-default PROFILE_NAME
+# Select active profile
+techsmith auth profiles select PROFILE_NAME
 
 # Create a new profile
 techsmith auth profiles create PROFILE_NAME
@@ -162,7 +162,6 @@ TECHSMITH_AUTH_SELECTOR=                               # CSS selector indicating
 TECHSMITH_AUTH_URL_PATTERN=                            # URL pattern indicating login page
 TECHSMITH_AUTH_TIMEOUT=60                              # Seconds to wait for login
 TECHSMITH_AUTH_POLL_INTERVAL=2                         # Seconds between auth checks
-TECHSMITH_DEFAULT_PROFILE=default                      # Default profile name
 ```
 
 Browser session data is stored in `.storage/` directory for persistence between commands.

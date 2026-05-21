@@ -61,8 +61,8 @@ slack auth profiles create <name>
 # Get profile details
 slack auth profiles get <name>
 
-# Set the default profile
-slack auth profiles set-default <name>
+# Select the active profile
+slack auth profiles select <name>
 
 # Delete a profile
 slack auth profiles delete <name>
@@ -318,7 +318,7 @@ REFRESH_TOKEN=
 BASE_URL=https://slack.com/api
 CLIENT_ID=your_client_id
 CLIENT_SECRET=your_client_secret
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 ```
 
 ### Required OAuth Scopes

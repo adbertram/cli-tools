@@ -98,7 +98,7 @@ g2 reviews search salesforce-sales-cloud "support" --stars 1 --stars 2 --limit 1
 g2 auth profiles list
 g2 auth profiles get default
 g2 auth profiles create research
-g2 auth profiles set-default research
+g2 auth profiles select research
 g2 auth profiles delete research
 ```
 
@@ -176,7 +176,7 @@ Profile data is stored outside the repo under:
 The active profile `.env` contains:
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 PERSONAL_ACCESS_TOKEN=
 BASE_URL=https://data.g2.com
 ```

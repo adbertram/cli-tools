@@ -8,7 +8,7 @@ def test_get_config_reads_migrated_default_profile(tmp_path, monkeypatch):
     profile_dir = data_home / "cli-tools" / "brickfreedom" / "authentication_profiles" / "default"
     profile_dir.mkdir(parents=True)
     env_file = profile_dir / ".env"
-    env_file.write_text("IS_DEFAULT_PROFILE=1\nBASE_URL=https://example.com\n")
+    env_file.write_text("ACTIVE=true\nBASE_URL=https://example.com\n")
 
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
 

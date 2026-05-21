@@ -21,7 +21,7 @@ paypal <command-group> <action> [arguments] [options]
 | Get payout item | `paypal payouts get-item ITEM_ID` |
 | Cancel unclaimed payout | `paypal payouts cancel-item ITEM_ID` |
 | List profiles | `paypal auth profiles list --table` |
-| Switch profile | `paypal auth profiles set-default production` |
+| Switch profile | `paypal auth profiles select production` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 </quick_start>

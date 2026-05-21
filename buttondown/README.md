@@ -27,7 +27,7 @@ buttondown auth profiles list
 buttondown auth profiles create work
 buttondown --profile work auth login
 buttondown --profile work subscribers list --limit 10
-buttondown auth profiles set-default work
+buttondown auth profiles select work
 ```
 
 ## Commands
@@ -44,7 +44,7 @@ buttondown auth refresh
 buttondown auth profiles list
 buttondown auth profiles create PROFILE
 buttondown auth profiles get PROFILE
-buttondown auth profiles set-default PROFILE
+buttondown auth profiles select PROFILE
 ```
 
 ### Subscribers

@@ -192,7 +192,7 @@ podio auth profiles list
 podio auth profiles create staging
 
 # Set a profile as default
-podio auth profiles set-default staging
+podio auth profiles select staging
 
 # Use a specific profile with any command
 podio auth login --profile staging

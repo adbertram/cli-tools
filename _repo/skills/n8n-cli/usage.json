@@ -2,7 +2,7 @@
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
   "discovered_at": "2026-05-20T16:16:00.019397+00:00",
-  "total_commands": 60,
+  "total_commands": 61,
   "global_options": [
     {
       "name": "--version",
@@ -56,7 +56,7 @@
           "usage_instructions": "Clear stored credentials and any browser session for the current or named profile. Use --force/-F to skip confirmation."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -106,7 +106,7 @@
           "help": "Manage authentication profiles",
           "commands": {
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "options": [
                 {
                   "name": "--table",
@@ -126,7 +126,7 @@
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
                 },
                 {
@@ -137,7 +137,7 @@
                   "short": "-p"
                 }
               ],
-              "usage_instructions": "List all authentication profiles and show which one is the default. Use --table/-t for a human-readable view."
+              "usage_instructions": "List all authentication profiles and show auth type and active state. Use --table/-t for a human-readable view."
             },
             "get": {
               "help": "Get details for a specific profile.",
@@ -172,17 +172,17 @@
               ],
               "usage_instructions": "Create a new profile from .env.example template. Prompts for each required field. Follow up with `auth login --profile <name>` to populate credentials."
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to set as default"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Mark a profile as the default so commands without --profile use it. Sets IS_DEFAULT_PROFILE=1 in the profile."
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -204,9 +204,30 @@
                 }
               ],
               "usage_instructions": "Delete a profile and all its stored data. Use --force/-F to skip confirmation."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and all its stored data. Use --force/-F to skip confirmation."
             }
           },
-          "usage_instructions": "Manage multiple named authentication profiles. Useful for working against multiple n8n instances (dev/staging/prod). The default profile is used when --profile is omitted."
+          "usage_instructions": "Manage multiple named authentication profiles. Useful for working against multiple n8n instances (dev/staging/prod). The active profile for the command auth type is used when --profile is omitted."
         }
       },
       "usage_instructions": "Authentication lifecycle: login to store credentials, check status, test that they work, refresh OAuth tokens, or logout. Runs per-profile when --profile is used."
@@ -261,6 +282,12 @@
               "type": "bool",
               "required": false,
               "help": "Filter by active status (true/false)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -289,6 +316,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get full details for one workflow by ID, including all nodes and connections. Example: `n8n workflows get abc123`."
@@ -323,6 +356,12 @@
               "required": false,
               "help": "Error handler workflow ID (default: global handler, use 'none' to skip)",
               "default": "F79g2nlj6f1glf8u"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a workflow from a JSON file containing the full workflow definition. Pass the file path as the argument."
@@ -357,6 +396,12 @@
               "type": "bool",
               "required": false,
               "help": "--deactivate          Activate or deactivate the workflow"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Update an existing workflow by ID, replacing its definition with the JSON file contents. Use `workflows get` first to fetch the current state."
@@ -378,6 +423,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a workflow permanently by ID. Example: `n8n workflows delete abc123`."
@@ -392,6 +443,14 @@
               "help": "Workflow ID to activate"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Activate a workflow so it runs on its triggers. Example: `n8n workflows activate abc123`."
         },
         "deactivate": {
@@ -402,6 +461,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Workflow ID to deactivate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Deactivate a workflow so triggers are paused. Example: `n8n workflows deactivate abc123`."
@@ -423,6 +490,12 @@
               "required": false,
               "help": "Output file path (default: stdout)",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Export a workflow as JSON to stdout or a file. Useful for backups or version control of workflow definitions."
@@ -435,6 +508,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Workflow ID to execute"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -465,6 +546,12 @@
               "required": false,
               "help": "Error handler workflow ID to assign",
               "default": "F79g2nlj6f1glf8u"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -545,6 +632,12 @@
                   "required": false,
                   "help": "Credential name or ID to attach to the node",
                   "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -592,6 +685,12 @@
                   "required": false,
                   "help": "Credential name or ID to attach",
                   "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -645,6 +744,12 @@
                   "help": "Connection type: main, ai_tool, ai_languageModel, ai_memory",
                   "short": "-t",
                   "default": "main"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -655,7 +760,15 @@
               "usage_instructions": "Connect two existing nodes in a workflow. Creates a connection from the source node's output to the target node's input. Required arguments: workflow_id. Notable options: --from, --to, --output-index, --input-index, --type/-t. Example: `n8n workflows node connect WF_ID --from \"Slack\" --to \"Set Fields\"`."
             }
           },
-          "usage_instructions": "Subgroup for adding and connecting nodes inside an existing workflow. Use `workflows node --help` to see available actions."
+          "usage_instructions": "Subgroup for adding and connecting nodes inside an existing workflow. Use `workflows node --help` to see available actions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Manage n8n workflows on the server -- list, get, create, update, delete, activate/deactivate, export, execute, and assign error handlers. Also contains the `node` subgroup for adding/connecting nodes inside a workflow."
@@ -664,7 +777,7 @@
       "help": "Manage n8n node packages",
       "commands": {
         "test": {
-          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow — config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials configured with `n8n auth login` - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
+          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow \u2014 config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials configured with `n8n auth login` - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
           "arguments": [
             {
               "name": "node_name",
@@ -758,9 +871,15 @@
               "type": "bool",
               "required": false,
               "help": "Emit health findings as JSON (instead of a table)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Test n8n nodes in two modes. PACKAGE MODE (default): pass NODE_NAME to spin up a temporary Webhook -> node workflow that exercises a freshly installed node package end-to-end (activate, trigger via webhook, poll for completion, verify success); before activation, the static health-check engine runs on the temp workflow so config bugs surface immediately. Use during node development to validate behavior. WORKFLOW MODE: pass --workflow <id> to run static health checks against an EXISTING workflow without executing it — validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Combine with --node \"<name>\" to scope checks to a single node, --strict to promote warnings to failures (non-zero exit on any warning), and --json to emit findings as JSON instead of a table."
+          "usage_instructions": "Test n8n nodes in two modes. PACKAGE MODE (default): pass NODE_NAME to spin up a temporary Webhook -> node workflow that exercises a freshly installed node package end-to-end (activate, trigger via webhook, poll for completion, verify success); before activation, the static health-check engine runs on the temp workflow so config bugs surface immediately. Use during node development to validate behavior. WORKFLOW MODE: pass --workflow <id> to run static health checks against an EXISTING workflow without executing it \u2014 validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Combine with --node \"<name>\" to scope checks to a single node, --strict to promote warnings to failures (non-zero exit on any warning), and --json to emit findings as JSON instead of a table."
         },
         "create": {
           "help": "Convert a CLI tool into an n8n community node package. Parses the CLI tool's commands, parameters, and credentials, then generates a complete n8n node package with TypeScript source, credentials, README, and a bundled copy of the CLI tool source (under cli/). The CLI venv is created on the server during deploy. Example: n8n nodes create brickowl n8n nodes create shippo --output-dir ./output n8n nodes create brickowl --force n8n nodes create slack --name slack-custom --display-name \"Slack (Custom)\"",
@@ -800,6 +919,12 @@
               "required": false,
               "help": "Override display name in n8n UI",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Convert a standardized CLI tool into an n8n community node package. Parses the CLI's commands/options and generates the node source in the cli-tools repo."
@@ -838,6 +963,12 @@
               "type": "bool",
               "required": false,
               "help": "Skip browser session auth check"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Deploy a generated/modified n8n node package to the n8n server (adam-server). Builds, uploads, and restarts n8n to pick it up."
@@ -864,6 +995,12 @@
               "type": "bool",
               "required": false,
               "help": "Keep associated credentials"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Uninstall a community node from the n8n server by package name."
@@ -902,6 +1039,12 @@
               "type": "bool",
               "required": false,
               "help": "Skip node verification after install"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Install a third-party community node package from npm through the running n8n server. Pass scoped packages exactly, for example @chrishdx/n8n-nodes-codex-cli-lm; use --version for a pinned npm version and --skip-verify only when you will verify separately."
@@ -949,6 +1092,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List n8n node packages. Without --type, lists locally generated node packages. Use --type community for third-party packages and --type custom for Adam-generated packages installed on the server. Supports --filter/-f, --limit/-l, --table/-t."
@@ -976,6 +1125,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get details for a node package or built-in node. Without --type, inspects a local package; with --type, inspects a node on the server."
@@ -1014,6 +1169,12 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "List available CLI tools that can be converted to n8n nodes. Example: n8n nodes cli-tools list n8n nodes cli-tools list --table n8n nodes cli-tools list --limit 10. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
@@ -1035,12 +1196,26 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Inspect a CLI tool's metadata (command groups, commands, parameters, credentials). Example: n8n nodes cli-tools get brickowl n8n nodes cli-tools get shippo --table. Required arguments: name. Notable options: --table/-t."
             }
           },
-          "usage_instructions": "List and inspect CLI tools available for conversion into n8n nodes. Helper subgroup used before `nodes create`."
+          "usage_instructions": "List and inspect CLI tools available for conversion into n8n nodes. Helper subgroup used before `nodes create`.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Manage n8n community node packages. Covers converting CLI tools into nodes (`create`), deploying them to the server (`deploy`), installing third-party community packages (`install`), listing/inspecting nodes (`list`, `get`), testing nodes (`test`), and removing them (`remove`). `cli-tools` lists CLI tools available for conversion."
@@ -1079,6 +1254,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List all credentials on the n8n server. Supports --filter/-f, --limit/-l, --table/-t, --properties/-p. Credentials values are NOT returned -- only metadata."
@@ -1100,6 +1281,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get metadata for a specific credential by ID. Example: `n8n credentials get cred123`."
@@ -1127,6 +1314,12 @@
               "required": false,
               "help": "Display name (defaults to credential type)",
               "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a credential on the server. The credential type must match one of the schemas returned by `credentials schema`. Pass the credential data as JSON."
@@ -1139,6 +1332,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Credential ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a credential by ID. Workflows using it will fail until the credential is replaced."
@@ -1159,6 +1360,14 @@
               "help": "New display name"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Rename a credential without changing its data or ID."
         },
         "schema": {
@@ -1169,6 +1378,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Credential type name (e.g., brickowlApi)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Show the JSON schema for a credential type (required/optional fields). Use before `credentials create` to see what fields a type expects."
@@ -1210,6 +1427,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List all data tables with --filter/-f, --limit/-l, --table/-t, --properties/-p. Example: `n8n data-tables list`."
@@ -1231,6 +1454,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get details for one data table by ID, including its column definitions. Example: `n8n data-tables get L13pmzZ`."
@@ -1252,6 +1481,12 @@
               "required": false,
               "help": "Column definition as name:type (repeatable)",
               "short": "-c"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Create a new data table. Column types supported: string, number, boolean, date. Pass a name and column spec."
@@ -1264,6 +1499,14 @@
               "type": "TEXT",
               "required": true,
               "help": "Data table ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete a data table and all its rows. Example: `n8n data-tables delete L13pmzZ`."
@@ -1285,6 +1528,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Show column definitions for a data table. Use before `insert` or `update-rows` to verify the schema."
@@ -1328,6 +1577,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "List rows in a data table. Supports --filter/-f for client-side filtering (e.g., `category:eq:memory`), --limit/-l, --table/-t."
@@ -1346,6 +1601,14 @@
               "type": "DATA",
               "required": false,
               "help": "JSON array of row objects (or pipe via stdin)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Insert one or more rows. Accepts a JSON array of objects keyed by column name."
@@ -1372,6 +1635,14 @@
               "help": "JSON object of column:value pairs to update"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Update a specific row by row ID. Accepts a JSON object with the columns to update."
         },
         "delete-rows": {
@@ -1391,6 +1662,12 @@
               "required": true,
               "help": "Row ID to delete (repeatable)",
               "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Delete specific rows from a data table by row ID. Example: `n8n data-tables delete-rows <table_id> <row_id>`."
@@ -1465,6 +1742,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1498,6 +1781,12 @@
               "required": false,
               "help": "Include full execution data",
               "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "usage_instructions": "Get full details for one execution by ID, including per-node input/output. Example: `n8n executions get 1618`."
@@ -1550,6 +1839,12 @@
               "required": false,
               "help": "n8n data directory on server",
               "default": "/var/root/.n8n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1581,6 +1876,12 @@
               "type": "bool",
               "required": false,
               "help": "Skip n8n server restart"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ],
           "examples": [
@@ -1592,10 +1893,26 @@
         },
         "version": {
           "help": "Show the n8n server version. Example: n8n server version",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Show the n8n server version. Example: `n8n server version`."
         },
         "restart": {
           "help": "Restart the n8n server. Example: n8n server restart",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "usage_instructions": "Restart the n8n server process. Required after upgrading or installing community nodes."
         },
         "logs": {
@@ -1618,6 +1935,12 @@
                   "required": false,
                   "help": "Log file path on server",
                   "default": "/var/log/n8n.log"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1643,6 +1966,12 @@
                   "required": false,
                   "help": "Error log file path on server",
                   "default": "/var/log/n8n.error.log"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1682,6 +2011,12 @@
                   "required": false,
                   "help": "n8n data directory on server",
                   "default": "/var/root/.n8n"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1699,6 +2034,12 @@
                   "required": false,
                   "help": "LaunchDaemon plist path on server",
                   "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Show current logging configuration from the n8n LaunchDaemon plist. Example: n8n server logs config. Notable options: --plist."
@@ -1745,6 +2086,12 @@
                   "required": false,
                   "help": "LaunchDaemon plist path on server",
                   "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1756,7 +2103,15 @@
               "usage_instructions": "Set n8n log level and optionally other logging settings. Modifies the LaunchDaemon plist on the server and restarts n8n. Required arguments: level. Notable options: --format, --output, --db-logging, --restart, --plist. Example: `n8n server logs set-level debug`."
             }
           },
-          "usage_instructions": "Subgroup for querying n8n server logs (packages, entries, etc). Run `n8n server logs --help` to see available commands."
+          "usage_instructions": "Subgroup for querying n8n server logs (packages, entries, etc). Run `n8n server logs --help` to see available commands.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "config": {
           "help": "Manage n8n server configuration",
@@ -1770,6 +2125,12 @@
                   "required": false,
                   "help": "LaunchDaemon plist path on server",
                   "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "usage_instructions": "Show current n8n server pruning configuration. Example: n8n server config show. Notable options: --plist."
@@ -1804,6 +2165,12 @@
                   "required": false,
                   "help": "LaunchDaemon plist path on server",
                   "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ],
               "examples": [
@@ -1813,7 +2180,15 @@
               "usage_instructions": "Set an n8n server configuration variable in the LaunchDaemon plist. Required arguments: key, value. Notable options: --restart, --plist. Example: `n8n server config set EXECUTIONS_DATA_MAX_AGE 168`."
             }
           },
-          "usage_instructions": "Subgroup for managing n8n server configuration. Run `n8n server config --help` to see available commands."
+          "usage_instructions": "Subgroup for managing n8n server configuration. Run `n8n server config --help` to see available commands.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       },
       "usage_instructions": "Manage the n8n server process itself -- upgrade to a new version, check version, restart, and inspect logs/config via the `logs` and `config` subgroups."

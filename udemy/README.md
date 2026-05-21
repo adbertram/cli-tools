@@ -59,18 +59,18 @@ udemy auth logout
 # List all profiles
 udemy auth profiles list
 
-# Show default profile
+# Show active profile
 udemy auth profiles get default
 
-# Switch default profile
-udemy auth profiles set-default PROFILE_NAME
+# Select active profile
+udemy auth profiles select PROFILE_NAME
 
 # Create a new profile
 udemy auth profiles create PROFILE_NAME
 
 # Use a specific profile
 udemy auth login --profile PROFILE_NAME
-udemy auth profiles set-default PROFILE_NAME
+udemy auth profiles select PROFILE_NAME
 ```
 
 ### Cache
@@ -225,7 +225,7 @@ JSON is the default output format. Use `--table` for human-readable output.
 Credentials are stored in a `.env` file in the package directory:
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 PERSONAL_ACCESS_TOKEN=your_udemy_instructor_api_bearer_token
 BASE_URL=https://www.udemy.com/instructor-api/v1
 BROWSER_SESSION=udemy

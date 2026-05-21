@@ -536,8 +536,8 @@ brickowl auth profiles get staging
 # Create a new profile
 brickowl auth profiles create staging
 
-# Set the default profile
-brickowl auth profiles set-default staging
+# Select the active profile
+brickowl auth profiles select staging
 
 # Delete a profile
 brickowl auth profiles delete staging
@@ -549,7 +549,7 @@ brickowl auth profiles delete staging --force
 | `list` | List all authentication profiles |
 | `get` | Get details for a specific profile |
 | `create` | Create a new profile from template |
-| `set-default` | Set which profile is used by default |
+| `select` | Set which profile is used by default |
 | `delete` | Delete a profile and its data |
 
 ### Cache (`brickowl cache`)
@@ -664,7 +664,7 @@ The CLI reads configuration from `.env` profile files in the package directory.
 
 ```bash
 API_KEY=your_api_key
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 ```
 
 Get your API key from your [Brick Owl account settings](https://www.brickowl.com/account/api).

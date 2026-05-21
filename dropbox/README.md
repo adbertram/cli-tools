@@ -62,8 +62,8 @@ dropbox auth profiles list
 # Create a new profile
 dropbox auth profiles create work
 
-# Set default profile
-dropbox auth profiles set-default work
+# Select active profile
+dropbox auth profiles select work
 
 # Delete a profile
 dropbox auth profiles delete work --force

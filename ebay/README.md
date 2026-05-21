@@ -62,7 +62,7 @@ ebay auth profiles get production
 ebay auth profiles create sandbox
 
 # Set a profile as the default
-ebay auth profiles set-default sandbox
+ebay auth profiles select sandbox
 
 # Delete a profile
 ebay auth profiles delete sandbox
@@ -584,7 +584,7 @@ Order ID         Status        Buyer        Total   Created
 Credentials are stored in a `.env` file in the package directory:
 
 ```bash
-IS_DEFAULT_PROFILE=1
+ACTIVE=true
 
 # OAuth App Credentials (from eBay Developer Portal)
 CLIENT_ID=your_client_id

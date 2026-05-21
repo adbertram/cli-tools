@@ -110,8 +110,8 @@ photos-app auth profiles list
 # Create a new profile
 photos-app auth profiles create "work"
 
-# Set default profile
-photos-app auth profiles set-default "work"
+# Select active profile
+photos-app auth profiles select "work"
 
 # Delete a profile
 photos-app auth profiles delete "work"
