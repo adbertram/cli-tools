@@ -15,37 +15,12 @@ from ..client import get_client
 def _token_cache_path(filename: str) -> Path:
     """Return a user-writable path for an MSAL token cache file.
 
-    Resolves to ``~/.cache/copilot/`` (or ``%LOCALAPPDATA%/copilot/Cache``
-    on Windows) per XDG. Migrates any caches found at the legacy
-    ``~/.copilot-cli/`` location on first access so existing token caches
-    are preserved across the upgrade.
+    Resolves under the active/default cli-tools authentication profile cache.
     """
     from ..config import get_cache_root
 
     cache_dir = get_cache_root()
     cache_dir.mkdir(parents=True, exist_ok=True)
-
-    # One-time migration from the pre-XDG location.
-    legacy_dir = Path.home() / ".copilot-cli"
-    if legacy_dir.is_dir():
-        for entry in legacy_dir.iterdir():
-            if not entry.is_file():
-                continue
-            target = cache_dir / entry.name
-            if not target.exists():
-                try:
-                    entry.replace(target)
-                except OSError:
-                    pass
-        # Remove the legacy dir if it's now empty.
-        try:
-            next(legacy_dir.iterdir())
-        except StopIteration:
-            try:
-                legacy_dir.rmdir()
-            except OSError:
-                pass
-
     return cache_dir / filename
 from cli_tools_shared.output import (
     print_json,
@@ -4342,20 +4317,15 @@ def analytics_get(
 
         config = client.get_bot_app_insights(agent_id)
 
-        typer.echo(f"\nApplication Insights for '{agent_name}':\n")
-
-        if config["enabled"]:
-            typer.echo(f"  Status:                   Enabled")
-            # Mask connection string for security (show only first 20 chars)
-            conn_str = config["connectionString"]
-            masked = conn_str[:40] + "..." if len(conn_str) > 40 else conn_str
-            typer.echo(f"  Connection String:        {masked}")
-        else:
-            typer.echo(f"  Status:                   Not configured")
-
-        typer.echo(f"  Log Activities:           {config['logActivities']}")
-        typer.echo(f"  Log Sensitive Properties: {config['logSensitiveProperties']}")
-        typer.echo("")
+        print_json({
+            "id": agent_id,
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "enabled": config["enabled"],
+            "connectionString": config.get("connectionString", ""),
+            "logActivities": config["logActivities"],
+            "logSensitiveProperties": config["logSensitiveProperties"],
+        })
 
     except Exception as e:
         exit_code = handle_error(e)
@@ -4753,14 +4723,16 @@ def auth_get(
 
         auth_config = client.get_bot_auth(agent_id)
 
-        typer.echo(f"\nAuthentication for '{agent_name}':\n")
-        typer.echo(f"  Mode:    {auth_config['mode']} ({auth_config['mode_name']})")
-        typer.echo(f"  Trigger: {auth_config['trigger']} ({auth_config['trigger_name']})")
-
-        if auth_config.get("configuration"):
-            typer.echo(f"  Config:  {auth_config['configuration']}")
-
-        typer.echo("")
+        print_json({
+            "id": agent_id,
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "mode": auth_config["mode"],
+            "mode_name": auth_config["mode_name"],
+            "trigger": auth_config["trigger"],
+            "trigger_name": auth_config["trigger_name"],
+            "configuration": auth_config.get("configuration"),
+        })
 
     except Exception as e:
         exit_code = handle_error(e)
@@ -4888,9 +4860,11 @@ def auth_list(
         formatted = []
         for bot in bots:
             auth_mode = bot.get("authenticationmode", 2)
+            bot_id = bot.get("botid")
             formatted.append({
+                "id": bot_id,
                 "name": bot.get("name"),
-                "bot_id": bot.get("botid"),
+                "bot_id": bot_id,
                 "auth_mode": auth_mode,
                 "auth_mode_name": AUTH_MODE_NAMES.get(auth_mode, f"Unknown({auth_mode})"),
             })
@@ -5352,6 +5326,7 @@ def model_list(
         # Enrich catalog with kind:hint from discovered agents
         for model in catalog:
             matched_hint = _match_hint_to_model(model["name"], hints)
+            model["id"] = model["name"]
             model["kind_hint"] = f"{matched_hint['modelKind']}:{matched_hint['modelNameHint']}" if matched_hint else "-"
 
         # Apply filters
@@ -5388,7 +5363,7 @@ def model_list(
 
 @model_app.command("get")
 def model_get(
-    agent_id: str = typer.Argument(..., help="Agent ID (GUID)"),
+    agent_id: str = typer.Argument(..., help="Agent ID (GUID) or model name"),
 ):
     """
     Get the current AI model configuration for an agent.
@@ -5406,6 +5381,16 @@ def model_get(
         copilot agent model get <agent-id>
     """
     try:
+        if not _is_guid(agent_id):
+            catalog = _fetch_model_catalog()
+            for model in catalog:
+                if model["name"].casefold() == agent_id.casefold():
+                    model["id"] = model["name"]
+                    print_json(model)
+                    return
+            print_error(f"Model not found: {agent_id}")
+            raise typer.Exit(1)
+
         client = get_client()
         bot = client.get_bot(agent_id)
 
@@ -5459,6 +5444,7 @@ def model_get(
             issues.append("The last publish attempt failed; the live published model may not match the current draft model.")
 
         result = {
+            "id": agent_id,
             "agent_id": agent_id,
             "agent_name": bot.get("name"),
             "resolvedModelId": effective_resolved["modelId"],

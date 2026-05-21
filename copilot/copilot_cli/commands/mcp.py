@@ -763,6 +763,24 @@ def mcp_tools_list(
         "-u",
         help="The MCP server endpoint URL",
     ),
+    filter: Optional[list[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., name:ilike:%sharepoint%)",
+    ),
+    limit: int = typer.Option(
+        100,
+        "--limit",
+        "-l",
+        help="Maximum number of tools to return",
+    ),
+    properties: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Comma-separated list of fields to include in output",
+    ),
     table: bool = typer.Option(
         False,
         "--table",
@@ -782,7 +800,17 @@ def mcp_tools_list(
     Examples:
         copilot tool mcp tools list --url "https://mcp.example.com/sse"
         copilot tool mcp tools list --url "https://mcp.example.com/sse" --table
+        copilot tool mcp tools list --url "https://mcp.example.com/sse" --filter "name:ilike:%site%"
+        copilot tool mcp tools list --url "https://mcp.example.com/sse" --properties "name,description"
     """
+    from cli_tools_shared.filters import (
+        FilterValidationError,
+        apply_filters,
+        get_nested_value,
+        validate_filters,
+    )
+    from cli_tools_shared.output import print_error
+
     try:
         token = _get_mcp_token_for_url(url)
 
@@ -795,14 +823,46 @@ def mcp_tools_list(
         tools = result.get("tools", [])
 
         if not tools:
-            typer.echo("No tools found on this MCP server.")
+            typer.echo("No tools found on this MCP server.", err=True)
             print_json([])
             return
 
+        formatted = [
+            {
+                "name": tool.get("name", ""),
+                "description": tool.get("description", ""),
+                "inputSchema": tool.get("inputSchema", {}),
+            }
+            for tool in tools
+        ]
+
+        if filter:
+            try:
+                validate_filters(filter)
+                formatted = apply_filters(formatted, filter)
+            except FilterValidationError as exc:
+                print_error(str(exc))
+                raise typer.Exit(1)
+
+        formatted = formatted[:limit]
+
+        if properties:
+            property_list = [field.strip() for field in properties.split(",") if field.strip()]
+            formatted = [
+                {field: get_nested_value(item, field) for field in property_list}
+                for item in formatted
+            ]
+        else:
+            property_list = []
+
         if table:
+            if properties:
+                print_table(formatted, columns=property_list, headers=property_list)
+                return
+
             rows = []
-            for tool in tools:
-                schema = tool.get("inputSchema", {})
+            for tool in formatted:
+                schema = tool.get("inputSchema", {}) if isinstance(tool, dict) else {}
                 props = schema.get("properties", {})
                 param_names = ", ".join(props.keys()) if props else ""
                 required = schema.get("required", [])
@@ -825,14 +885,6 @@ def mcp_tools_list(
                 headers=["Name", "Description", "Parameters", "Required"],
             )
         else:
-            # Output full tool definitions
-            formatted = []
-            for tool in tools:
-                formatted.append({
-                    "name": tool.get("name", ""),
-                    "description": tool.get("description", ""),
-                    "inputSchema": tool.get("inputSchema", {}),
-                })
             print_json(formatted)
 
     except RuntimeError as e:

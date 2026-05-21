@@ -116,8 +116,7 @@ def _copilot_login_handler(config, force):
 
     print_success(f"Azure CLI logged in as: {actual_user}")
 
-    # Verify credentials are now usable. ``has_credentials()`` already
-    # re-validates the active az identity against AZURE_CLI_EXPECTED_USER.
+    # Verify required profile fields are saved before the live API probe.
     if not config.has_credentials():
         missing = config.get_missing_credentials()
         if missing:
@@ -179,9 +178,9 @@ app.add_typer(auth_app, name="auth", help="Manage CLI authentication (login, sta
 
 app.add_typer(create_cache_app(get_config), name="cache")
 
-# Config commands (paths, migrate, set-secret)
+# Config commands (paths, profiles, set-secret)
 from .commands import config as _config_cmd
-app.add_typer(_config_cmd.app, name="config", help="Manage copilot configuration paths, profiles, and migration.")
+app.add_typer(_config_cmd.app, name="config", help="Manage copilot configuration paths, profiles, and secrets.")
 
 import importlib
 

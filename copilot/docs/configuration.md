@@ -1,52 +1,39 @@
 # Configuration & Storage
 
-Copilot follows the XDG Base Directory specification on Linux and macOS,
-and uses the standard `%APPDATA%` / `%LOCALAPPDATA%` paths on Windows.
-Profile data and secret storage are aligned with public-CLI conventions.
+Copilot follows the cli-tools user profile layout. Profile data and secret
+storage are aligned with the shared CLI contract.
 
 ## Path Layout
 
-| Purpose            | Linux / macOS                            | Windows                                    |
-|--------------------|------------------------------------------|--------------------------------------------|
-| Profile `.env` files | `~/.config/copilot/profiles/<name>.env` | `%APPDATA%\copilot\profiles\<name>.env`    |
-| Token caches       | `~/.cache/copilot/`                      | `%LOCALAPPDATA%\copilot\Cache\`            |
-| State / logs       | `~/.local/state/copilot/`                | `%LOCALAPPDATA%\copilot\State\`            |
-| Secrets            | OS keychain (libsecret / `pass`)         | Windows Credential Manager                 |
-| Secrets (macOS)    | macOS Keychain                           | —                                          |
+| Purpose | Linux / macOS | Windows |
+| --- | --- | --- |
+| Tool config `.env` | `~/.local/share/cli-tools/copilot/.env` | `%APPDATA%\cli-tools\copilot\.env` |
+| Profile `.env` files | `~/.local/share/cli-tools/copilot/authentication_profiles/<name>/.env` | `%APPDATA%\cli-tools\copilot\authentication_profiles\<name>\.env` |
+| Token caches | `~/.local/share/cli-tools/copilot/authentication_profiles/<name>/cache/` | `%APPDATA%\cli-tools\copilot\authentication_profiles\<name>\cache\` |
+| Secrets | CLI-tools secret manager; profile `.env` contains `secret://...` placeholders | CLI-tools secret manager; profile `.env` contains `secret://...` placeholders |
 
 ## Override Env Vars
 
-You can override any directory:
+The shared cli-tools runtime follows `XDG_DATA_HOME` on Linux/macOS:
 
 ```bash
-COPILOT_CONFIG_DIR=/opt/copilot/etc copilot auth status      # absolute override
-XDG_CONFIG_HOME=$HOME/.dotfiles copilot auth status          # XDG override
+XDG_DATA_HOME=$HOME/.local/share copilot auth status
 ```
 
-Precedence: `COPILOT_CONFIG_DIR` > `XDG_CONFIG_HOME/copilot` > platform default.
-The same precedence applies to `COPILOT_CACHE_DIR` / `XDG_CACHE_HOME`.
+Copilot no longer uses `COPILOT_CONFIG_DIR`, `COPILOT_CACHE_DIR`,
+`XDG_CONFIG_HOME`, or `XDG_CACHE_HOME` for active profile storage.
 
-## Secrets in the OS Keychain
+## Secrets
 
-The following fields are stored in the OS keychain (service name
-`copilot-cli`, username `<profile>:<field>`):
+The following fields are stored by the CLI-tools secret manager. The active
+profile `.env` stores only a `secret://<name>` placeholder for each configured
+secret:
 
 - `AZURE_CLIENT_SECRET`
 - `M365_SDK_CLIENT_SECRET`
 - `DIRECTLINE_SECRET`
 
-They are **never** written to plain-text `.env` files. To inspect or rotate:
-
-```bash
-# macOS — list all copilot-cli entries
-security find-generic-password -s copilot-cli
-
-# Linux (libsecret)
-secret-tool search service copilot-cli
-
-# Windows (PowerShell)
-cmdkey /list:copilot-cli
-```
+They are **never** written to profile `.env` files as plain text.
 
 To set or replace a secret:
 
@@ -55,10 +42,11 @@ copilot config set-secret AZURE_CLIENT_SECRET            # prompts (hidden)
 copilot config set-secret AZURE_CLIENT_SECRET --value '…' --profile staging
 ```
 
-**Linux server prerequisites:** install `libsecret` (e.g.
-`sudo apt install libsecret-1-0 gir1.2-secret-1`) for desktop environments,
-or `pip install keyrings.alt` plus configure a `pass`-based backend for
-headless servers.
+For the default profile, that command writes a profile reference like:
+
+```dotenv
+AZURE_CLIENT_SECRET=secret://copilot-azure-client-secret
+```
 
 ## Inspect Resolved Paths
 
@@ -66,29 +54,22 @@ headless servers.
 copilot config show               # table of all paths + active profile
 copilot config show --json        # same data as JSON
 
-copilot config path config        # ~/.config/copilot
-copilot config path cache         # ~/.cache/copilot
-copilot config path profiles      # ~/.config/copilot/profiles
+copilot config path config        # ~/.local/share/cli-tools/copilot
+copilot config path cache         # active profile cache directory
+copilot config path profiles      # ~/.local/share/cli-tools/copilot/authentication_profiles
 copilot config path active        # the .env currently in use
 ```
 
-## Migrating From Pre-XDG Installs
+## Cutover Requirement
 
-Earlier versions of copilot stored `.env` and `.env.<profile>` files inside
-the repo or alongside the package source. To move them to the new XDG
-layout and stash secrets in the keychain:
+The Copilot CLI reads only the canonical cli-tools profile layout. It does not
+move or inspect legacy profile files at runtime.
+
+Before running the tool, place profile files under:
 
 ```bash
-copilot config migrate --dry-run        # preview (no writes)
-copilot config migrate                  # interactive, prompts per secret
-copilot config migrate --yes            # auto-confirm all secrets
-copilot config migrate --skip-secrets   # non-secret values only
+~/.local/share/cli-tools/copilot/authentication_profiles/<profile>/.env
 ```
 
-The migration is idempotent — a `.env.<name>.migrated` marker is written
-next to each consumed legacy file. The original `.env` / `.env.<name>`
-files are **not** deleted; review the new profiles, run
-`copilot auth status`, then delete the legacy files manually.
-
-If a legacy file is detected on startup the CLI prints a one-time
-deprecation warning pointing at `copilot config migrate`.
+Store reusable secrets with `copilot config set-secret`; do not place raw
+secret values in the profile `.env` files.

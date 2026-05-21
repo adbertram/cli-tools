@@ -56,25 +56,25 @@ curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
 ### 3. Configure credentials
 
-Profiles live under your user-config directory, not the repo. Copy the
-template into place:
+Profiles live under the cli-tools user profile directory, not the repo. Copy
+the template into place:
 
 ```bash
 # macOS / Linux
-mkdir -p ~/.config/copilot/profiles
-cp .env.example ~/.config/copilot/profiles/default.env
+mkdir -p ~/.local/share/cli-tools/copilot/authentication_profiles/default
+cp .env.example ~/.local/share/cli-tools/copilot/authentication_profiles/default/.env
 # edit the copy and set DATAVERSE_URL=https://yourorg.crm.dynamics.com
 ```
 
 ```powershell
 # Windows
-New-Item -ItemType Directory -Force "$env:APPDATA\copilot\profiles"
-Copy-Item .env.example "$env:APPDATA\copilot\profiles\default.env"
+New-Item -ItemType Directory -Force "$env:APPDATA\cli-tools\copilot\authentication_profiles\default"
+Copy-Item .env.example "$env:APPDATA\cli-tools\copilot\authentication_profiles\default\.env"
 ```
 
 Secrets (`AZURE_CLIENT_SECRET`, `M365_SDK_CLIENT_SECRET`,
-`DIRECTLINE_SECRET`) live in the OS keychain — never in plain-text
-`.env`. Set them with:
+`DIRECTLINE_SECRET`) live in the CLI-tools secret manager. The profile
+`.env` contains only `secret://...` placeholders. Set them with:
 
 ```bash
 copilot config set-secret AZURE_CLIENT_SECRET
@@ -85,10 +85,9 @@ Then run the guided login (see [docs/auth.md](docs/auth.md) for details):
 copilot auth login
 ```
 
-If you have legacy `.env` / `.env.<profile>` files in the repo from an
-earlier install, run `copilot config migrate` to move them into the new
-location and stash secrets in the keychain. See
-[docs/configuration.md](docs/configuration.md).
+The CLI reads only the canonical cli-tools profile layout. Older profile files
+must be moved into `~/.local/share/cli-tools/copilot/authentication_profiles/`
+before running the tool.
 
 ### 4. Verify
 
@@ -114,11 +113,34 @@ copilot agent list --table
 
 For full authentication setup including profiles, see [docs/auth.md](docs/auth.md).
 
+## Command Groups
+
+Common command-group entry points:
+
+```bash
+copilot cache clear
+copilot powerautomate-flow list --table
+copilot agent-flow list --table
+copilot managed-connector list --limit 10
+copilot custom-connector list --limit 10
+copilot connection-references list --table
+copilot user-licenses list --user-id user@contoso.com
+```
+
+Additional examples:
+
+```bash
+copilot tool list --type mcp --table
+copilot tool mcp tools list --url "https://mcp.example.com/sse" --limit 10
+copilot environment list --table
+copilot solution list --table
+```
+
 ## Documentation
 
 | Topic | Doc |
 |-------|-----|
-| Configuration paths, profile storage, OS keychain, migration | [docs/configuration.md](docs/configuration.md) |
+| Configuration paths, profile storage, secret placeholders | [docs/configuration.md](docs/configuration.md) |
 | Authentication, profiles, login/logout, user info | [docs/auth.md](docs/auth.md) |
 | Agents, agent tools, knowledge, analytics, transcripts | [docs/agents.md](docs/agents.md) |
 | Topics (conversation flows) and YAML examples | [docs/topics.md](docs/topics.md) |
