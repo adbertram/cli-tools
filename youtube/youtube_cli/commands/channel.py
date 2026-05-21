@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-from cli_tools_shared.filters import apply_filters
+from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import (
     handle_error,
     print_error,
@@ -121,8 +121,8 @@ def videos_list(
     filter: Optional[List[str]] = typer.Option(
         None, "--filter", "-f", help="Filter: field:op:value (e.g., title:contains:foo)"
     ),
-    properties: Optional[List[str]] = typer.Option(
-        None, "--properties", "-p", help="Properties to include in output"
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated fields to include in output"
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -182,16 +182,18 @@ def videos_list(
             video_models = [v for v in video_models if v.id in ids]
 
         # Apply property filtering for output only (after filtering on full model).
+        output_rows = [m.model_dump(mode="json") for m in video_models]
+        property_fields = None
         if properties:
-            output_rows = [
-                {k: v for k, v in m.model_dump(mode="json").items() if k in properties}
-                for m in video_models
-            ]
-        else:
-            output_rows = video_models
+            output_rows = apply_properties_filter(output_rows, properties)
+            property_fields = [field.strip() for field in properties.split(",") if field.strip()]
 
         if table:
-            cols = properties[:5] if properties else ["id", "title", "privacy_status", "published_at"]
+            cols = (
+                property_fields[:5]
+                if property_fields
+                else ["id", "title", "privacy_status", "published_at"]
+            )
             headers = [c.replace("_", " ").title() for c in cols]
             print_table(output_rows, cols, headers)
         else:

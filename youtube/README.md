@@ -4,6 +4,7 @@ A command-line interface that combines:
 
 1. **Public download commands** (no auth) for any YouTube video/transcript using `yt-dlp`.
 2. **Channel management commands** (OAuth) for the authenticated user's own channel via the YouTube Data API v3 — list, get, upload, update, and delete videos.
+3. **Owned-channel commands** (OAuth) to list every YouTube channel available under the authenticated Google account/profile, update the banner image for one owned channel, plus `youtube channels create` guidance for the unsupported channel-creation boundary.
 
 ## Installation
 
@@ -105,7 +106,7 @@ youtube videos download --channel channelname --sync --folder-path ./videos --ex
 youtube videos download --channel channelname -o ./videos -t
 ```
 
-### Auth (OAuth, only required for `channel ...` commands)
+### Auth (OAuth, required for `channel ...` and `channels ...` commands)
 
 Channel management uses the YouTube Data API v3 with OAuth 2.0.
 
@@ -181,6 +182,36 @@ youtube channel videos update VIDEO_ID --tag tagA --tag tagB   # replaces existi
 
 # Delete a video (prompts for confirmation; use --yes/-y to skip)
 youtube channel videos delete VIDEO_ID --yes
+```
+
+### Owned Channels (`youtube channels ...`)
+
+These commands list the YouTube channels returned by `channels.list(mine=true)` for the authenticated profile.
+`youtube channels update` inspects the banner image before any API call. Images smaller than 2048x1152 fail immediately. Every other valid jpg/png banner is normalized to YouTube's recommended 2560x1440 frame when needed, and oversize files are re-encoded under 6 MB before `channelBanners.insert` runs.
+`youtube channels create` is intentionally non-mutating: the YouTube Data API v3 does not expose a channel-creation method, so the CLI exits with a clear error that points you to the official web flow.
+
+```bash
+# List every owned/available channel for the active authenticated profile
+youtube channels list
+
+# Standard list options
+youtube channels list --table
+youtube channels list --limit 10
+youtube channels list --filter "title:contains:Brick"
+youtube channels list --properties "id,title,subscriber_count"
+
+# Get one owned channel by channel ID
+youtube channels get CHANNEL_ID
+youtube channels get CHANNEL_ID --table
+
+# Update one owned channel's banner image
+# The CLI rejects banners smaller than 2048x1152 before upload.
+# Larger or oversize files are normalized to a 2560x1440 upload-ready copy under 6 MB.
+youtube channels update CHANNEL_ID --banner-image ./banner.png
+youtube channels update CHANNEL_ID --banner-image ./banner.png --properties "id,title,banner_external_url"
+
+# Channel creation is not available in the API; the command explains the manual flow
+youtube channels create
 ```
 
 ## Options Reference
