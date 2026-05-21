@@ -1,5 +1,7 @@
 """Declarative Bricklink browser-session hooks."""
 
+import re
+
 from cli_tools_shared.auth import BrowserAutomation
 
 
@@ -32,8 +34,6 @@ class BricklinkBrowser(BrowserAutomation):
     WANTED_NOTIFY_URL = "https://www.bricklink.com/wantedNotify.asp"
 
 def normalize_subject(subject: str) -> str:
-    import re
-
     value = subject.strip()
     while value.lower().startswith("re: "):
         value = value[4:]
@@ -41,9 +41,3 @@ def normalize_subject(subject: str) -> str:
     value = value.replace("#", "")
     value = re.sub(r"\s+", " ", value).strip()
     return value.lower()
-
-
-def get_browser():
-    from .browser_runtime import BricklinkRuntimeBrowser
-
-    return BricklinkRuntimeBrowser()

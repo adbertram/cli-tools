@@ -5,6 +5,7 @@ from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
 
 from .config import get_config
+from .commands import auth, catalog, coupon, inventory, member, messages, notification, order, refund
 
 app = create_app(
     name="bricklink",
@@ -28,18 +29,20 @@ app = create_app(
 # pattern that violated Fail-Fast. Deprecating the commands removes the
 # lie. Restore them once Bricklink ships a real invoice endpoint we can
 # call — at that point reintroduce `commands/invoice.py` and the
-# `register_commands(...)` line below.
-from .commands import order, inventory, catalog, member, coupon
-from .commands import messages, refund, notification, auth
+# `COMMAND_GROUPS` entry below.
+COMMAND_GROUPS = (
+    (order, "order", "Manage orders"),
+    (inventory, "inventory", "Manage store inventory"),
+    (catalog, "catalog", "Browse catalog data"),
+    (member, "member", "Member information"),
+    (coupon, "coupon", "Manage coupons"),
+    (messages, "messages", "Manage messages (browser)"),
+    (refund, "refund", "Manage refunds (browser)"),
+    (notification, "notification", "Manage notifications (browser)"),
+)
 
-register_commands(app, get_config, order, name="order", help="Manage orders")
-register_commands(app, get_config, inventory, name="inventory", help="Manage store inventory")
-register_commands(app, get_config, catalog, name="catalog", help="Browse catalog data")
-register_commands(app, get_config, member, name="member", help="Member information")
-register_commands(app, get_config, coupon, name="coupon", help="Manage coupons")
-register_commands(app, get_config, messages, name="messages", help="Manage messages (browser)")
-register_commands(app, get_config, refund, name="refund", help="Manage refunds (browser)")
-register_commands(app, get_config, notification, name="notification", help="Manage notifications (browser)")
+for module, name, help_text in COMMAND_GROUPS:
+    register_commands(app, get_config, module, name=name, help=help_text)
 
 # Register shared auth + cache apps
 app.add_typer(auth.app, name="auth")

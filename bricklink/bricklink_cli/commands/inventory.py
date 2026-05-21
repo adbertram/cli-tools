@@ -36,10 +36,6 @@ def _item_display(item_dict: Optional[dict]) -> str:
     return no or name or ""
 
 
-def _to_dicts(items) -> list:
-    return list(items)
-
-
 def _prepare_table_rows(data: list) -> list:
     """Add a flat 'item' string column for table display."""
     rows = []
@@ -81,7 +77,7 @@ def inventory_list(
         client = get_client()
         inventories = client.list_inventories(item_type=type, status=status)
 
-        data = _to_dicts(inventories)
+        data = list(inventories)
 
         # Apply client-side filters
         if filter:
@@ -470,7 +466,7 @@ def inventory_search(
                 continue
             matches.append(inv)
 
-        data = _to_dicts(matches)
+        data = list(matches)
 
         if table:
             rows = _prepare_table_rows(data)
@@ -517,7 +513,7 @@ def inventory_stockroom(
         client = get_client()
         inventories = client.list_inventories(status=status)
 
-        data = _to_dicts(inventories)
+        data = list(inventories)
 
         # Apply client-side filters
         if filter:

@@ -1017,43 +1017,6 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         reason = reason or RefundReason.CANCEL_ORDER.value
         return self._submit_refund(order_id, reason, details, full=True, dry_run=dry_run)
 
-    def _check_refund_success(self, page) -> bool:
-        """Check for refund success using multiple detection methods."""
-        # Method 1: Toast
-        toast = page.query_selector('text=/refund.*sent|refund.*issued|refund.*completed|successfully/i')
-        if toast:
-            return True
-
-        # Method 2: Prior refunds field shows non-zero
-        prior_text = page.evaluate("""() => {
-            const el = Array.from(document.querySelectorAll('div')).find(
-                el => el.textContent.trim() === 'Prior refund(s)' || el.textContent.trim() === 'Prior refunds'
-            );
-            if (el) { const s = el.nextElementSibling; if (s) return s.textContent.trim(); }
-            return null;
-        }""")
-        if prior_text and "$0.00" not in prior_text and "$ 0.00" not in prior_text:
-            return True
-
-        # Method 3: Refund activity section
-        activity = page.query_selector('text="Refund activity"')
-        if activity:
-            activity_text = page.evaluate("""() => {
-                const el = Array.from(document.querySelectorAll('div')).find(el => el.textContent.trim() === 'Refund activity');
-                if (el && el.nextElementSibling) return el.nextElementSibling.textContent;
-                return '';
-            }""")
-            if "Completed" in activity_text or "Pending" in activity_text:
-                return True
-
-        # Method 4: Form no longer visible
-        review_btn = page.query_selector('button:has-text("Review refund")')
-        amount_input = page.query_selector('input[type="number"], [role="spinbutton"]')
-        if not review_btn and not amount_input:
-            return True
-
-        return False
-
     # ==================== Invoices ====================
     #
     # The `get_latest_invoice` and `pay_invoice` helpers were removed

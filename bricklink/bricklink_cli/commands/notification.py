@@ -14,9 +14,10 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 
-from ..display import print_detail
-from cli_tools_shared.output import print_json, print_success, handle_error
-from . import render_list, run_browser
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.output import handle_error, print_error, print_json, print_success
+from ..display import print_detail, print_list
+from . import run_browser
 
 app = typer.Typer(help="Manage notifications (browser)", no_args_is_help=True)
 
@@ -27,14 +28,11 @@ WANTED_LIST_NOTIFICATION = {
     "description": "Send wanted list notification to matching stores",
     "command": "bricklink notification send-wanted-list",
 }
-
-
-def _get_notification(notification_type: str) -> dict | None:
-    if notification_type == WANTED_LIST_NOTIFICATION["type"]:
-        return WANTED_LIST_NOTIFICATION
-    if notification_type.lower() == WANTED_LIST_NOTIFICATION["name"].lower():
-        return WANTED_LIST_NOTIFICATION
-    return None
+NOTIFICATIONS = [WANTED_LIST_NOTIFICATION]
+NOTIFICATIONS_BY_KEY = {
+    WANTED_LIST_NOTIFICATION["type"]: WANTED_LIST_NOTIFICATION,
+    WANTED_LIST_NOTIFICATION["name"].lower(): WANTED_LIST_NOTIFICATION,
+}
 
 
 @app.command("list")
@@ -56,14 +54,18 @@ def notification_list(
         bricklink notification list --properties type,name
     """
     try:
-        render_list(
-            [WANTED_LIST_NOTIFICATION],
+        data = NOTIFICATIONS
+        if filter:
+            data = apply_filters(data, filter)
+        if properties:
+            data = apply_properties_filter(data, properties)
+        data = apply_limit(data, limit)
+        print_list(
+            data,
             table,
             properties,
             ["type", "name", "description"],
             ["Type", "Name", "Description"],
-            filter=filter,
-            limit=limit,
         )
 
     except Exception as e:
@@ -83,9 +85,10 @@ def notification_get(
         bricklink notification get wanted_list --table
     """
     try:
-        data = _get_notification(notification_type)
+        data = NOTIFICATIONS_BY_KEY.get(notification_type)
+        if data is None:
+            data = NOTIFICATIONS_BY_KEY.get(notification_type.lower())
         if not data:
-            from cli_tools_shared.output import print_error
             print_error(f"Unknown notification type: {notification_type}. Available: {WANTED_LIST_NOTIFICATION['type']}")
             raise typer.Exit(1)
 

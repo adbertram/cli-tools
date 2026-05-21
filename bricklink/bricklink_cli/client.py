@@ -747,20 +747,13 @@ class BricklinkClient:
         """
         return self._make_request("DELETE", f"/coupons/{coupon_id}")
 
-    # ==================== Browser Auth Testing ====================
-
     def test_auth(self) -> dict:
-        """Test browser authentication status via BricklinkBrowser.
-
-        Returns:
-            Dict with authenticated, url, cookies, and details.
-        """
+        """Test browser authentication status via the configured browser."""
         activity.info("Testing browser auth session")
         browser = get_config().get_browser()
         result = browser.test_session()
         activity.info("Browser auth test result: authenticated=%s", result.get("authenticated"))
         return result
-
 
 # ==================== Helpers ====================
 
