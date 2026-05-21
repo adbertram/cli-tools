@@ -178,15 +178,15 @@ fi
 # ============================================================================
 HELP_WORKS="false"
 if [ $INSTALL_EXIT -eq 0 ]; then
-    # Use command -v to find the binary (handles .exe on Windows)
-    SMOKE_BIN=$(command -v "$CLI_NAME" 2>/dev/null)
-    if [ -z "$SMOKE_BIN" ]; then
-        # Fallback: check explicit paths
-        if [ -f "$HOME/.local/bin/$CLI_NAME" ]; then
-            SMOKE_BIN="$HOME/.local/bin/$CLI_NAME"
-        elif [ -f "$HOME/.local/bin/$CLI_NAME.exe" ]; then
-            SMOKE_BIN="$HOME/.local/bin/$CLI_NAME.exe"
-        fi
+    # Prefer the uv-managed launcher we just installed; PATH may resolve to an
+    # unrelated system binary with the same command name.
+    SMOKE_BIN=""
+    if [ -f "$HOME/.local/bin/$CLI_NAME" ]; then
+        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME"
+    elif [ -f "$HOME/.local/bin/$CLI_NAME.exe" ]; then
+        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME.exe"
+    else
+        SMOKE_BIN=$(command -v "$CLI_NAME" 2>/dev/null)
     fi
     if [ -n "$SMOKE_BIN" ]; then
         "$SMOKE_BIN" --help >/dev/null 2>&1 && HELP_WORKS="true"

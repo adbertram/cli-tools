@@ -27,11 +27,11 @@ It is backed by the macOS Keychain using the `cli-tools` service namespace.
 Supported commands:
 
 ```bash
-<cli-tools-root>/_repo/_secret-manager/secrets.sh set <name> [value]
-<cli-tools-root>/_repo/_secret-manager/secrets.sh get <name>
-<cli-tools-root>/_repo/_secret-manager/secrets.sh has <name>
-<cli-tools-root>/_repo/_secret-manager/secrets.sh delete <name>
-<cli-tools-root>/_repo/_secret-manager/secrets.sh list
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] set <name> [value]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] get <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] has <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] delete <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] list
 ```
 
 Use stdin or `SECRET_VALUE` for secret values so they do not appear in shell history:
@@ -40,6 +40,8 @@ Use stdin or `SECRET_VALUE` for secret values so they do not appear in shell his
 printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set <name>
 SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh set <name>
 ```
+
+For remote hosts, run the same command with `--remote-host <host>`. The secret-manager copies `set` payloads to a private temp file on the remote host instead of placing them in the SSH command line or streaming them over SSH stdin. That keeps `/dev/tty` available when the remote login keychain needs an unlock prompt before retrying the canonical Keychain command.
 
 ## Required Workflow
 

@@ -552,6 +552,340 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
     assert "old-secret" not in content
 
 
+def test_profiles_create_requires_auth_type_for_profile_auth_configs(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD"]
+        CUSTOM_ALL_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {
+            "az_cli": [],
+            "device_code": [("TENANT_ID", "Tenant ID", False)],
+        }
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["profiles", "create", "work"])
+
+    assert result.exit_code == 2, result.output
+    assert "Missing option '--auth-type'" in result.output
+
+
+def test_profiles_create_prompts_for_missing_auth_params(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
+        CUSTOM_ALL_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {
+            "az_cli": [],
+            "device_code": [("TENANT_ID", "Tenant ID", False)],
+        }
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(
+        app,
+        ["profiles", "create", "work", "--auth-type", "device_code"],
+        input="tenant-123\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    content = (
+        tmp_path / "data" / "tool" / "authentication_profiles" / "work" / ".env"
+    ).read_text()
+    assert "AUTH_METHOD='device_code'" in content
+    assert "TENANT_ID='tenant-123'" in content
+
+
+def test_profiles_create_noninteractive_missing_auth_params_fails_clearly(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
+        CUSTOM_ALL_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {
+            "device_code": [("TENANT_ID", "Tenant ID", False)],
+        }
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(
+        app,
+        ["profiles", "create", "work", "--auth-type", "device_code"],
+        input="",
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "Missing required auth parameter values." in result.output
+    profile_dir = tmp_path / "data" / "tool" / "authentication_profiles" / "work"
+    assert not profile_dir.exists()
+
+
+def test_profiles_create_accepts_auth_params_without_prompting(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD", "TENANT_ID", "CLIENT_ID"]
+        CUSTOM_ALL_FIELDS = ["AUTH_METHOD", "TENANT_ID", "CLIENT_ID"]
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {
+            "service_principal": [
+                ("TENANT_ID", "Tenant ID", False),
+                ("CLIENT_ID", "Client ID", False),
+            ],
+        }
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "AUTH_METHOD=\nTENANT_ID=\nCLIENT_ID=\nIS_DEFAULT_PROFILE=1\n"
+    )
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(
+        app,
+        [
+            "profiles",
+            "create",
+            "work",
+            "--auth-type",
+            "service_principal",
+            "--auth-param",
+            "TENANT_ID=tenant-123",
+            "--auth-param",
+            "CLIENT_ID=client-456",
+        ],
+        input="",
+    )
+
+    assert result.exit_code == 0, result.output
+    content = (
+        tmp_path / "data" / "tool" / "authentication_profiles" / "work" / ".env"
+    ).read_text()
+    assert "AUTH_METHOD='service_principal'" in content
+    assert "TENANT_ID='tenant-123'" in content
+    assert "CLIENT_ID='client-456'" in content
+
+
+def test_profiles_help_exposes_delete_and_remove_commands(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["profiles", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "delete" in result.output
+    assert "remove" in result.output
+
+
+def test_profiles_remove_deletes_profile_directory_from_disk(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    _seed_profile(
+        base_profiles_dir,
+        "default",
+        is_default=True,
+        env_body="API_KEY=default-key\n",
+    )
+    _seed_profile(
+        base_profiles_dir,
+        "work",
+        is_default=False,
+        env_body="API_KEY=work-key\n",
+    )
+    cache_file = (
+        base_profiles_dir / "work" / "browser-data" / "chromium-profile" / "Default" / "Cookies"
+    )
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text("sqlite-stub")
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["profiles", "remove", "work", "--force"])
+
+    assert result.exit_code == 0, result.output
+    assert not (base_profiles_dir / "work").exists()
+    assert "Profile 'work' deleted" in result.output
+
+
+def test_profiles_remove_missing_profile_fails_clearly(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    _seed_profile(
+        base_profiles_dir,
+        "default",
+        is_default=True,
+        env_body="API_KEY=default-key\n",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["profiles", "remove", "missing", "--force"])
+
+    assert result.exit_code == 1, result.output
+    assert "Profile 'missing' not found" in result.output
+
+
+def test_profiles_remove_refuses_to_delete_default_profile(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    _seed_profile(
+        base_profiles_dir,
+        "default",
+        is_default=True,
+        env_body="API_KEY=default-key\n",
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["profiles", "remove", "default", "--force"])
+
+    assert result.exit_code == 1, result.output
+    assert "Cannot delete default profile 'default'." in result.output
+    assert (base_profiles_dir / "default").exists()
+
+
 # ============================================================================
 # auth status canonical schema (end-to-end via CliRunner)
 # ============================================================================

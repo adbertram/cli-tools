@@ -42,6 +42,12 @@ uv tool list 2>/dev/null | grep -q "$CLI_NAME" && uv_tool_installed=true
 executable_exists=false
 [ -f "$SYMLINK_PATH" ] && executable_exists=true
 
+pkg_py_grep() {
+    local pattern="$1"
+    find "$TOOL_DIR/$PKG_NAME" -path '*/__pycache__' -prune -o -type f -name '*.py' -print0 \
+        | xargs -0 grep -E "$pattern" >/dev/null 2>&1
+}
+
 run_silent() {
     [ "$executable_exists" = "true" ] || return 1
     "$SYMLINK_PATH" "$@" >/dev/null 2>&1
@@ -106,15 +112,15 @@ fi
 
 ai_instruction_contract=skipped
 ai_instruction_forbidden_fields=skipped
-if [ -d "$TOOL_DIR/$PKG_NAME" ] && grep -R "AIInstruction\|print_ai_instruction\|ai_instruction" "$TOOL_DIR/$PKG_NAME" >/dev/null 2>&1; then
+if [ -d "$TOOL_DIR/$PKG_NAME" ] && pkg_py_grep "AIInstruction|print_ai_instruction|ai_instruction"; then
     ai_instruction_contract=false
     ai_instruction_forbidden_fields=false
-    if grep -R "from cli_tools_shared.models import AIInstruction\|from cli_tools_shared import AIInstruction" "$TOOL_DIR/$PKG_NAME" >/dev/null 2>&1 \
-        && grep -R "print_ai_instruction" "$TOOL_DIR/$PKG_NAME" >/dev/null 2>&1 \
-        && ! grep -R "class AIInstruction" "$TOOL_DIR/$PKG_NAME" >/dev/null 2>&1; then
+    if pkg_py_grep "from cli_tools_shared.models import AIInstruction|from cli_tools_shared import AIInstruction" \
+        && pkg_py_grep "print_ai_instruction" \
+        && ! pkg_py_grep "class AIInstruction"; then
         ai_instruction_contract=true
     fi
-    grep -R "required_commands\|command_to_run\|commands_to_run" "$TOOL_DIR/$PKG_NAME" >/dev/null 2>&1 \
+    pkg_py_grep "required_commands|command_to_run|commands_to_run" \
         || ai_instruction_forbidden_fields=true
 fi
 

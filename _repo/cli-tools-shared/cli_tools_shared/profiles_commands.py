@@ -2,11 +2,93 @@
 
 from typing import Optional, List
 
+import click
+
 import typer
 
 from .filters import apply_filters, apply_limit, apply_properties_filter
 from .profiles import list_profiles, create_profile, set_default_profile, delete_profile
 from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command
+
+
+def _get_profile_auth_settings(config) -> Optional[tuple[str, dict[str, list[tuple[str, str, bool]]]]]:
+    """Return profile auth-type metadata declared by the config, if any."""
+    sentinel = object()
+    auth_type_field = getattr(type(config), "PROFILE_AUTH_TYPE_FIELD", sentinel)
+    if auth_type_field is sentinel:
+        auth_type_field = getattr(config, "__dict__", {}).get("PROFILE_AUTH_TYPE_FIELD", sentinel)
+    auth_types = getattr(type(config), "PROFILE_AUTH_TYPES", sentinel)
+    if auth_types is sentinel:
+        auth_types = getattr(config, "__dict__", {}).get("PROFILE_AUTH_TYPES", sentinel)
+    if auth_type_field is sentinel and auth_types is sentinel:
+        return None
+    if auth_type_field is sentinel or auth_types is sentinel:
+        raise ValueError(
+            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
+        )
+    if not auth_type_field or not isinstance(auth_types, dict) or not auth_types:
+        raise ValueError(
+            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
+        )
+    return auth_type_field, auth_types
+
+
+def _parse_auth_params(raw_params: Optional[List[str]]) -> dict[str, str]:
+    """Parse repeated ``FIELD=VALUE`` auth parameter options."""
+    parsed: dict[str, str] = {}
+    for raw_param in raw_params or []:
+        if "=" not in raw_param:
+            print_error(
+                f"Invalid auth parameter '{raw_param}'. Use --auth-param FIELD=VALUE."
+            )
+            raise typer.Exit(1)
+        field_name, value = raw_param.split("=", 1)
+        field_name = field_name.strip()
+        if not field_name:
+            print_error(
+                f"Invalid auth parameter '{raw_param}'. Use --auth-param FIELD=VALUE."
+            )
+            raise typer.Exit(1)
+        if field_name in parsed:
+            print_error(f"Duplicate auth parameter '{field_name}'.")
+            raise typer.Exit(1)
+        clean_value = value.strip()
+        if not clean_value:
+            print_error(f"Auth parameter '{field_name}' cannot be empty.")
+            raise typer.Exit(1)
+        parsed[field_name] = clean_value
+    return parsed
+
+
+def _collect_profile_auth_values(prompts, provided_values: dict[str, str]) -> dict[str, str]:
+    """Validate and collect auth-type-specific profile values before profile creation."""
+    expected_fields = {field_name for field_name, _prompt_text, _hide in prompts}
+    unexpected = sorted(set(provided_values) - expected_fields)
+    if unexpected:
+        expected = ", ".join(sorted(expected_fields)) if expected_fields else "(none)"
+        print_error(
+            f"Unexpected auth parameters: {', '.join(unexpected)}. Expected fields: {expected}."
+        )
+        raise typer.Exit(1)
+
+    resolved_values: dict[str, str] = {}
+    for field_name, prompt_text, hide_input in prompts:
+        value = provided_values.get(field_name)
+        if value is None:
+            try:
+                value = typer.prompt(f"Enter {prompt_text}", hide_input=hide_input)
+            except click.Abort:
+                print_error(
+                    "Missing required auth parameter values. "
+                    "Provide --auth-param FIELD=VALUE or run interactively to enter them."
+                )
+                raise typer.Exit(1)
+            value = value.strip()
+        if not value:
+            print_error(f"{prompt_text} cannot be empty.")
+            raise typer.Exit(1)
+        resolved_values[field_name] = value
+    return resolved_values
 
 
 def create_profiles_app(get_config_fn):
@@ -73,16 +155,61 @@ def create_profiles_app(get_config_fn):
         profile = match[0]
         print_output(profile, table)
 
-    @app.command("create")
-    @command
-    def profiles_create(
-        name: str = typer.Argument(..., help="Profile name (e.g., staging, production)"),
-    ):
-        """Create a new profile from .env.example template."""
-        config = get_config_fn()
-        path = create_profile(config, name)
-        print_success(f"Profile '{name}' created at {path.name}")
-        print_info(f"Run 'auth login --profile {name}' to configure credentials.")
+    try:
+        profile_auth_settings = _get_profile_auth_settings(get_config_fn())
+    except Exception as exc:
+        raise RuntimeError(f"Invalid profile auth configuration: {exc}") from exc
+
+    if profile_auth_settings is None:
+        @app.command("create")
+        @command
+        def profiles_create(
+            name: str = typer.Argument(..., help="Profile name (e.g., staging, production)"),
+        ):
+            """Create a new profile from .env.example template."""
+            config = get_config_fn()
+            path = create_profile(config, name)
+            print_success(f"Profile '{name}' created at {path.name}")
+            print_info(f"Run 'auth login --profile {name}' to configure credentials.")
+    else:
+        auth_type_field, auth_types = profile_auth_settings
+        valid_auth_types = ", ".join(auth_types)
+
+        @app.command("create")
+        @command
+        def profiles_create(
+            name: str = typer.Argument(..., help="Profile name (e.g., staging, production)"),
+            auth_type: str = typer.Option(
+                ...,
+                "--auth-type",
+                help=f"Authentication type for this profile. Valid values: {valid_auth_types}",
+            ),
+            auth_param: Optional[List[str]] = typer.Option(
+                None,
+                "--auth-param",
+                help="Auth parameter as FIELD=VALUE. Repeat for additional required values.",
+            ),
+        ):
+            """Create a new profile from .env.example template."""
+            config = get_config_fn()
+            prompts = auth_types.get(auth_type)
+            if prompts is None:
+                print_error(
+                    f"Unknown auth type '{auth_type}'. Valid types: {valid_auth_types}."
+                )
+                raise typer.Exit(1)
+
+            auth_values = _collect_profile_auth_values(
+                prompts,
+                _parse_auth_params(auth_param),
+            )
+            path = create_profile(config, name)
+            profile_config = get_config_fn(profile=name)
+            profile_config._set(auth_type_field, auth_type)
+            for field_name, value in auth_values.items():
+                profile_config._set(field_name, value)
+            print_success(f"Profile '{name}' created at {path.name}")
+            print_info(f"Run 'auth login --profile {name}' to configure credentials.")
 
     @app.command("set-default")
     @command
@@ -94,9 +221,7 @@ def create_profiles_app(get_config_fn):
         set_default_profile(config, name)
         print_success(f"Profile '{name}' is now the default")
 
-    @app.command("delete")
-    @command
-    def profiles_delete(
+    def _delete_profile(
         name: str = typer.Argument(..., help="Profile name to delete"),
         force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation"),
     ):
@@ -109,5 +234,12 @@ def create_profiles_app(get_config_fn):
         config = get_config_fn()
         delete_profile(config, name)
         print_success(f"Profile '{name}' deleted")
+
+    app.command("delete")(
+        command(_delete_profile)
+    )
+    app.command("remove")(
+        command(_delete_profile)
+    )
 
     return app
