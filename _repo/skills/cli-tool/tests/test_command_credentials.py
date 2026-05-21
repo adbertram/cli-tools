@@ -404,7 +404,7 @@ def test_all_commands_have_credential_mapping(
 def test_credentialed_commands_expose_profile_option(
     cli_name, cli_dir, test_config, cli_executable, help_cache, command_filter
 ):
-    """Credential-gated commands must expose --profile at the real command surface."""
+    """Credential-gated commands must expose shared --profile on their command path."""
     no_auth_clis = test_config["exclusions"].get("no_auth_clis", [])
     if cli_name in no_auth_clis:
         pytest.skip(f"{cli_name} does not require authentication")
@@ -418,23 +418,15 @@ def test_credentialed_commands_expose_profile_option(
     if not module_entries:
         pytest.skip(f"{cli_name} has no command modules")
 
-    all_commands = discover_nested_commands(
-        cli_executable, max_depth=2, skip_list=list(SKIP_GROUPS)
-    )
-    leaf_commands = []
-    for cmd_path in all_commands:
-        parts = cmd_path.split()
-        if len(parts) != 2:
-            continue
-        group, cmd = parts
-        if group in SKIP_GROUPS:
-            continue
-        if command_filter and group != command_filter:
-            continue
-        leaf_commands.append((group, cmd, cmd_path))
+    max_depth = test_config["general"]["max_nested_depth"]
+    if cli_name in test_config.get("cli_specific", {}):
+        max_depth = test_config["cli_specific"][cli_name].get("max_nested_depth", max_depth)
 
-    if not leaf_commands:
-        pytest.skip("No leaf commands found to validate")
+    all_commands = discover_nested_commands(
+        cli_executable,
+        max_depth=max_depth,
+        skip_list=list(SKIP_GROUPS),
+    )
 
     from cli_test_utils import get_uv_tool_venv_dir
     uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
@@ -449,15 +441,8 @@ def test_credentialed_commands_expose_profile_option(
         else None
     )
 
-    missing_profile = []
-    for group, cmd, cmd_path in leaf_commands:
-        module_entry = flat_entry or module_entries_by_stem.get(group)
-        if module_entry is None:
-            module_entry = module_entries_by_stem.get(group.replace("-", "_"))
-        if module_entry is None:
-            continue
-
-        _entry_name, _module_file, import_path = module_entry
+    credential_maps = {}
+    for _module_name, _module_file, import_path in module_entries:
         result = subprocess.run(
             [
                 venv_python,
@@ -473,18 +458,61 @@ def test_credentialed_commands_expose_profile_option(
         if result.returncode != 0:
             continue
 
-        cred_map = json.loads(result.stdout.strip())
-        cred_types = cred_map.get(cmd)
-        if not cred_types or cred_types == ["no_auth"]:
+        credential_maps[import_path] = json.loads(result.stdout.strip())
+
+    def module_entry_for_group(group):
+        module_entry = flat_entry or module_entries_by_stem.get(group)
+        if module_entry is None:
+            module_entry = module_entries_by_stem.get(group.replace("-", "_"))
+        return module_entry
+
+    def command_path_requires_credentials(cmd_path):
+        parts = cmd_path.split()
+        if not parts or parts[0] in SKIP_GROUPS:
+            return False
+        if command_filter and parts[0] != command_filter:
+            return False
+
+        for index in range(1, len(parts)):
+            module_entry = module_entry_for_group(parts[index - 1])
+            if module_entry is None:
+                continue
+            _entry_name, _module_file, import_path = module_entry
+            cred_map = credential_maps.get(import_path, {})
+            cred_types = cred_map.get(parts[index])
+            if cred_types and cred_types != ["no_auth"]:
+                return True
+        return False
+
+    def command_path_profile_help(cmd_path):
+        parts = cmd_path.split()
+        return [
+            " ".join(parts[:index])
+            for index in range(1, len(parts) + 1)
+        ]
+
+    credentialed_commands = [
+        cmd_path for cmd_path in all_commands
+        if command_path_requires_credentials(cmd_path)
+    ]
+
+    if not credentialed_commands:
+        pytest.skip("No credential-gated commands found to validate")
+
+    missing_profile = []
+    for cmd_path in credentialed_commands:
+        profile_help_paths = command_path_profile_help(cmd_path)
+        if any("--profile" in help_cache(help_path) for help_path in profile_help_paths):
             continue
 
-        command_help = help_cache(cmd_path)
-        if "--profile" not in command_help:
-            missing_profile.append(f"  {cmd_path}")
+        missing_profile.append(
+            f"  {cmd_path} (checked: {', '.join(profile_help_paths)})"
+        )
 
     assert not missing_profile, (
-        "Credential-gated commands must accept --profile so command routing can "
-        "validate explicit profile auth types.\nMissing --profile:\n"
+        "Credential-gated commands must accept shared --profile on the command "
+        "path so users can override the active selected auth profile.\n"
+        "Missing --profile:\n"
         + "\n".join(missing_profile)
     )
 

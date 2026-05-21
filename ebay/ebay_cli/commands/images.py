@@ -176,8 +176,14 @@ def images_list(
         images = storage.get_all_images()
 
         if not images:
-            print_warning("No uploaded images found in local storage.")
-            print_info("Use 'ebay images upload' to upload images.")
+            if table:
+                print_table(
+                    [],
+                    ["image_id", "imageUrl", "expirationDate", "source", "original", "uploaded_at"],
+                    ["Image ID", "URL", "Expires", "Source", "Original", "Uploaded"]
+                )
+            else:
+                print_json([])
             return
 
         # Validate and apply client-side filters if provided
@@ -210,7 +216,7 @@ def images_list(
                 ["Image ID", "URL", "Expires", "Source", "Original", "Uploaded"]
             )
         else:
-            print_json({"images": images, "count": len(images)})
+            print_json(images)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

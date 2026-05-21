@@ -170,7 +170,7 @@ cmd_set() {
     value="$(resolve_set_value "${2:-}")"
 
     log_info "security add-generic-password (service=$SERVICE account=$name)"
-    run_security security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}" >/dev/null
+    run_security security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
     log_info "security add-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -179,7 +179,7 @@ cmd_get() {
     [[ -n "$name" ]] || die "get requires <name>"
 
     log_info "security find-generic-password (service=$SERVICE account=$name)"
-    run_security security find-generic-password -s "$SERVICE" -a "$name" -w "${KEYCHAIN_ARGS[@]}"
+    run_security security find-generic-password -s "$SERVICE" -a "$name" -w "${KEYCHAIN_ARGS[@]}" || return $?
     log_info "security find-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -188,7 +188,7 @@ cmd_delete() {
     [[ -n "$name" ]] || die "delete requires <name>"
 
     log_info "security delete-generic-password (service=$SERVICE account=$name)"
-    run_security security delete-generic-password -s "$SERVICE" -a "$name" "${KEYCHAIN_ARGS[@]}" >/dev/null
+    run_security security delete-generic-password -s "$SERVICE" -a "$name" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
     log_info "security delete-generic-password completed (service=$SERVICE account=$name)"
 }
 
@@ -230,7 +230,7 @@ cmd_list() {
             acct=line
         }
         svc_match && acct { print acct; svc_match=0; acct="" }
-    ' | sort -u
+    ' | sort -u || return $?
     log_info "security dump-keychain list completed (service=$SERVICE)"
 }
 
@@ -339,13 +339,13 @@ dispatch_remote() {
     if [[ -n "${CLI_TOOLS_KEYCHAIN:-}" ]]; then
         remote_command+="CLI_TOOLS_KEYCHAIN=$(shell_quote "$CLI_TOOLS_KEYCHAIN") "
     fi
+    if [[ "$sub" == "set" ]]; then
+        remote_command+="SECRET_VALUE=\"\$(cat $(shell_quote "$remote_payload_file"))\" "
+    fi
     remote_command+="bash $(shell_quote "$remote_script")"
     for arg in "${remote_args[@]}"; do
         remote_command+=" $(shell_quote "$arg")"
     done
-    if [[ "$sub" == "set" ]]; then
-        remote_command+=" < $(shell_quote "$remote_payload_file")"
-    fi
 
     if has_tty; then
         ssh_command_flags=(-tt)

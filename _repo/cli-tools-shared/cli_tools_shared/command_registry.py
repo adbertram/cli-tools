@@ -27,6 +27,7 @@ import typer
 
 from .auth_verifier import AuthVerifier
 from .config import (
+    get_runtime_profile_resolution,
     get_profile_auth_settings,
     implicit_profile_auth_type,
     reset_runtime_profile_resolution,
@@ -132,6 +133,10 @@ def _resolve_runtime_profile_context(
     explicit_profile: Optional[str],
     cred_type_strings: list[str],
 ) -> tuple[Optional[str], Optional[str]]:
+    runtime_profile_name, _runtime_profile_auth_type = get_runtime_profile_resolution()
+    if explicit_profile is None and runtime_profile_name:
+        explicit_profile = runtime_profile_name
+
     config_cls = _get_config_class(get_config_fn)
     profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
     if explicit_profile:
@@ -400,7 +405,10 @@ def register_commands(
     )
 
     @sub_app.callback(invoke_without_command=True)
-    def _credential_gate(ctx: typer.Context):
+    def _credential_gate(
+        ctx: typer.Context,
+        profile: Optional[str] = typer.Option(None, "--profile", help="Auth profile name"),
+    ):
         """Preserve the command group's no-subcommand help behavior."""
         invoked = ctx.invoked_subcommand
         if invoked is None:
@@ -411,5 +419,21 @@ def register_commands(
                 typer.echo(ctx.get_help())
                 raise typer.Exit()
             return
+
+        cred_types = cred_map.get(invoked)
+        if not cred_types:
+            return
+
+        profile_name, profile_auth_type = _resolve_runtime_profile_context(
+            get_config,
+            resolved_cli_name,
+            profile,
+            cred_types,
+        )
+        tokens = set_runtime_profile_resolution(
+            profile_name=profile_name,
+            profile_auth_type=profile_auth_type,
+        )
+        ctx.call_on_close(lambda: reset_runtime_profile_resolution(tokens))
 
     app.add_typer(sub_app, name=name, help=help)

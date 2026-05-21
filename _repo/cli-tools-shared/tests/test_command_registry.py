@@ -252,3 +252,74 @@ def test_registered_command_accepts_profile_option_after_leaf_command():
     assert "ok" in result.output
     assert calls == ["staging"]
     assert ran == [3]
+
+
+def test_registered_group_help_exposes_profile_option():
+    command_app = typer.Typer()
+
+    @command_app.command("list")
+    def list_items(limit: int = typer.Option(1, "--limit", "-l")):
+        typer.echo(limit)
+
+    root = typer.Typer()
+    register_commands(
+        root,
+        lambda profile=None: None,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"list": ["api_key"]},
+        ),
+        name="items",
+        help="Manage items",
+        cli_name="tool",
+    )
+
+    result = CliRunner().invoke(root, ["items", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--profile" in result.output
+
+
+def test_registered_group_accepts_profile_option_before_leaf_command():
+    calls = []
+    ran = []
+
+    class SingleProfileConfig:
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+        def _get(self, name):
+            return {"API_KEY": "saved-key"}.get(name)
+
+    def get_config(profile=None) -> SingleProfileConfig:
+        calls.append(profile)
+        return SingleProfileConfig()
+
+    command_app = typer.Typer()
+
+    @command_app.command("list")
+    def list_items(limit: int = typer.Option(1, "--limit", "-l")):
+        ran.append(limit)
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_commands(
+        root,
+        get_config,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"list": ["api_key"]},
+        ),
+        name="items",
+        help="Manage items",
+        cli_name="tool",
+    )
+
+    result = CliRunner().invoke(
+        root,
+        ["items", "--profile", "staging", "list", "--limit", "3"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "ok" in result.output
+    assert calls == ["staging"]
+    assert ran == [3]

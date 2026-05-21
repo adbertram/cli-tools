@@ -59,7 +59,10 @@ def templates_list(
         templates = storage.get_all_templates()
 
         if not templates:
-            print_info("No templates found. Create one with 'ebay templates create <name>'")
+            if table:
+                print_table([], ["name", "description", "category", "price", "updated"], ["Name", "Description", "Category", "Price", "Updated"])
+            else:
+                print_json([])
             return
 
         # Validate and apply client-side filters if provided
@@ -101,7 +104,7 @@ def templates_list(
                 ["Name", "Description", "Category", "Price", "Updated"],
             )
         else:
-            print_json({"templates": templates, "count": len(templates)})
+            print_json(templates)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))
@@ -445,4 +448,3 @@ def templates_validate(
         raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
-

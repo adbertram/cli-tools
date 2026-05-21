@@ -261,6 +261,14 @@
     },
     "categories": {
       "help": "Search and browse eBay marketplace categories",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "list": {
           "help": "List eBay categories matching a keyword query. Returns leaf category suggestions based on your search query. Use the category ID when creating listings. This is an alias for 'ebay categories search'.",
@@ -475,6 +483,14 @@
     },
     "listings": {
       "help": "Search eBay marketplace listings",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "search": {
           "help": "Search eBay completed/sold listings. Searches eBay marketplace for completed listings using browser automation. Returns sold and unsold completed listings by default. Use --sold to filter to only sold items.",
@@ -567,6 +583,14 @@
     },
     "seller": {
       "help": "Seller tools \u2014 listings, orders, inventory, policies, and more",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "list": {
           "help": "List seller command groups.",

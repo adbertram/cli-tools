@@ -251,8 +251,17 @@ def test_usage_json_matches_installed_command_parameters(
             )
         )
 
+    def without_shared_profile_option(parameters):
+        return {
+            "arguments": parameters["arguments"],
+            "options": [
+                option for option in parameters["options"]
+                if option.get("name") != "--profile"
+            ],
+        }
+
     live_parameters = {
-        path: parse_help_parameters(help_cache(path))
+        path: without_shared_profile_option(parse_help_parameters(help_cache(path)))
         for path in sorted(live_paths)
     }
 
@@ -261,7 +270,10 @@ def test_usage_json_matches_installed_command_parameters(
             pytest.skip(f"usage.json not found at {usage_json}")
 
         usage = json.loads(usage_json.read_text())
-        usage_parameters = extract_usage_command_parameters(usage)
+        usage_parameters = {
+            path: without_shared_profile_option(parameters)
+            for path, parameters in extract_usage_command_parameters(usage).items()
+        }
 
         if command_filter:
             usage_parameters = {
