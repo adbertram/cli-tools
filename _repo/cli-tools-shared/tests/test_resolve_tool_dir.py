@@ -143,7 +143,7 @@ def test_stray_package_copy_does_not_redirect_tool_dir(tmp_path, monkeypatch):
     # Add a distinguishing source-tree profile in the stray copy. Runtime
     # config must read only the canonical user-data profile below.
     (stray / ".env.stray_profile").write_text(
-        "IS_DEFAULT_PROFILE=0\nORIGIN=stray\n"
+        "ACTIVE=false\nORIGIN=stray\n"
     )
 
     fake_dist = _mock_editable_distribution("example-cli", canonical)
@@ -168,7 +168,7 @@ def test_stray_package_copy_does_not_redirect_tool_dir(tmp_path, monkeypatch):
     profiles_dir = get_profiles_base_dir(resolved.name)
     user_profile = profiles_dir / "canonical_profile" / ".env"
     user_profile.parent.mkdir(parents=True)
-    user_profile.write_text("IS_DEFAULT_PROFILE=0\nORIGIN=canonical-user-data\n")
+    user_profile.write_text("ACTIVE=false\nORIGIN=canonical-user-data\n")
 
     class _ExampleConfig(BaseConfig):
         CREDENTIAL_TYPES = [CredentialType.NO_AUTH]

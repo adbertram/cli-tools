@@ -102,8 +102,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         -h|--help|help|"")
             cat <<'EOF'
 Usage:
-  scripts/lib/log.sh read [-f] [-n N] <script-or-log-path>
-  scripts/lib/log.sh path <script-or-log-path>
+  _repo/_scripts/lib/log.sh read [-f] [-n N] <script-or-log-path>
+  _repo/_scripts/lib/log.sh path <script-or-log-path>
 EOF
             ;;
         *)

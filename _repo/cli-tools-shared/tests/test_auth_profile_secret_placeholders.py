@@ -17,8 +17,8 @@ def test_validate_auth_profile_secret_placeholders_accepts_existing_secrets(monk
     tool_name = "exampletool"
     default_profile = get_profiles_base_dir(tool_name) / "default" / ".env"
     staging_profile = get_profiles_base_dir(tool_name) / "staging" / ".env"
-    _write_profile(default_profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=secret://exampletool-api-key\n")
-    _write_profile(staging_profile, "IS_DEFAULT_PROFILE=0\nPASSWORD=secret://exampletool-staging-password\n")
+    _write_profile(default_profile, "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n")
+    _write_profile(staging_profile, "ACTIVE=false\nPASSWORD=secret://exampletool-staging-password\n")
 
     checked = []
 
@@ -40,8 +40,8 @@ def test_validate_auth_profile_secret_placeholders_reports_every_missing_secret(
     tool_name = "exampletool"
     default_profile = get_profiles_base_dir(tool_name) / "default" / ".env"
     staging_profile = get_profiles_base_dir(tool_name) / "staging" / ".env"
-    _write_profile(default_profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=secret://exampletool-api-key\n")
-    _write_profile(staging_profile, "IS_DEFAULT_PROFILE=0\nPASSWORD=secret://exampletool-staging-password\n")
+    _write_profile(default_profile, "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n")
+    _write_profile(staging_profile, "ACTIVE=false\nPASSWORD=secret://exampletool-staging-password\n")
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         assert command == "has"
@@ -65,7 +65,7 @@ def test_validate_auth_profile_secret_placeholders_reports_every_missing_secret(
 def test_validate_auth_profile_secret_placeholders_rejects_invalid_placeholder(monkeypatch):
     tool_name = "exampletool"
     default_profile = get_profiles_base_dir(tool_name) / "default" / ".env"
-    _write_profile(default_profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=secret://\n")
+    _write_profile(default_profile, "ACTIVE=true\nAPI_KEY=secret://\n")
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         raise AssertionError("Secret manager should not run for an invalid placeholder")
@@ -86,7 +86,7 @@ def test_validate_auth_profile_secret_placeholders_skips_missing_optional_secret
     default_profile = get_profiles_base_dir(tool_name) / "default" / ".env"
     _write_profile(
         default_profile,
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "USERNAME=secret://exampletool-username\n"
         "PASSWORD=secret://exampletool-password\n"
         "OPTIONAL_TOKEN=secret://exampletool-optional-token\n",

@@ -101,7 +101,7 @@ def test_browser_session_login_skips_live_probe_when_no_session_on_disk(tmp_path
 
     profile_path = tmp_path / "default" / ".env"
     profile_path.parent.mkdir(parents=True)
-    profile_path.write_text("IS_DEFAULT_PROFILE=1\n")
+    profile_path.write_text("ACTIVE=true\n")
 
     config = _make_config(browser, profile_path)
     config.has_saved_session.return_value = False
@@ -131,7 +131,7 @@ def test_browser_session_login_live_verifies_before_claiming_already_authenticat
 
     profile_path = tmp_path / "default" / ".env"
     profile_path.parent.mkdir(parents=True)
-    profile_path.write_text("IS_DEFAULT_PROFILE=1\n")
+    profile_path.write_text("ACTIVE=true\n")
 
     config = _make_config(browser, profile_path)
     config.has_saved_session.return_value = True
@@ -162,7 +162,7 @@ def test_browser_session_login_falls_through_when_live_check_fails(tmp_path):
 
     profile_path = tmp_path / "default" / ".env"
     profile_path.parent.mkdir(parents=True)
-    profile_path.write_text("IS_DEFAULT_PROFILE=1\n")
+    profile_path.write_text("ACTIVE=true\n")
 
     config = _make_config(browser, profile_path)
     config.has_saved_session.return_value = True
@@ -190,7 +190,7 @@ def test_browser_session_login_returns_nonzero_when_browser_auth_fails(tmp_path)
 
     profile_path = tmp_path / "default" / ".env"
     profile_path.parent.mkdir(parents=True)
-    profile_path.write_text("IS_DEFAULT_PROFILE=1\n")
+    profile_path.write_text("ACTIVE=true\n")
 
     config = _make_config(browser, profile_path)
     config.has_saved_session.return_value = False
@@ -223,7 +223,7 @@ def test_logout_clears_browser_session_via_config(tmp_path, monkeypatch):
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n"
     )
 
@@ -245,7 +245,7 @@ def test_logout_clears_browser_session_via_config(tmp_path, monkeypatch):
     _seed_profile(
         base_profiles_dir,
         "smoke-logout",
-        is_default=False,
+        active=False,
         env_body=(
             "CLIENT_ID=client-id\n"
             "CLIENT_SECRET=client-secret\n"
@@ -285,7 +285,7 @@ def test_refresh_command_hidden_without_oauth_token_url(tmp_path):
 
     profile_path = tmp_path / "default" / ".env"
     profile_path.parent.mkdir(parents=True)
-    profile_path.write_text("IS_DEFAULT_PROFILE=1\n")
+    profile_path.write_text("ACTIVE=true\n")
 
     config = _make_config(browser, profile_path)
     app = create_auth_app(lambda profile=None: config, tool_name="tool")
@@ -307,7 +307,7 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     monkeypatch.setenv("CLI_TOOL_DATA_HOME", str(tmp_path / "data"))
 
@@ -333,9 +333,9 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
     profile_dir = tmp_path / "data" / "tool" / "authentication_profiles" / "default"
     env_file = profile_dir / ".env"
-    assert env_file.exists(), f"Expected default profile env file at {env_file}"
+    assert env_file.exists(), f"Expected bootstrap profile env file at {env_file}"
     content = env_file.read_text()
-    assert "IS_DEFAULT_PROFILE=1" in content
+    assert "ACTIVE=true" in content
     assert "API_KEY='secret://tool-api-key'" in content
     assert "API_KEY=" in content
 
@@ -348,7 +348,7 @@ def test_base_config_initializes_default_profile_when_none_exist(tmp_path, monke
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=0\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=false\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -360,7 +360,7 @@ def test_base_config_initializes_default_profile_when_none_exist(tmp_path, monke
     env_file = tmp_path / "data" / "tool" / "authentication_profiles" / "default" / ".env"
     assert config.env_file_path == env_file
     assert env_file.exists()
-    assert "IS_DEFAULT_PROFILE=1" in env_file.read_text()
+    assert "ACTIVE=true" in env_file.read_text()
 
 
 def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
@@ -374,7 +374,7 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
@@ -390,7 +390,7 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
     default_dir = base_profiles_dir / "default"
     default_dir.mkdir(parents=True)
     (default_dir / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         + _canonicalize_secret_profile_body(
             "tool",
             "default",
@@ -409,10 +409,10 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
     assert staging_env.exists()
     staging_content = staging_env.read_text()
     assert "API_KEY='secret://tool-staging-api-key'" in staging_content
-    assert "IS_DEFAULT_PROFILE=0" in staging_content
+    assert "ACTIVE=false" in staging_content
     # Default unchanged
     default_content = (default_dir / ".env").read_text()
-    assert "IS_DEFAULT_PROFILE=1" in default_content
+    assert "ACTIVE=true" in default_content
     assert "API_KEY='secret://tool-api-key'" in default_content
 
 
@@ -425,7 +425,7 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
@@ -440,7 +440,7 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     default_dir = base_profiles_dir / "default"
     default_dir.mkdir(parents=True)
     (default_dir / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         + _canonicalize_secret_profile_body(
             "tool",
             "default",
@@ -459,6 +459,54 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     # Profile preserved exactly
     content = (default_dir / ".env").read_text()
     assert "API_KEY='secret://tool-api-key'" in content
+
+
+def test_login_requires_profile_when_multiple_profile_auth_types_exist(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD"]
+        CUSTOM_ALL_FIELDS = ["AUTH_METHOD"]
+        CUSTOM_LOGIN_PROMPTS = []
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {
+            "az_cli": [],
+            "device_code": [],
+        }
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nACTIVE=true\n")
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    for profile_name, auth_type in (
+        ("work", "az_cli"),
+        ("lab", "device_code"),
+    ):
+        profile_dir = base_profiles_dir / profile_name
+        profile_dir.mkdir(parents=True)
+        (profile_dir / ".env").write_text(
+            f"ACTIVE=true\nAUTH_METHOD={auth_type}\n"
+        )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["login"])
+
+    assert result.exit_code == 1, result.output
+    assert "auth login requires --profile" in result.output
 
 
 def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeypatch):
@@ -482,7 +530,7 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text(
         "CLIENT_ID=\nCLIENT_SECRET=\nREDIRECT_URI=\nACCESS_TOKEN=\n"
-        "REFRESH_TOKEN=\nTOKEN_EXPIRES_AT=\nIS_DEFAULT_PROFILE=1\n"
+        "REFRESH_TOKEN=\nTOKEN_EXPIRES_AT=\nACTIVE=true\n"
     )
 
     base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
@@ -498,7 +546,7 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
     default_dir = base_profiles_dir / "default"
     default_dir.mkdir(parents=True)
     (default_dir / ".env").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         + _canonicalize_secret_profile_body(
             "tool",
             "default",
@@ -567,7 +615,7 @@ def test_profiles_create_requires_auth_type_for_profile_auth_configs(tmp_path, m
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -603,7 +651,7 @@ def test_profiles_create_prompts_for_missing_auth_params(tmp_path, monkeypatch):
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -646,7 +694,7 @@ def test_profiles_create_noninteractive_missing_auth_params_fails_clearly(tmp_pa
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("AUTH_METHOD=\nTENANT_ID=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -691,7 +739,7 @@ def test_profiles_create_accepts_auth_params_without_prompting(tmp_path, monkeyp
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text(
-        "AUTH_METHOD=\nTENANT_ID=\nCLIENT_ID=\nIS_DEFAULT_PROFILE=1\n"
+        "AUTH_METHOD=\nTENANT_ID=\nCLIENT_ID=\nACTIVE=true\n"
     )
 
     monkeypatch.setattr(
@@ -740,7 +788,7 @@ def test_profiles_help_exposes_delete_and_remove_commands(tmp_path, monkeypatch)
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -770,7 +818,7 @@ def test_profiles_remove_deletes_profile_directory_from_disk(tmp_path, monkeypat
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -785,13 +833,13 @@ def test_profiles_remove_deletes_profile_directory_from_disk(tmp_path, monkeypat
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="API_KEY=default-key\n",
     )
     _seed_profile(
         base_profiles_dir,
         "work",
-        is_default=False,
+        active=False,
         env_body="API_KEY=work-key\n",
     )
     cache_file = (
@@ -819,7 +867,7 @@ def test_profiles_remove_missing_profile_fails_clearly(tmp_path, monkeypatch):
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -834,7 +882,7 @@ def test_profiles_remove_missing_profile_fails_clearly(tmp_path, monkeypatch):
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="API_KEY=default-key\n",
     )
 
@@ -848,7 +896,7 @@ def test_profiles_remove_missing_profile_fails_clearly(tmp_path, monkeypatch):
     assert "Profile 'missing' not found" in result.output
 
 
-def test_profiles_remove_refuses_to_delete_default_profile(tmp_path, monkeypatch):
+def test_profiles_remove_refuses_to_delete_only_active_profile_for_auth_type(tmp_path, monkeypatch):
     from cli_tools_shared.config import BaseConfig
 
     class _Cfg(BaseConfig):
@@ -856,7 +904,7 @@ def test_profiles_remove_refuses_to_delete_default_profile(tmp_path, monkeypatch
 
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
-    (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
@@ -871,7 +919,7 @@ def test_profiles_remove_refuses_to_delete_default_profile(tmp_path, monkeypatch
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="API_KEY=default-key\n",
     )
 
@@ -882,7 +930,7 @@ def test_profiles_remove_refuses_to_delete_default_profile(tmp_path, monkeypatch
     result = CliRunner().invoke(app, ["profiles", "remove", "default", "--force"])
 
     assert result.exit_code == 1, result.output
-    assert "Cannot delete default profile 'default'." in result.output
+    assert "Cannot delete active profile 'default'." in result.output
     assert (base_profiles_dir / "default").exists()
 
 
@@ -930,8 +978,11 @@ def _assert_canonical_status_shape(stdout: str) -> dict:
         assert isinstance(profile.get("name"), str) and profile["name"], (
             f"profile must have non-empty string 'name': {profile!r}"
         )
-        assert isinstance(profile.get("is_default"), bool), (
-            f"profile '{profile.get('name')}' must have boolean 'is_default'"
+        assert isinstance(profile.get("auth_type"), str) and profile["auth_type"], (
+            f"profile '{profile.get('name')}' must have non-empty string 'auth_type'"
+        )
+        assert isinstance(profile.get("active"), bool), (
+            f"profile '{profile.get('name')}' must have boolean 'active'"
         )
         assert isinstance(profile.get("authenticated"), bool), (
             f"profile '{profile.get('name')}' must have boolean 'authenticated'"
@@ -970,12 +1021,6 @@ def _assert_canonical_status_shape(stdout: str) -> dict:
                     f"or start with \"failed:\" (got: {val!r})"
                 )
 
-    # 7. Exactly one profile has is_default=True (when the CLI has profiles).
-    defaults = [p for p in data["profiles"] if p["is_default"]]
-    assert len(defaults) <= 1, (
-        f"At most one profile may have is_default=True, found {len(defaults)}"
-    )
-
     return data
 
 
@@ -1006,7 +1051,7 @@ def _make_auth_app_in_tmp(
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
     # Provide a usable .env.example so bootstrap copies the right shape.
-    example_lines = ["IS_DEFAULT_PROFILE=1"]
+    example_lines = ["ACTIVE=true"]
     if env_seed:
         example_lines.append(env_seed)
     (tool_dir / ".env.example").write_text("\n".join(example_lines) + "\n")
@@ -1028,13 +1073,13 @@ def _make_auth_app_in_tmp(
     return app, get_config, tool_dir, base_profiles_dir
 
 
-def _seed_profile(base_profiles_dir, name, *, is_default, env_body):
+def _seed_profile(base_profiles_dir, name, *, active, env_body):
     """Create a profile env file on disk with the given body."""
     pdir = base_profiles_dir / name
     pdir.mkdir(parents=True, exist_ok=True)
     tool_name = base_profiles_dir.parent.name
     body = (
-        f"IS_DEFAULT_PROFILE={1 if is_default else 0}\n"
+        f"ACTIVE={'true' if active else 'false'}\n"
         + _canonicalize_secret_profile_body(tool_name, name, env_body)
     )
     (pdir / ".env").write_text(body)
@@ -1046,7 +1091,7 @@ def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
         tmp_path, monkeypatch, [CredentialType.API_KEY]
     )
-    _seed_profile(base_profiles_dir, "default", is_default=True, env_body="API_KEY=\n")
+    _seed_profile(base_profiles_dir, "default", active=True, env_body="API_KEY=\n")
 
     result = CliRunner().invoke(app, ["status"])
     assert result.exit_code == 0, result.output
@@ -1055,7 +1100,8 @@ def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     assert len(data["profiles"]) == 1
     profile = data["profiles"][0]
     assert profile["name"] == "default"
-    assert profile["is_default"] is True
+    assert profile["auth_type"] == "default"
+    assert profile["active"] is True
     assert profile["authenticated"] is False
     block = profile["credential_types"]["api_key"]
     assert block["credentials_saved"] is False
@@ -1074,7 +1120,7 @@ def test_auth_status_canonical_shape_valid_credentials_pass(tmp_path, monkeypatc
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="API_KEY=secret-key-abc-123\n",
     )
 
@@ -1103,7 +1149,7 @@ def test_auth_status_canonical_shape_failed_test_connection(tmp_path, monkeypatc
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="API_KEY=bogus-key-with-enough-length\n",
     )
 
@@ -1131,7 +1177,7 @@ def test_auth_status_oauth_authorization_code_uses_live_test_connection(tmp_path
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body=(
             "CLIENT_ID=client-id\n"
             "CLIENT_SECRET=client-secret\n"
@@ -1153,8 +1199,7 @@ def test_auth_status_oauth_authorization_code_uses_live_test_connection(tmp_path
 
 
 def test_auth_status_canonical_shape_multi_profile(tmp_path, monkeypatch):
-    """Multi-profile setup → profiles[] contains all profiles, is_default set
-    on exactly one, every entry passes the canonical schema check."""
+    """Status reports only active profiles, not every stored profile."""
     app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
         tmp_path,
         monkeypatch,
@@ -1162,13 +1207,13 @@ def test_auth_status_canonical_shape_multi_profile(tmp_path, monkeypatch):
         test_connection_result={"api_test": "passed"},
     )
     _seed_profile(
-        base_profiles_dir, "default", is_default=True, env_body="API_KEY=default-key-abc\n"
+        base_profiles_dir, "default", active=True, env_body="API_KEY=default-key-abc\n"
     )
     _seed_profile(
-        base_profiles_dir, "staging", is_default=False, env_body="API_KEY=staging-key-xyz\n"
+        base_profiles_dir, "staging", active=False, env_body="API_KEY=staging-key-xyz\n"
     )
     _seed_profile(
-        base_profiles_dir, "empty", is_default=False, env_body="API_KEY=\n"
+        base_profiles_dir, "empty", active=False, env_body="API_KEY=\n"
     )
 
     result = CliRunner().invoke(app, ["status"])
@@ -1176,18 +1221,10 @@ def test_auth_status_canonical_shape_multi_profile(tmp_path, monkeypatch):
 
     data = _assert_canonical_status_shape(result.stdout)
     names = {p["name"]: p for p in data["profiles"]}
-    assert set(names) == {"default", "staging", "empty"}, (
-        f"Expected all three profiles in profiles[], got {set(names)}"
+    assert set(names) == {"default"}, (
+        f"Expected only active profiles in profiles[], got {set(names)}"
     )
-    # Exactly one default.
-    defaults = [p for p in data["profiles"] if p["is_default"]]
-    assert len(defaults) == 1
-    assert defaults[0]["name"] == "default"
-    # Non-default with creds still authenticates.
-    assert names["staging"]["authenticated"] is True
-    # Empty profile authenticated=False.
-    assert names["empty"]["authenticated"] is False
-    assert names["empty"]["credential_types"]["api_key"]["credentials_saved"] is False
+    assert names["default"]["active"] is True
 
 
 def test_auth_status_stdout_is_pure_json(tmp_path, monkeypatch):
@@ -1204,7 +1241,7 @@ def test_auth_status_stdout_is_pure_json(tmp_path, monkeypatch):
         test_connection_result={"api_test": "passed"},
     )
     _seed_profile(
-        base_profiles_dir, "default", is_default=True, env_body="API_KEY=key-abc-def\n"
+        base_profiles_dir, "default", active=True, env_body="API_KEY=key-abc-def\n"
     )
 
     result = CliRunner().invoke(app, ["status"])
@@ -1237,7 +1274,7 @@ def test_auth_status_canonical_shape_with_browser_session(tmp_path, monkeypatch)
         browser=browser,
     )
     _seed_profile(
-        base_profiles_dir, "default", is_default=True, env_body="API_KEY=key-abc-def\n"
+        base_profiles_dir, "default", active=True, env_body="API_KEY=key-abc-def\n"
     )
     # Seed the persistent Chromium profile's cookie database so the real
     # ``BaseConfig.has_saved_session()`` reports True.
@@ -1277,7 +1314,7 @@ def test_auth_status_dual_auth_browser_session_is_not_overridden_by_api_test(tmp
     tool_dir = tmp_path / "tool"
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n"
     )
 
@@ -1303,7 +1340,7 @@ def test_auth_status_dual_auth_browser_session_is_not_overridden_by_api_test(tmp
     _seed_profile(
         base_profiles_dir,
         "default",
-        is_default=True,
+        active=True,
         env_body="CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n",
     )
     cookies = (

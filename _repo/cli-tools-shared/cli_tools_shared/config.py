@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import sys
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 
@@ -55,18 +56,55 @@ def get_cache_ttl() -> int:
     return int(os.environ.get("CACHE_TTL", str(DEFAULT_CACHE_TTL)))
 
 
-def read_is_default_profile(env_path: Path) -> Optional[bool]:
-    """Read IS_DEFAULT_PROFILE from an env file without loading into os.environ.
+_RUNTIME_PROFILE_NAME: ContextVar[Optional[str]] = ContextVar(
+    "cli_tools_runtime_profile_name",
+    default=None,
+)
+_RUNTIME_PROFILE_AUTH_TYPE: ContextVar[Optional[str]] = ContextVar(
+    "cli_tools_runtime_profile_auth_type",
+    default=None,
+)
 
-    Returns True if IS_DEFAULT_PROFILE=1, False if =0, None if not found.
-    """
+
+def set_runtime_profile_resolution(
+    *,
+    profile_name: Optional[str],
+    profile_auth_type: Optional[str],
+) -> tuple:
+    """Set runtime-only profile resolution overrides for the current command."""
+    name_token = _RUNTIME_PROFILE_NAME.set(profile_name)
+    auth_type_token = _RUNTIME_PROFILE_AUTH_TYPE.set(profile_auth_type)
+    return name_token, auth_type_token
+
+
+def reset_runtime_profile_resolution(tokens: tuple) -> None:
+    """Reset runtime-only profile resolution overrides for the current command."""
+    name_token, auth_type_token = tokens
+    _RUNTIME_PROFILE_NAME.reset(name_token)
+    _RUNTIME_PROFILE_AUTH_TYPE.reset(auth_type_token)
+
+
+def get_runtime_profile_resolution() -> tuple[Optional[str], Optional[str]]:
+    """Return runtime-only profile resolution overrides for the current command."""
+    return _RUNTIME_PROFILE_NAME.get(), _RUNTIME_PROFILE_AUTH_TYPE.get()
+
+
+def read_profile_active(env_path: Path) -> Optional[bool]:
+    """Read ACTIVE from an env file without loading into os.environ."""
     try:
         with open(env_path) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith("IS_DEFAULT_PROFILE="):
+                if line.startswith("ACTIVE="):
                     value = line.split("=", 1)[1].strip().strip("\"'")
-                    return value == "1"
+                    if value == "true":
+                        return True
+                    if value == "false":
+                        return False
+                    raise ConfigError(
+                        f"{env_path} has invalid ACTIVE value {value!r}. "
+                        "Expected ACTIVE=true or ACTIVE=false."
+                    )
     except (OSError, UnicodeDecodeError):
         pass
     return None
@@ -131,7 +169,7 @@ def list_env_files(tool_name: str) -> list:
     return files
 
 
-_AUTH_METADATA_FIELDS = {"IS_DEFAULT_PROFILE"}
+_AUTH_METADATA_FIELDS = {"ACTIVE"}
 _AUTH_FIELD_PREFIXES = ("AUTH_", "OAUTH_")
 _AUTH_FIELD_NAMES = {"AUTHORIZATION_CODE", "REDIRECT_URI"}
 _SECRET_PLACEHOLDER_PREFIX = "secret://"
@@ -145,6 +183,41 @@ _DEFAULT_ROOT_CONFIG_FIELDS = {
     "CLI_COMMAND",
     "CLI_PATH",
 }
+
+
+def get_profile_auth_settings(config_or_cls) -> Optional[tuple[str, dict]]:
+    """Return profile auth-type metadata declared by the config, if any."""
+    sentinel = object()
+    auth_type_field = getattr(config_or_cls, "PROFILE_AUTH_TYPE_FIELD", sentinel)
+    if auth_type_field is sentinel:
+        auth_type_field = getattr(
+            getattr(config_or_cls, "__dict__", {}),
+            "get",
+            lambda *_args, **_kwargs: sentinel,
+        )("PROFILE_AUTH_TYPE_FIELD", sentinel)
+    auth_types = getattr(config_or_cls, "PROFILE_AUTH_TYPES", sentinel)
+    if auth_types is sentinel:
+        auth_types = getattr(
+            getattr(config_or_cls, "__dict__", {}),
+            "get",
+            lambda *_args, **_kwargs: sentinel,
+        )("PROFILE_AUTH_TYPES", sentinel)
+    if auth_type_field is sentinel and auth_types is sentinel:
+        return None
+    if auth_type_field is sentinel or auth_types is sentinel:
+        raise ConfigError(
+            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
+        )
+    if not auth_type_field or not isinstance(auth_types, dict) or not auth_types:
+        raise ConfigError(
+            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
+        )
+    return auth_type_field, auth_types
+
+
+def implicit_profile_auth_type() -> str:
+    """Return the implicit single auth type for CLIs without profile auth metadata."""
+    return "default"
 
 
 def _secret_name_from_placeholder(value: str) -> Optional[str]:
@@ -420,7 +493,7 @@ def _initialize_default_profile(
         return
 
     target = env_path_for_profile(tool_name, "default")
-    auth_values["IS_DEFAULT_PROFILE"] = "1"
+    auth_values["ACTIVE"] = "true"
     _write_env_values(target, auth_values)
 
 
@@ -788,16 +861,24 @@ class BaseConfig:
                 "manager and set the field to secret://<secret-name>."
             )
 
-    def __init__(self, tool_dir: Path, profile: str = None):
+    def __init__(
+        self,
+        tool_dir: Path,
+        profile: str = None,
+        profile_auth_type: str = None,
+    ):
         """Initialize config by resolving the profile and loading the env file.
 
         Profile resolution priority:
             1. Explicit profile argument (from profile-management code)
-            2. Whichever .env* file has IS_DEFAULT_PROFILE=1
+            2. Runtime command-profile override
+            3. Active profile for the requested auth type
+            4. Single active profile when the CLI has one implicit auth type
 
         Args:
             tool_dir: Root directory of the CLI tool (contains .env.example).
             profile: Optional explicit profile name.
+            profile_auth_type: Optional auth type whose active profile should load.
         """
         if self.CREDENTIAL_TYPES is None:
             raise ConfigError(
@@ -806,6 +887,7 @@ class BaseConfig:
         self.tool_dir = tool_dir
         self._tool_name = tool_dir.name
         self.profile = profile
+        self.profile_auth_type = profile_auth_type
         self.config_env_file_path = config_env_path_for_tool(self._tool_name)
         auth_fields = self._auth_field_names()
         root_config_fields = self._root_config_field_names()
@@ -820,7 +902,10 @@ class BaseConfig:
         _validate_root_config_env_file(self._tool_name, auth_fields)
         _validate_profile_env_files(self._tool_name, auth_fields, root_config_fields)
 
-        self.env_file_path = self._resolve_env_file(profile)
+        self.env_file_path = self._resolve_env_file(
+            profile=profile,
+            profile_auth_type=profile_auth_type,
+        )
         self._validate_sensitive_placeholders()
 
         if self.config_env_file_path.exists():
@@ -835,7 +920,7 @@ class BaseConfig:
             # stale values from a previously loaded profile
             for field in auth_fields:
                 os.environ.pop(field, None)
-            os.environ.pop("IS_DEFAULT_PROFILE", None)
+            os.environ.pop("ACTIVE", None)
             for key, value in self._resolve_env_values(
                 _read_env_values(self.env_file_path),
                 self.env_file_path,
@@ -845,14 +930,29 @@ class BaseConfig:
         # If no .env file exists, keep current env vars intact — supports
         # running with credentials injected via environment (e.g., n8n nodes)
 
-    def _resolve_env_file(self, profile: str = None) -> Path:
+    def _resolve_env_file(
+        self,
+        profile: str = None,
+        profile_auth_type: str = None,
+    ) -> Path:
         """Resolve which .env file to load."""
         # 1. Explicit profile argument
         if profile:
-            return self._env_file_for_profile(profile)
+            env_path = self._env_file_for_profile(profile)
+            if profile_auth_type is not None:
+                self._validate_profile_auth_type(env_path, profile_auth_type)
+            return env_path
 
-        # 2. Find default (IS_DEFAULT_PROFILE=1)
-        return self._find_default_env_file()
+        runtime_profile, runtime_profile_auth_type = get_runtime_profile_resolution()
+        if runtime_profile:
+            env_path = self._env_file_for_profile(runtime_profile)
+            resolved_auth_type = profile_auth_type or runtime_profile_auth_type
+            if resolved_auth_type is not None:
+                self._validate_profile_auth_type(env_path, resolved_auth_type)
+            return env_path
+
+        resolved_auth_type = profile_auth_type or runtime_profile_auth_type
+        return self._find_active_env_file(resolved_auth_type)
 
     def _env_file_for_profile(self, name: str) -> Path:
         """Get .env file path for a named profile."""
@@ -865,33 +965,75 @@ class BaseConfig:
             )
         return path
 
-    def _find_default_env_file(self) -> Path:
-        """Find the .env file with IS_DEFAULT_PROFILE=1."""
+    def _find_active_env_file(self, profile_auth_type: str | None = None) -> Path:
+        """Find the active .env file for the CLI or the requested auth type."""
         env_files = list_env_files(self._tool_name)
 
         if not env_files:
-            # No env files exist yet — return the path the default profile
+            # No env files exist yet — return the bootstrap profile path
             # WOULD live at, so subsequent _set() writes can create it.
             return env_path_for_profile(self._tool_name, "default")
 
-        defaults = []
-        for f in env_files:
-            if read_is_default_profile(f) is True:
-                defaults.append(f)
+        active_profiles = []
+        for env_file in env_files:
+            if read_profile_active(env_file) is not True:
+                continue
+            if profile_auth_type is not None:
+                if self._profile_auth_type_for_env(env_file) != profile_auth_type:
+                    continue
+            active_profiles.append(env_file)
 
-        if len(defaults) == 1:
-            return defaults[0]
+        if len(active_profiles) == 1:
+            return active_profiles[0]
 
-        if len(defaults) > 1:
-            names = [profile_name_from_path(f) for f in defaults]
+        if len(active_profiles) > 1:
+            names = [profile_name_from_path(env_file) for env_file in active_profiles]
+            if profile_auth_type is not None:
+                raise ConfigError(
+                    f"Multiple active profiles found for auth type '{profile_auth_type}': "
+                    f"{', '.join(names)}. Only one profile of a given auth type may be ACTIVE=true."
+                )
             raise ConfigError(
-                f"Multiple default profiles found: {', '.join(names)}. "
-                "Only one .env file should have IS_DEFAULT_PROFILE=1."
+                "Multiple active profiles found. Resolve the command to a specific auth type "
+                f"or profile. Active profiles: {', '.join(names)}."
+            )
+
+        if profile_auth_type is not None:
+            raise ConfigError(
+                f"No active profile found for auth type '{profile_auth_type}'. "
+                f"Select one with '{self._tool_name} auth profiles select <name>'."
             )
 
         raise ConfigError(
-            "No default profile found. Set IS_DEFAULT_PROFILE=1 in one .env file."
+            "No active profile found. Select a profile with "
+            f"'{self._tool_name} auth profiles select <name>'."
         )
+
+    def _profile_auth_type_for_env(self, env_path: Path) -> str:
+        settings = get_profile_auth_settings(type(self))
+        if settings is None:
+            return implicit_profile_auth_type()
+        auth_type_field, auth_types = settings
+        auth_type = _read_env_values(env_path).get(auth_type_field, "").strip()
+        if not auth_type:
+            raise ConfigError(
+                f"Profile '{profile_name_from_path(env_path)}' is missing {auth_type_field}. "
+                "Recreate the profile with 'auth profiles create'."
+            )
+        if auth_type not in auth_types:
+            raise ConfigError(
+                f"Profile '{profile_name_from_path(env_path)}' has invalid auth type "
+                f"{auth_type!r}. Valid types: {', '.join(sorted(auth_types))}."
+            )
+        return auth_type
+
+    def _validate_profile_auth_type(self, env_path: Path, expected_auth_type: str) -> None:
+        actual_auth_type = self._profile_auth_type_for_env(env_path)
+        if actual_auth_type != expected_auth_type:
+            raise ConfigError(
+                f"Profile '{profile_name_from_path(env_path)}' has auth type "
+                f"'{actual_auth_type}', not '{expected_auth_type}'."
+            )
 
     # ==================== Generic Get/Set/Clear ====================
 

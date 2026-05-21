@@ -1,4 +1,4 @@
-"""Standard profiles Typer app: list, create, set-default, delete, get."""
+"""Standard profiles Typer app: list, create, select, delete, get."""
 
 from typing import Optional, List
 
@@ -6,31 +6,52 @@ import click
 
 import typer
 
+from .config import ConfigError, get_profile_auth_settings, resolve_tool_dir
 from .filters import apply_filters, apply_limit, apply_properties_filter
-from .profiles import list_profiles, create_profile, set_default_profile, delete_profile
+from .profiles import ProfileStore, create_profile, delete_profile, list_profiles, select_profile
 from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command
 
 
-def _get_profile_auth_settings(config) -> Optional[tuple[str, dict[str, list[tuple[str, str, bool]]]]]:
-    """Return profile auth-type metadata declared by the config, if any."""
-    sentinel = object()
-    auth_type_field = getattr(type(config), "PROFILE_AUTH_TYPE_FIELD", sentinel)
-    if auth_type_field is sentinel:
-        auth_type_field = getattr(config, "__dict__", {}).get("PROFILE_AUTH_TYPE_FIELD", sentinel)
-    auth_types = getattr(type(config), "PROFILE_AUTH_TYPES", sentinel)
-    if auth_types is sentinel:
-        auth_types = getattr(config, "__dict__", {}).get("PROFILE_AUTH_TYPES", sentinel)
-    if auth_type_field is sentinel and auth_types is sentinel:
-        return None
-    if auth_type_field is sentinel or auth_types is sentinel:
-        raise ValueError(
-            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
-        )
-    if not auth_type_field or not isinstance(auth_types, dict) or not auth_types:
-        raise ValueError(
-            "Config profile auth types must define PROFILE_AUTH_TYPE_FIELD and non-empty PROFILE_AUTH_TYPES."
-        )
-    return auth_type_field, auth_types
+def _get_config_class(get_config_fn):
+    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
+    config_cls = annotations.get("return")
+    if config_cls is not None:
+        return config_cls
+    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
+    if config_cls is not None:
+        return config_cls
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
+            return value
+    return None
+
+
+def _tool_dir_from_closure(get_config_fn):
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type(None)):
+            continue
+        if hasattr(value, "is_dir") and hasattr(value, "exists"):
+            try:
+                if value.exists():
+                    return value
+            except OSError:
+                continue
+    return None
+
+
+def _get_profile_store(get_config_fn, tool_name: str, probe_config=None) -> ProfileStore:
+    config_cls = _get_config_class(get_config_fn)
+    if config_cls is None and probe_config is not None:
+        config_cls = type(probe_config)
+    profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
+    tool_dir = getattr(probe_config, "tool_dir", None)
+    if tool_dir is None:
+        tool_dir = _tool_dir_from_closure(get_config_fn)
+    if tool_dir is None and config_cls is not None and getattr(config_cls, "DIST_NAME", None):
+        tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
+    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
 
 
 def _parse_auth_params(raw_params: Optional[List[str]]) -> dict[str, str]:
@@ -91,28 +112,34 @@ def _collect_profile_auth_values(prompts, provided_values: dict[str, str]) -> di
     return resolved_values
 
 
-def create_profiles_app(get_config_fn):
+def create_profiles_app(get_config_fn, tool_name: str):
     """Create a standard profiles Typer app for a CLI tool.
 
     Args:
         get_config_fn: Callable that accepts (profile=None) and returns a BaseConfig.
 
     Returns:
-        typer.Typer app with list, get, create, set-default, delete commands.
+        typer.Typer app with list, get, create, select, delete commands.
     """
     app = typer.Typer(help="Manage authentication profiles", no_args_is_help=True)
+    probe_config = None
+    if _get_config_class(get_config_fn) is None:
+        try:
+            probe_config = get_config_fn()
+        except Exception:
+            probe_config = None
+    profile_store = _get_profile_store(get_config_fn, tool_name, probe_config)
 
     @app.command("list")
     @command
     def profiles_list(
         table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
         limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of profiles to return"),
-        filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., is_default:eq:True)"),
+        filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., active:eq:True)"),
         properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
     ):
-        """List all profiles and show which is the default."""
-        config = get_config_fn()
-        profiles = list_profiles(config)
+        """List all profiles and show their auth types and active state."""
+        profiles = list_profiles(profile_store)
 
         if not profiles:
             print_error("No profiles found. Run 'auth profiles create <name>' to create one.")
@@ -131,8 +158,8 @@ def create_profiles_app(get_config_fn):
             else:
                 print_table(
                     profiles,
-                    ["name", "file", "is_default"],
-                    ["Name", "File", "Default"],
+                    ["name", "file", "auth_type", "active"],
+                    ["Name", "File", "Auth Type", "Active"],
                 )
         else:
             print_json(profiles)
@@ -144,8 +171,7 @@ def create_profiles_app(get_config_fn):
         table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     ):
         """Get details for a specific profile."""
-        config = get_config_fn()
-        profiles = list_profiles(config)
+        profiles = list_profiles(profile_store)
 
         match = [p for p in profiles if p.get("name") == name]
         if not match:
@@ -156,8 +182,8 @@ def create_profiles_app(get_config_fn):
         print_output(profile, table)
 
     try:
-        profile_auth_settings = _get_profile_auth_settings(get_config_fn())
-    except Exception as exc:
+        profile_auth_settings = profile_store.get_profile_auth_settings()
+    except ConfigError as exc:
         raise RuntimeError(f"Invalid profile auth configuration: {exc}") from exc
 
     if profile_auth_settings is None:
@@ -167,8 +193,7 @@ def create_profiles_app(get_config_fn):
             name: str = typer.Argument(..., help="Profile name (e.g., staging, production)"),
         ):
             """Create a new profile from .env.example template."""
-            config = get_config_fn()
-            path = create_profile(config, name)
+            path = create_profile(profile_store, name)
             print_success(f"Profile '{name}' created at {path.name}")
             print_info(f"Run 'auth login --profile {name}' to configure credentials.")
     else:
@@ -191,7 +216,6 @@ def create_profiles_app(get_config_fn):
             ),
         ):
             """Create a new profile from .env.example template."""
-            config = get_config_fn()
             prompts = auth_types.get(auth_type)
             if prompts is None:
                 print_error(
@@ -203,7 +227,7 @@ def create_profiles_app(get_config_fn):
                 prompts,
                 _parse_auth_params(auth_param),
             )
-            path = create_profile(config, name)
+            path = create_profile(profile_store, name, auth_type=auth_type)
             profile_config = get_config_fn(profile=name)
             profile_config._set(auth_type_field, auth_type)
             for field_name, value in auth_values.items():
@@ -211,15 +235,14 @@ def create_profiles_app(get_config_fn):
             print_success(f"Profile '{name}' created at {path.name}")
             print_info(f"Run 'auth login --profile {name}' to configure credentials.")
 
-    @app.command("set-default")
+    @app.command("select")
     @command
-    def profiles_set_default(
-        name: str = typer.Argument(..., help="Profile name to set as default"),
+    def profiles_select(
+        name: str = typer.Argument(..., help="Profile name to activate within its auth type"),
     ):
-        """Set a profile as the default (IS_DEFAULT_PROFILE=1)."""
-        config = get_config_fn()
-        set_default_profile(config, name)
-        print_success(f"Profile '{name}' is now the default")
+        """Activate a profile within its auth type."""
+        select_profile(profile_store, name)
+        print_success(f"Profile '{name}' is now active for its auth type")
 
     def _delete_profile(
         name: str = typer.Argument(..., help="Profile name to delete"),
@@ -231,8 +254,7 @@ def create_profiles_app(get_config_fn):
         ):
             raise typer.Exit(0)
 
-        config = get_config_fn()
-        delete_profile(config, name)
+        delete_profile(profile_store, name)
         print_success(f"Profile '{name}' deleted")
 
     app.command("delete")(

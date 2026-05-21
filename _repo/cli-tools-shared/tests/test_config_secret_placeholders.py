@@ -56,7 +56,7 @@ def test_load_resolves_secret_placeholder_for_auth_profile_fields(
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     _write_profile(
         profile,
-        "IS_DEFAULT_PROFILE=1\nCLIENT_ID=secret://exampletool-client-id\nACCESS_TOKEN=\n",
+        "ACTIVE=true\nCLIENT_ID=secret://exampletool-client-id\nACCESS_TOKEN=\n",
     )
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
@@ -90,7 +90,7 @@ def test_load_missing_secret_placeholder_raises_config_error(
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     _write_profile(
         profile,
-        "IS_DEFAULT_PROFILE=1\nAPI_KEY=secret://exampletool-api-key\n",
+        "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n",
     )
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
@@ -116,7 +116,7 @@ def test_load_missing_optional_secret_placeholder_treats_field_as_unconfigured(
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     _write_profile(
         profile,
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "USERNAME=secret://exampletool-username\n"
         "PASSWORD=secret://exampletool-password\n"
         "OPTIONAL_TOKEN=secret://exampletool-optional-token\n",
@@ -161,7 +161,7 @@ def test_empty_sensitive_auth_field_stays_empty_until_set(
 ):
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=\n")
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=\n")
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         raise AssertionError(f"Unexpected command: {command}")
@@ -186,7 +186,7 @@ def test_load_resolves_secret_placeholder_for_root_config_env(
     root_env.parent.mkdir(parents=True, exist_ok=True)
     root_env.write_text("BASE_URL=secret://exampletool-base-url\n")
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=\n")
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=\n")
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         assert command == "get"
@@ -219,7 +219,7 @@ def test_load_missing_root_config_secret_raises_config_error_with_env_path(
     root_env.parent.mkdir(parents=True, exist_ok=True)
     root_env.write_text("BASE_URL=secret://exampletool-base-url\n")
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=\n")
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=\n")
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         assert command == "get"
@@ -245,7 +245,7 @@ def test_set_sensitive_field_preserves_existing_placeholder_and_updates_secret(
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     _write_profile(
         profile,
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "USERNAME=secret://exampletool-username\n"
         "PASSWORD=secret://saved-password\n",
     )
@@ -276,7 +276,7 @@ def test_set_sensitive_field_preserves_existing_placeholder_and_updates_secret(
 
 
 @pytest.mark.parametrize(
-    ("profile_name", "is_default", "expected_secret_name"),
+    ("profile_name", "active", "expected_secret_name"),
     [
         ("default", True, "exampletool-api-key"),
         ("staging", False, "exampletool-staging-api-key"),
@@ -287,14 +287,14 @@ def test_set_sensitive_field_uses_deterministic_secret_names(
     monkeypatch,
     isolated_data_home,
     profile_name,
-    is_default,
+    active,
     expected_secret_name,
 ):
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / profile_name / ".env"
     _write_profile(
         profile,
-        f"IS_DEFAULT_PROFILE={1 if is_default else 0}\nAPI_KEY=\n",
+        f"ACTIVE={'true' if active else 'false'}\nAPI_KEY=\n",
     )
     calls = []
 
@@ -328,7 +328,7 @@ def test_set_non_sensitive_auth_field_keeps_plaintext_in_profile_env(
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     _write_profile(
         profile,
-        "IS_DEFAULT_PROFILE=1\nCLIENT_ID=old-client\nCLIENT_SECRET=\nACCESS_TOKEN=\n",
+        "ACTIVE=true\nCLIENT_ID=old-client\nCLIENT_SECRET=\nACCESS_TOKEN=\n",
     )
     calls = []
 
@@ -354,7 +354,7 @@ def test_clear_sensitive_field_deletes_secret_store_entry(
 ):
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, "IS_DEFAULT_PROFILE=1\nAPI_KEY=secret://exampletool-api-key\n")
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n")
     calls = []
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):

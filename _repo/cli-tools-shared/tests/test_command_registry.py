@@ -7,12 +7,20 @@ offline snapshot checks have been removed. CLIs that need a stricter live
 check perform it at the point of use, not in the gate.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
+from typer.testing import CliRunner
 
-from cli_tools_shared.command_registry import _check_credentials
+from cli_tools_shared.command_registry import (
+    _check_credentials,
+    _resolve_runtime_profile_context,
+    register_commands,
+)
+from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
+from cli_tools_shared.credentials import CredentialType
 
 
 def _config_with_session(has_session: bool) -> MagicMock:
@@ -103,3 +111,144 @@ def test_browser_session_gate_does_not_consider_browser_class_attributes():
     # because ``has_saved_session()`` is False. The hooks have no effect.
     with pytest.raises(typer.Exit):
         _check_credentials(config, ["browser_session"], "tool")
+
+
+class MultiProfileConfig(BaseConfig):
+    CREDENTIAL_TYPES = [CredentialType.API_KEY, CredentialType.BROWSER_SESSION]
+    PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"
+    PROFILE_AUTH_TYPES = {
+        "api_key": [],
+        "browser_session": [],
+    }
+
+
+def _write_profile(path, *, auth_type: str, active: bool = True):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"ACTIVE={'true' if active else 'false'}\nAUTH_TYPE={auth_type}\n"
+    )
+
+
+def _multi_profile_get_config() -> MultiProfileConfig:
+    raise AssertionError("profile context resolution must not instantiate config")
+
+
+def test_command_profile_auth_type_comes_from_command_credentials(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    profiles_base = get_profiles_base_dir("tool")
+    _write_profile(profiles_base / "api" / ".env", auth_type="api_key")
+    _write_profile(
+        profiles_base / "browser" / ".env",
+        auth_type="browser_session",
+    )
+
+    profile_name, profile_auth_type = _resolve_runtime_profile_context(
+        _multi_profile_get_config,
+        "tool",
+        None,
+        ["api_key"],
+    )
+
+    assert profile_name == "api"
+    assert profile_auth_type == "api_key"
+
+
+def test_explicit_profile_must_match_command_profile_auth_type(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    profiles_base = get_profiles_base_dir("tool")
+    _write_profile(profiles_base / "api" / ".env", auth_type="api_key")
+    _write_profile(
+        profiles_base / "browser" / ".env",
+        auth_type="browser_session",
+    )
+
+    with pytest.raises(typer.BadParameter, match="requires auth type 'api_key'"):
+        _resolve_runtime_profile_context(
+            _multi_profile_get_config,
+            "tool",
+            "browser",
+            ["api_key"],
+        )
+
+
+def test_explicit_profile_is_allowed_when_command_auth_type_is_ambiguous(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    profiles_base = get_profiles_base_dir("tool")
+    _write_profile(profiles_base / "api" / ".env", auth_type="api_key")
+    _write_profile(
+        profiles_base / "browser" / ".env",
+        auth_type="browser_session",
+    )
+
+    profile_name, profile_auth_type = _resolve_runtime_profile_context(
+        _multi_profile_get_config,
+        "tool",
+        "browser",
+        ["custom"],
+    )
+
+    assert profile_name == "browser"
+    assert profile_auth_type == "browser_session"
+
+
+def test_multi_profile_auth_type_command_without_mapping_fails_clearly(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    profiles_base = get_profiles_base_dir("tool")
+    _write_profile(profiles_base / "api" / ".env", auth_type="api_key")
+    _write_profile(
+        profiles_base / "browser" / ".env",
+        auth_type="browser_session",
+    )
+
+    with pytest.raises(typer.BadParameter, match="does not identify one profile auth type"):
+        _resolve_runtime_profile_context(
+            _multi_profile_get_config,
+            "tool",
+            None,
+            ["custom"],
+        )
+
+
+def test_registered_command_accepts_profile_option_after_leaf_command():
+    calls = []
+    ran = []
+
+    class SingleProfileConfig:
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+        def _get(self, name):
+            return {"API_KEY": "saved-key"}.get(name)
+
+    def get_config(profile=None) -> SingleProfileConfig:
+        calls.append(profile)
+        return SingleProfileConfig()
+
+    command_app = typer.Typer()
+
+    @command_app.command("list")
+    def list_items(limit: int = typer.Option(1, "--limit", "-l")):
+        ran.append(limit)
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_commands(
+        root,
+        get_config,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"list": ["api_key"]},
+        ),
+        name="items",
+        help="Manage items",
+        cli_name="tool",
+    )
+
+    result = CliRunner().invoke(
+        root,
+        ["items", "list", "--limit", "3", "--profile", "staging"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "ok" in result.output
+    assert calls == ["staging"]
+    assert ran == [3]

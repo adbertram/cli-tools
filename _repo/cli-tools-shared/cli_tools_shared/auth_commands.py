@@ -13,6 +13,7 @@ from .credentials import (
     mask_value,
 )
 from .exceptions import ConfigError
+from .config import BaseConfig, get_profile_auth_settings, resolve_tool_dir
 from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command
 
 logger = get_debug_logger("cli_tools.auth_commands")
@@ -146,7 +147,7 @@ def _mask_saved_fields(config, cred_type) -> dict:
     return masked
 
 
-def _resolve_profile_names(get_config_fn, requested_profile: Optional[str]) -> list:
+def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool_name: str) -> list:
     """Return the list of profile names to check.
 
     If a specific profile is requested, returns just that one. Otherwise
@@ -158,11 +159,72 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str]) -> l
 
     from .profiles import list_profiles
 
-    probe_config = get_config_fn()
-    profile_entries = list_profiles(probe_config)
+    config_cls = _get_config_class(get_config_fn)
+    profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
+    profile_entries = [entry for entry in list_profiles(profile_store) if entry.get("active") is True]
     if not profile_entries:
         return [None]
     return [entry["name"] for entry in profile_entries]
+
+
+def _get_config_class(get_config_fn):
+    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
+    config_cls = annotations.get("return")
+    if config_cls is not None:
+        return config_cls
+    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
+    if config_cls is not None:
+        return config_cls
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
+            return value
+    return None
+
+
+def _tool_dir_from_closure(get_config_fn):
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type(None)):
+            continue
+        if hasattr(value, "is_dir") and hasattr(value, "exists"):
+            try:
+                if value.exists():
+                    return value
+            except OSError:
+                continue
+    return None
+
+
+def _get_profile_store_for_auth(get_config_fn, config_cls, tool_name: str):
+    from .profiles import ProfileStore
+    probe_config = None
+
+    profile_auth_settings = None
+    tool_dir = _tool_dir_from_closure(get_config_fn)
+    if config_cls is not None:
+        profile_auth_settings = get_profile_auth_settings(config_cls)
+        if tool_dir is None and getattr(config_cls, "DIST_NAME", None):
+            tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
+
+    if config_cls is None or tool_dir is None:
+        try:
+            probe_config = get_config_fn()
+        except Exception:
+            probe_config = None
+
+    if config_cls is None and probe_config is not None:
+        config_cls = type(probe_config)
+        profile_auth_settings = get_profile_auth_settings(config_cls)
+
+    if tool_dir is None:
+        tool_dir = getattr(probe_config, "tool_dir", None)
+    if tool_dir is None:
+        tool_dir = _tool_dir_from_closure(get_config_fn)
+    if config_cls is not None:
+        if tool_dir is None and getattr(config_cls, "DIST_NAME", None):
+            tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
+    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
 
 
 def _collect_profile_statuses(
@@ -175,19 +237,18 @@ def _collect_profile_statuses(
     """Run AuthVerifier for each target profile and build the response dict.
 
     Always returns {"profiles": [...]}. Each profile entry contains
-    `name`, `is_default`, `authenticated`, and `credential_types`. When
+    `name`, `auth_type`, `active`, `authenticated`, and `credential_types`. When
     `verbose` is True, `base_url` is added to every profile entry.
     """
     from .profiles import list_profiles
 
-    profile_names = _resolve_profile_names(get_config_fn, profile)
+    profile_names = _resolve_profile_names(get_config_fn, profile, tool_name)
 
-    # Build is_default lookup once from the filesystem (requested profile
-    # may or may not be the default; list_profiles gives us authoritative data)
-    probe_config = get_config_fn()
-    default_map = {
-        entry["name"]: entry["is_default"]
-        for entry in list_profiles(probe_config)
+    config_cls = _get_config_class(get_config_fn)
+    profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
+    profile_map = {
+        entry["name"]: entry
+        for entry in list_profiles(profile_store)
     }
 
     profile_entries = []
@@ -199,7 +260,8 @@ def _collect_profile_statuses(
         active_name = config.get_active_profile_name()
         entry = {
             "name": active_name,
-            "is_default": bool(default_map.get(active_name, False)),
+            "auth_type": profile_map.get(active_name, {}).get("auth_type"),
+            "active": bool(profile_map.get(active_name, {}).get("active", False)),
             "authenticated": result["authenticated"],
             "credential_types": result["credential_types"],
         }
@@ -232,7 +294,7 @@ def _collect_profile_statuses(
     return {"profiles": profile_entries}
 
 
-def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str]) -> Optional[str]:
+def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str], tool_name: str) -> Optional[str]:
     """Ensure a profile exists for ``auth login`` to write credentials into.
 
     On a fresh install no ``.env`` files exist yet, so ``auth login`` would
@@ -243,10 +305,9 @@ def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str
 
     Behavior:
       * If ``requested_profile`` is ``None`` AND no profile env files exist
-        for the tool, create a ``default`` profile and mark it as default.
+        for the tool, create a ``default`` profile.
       * If ``requested_profile`` is set and its env file does not exist,
-        create that profile. Mark it as default only when no other default
-        profile is already registered.
+        create that profile.
       * If the relevant profile already exists, do nothing.
 
     Returns the effective profile name to use for subsequent
@@ -254,30 +315,49 @@ def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str
     ``"default"`` after bootstrapping). Raises on creation failure — no
     silent suppression.
     """
-    from .profiles import create_profile, set_default_profile, list_profiles
+    from .profiles import create_profile, list_profiles
 
-    probe_config = get_config_fn(profile=None)
-    existing = list_profiles(probe_config)
+    config_cls = _get_config_class(get_config_fn)
+    profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
+    existing = list_profiles(profile_store)
     existing_names = {entry["name"] for entry in existing}
-    has_default = any(entry["is_default"] for entry in existing)
 
     if requested_profile is None:
         if existing:
             return None
         target_name = "default"
-        make_default = True
     else:
         if requested_profile in existing_names:
             return requested_profile
         target_name = requested_profile
-        make_default = not has_default
 
-    create_profile(probe_config, target_name)
-    if make_default:
-        set_default_profile(probe_config, target_name)
+    create_profile(profile_store, target_name)
     print_info(f"Created profile '{target_name}'")
 
     return target_name if requested_profile else None
+
+
+def _require_profile_for_multi_auth_login(
+    get_config_fn,
+    requested_profile: Optional[str],
+    tool_name: str,
+) -> None:
+    if requested_profile:
+        return
+    config_cls = _get_config_class(get_config_fn)
+    profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
+    if profile_auth_settings is None:
+        return
+    _auth_type_field, auth_types = profile_auth_settings
+    if len(auth_types) < 2:
+        return
+    valid_types = ", ".join(sorted(auth_types))
+    print_error(
+        f"{tool_name} auth login requires --profile because this CLI has "
+        f"multiple profile auth types: {valid_types}. Create or select the "
+        "target profile first, then run auth login --profile <name>."
+    )
+    raise typer.Exit(1)
 
 
 def _resolve_credential_type(config, credential_type_str: str):
@@ -332,11 +412,20 @@ def create_auth_app(
         + profiles, + test if test_handler provided).
     """
     app = typer.Typer(help=f"Manage {tool_name} authentication", no_args_is_help=True)
-    try:
-        probe_config = get_config_fn()
-    except Exception:
-        probe_config = None
-    configured_credential_types = list(getattr(probe_config, "CREDENTIAL_TYPES", []) or [])
+    config_cls = _get_config_class(get_config_fn)
+    probe_config = None
+    if config_cls is None:
+        try:
+            probe_config = get_config_fn()
+        except Exception:
+            probe_config = None
+    if config_cls is None and probe_config is not None:
+        config_cls = type(probe_config)
+    configured_credential_types = list(
+        getattr(config_cls, "CREDENTIAL_TYPES", None)
+        or getattr(probe_config, "CREDENTIAL_TYPES", [])
+        or []
+    )
     has_browser_auth = CredentialType.BROWSER_SESSION in configured_credential_types
     allow_credential_type_selection = len(configured_credential_types) > 1
     credential_type_examples = ", ".join(f"'{ct.value}'" for ct in configured_credential_types)
@@ -372,8 +461,7 @@ def create_auth_app(
     effective_test_handler = test_handler
     if effective_test_handler is None:
         try:
-            from .config import BaseConfig
-            if probe_config is not None and type(probe_config).test_connection is not BaseConfig.test_connection:
+            if config_cls is not None and config_cls.test_connection is not BaseConfig.test_connection:
                 def _auto_test_handler(config):
                     result = config.test_connection()
                     if result is not None:
@@ -394,11 +482,12 @@ def create_auth_app(
         force: bool,
         credential_type: Optional[str] = None,
     ):
+        _require_profile_for_multi_auth_login(get_config_fn, profile, tool_name)
         # Auto-create a profile when none exists yet (or the requested one
         # is missing) so credentials saved during this login flow land in a
         # registered profile that ``auth profiles list`` / ``auth status``
         # can discover.
-        effective_profile = _bootstrap_profile_if_missing(get_config_fn, profile)
+        effective_profile = _bootstrap_profile_if_missing(get_config_fn, profile, tool_name)
         config = get_config_fn(profile=effective_profile)
 
         # Resolve scoped credential type if specified
@@ -493,14 +582,14 @@ def create_auth_app(
             None, "--profile", "-p", help="Profile name to clear credentials from"
         ),
     ):
-        config = get_config_fn(profile=profile)
-        config.clear_credentials()
-        # Close any running browser daemon first, then delete the profile's
-        # persisted browser-data directly from the config-owned data dir.
-        browser = config.get_browser()
-        if browser is not None:
-            browser.close()
-        config.clear_session()
+        target_profiles = _resolve_profile_names(get_config_fn, profile, tool_name)
+        for profile_name in target_profiles:
+            config = get_config_fn(profile=profile_name)
+            config.clear_credentials()
+            browser = config.get_browser()
+            if browser is not None:
+                browser.close()
+            config.clear_session()
         print_success("Credentials cleared")
 
     @app.command("status", help=status_help)
@@ -523,7 +612,7 @@ def create_auth_app(
 
     # Add refresh command only if config has OAuth token URL
     # We check lazily via a probe config to avoid requiring profile at import time
-    if probe_config is not None and probe_config.OAUTH_TOKEN_URL:
+    if config_cls is not None and getattr(config_cls, "OAUTH_TOKEN_URL", ""):
         @app.command("refresh")
         @command
         def auth_refresh(
@@ -565,7 +654,7 @@ def create_auth_app(
     if include_profiles:
         if profiles_app is None:
             from .profiles_commands import create_profiles_app
-            profiles_app = create_profiles_app(get_config_fn)
+            profiles_app = create_profiles_app(get_config_fn, tool_name)
         app.add_typer(profiles_app, name="profiles", help="Manage authentication profiles")
 
     return app

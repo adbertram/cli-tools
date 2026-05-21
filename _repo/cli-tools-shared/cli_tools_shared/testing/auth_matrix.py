@@ -8,7 +8,7 @@ from typing import Iterable
 @dataclass(frozen=True)
 class AuthProfileSeed:
     name: str
-    is_default: bool
+    active: bool
     env_body: str = ""
     browser_session: bool = False
 
@@ -26,7 +26,7 @@ def seed_auth_profile(
     base_profiles_dir: Path,
     name: str,
     *,
-    is_default: bool,
+    active: bool,
     env_body: str = "",
     browser_session: bool = False,
 ) -> AuthProfilePaths:
@@ -38,7 +38,7 @@ def seed_auth_profile(
     cookies_file = persistent_profile_dir / "Default" / "Cookies"
 
     profile_dir.mkdir(parents=True, exist_ok=True)
-    env_file.write_text(_profile_env(is_default=is_default, env_body=env_body))
+    env_file.write_text(_profile_env(active=active, env_body=env_body))
     if browser_session:
         cookies_file.parent.mkdir(parents=True, exist_ok=True)
         cookies_file.write_text("sqlite-stub")
@@ -61,7 +61,7 @@ def seed_auth_profiles(
         seed_auth_profile(
             base_profiles_dir,
             profile.name,
-            is_default=profile.is_default,
+            active=profile.active,
             env_body=profile.env_body,
             browser_session=profile.browser_session,
         )
@@ -69,9 +69,9 @@ def seed_auth_profiles(
     ]
 
 
-def _profile_env(*, is_default: bool, env_body: str) -> str:
-    default_value = "1" if is_default else "0"
+def _profile_env(*, active: bool, env_body: str) -> str:
+    active_value = "true" if active else "false"
     body = env_body
     if body and not body.endswith("\n"):
         body = f"{body}\n"
-    return f"IS_DEFAULT_PROFILE={default_value}\n{body}"
+    return f"ACTIVE={active_value}\n{body}"

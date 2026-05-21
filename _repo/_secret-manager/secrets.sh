@@ -55,7 +55,7 @@ usage() {
 secrets.sh - CLI tools secret store (macOS Keychain)
 
 Usage:
-  secrets.sh [--remote-host <host>] <command> [args]
+  secrets.sh [--remote-host <host>] [--remote-unlock-secret <name>] <command> [args]
 
 Commands:
   set <name> [value]   Store secret. Value from arg, $SECRET_VALUE, or stdin.
@@ -68,6 +68,12 @@ Options:
   --remote-host <host> Run the command on the remote host over SSH.
                        If the remote keychain must be unlocked, re-run from an
                        interactive terminal so the remote session has a TTY.
+  --remote-unlock-secret <name>
+                       Local secret-manager entry containing the remote
+                       keychain password. With --remote-host, the password is
+                       copied to a private remote temp file and used to unlock
+                       the remote keychain in the same SSH command before the
+                       requested secret operation runs.
 
 Service namespace: cli-tools
 EOF
@@ -112,24 +118,30 @@ run_security() {
     stderr_file="$(mktemp "${TMPDIR:-/tmp}/cli-tools-secrets.stderr.XXXXXX")"
 
     if "$@" >"$stdout_file" 2>"$stderr_file"; then
-        cat "$stdout_file"
-        rm -f "$stdout_file" "$stderr_file"
-        return 0
+        status=0
     else
         status=$?
     fi
 
-    if [[ "$REMOTE_CONTEXT" == "1" ]] && grep -Fq "User interaction is not allowed." "$stderr_file"; then
+    if [[ -s "$stderr_file" && "$REMOTE_CONTEXT" == "1" ]] && grep -Fq "User interaction is not allowed." "$stderr_file"; then
         unlock_keychain_for_remote_host
         : >"$stdout_file"
         : >"$stderr_file"
         if "$@" >"$stdout_file" 2>"$stderr_file"; then
-            cat "$stdout_file"
-            rm -f "$stdout_file" "$stderr_file"
-            return 0
+            status=0
         else
             status=$?
         fi
+    fi
+
+    if [[ "$status" -eq 0 && -s "$stderr_file" ]]; then
+        status=1
+    fi
+
+    if [[ "$status" -eq 0 ]]; then
+        cat "$stdout_file"
+        rm -f "$stdout_file" "$stderr_file"
+        return 0
     fi
 
     cat "$stderr_file" >&2
@@ -233,13 +245,16 @@ cleanup_remote_dir() {
 
 dispatch_remote() {
     local host="$1"
-    shift
+    local remote_unlock_secret="$2"
+    shift 2
 
     local sub="${1:-}"
     local remote_dir=""
     local remote_script=""
     local remote_payload_file=""
+    local remote_unlock_file=""
     local local_payload_file=""
+    local local_unlock_file=""
     local create_dir_command='mktemp -d "${TMPDIR:-/tmp}/cli-tools-secrets.XXXXXX"'
     local remote_command=""
     local ssh_command_flags=()
@@ -254,22 +269,45 @@ dispatch_remote() {
         remote_args=("set" "$name")
     fi
 
+    if [[ -n "$remote_unlock_secret" ]]; then
+        local keychain_password
+        keychain_password="$(cmd_get "$remote_unlock_secret")"
+        local_unlock_file="$(mktemp "${TMPDIR:-/tmp}/cli-tools-secrets.unlock.XXXXXX")"
+        chmod 600 "$local_unlock_file"
+        printf '%s' "$keychain_password" >"$local_unlock_file"
+        unset keychain_password
+    fi
+
     log_info "dispatching command to remote host=$host command=${sub:-help}"
     if ! remote_dir="$(ssh "$host" "bash -lc $(shell_quote "$create_dir_command")")"; then
         rm -f "$local_payload_file"
+        rm -f "$local_unlock_file"
         die "failed to create remote temp directory on $host"
     fi
     remote_dir="${remote_dir%$'\n'}"
     if [[ -z "$remote_dir" ]]; then
         rm -f "$local_payload_file"
+        rm -f "$local_unlock_file"
         die "remote host $host did not return a temp directory"
     fi
     remote_script="${remote_dir}/secrets.sh"
 
     if ! scp -q "$0" "$host:$remote_script"; then
         rm -f "$local_payload_file"
+        rm -f "$local_unlock_file"
         cleanup_remote_dir "$host" "$remote_dir"
         die "failed to copy secrets.sh to remote host $host"
+    fi
+
+    if [[ -n "$remote_unlock_secret" ]]; then
+        remote_unlock_file="${remote_dir}/keychain-password"
+        if ! scp -q "$local_unlock_file" "$host:$remote_unlock_file"; then
+            rm -f "$local_payload_file" "$local_unlock_file"
+            cleanup_remote_dir "$host" "$remote_dir"
+            die "failed to copy keychain password to remote host $host"
+        fi
+        rm -f "$local_unlock_file"
+        local_unlock_file=""
     fi
 
     if [[ "$sub" == "set" ]]; then
@@ -286,6 +324,13 @@ dispatch_remote() {
     remote_command="set -euo pipefail; "
     remote_command+="cleanup(){ rm -rf -- $(shell_quote "$remote_dir"); }; trap cleanup EXIT; "
     remote_command+="chmod 700 $(shell_quote "$remote_script"); "
+    if [[ -n "$remote_unlock_secret" ]]; then
+        remote_command+="chmod 600 $(shell_quote "$remote_unlock_file"); "
+        remote_command+="keychain_password=\"\$(cat $(shell_quote "$remote_unlock_file"))\"; "
+        remote_command+="security unlock-keychain -p \"\$keychain_password\" "
+        remote_command+="$(shell_quote "$KEYCHAIN") >/dev/null; "
+        remote_command+="unset keychain_password; "
+    fi
     if [[ "$sub" == "set" ]]; then
         remote_command+="chmod 600 $(shell_quote "$remote_payload_file"); "
     fi
@@ -321,6 +366,7 @@ dispatch_remote() {
 
 main() {
     local remote_host=""
+    local remote_unlock_secret=""
     local argv=()
 
     while [[ $# -gt 0 ]]; do
@@ -328,6 +374,11 @@ main() {
             --remote-host)
                 [[ $# -ge 2 ]] || die "--remote-host requires <host>"
                 remote_host="$2"
+                shift 2
+                ;;
+            --remote-unlock-secret)
+                [[ $# -ge 2 ]] || die "--remote-unlock-secret requires <name>"
+                remote_unlock_secret="$2"
                 shift 2
                 ;;
             -h|--help|help)
@@ -359,8 +410,12 @@ main() {
 
     log_info "starting $(basename "$0") command=${sub:-help} service=$SERVICE remote_host=${remote_host:-local}"
 
+    if [[ -n "$remote_unlock_secret" && -z "$remote_host" ]]; then
+        die "--remote-unlock-secret requires --remote-host"
+    fi
+
     if [[ -n "$remote_host" && "$REMOTE_CONTEXT" != "1" && "$sub" != "" && "$sub" != "-h" && "$sub" != "--help" && "$sub" != "help" ]]; then
-        if dispatch_remote "$remote_host" "$@"; then
+        if dispatch_remote "$remote_host" "$remote_unlock_secret" "$@"; then
             status=0
         else
             status=$?

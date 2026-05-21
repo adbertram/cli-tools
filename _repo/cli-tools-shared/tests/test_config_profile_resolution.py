@@ -10,7 +10,7 @@ from cli_tools_shared.profiles import (
     create_profile,
     delete_profile,
     list_profiles,
-    set_default_profile,
+    select_profile,
 )
 
 
@@ -20,12 +20,12 @@ class CustomConfig(BaseConfig):
     CUSTOM_ALL_FIELDS = ["API_URL"]
 
 
-def _write_profile(path: Path, *, is_default: bool, api_url: str) -> None:
+def _write_profile(path: Path, *, active: bool, api_url: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(
             [
-                f"IS_DEFAULT_PROFILE={1 if is_default else 0}",
+                f"ACTIVE={'true' if active else 'false'}",
                 f"API_URL={api_url}",
             ]
         )
@@ -76,14 +76,14 @@ def _fake_secret_manager(initial: dict[str, str] | None = None):
     return fake_run, secrets
 
 
-def test_config_uses_active_profile_marked_default(tmp_path, monkeypatch, isolated_data_home):
+def test_config_uses_active_profile_marker(tmp_path, monkeypatch, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     profiles_base = get_profiles_base_dir(tool_dir.name)
     active = profiles_base / "active" / ".env"
     other = profiles_base / "env_override" / ".env"
 
-    _write_profile(active, is_default=True, api_url="https://active.example.com")
-    _write_profile(other, is_default=False, api_url="https://env.example.com")
+    _write_profile(active, active=True, api_url="https://active.example.com")
+    _write_profile(other, active=False, api_url="https://env.example.com")
     monkeypatch.setenv("CLI_TOOLS_PROFILE", "env_override")
 
     config = CustomConfig(tool_dir=tool_dir)
@@ -98,8 +98,8 @@ def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch, isolated
     active = profiles_base / "active" / ".env"
     explicit = profiles_base / "explicit" / ".env"
 
-    _write_profile(active, is_default=True, api_url="https://active.example.com")
-    _write_profile(explicit, is_default=False, api_url="https://explicit.example.com")
+    _write_profile(active, active=True, api_url="https://active.example.com")
+    _write_profile(explicit, active=False, api_url="https://explicit.example.com")
     monkeypatch.setenv("CLI_TOOLS_PROFILE", "active")
 
     config = CustomConfig(tool_dir=tool_dir, profile="explicit")
@@ -116,7 +116,7 @@ def test_save_tokens_clears_refresh_token_when_missing(tmp_path, isolated_data_h
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "ACCESS_TOKEN=\n"
         "REFRESH_TOKEN='secret://exampletool-refresh-token'\n"
         "TOKEN_EXPIRES_AT=1\n"
@@ -154,7 +154,7 @@ def test_static_oauth_missing_credentials_include_refresh_token(tmp_path, isolat
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=\n"
         "CLIENT_SECRET=\n"
         "ACCESS_TOKEN=\n"
@@ -186,7 +186,7 @@ def test_static_oauth_has_credentials_requires_refresh_token(tmp_path, isolated_
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=client-id\n"
         "CLIENT_SECRET=secret://exampletool-client-secret\n"
         "ACCESS_TOKEN=secret://exampletool-access-token\n"
@@ -213,7 +213,7 @@ def test_static_oauth_has_credentials_requires_refresh_token(tmp_path, isolated_
 def test_source_env_file_raises_clear_cutover_error(tmp_path, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     legacy = tool_dir / ".env"
-    legacy.write_text("IS_DEFAULT_PROFILE=1\nAPI_URL=https://legacy.example.com\n")
+    legacy.write_text("ACTIVE=true\nAPI_URL=https://legacy.example.com\n")
 
     with pytest.raises(ConfigError, match="Unsupported legacy profile layout detected"):
         CustomConfig(tool_dir=tool_dir)
@@ -227,7 +227,7 @@ def test_source_authentication_profiles_dir_raises_clear_cutover_error(tmp_path,
     cookies.write_text("")
 
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=True, api_url="https://canonical.example.com")
+    _write_profile(profile, active=True, api_url="https://canonical.example.com")
 
     with pytest.raises(ConfigError, match="Unsupported legacy profile layout detected"):
         CustomConfig(tool_dir=tool_dir)
@@ -242,19 +242,19 @@ def test_legacy_user_data_profiles_dir_raises_clear_cutover_error(tmp_path, isol
     cookies.write_text("")
 
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=True, api_url="https://canonical.example.com")
+    _write_profile(profile, active=True, api_url="https://canonical.example.com")
 
     with pytest.raises(ConfigError, match="Unsupported legacy profile layout detected"):
         CustomConfig(tool_dir=tool_dir)
     assert cookies.exists()
 
 
-def test_no_default_marker_raises_instead_of_falling_back_to_default_profile(tmp_path, isolated_data_home):
+def test_no_active_marker_raises_instead_of_falling_back_to_default_profile(tmp_path, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=False, api_url="https://default.example.com")
+    _write_profile(profile, active=False, api_url="https://default.example.com")
 
-    with pytest.raises(ConfigError, match="No default profile found"):
+    with pytest.raises(ConfigError, match="No active profile found"):
         CustomConfig(tool_dir=tool_dir)
 
 
@@ -263,7 +263,7 @@ def test_profile_env_with_tool_config_field_raises(tmp_path, isolated_data_home)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "API_URL=https://auth.example.com\n"
         "BASE_URL=https://config.example.com\n"
     )
@@ -280,7 +280,7 @@ def test_sensitive_profile_value_must_be_secret_placeholder(tmp_path, isolated_d
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=client-id\n"
         "CLIENT_SECRET=raw-secret\n"
         "ACCESS_TOKEN=\n"
@@ -298,10 +298,10 @@ def test_profile_crud_uses_canonical_layout_for_tool_dir_callers(tmp_path, isola
 
     staging = create_profile(tool_dir, "staging")
     default = create_profile(tool_dir, "default")
-    set_default_profile(tool_dir, "default")
+    select_profile(tool_dir, "default")
 
     assert staging == get_profiles_base_dir(tool_dir.name) / "staging" / ".env"
-    assert "IS_DEFAULT_PROFILE=0" in staging.read_text()
+    assert "ACTIVE=false" in staging.read_text()
     assert "BASE_URL" not in staging.read_text()
 
     root_env = get_profiles_base_dir(tool_dir.name).parent / ".env"
@@ -309,8 +309,8 @@ def test_profile_crud_uses_canonical_layout_for_tool_dir_callers(tmp_path, isola
 
     profiles = list_profiles(tool_dir)
     assert profiles == [
-        {"name": "default", "file": ".env", "is_default": True},
-        {"name": "staging", "file": ".env", "is_default": False},
+        {"name": "default", "file": ".env", "auth_type": "default", "active": True},
+        {"name": "staging", "file": ".env", "auth_type": "default", "active": False},
     ]
 
     delete_profile(tool_dir, "staging")
@@ -330,7 +330,7 @@ def test_profile_crud_uses_canonical_layout_for_tool_dir_callers(tmp_path, isola
 def test_get_persistent_profile_dir_resolves_under_browser_data_dir(tmp_path, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=True, api_url="https://x")
+    _write_profile(profile, active=True, api_url="https://x")
 
     config = CustomConfig(tool_dir=tool_dir)
 
@@ -347,7 +347,7 @@ def test_has_saved_session_requires_chromium_profile_default_cookies(tmp_path, i
     """
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=True, api_url="https://x")
+    _write_profile(profile, active=True, api_url="https://x")
 
     config = CustomConfig(tool_dir=tool_dir)
 
@@ -369,12 +369,12 @@ def test_clear_session_removes_browser_data_without_deleting_profile_env(tmp_pat
     """Browser-session force login must not wipe non-browser credentials."""
     tool_dir = _tool_dir(tmp_path)
     profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
-    _write_profile(profile, is_default=True, api_url="https://x")
+    _write_profile(profile, active=True, api_url="https://x")
 
     config = CustomConfig(tool_dir=tool_dir)
     env_file = config.env_file_path
     env_file.write_text(
-        "IS_DEFAULT_PROFILE=1\n"
+        "ACTIVE=true\n"
         "CLIENT_ID=client-id\n"
         "CLIENT_SECRET=secret://exampletool-client-secret\n"
         "ACCESS_TOKEN=secret://exampletool-access-token\n"

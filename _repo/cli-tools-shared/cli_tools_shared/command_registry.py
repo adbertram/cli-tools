@@ -18,19 +18,255 @@ This replaces:
     app.add_typer(accounts.app, name="accounts", help="Manage accounts")
 """
 
-import sys
 import logging
+import functools
+import inspect
 from typing import Callable, Optional
 
 import typer
 
 from .auth_verifier import AuthVerifier
+from .config import (
+    get_profile_auth_settings,
+    implicit_profile_auth_type,
+    reset_runtime_profile_resolution,
+    set_runtime_profile_resolution,
+)
 from .credentials import CredentialType
+from .profiles import ProfileStore, list_profiles
 
 logger = logging.getLogger("cli_tools.command_registry")
 
 # Maps credential type string names (from COMMAND_CREDENTIALS) to CredentialType enum
 _CRED_TYPE_MAP = {ct.value: ct for ct in CredentialType}
+
+
+def _get_config_class(get_config_fn):
+    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
+    config_cls = annotations.get("return")
+    if config_cls is not None:
+        return config_cls
+    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
+    if config_cls is not None:
+        return config_cls
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
+            return value
+    return None
+
+
+def _profile_store_for_command(get_config_fn, config_cls, cli_name: str) -> ProfileStore:
+    tool_name = cli_name.replace("-cli", "")
+    profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
+    tool_dir = None
+    if config_cls is not None and getattr(config_cls, "DIST_NAME", None):
+        from .config import resolve_tool_dir
+
+        tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
+        tool_name = tool_dir.name
+    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
+
+
+def _command_profile_auth_type(
+    profile_auth_settings,
+    cred_type_strings: list[str],
+    *,
+    require_unambiguous: bool = True,
+) -> Optional[str]:
+    if all(type_str == CredentialType.NO_AUTH.value for type_str in cred_type_strings):
+        return None
+
+    if profile_auth_settings is None:
+        return implicit_profile_auth_type()
+
+    _auth_type_field, auth_types = profile_auth_settings
+    matching_auth_types = [
+        type_str for type_str in cred_type_strings if type_str in auth_types
+    ]
+    if len(matching_auth_types) == 1:
+        return matching_auth_types[0]
+    if len(matching_auth_types) > 1:
+        raise typer.BadParameter(
+            "This command declares multiple profile auth types: "
+            f"{', '.join(matching_auth_types)}."
+        )
+    if len(auth_types) == 1:
+        return next(iter(auth_types))
+    if not require_unambiguous:
+        return None
+    raise typer.BadParameter(
+        "This command requires an explicit --profile because its COMMAND_CREDENTIALS "
+        "entry does not identify one profile auth type."
+    )
+
+
+def _active_profile_name_for_auth_type(
+    get_config_fn,
+    config_cls,
+    cli_name: str,
+    profile_auth_type: Optional[str],
+) -> Optional[str]:
+    if profile_auth_type is None:
+        return None
+
+    store = _profile_store_for_command(get_config_fn, config_cls, cli_name)
+    active_profiles = [
+        entry
+        for entry in list_profiles(store)
+        if entry.get("active") is True and entry.get("auth_type") == profile_auth_type
+    ]
+    if len(active_profiles) == 1:
+        return active_profiles[0]["name"]
+    if len(active_profiles) > 1:
+        names = ", ".join(entry["name"] for entry in active_profiles)
+        raise typer.BadParameter(
+            f"Multiple active profiles found for auth type '{profile_auth_type}': {names}."
+        )
+    return None
+
+
+def _resolve_runtime_profile_context(
+    get_config_fn,
+    cli_name: str,
+    explicit_profile: Optional[str],
+    cred_type_strings: list[str],
+) -> tuple[Optional[str], Optional[str]]:
+    config_cls = _get_config_class(get_config_fn)
+    profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
+    if explicit_profile:
+        if profile_auth_settings is None:
+            return explicit_profile, implicit_profile_auth_type()
+        command_auth_type = _command_profile_auth_type(
+            profile_auth_settings,
+            cred_type_strings,
+            require_unambiguous=False,
+        )
+        store = _profile_store_for_command(get_config_fn, config_cls, cli_name)
+        profiles = {entry["name"]: entry for entry in list_profiles(store)}
+        profile_entry = profiles.get(explicit_profile)
+        if profile_entry is None:
+            raise typer.BadParameter(f"Profile '{explicit_profile}' not found.")
+        if command_auth_type is not None and profile_entry["auth_type"] != command_auth_type:
+            raise typer.BadParameter(
+                f"Profile '{explicit_profile}' has auth type '{profile_entry['auth_type']}', "
+                f"but this command requires auth type '{command_auth_type}'."
+            )
+        return explicit_profile, profile_entry["auth_type"]
+
+    command_auth_type = _command_profile_auth_type(
+        profile_auth_settings,
+        cred_type_strings,
+    )
+    profile_name = _active_profile_name_for_auth_type(
+        get_config_fn,
+        config_cls,
+        cli_name,
+        command_auth_type,
+    )
+    return profile_name, command_auth_type
+
+def _profile_parameter() -> inspect.Parameter:
+    return inspect.Parameter(
+        "profile",
+        inspect.Parameter.KEYWORD_ONLY,
+        default=typer.Option(
+            None,
+            "--profile",
+            help="Auth profile name",
+        ),
+    )
+
+
+def _callback_name(callback) -> str:
+    return callback.__name__.replace("_", "-")
+
+
+def _wrap_command_callback(
+    command_info,
+    *,
+    get_config: Callable,
+    cli_name: str,
+    cred_types: list[str],
+) -> None:
+    callback = command_info.callback
+    if callback is None or getattr(callback, "_cli_tools_profile_wrapped", False):
+        return
+
+    signature = inspect.signature(callback)
+    has_profile_param = "profile" in signature.parameters
+    wrapped_signature = signature
+    if not has_profile_param:
+        params = list(signature.parameters.values())
+        insert_at = len(params)
+        for index, parameter in enumerate(params):
+            if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+                insert_at = index
+                break
+        params.insert(insert_at, _profile_parameter())
+        wrapped_signature = signature.replace(parameters=params)
+
+    @functools.wraps(callback)
+    def _wrapped_command(*args, **kwargs):
+        explicit_profile = kwargs.get("profile")
+        if not has_profile_param:
+            kwargs.pop("profile", None)
+
+        profile_name, profile_auth_type = _resolve_runtime_profile_context(
+            get_config,
+            cli_name,
+            explicit_profile,
+            cred_types,
+        )
+        tokens = set_runtime_profile_resolution(
+            profile_name=profile_name,
+            profile_auth_type=profile_auth_type,
+        )
+        try:
+            try:
+                config = get_config(profile=profile_name)
+            except Exception as e:
+                logger.debug("Config initialization failed: %s", e)
+            else:
+                _check_credentials(config, cred_types, cli_name)
+            return callback(*args, **kwargs)
+        finally:
+            reset_runtime_profile_resolution(tokens)
+
+    _wrapped_command.__signature__ = wrapped_signature
+    _wrapped_command._cli_tools_profile_wrapped = True
+    command_info.callback = _wrapped_command
+
+
+def _install_command_wrappers(
+    typer_app: typer.Typer,
+    *,
+    cred_map: dict,
+    get_config: Callable,
+    cli_name: str,
+    inherited_cred_types: Optional[list[str]] = None,
+) -> None:
+    for command_info in typer_app.registered_commands:
+        command_name = command_info.name or _callback_name(command_info.callback)
+        cred_types = cred_map.get(command_name) or inherited_cred_types
+        if cred_types:
+            _wrap_command_callback(
+                command_info,
+                get_config=get_config,
+                cli_name=cli_name,
+                cred_types=cred_types,
+            )
+
+    for group_info in typer_app.registered_groups:
+        group_name = group_info.name
+        group_cred_types = cred_map.get(group_name) or inherited_cred_types
+        _install_command_wrappers(
+            group_info.typer_instance,
+            cred_map=cred_map,
+            get_config=get_config,
+            cli_name=cli_name,
+            inherited_cred_types=group_cred_types,
+        )
 
 
 def _check_credentials(
@@ -156,9 +392,16 @@ def register_commands(
     if original_callback and original_callback.callback:
         original_callback_fn = original_callback.callback
 
+    _install_command_wrappers(
+        sub_app,
+        cred_map=cred_map,
+        get_config=get_config,
+        cli_name=resolved_cli_name,
+    )
+
     @sub_app.callback(invoke_without_command=True)
     def _credential_gate(ctx: typer.Context):
-        """Check credentials before running any command in this group."""
+        """Preserve the command group's no-subcommand help behavior."""
         invoked = ctx.invoked_subcommand
         if invoked is None:
             # No subcommand — show help (default Typer behavior)
@@ -168,24 +411,5 @@ def register_commands(
                 typer.echo(ctx.get_help())
                 raise typer.Exit()
             return
-
-        # Skip credential check when --help is requested on a subcommand
-        if "--help" in sys.argv or "-h" in sys.argv:
-            return
-
-        cred_types = cred_map.get(invoked)
-        if not cred_types:
-            # Command not in credential map — allow through
-            return
-
-        try:
-            config = get_config()
-        except Exception as e:
-            logger.debug("Config initialization failed: %s", e)
-            # Config can't load — credential check can't run, let the command
-            # fail naturally with its own error handling
-            return
-
-        _check_credentials(config, cred_types, resolved_cli_name)
 
     app.add_typer(sub_app, name=name, help=help)
