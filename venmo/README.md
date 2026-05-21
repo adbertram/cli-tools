@@ -39,7 +39,7 @@ _repo/_secret-manager/secrets.sh set venmo-password
 
 Then run the interactive login. Venmo sends a 6-digit OTP via SMS; the CLI prompts
 for it and exchanges it for an access token + device id, both of which are persisted
-to the per-profile `.env` (`~/.local/share/cli-tools/venmo/.profiles/<profile>/.env`):
+to the per-profile `.env` (`~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/.env`):
 
 ```bash
 venmo auth login
@@ -104,7 +104,7 @@ Each profile keeps its own access token, device id, and cache directory.
 ### Cache
 
 The shared `@cached` decorator stores response files under
-`~/.local/share/cli-tools/venmo/.profiles/<profile>/cache/`.
+`~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/cache/`.
 
 ```bash
 venmo cache status
@@ -193,7 +193,7 @@ table. stderr is reserved for status messages.
 
 ## Configuration
 
-Per-profile state lives in `~/.local/share/cli-tools/venmo/.profiles/<profile>/.env`:
+Per-profile state lives in `~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/.env`:
 
 ```bash
 ACCESS_TOKEN=<long-lived Venmo access token>

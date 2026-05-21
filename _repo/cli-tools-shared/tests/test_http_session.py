@@ -198,10 +198,10 @@ def test_http_client_rejects_unsupported_content_encoding():
 
 
 # ---------------------------------------------------------------------------
-# H1 — Live CDP cookie read replaces auth-state.json
+# H1 — Live CDP cookie read uses the persistent Chromium profile
 #
 # After the persistent-profile refactor, ``BrowserAuthState.from_config`` no
-# longer reads ``auth-state.json`` from disk. It fetches cookies live from the
+# longer reads a disk snapshot. It fetches cookies live from the
 # running browser-harness daemon via ``config.get_browser().live_cookies()``.
 # The persistent Chromium profile is the single source of truth.
 # ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ def _cookie(**overrides):
 def test_from_config_reads_live_cookies_from_browser():
     """``BrowserAuthState.from_config`` must delegate to
     ``config.get_browser().live_cookies()`` and wrap the result in cookie
-    entries — no disk read of ``auth-state.json``.
+    entries — no disk snapshot read.
     """
     cookies = [
         _cookie(name="session", value="abc"),
@@ -254,5 +254,4 @@ def test_from_config_raises_when_browser_has_no_session():
 
     with pytest.raises(BrowserAuthStateError, match="No browser session"):
         BrowserAuthState.from_config(config)
-
 

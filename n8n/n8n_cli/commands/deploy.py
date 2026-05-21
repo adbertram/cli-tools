@@ -9,7 +9,12 @@ import time
 from pathlib import Path
 import typer
 
-from cli_tools_shared.config import get_profiles_base_dir
+from cli_tools_shared.config import (
+    config_env_path_for_tool,
+    get_profiles_base_dir,
+    list_env_files,
+    read_is_default_profile,
+)
 
 from ..config import get_config
 from ..parser import parse_cli_tool, ParserError
@@ -49,31 +54,22 @@ def _read_env_file(env_path: Path) -> dict[str, str]:
     return env_vars
 
 
-def _find_default_env_file(tool_dir: Path) -> Path | None:
-    """Find the default .env file for a CLI tool (IS_DEFAULT_PROFILE=1 or bare .env)."""
-    # Check all .env files for IS_DEFAULT_PROFILE=1
-    env_files = []
-    bare = tool_dir / ".env"
-    if bare.exists():
-        env_files.append(bare)
-    for f in sorted(tool_dir.glob(".env.*")):
-        if f.name != ".env.example":
-            env_files.append(f)
+def _find_default_auth_env_file(cli_tool_name: str) -> Path | None:
+    """Find the default auth profile env file for a CLI tool."""
+    env_files = list_env_files(cli_tool_name)
+    for env_file in env_files:
+        if read_is_default_profile(env_file) is True:
+            return env_file
+    return None
 
-    for f in env_files:
-        try:
-            for line in f.read_text().splitlines():
-                if line.strip().startswith("IS_DEFAULT_PROFILE=1"):
-                    return f
-        except OSError:
-            continue
 
-    # Fall back to bare .env
-    if bare.exists():
-        return bare
-
-    # Fall back to first profile file
-    return env_files[0] if env_files else None
+def _read_cli_tool_env_values(cli_tool_name: str) -> dict[str, str]:
+    """Read root config values plus default auth profile values."""
+    env_values = _read_env_file(config_env_path_for_tool(cli_tool_name))
+    auth_env = _find_default_auth_env_file(cli_tool_name)
+    if auth_env:
+        env_values.update(_read_env_file(auth_env))
+    return env_values
 
 
 def _run_local(cmd: list[str], cwd: str = None, timeout: int = 120) -> subprocess.CompletedProcess:
@@ -296,25 +292,47 @@ def deploy_node(
             print_error(f"CLI venv install failed: {result.stderr or result.stdout}")
             raise typer.Exit(1)
 
-        # Copy CLI .env to server so the CLI can authenticate via its profile system
-        tool_dir = Path(config.cli_tools_dir) / cli_tool_name
-        env_file = _find_default_env_file(tool_dir)
-        if env_file:
-            scp_result = copy_file_to_server(str(env_file), f"/tmp/{package_name}.env")
+        # Copy root CLI config .env to server.
+        root_env_file = config_env_path_for_tool(cli_tool_name)
+        server_tool_data_dir = f"$HOME/.local/share/cli-tools/{cli_tool_name}"
+        if root_env_file.exists():
+            scp_result = copy_file_to_server(str(root_env_file), f"/tmp/{package_name}.env")
             if scp_result.returncode == 0:
                 cp_result = run_on_server_raw(
-                    f'cp /tmp/{package_name}.env {installed_cli_dir}/.env && '
-                    f'chmod 600 {installed_cli_dir}/.env && '
+                    f'mkdir -p {server_tool_data_dir} && '
+                    f'cp /tmp/{package_name}.env {server_tool_data_dir}/.env && '
+                    f'chmod 600 {server_tool_data_dir}/.env && '
                     f'rm -f /tmp/{package_name}.env'
                 )
                 if cp_result.returncode == 0:
-                    print_success("CLI .env copied to server")
+                    print_success("CLI root config .env copied to server")
                 else:
-                    print_error(f"Failed to copy .env to CLI dir: {cp_result.stderr}")
+                    print_error(f"Failed to copy root .env to user-data dir: {cp_result.stderr}")
             else:
-                print_error(f"Failed to copy .env: {scp_result.stderr}")
+                print_error(f"Failed to copy root .env: {scp_result.stderr}")
         else:
-            print_info("No CLI .env file found locally, skipping")
+            print_info("No CLI root config .env found locally, skipping")
+
+        # Copy default auth profile .env to server.
+        auth_env_file = _find_default_auth_env_file(cli_tool_name)
+        if auth_env_file:
+            server_auth_dir = f"{server_tool_data_dir}/authentication_profiles/default"
+            scp_result = copy_file_to_server(str(auth_env_file), f"/tmp/{package_name}-auth.env")
+            if scp_result.returncode == 0:
+                cp_result = run_on_server_raw(
+                    f'mkdir -p {server_auth_dir} && '
+                    f'cp /tmp/{package_name}-auth.env {server_auth_dir}/.env && '
+                    f'chmod 600 {server_auth_dir}/.env && '
+                    f'rm -f /tmp/{package_name}-auth.env'
+                )
+                if cp_result.returncode == 0:
+                    print_success("CLI auth profile .env copied to server")
+                else:
+                    print_error(f"Failed to copy auth .env to user-data dir: {cp_result.stderr}")
+            else:
+                print_error(f"Failed to copy auth .env: {scp_result.stderr}")
+        else:
+            print_info("No CLI auth profile .env found locally, skipping")
 
         # Copy browser session data if this CLI uses browser_session credential type
         try:
@@ -322,8 +340,8 @@ def deploy_node(
             if "browser_session" in (metadata_check.credential_types or []):
                 browser_data_dir = get_profiles_base_dir(cli_tool_name) / "default" / "browser-data"
                 if browser_data_dir.is_dir():
-                    # Ensure profiles directory exists on server
-                    profiles_dir = f"{installed_cli_dir}/.profiles/default/browser-data"
+                    # Ensure auth profile browser-data directory exists on server
+                    profiles_dir = f"{server_tool_data_dir}/authentication_profiles/default/browser-data"
                     run_on_server_raw(f"mkdir -p {profiles_dir}")
 
                     # Sync browser data to a temp location, then copy
@@ -390,14 +408,10 @@ def deploy_node(
             raise typer.Exit(1)
 
         if metadata.credentials and metadata.credential_types:
-            # Find the CLI tool's .env file with actual values
-            tool_dir = Path(config.cli_tools_dir) / cli_tool_name
-            env_file = _find_default_env_file(tool_dir)
-            if not env_file:
-                print_error(f"No .env file found in {tool_dir}")
+            env_values = _read_cli_tool_env_values(cli_tool_name)
+            if not env_values:
+                print_error(f"No CLI env values found for {cli_tool_name}")
                 raise typer.Exit(1)
-
-            env_values = _read_env_file(env_file)
 
             try:
                 api = get_n8n_api_client()

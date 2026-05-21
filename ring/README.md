@@ -28,7 +28,7 @@ This CLI does not use Ring Partner API app credentials. It wraps `python-ring-do
 
 The official Ring developer platform is a separate hosted partner integration model with account-linking URLs, token-exchange endpoints, webhooks, and HMAC verification. That model is not wired into this local CLI and does not cover the full control surface this tool currently exposes through `ring-doorbell`.
 
-On first login the SDK exchanges your email + password for an access/refresh token, and Ring sends a 6-digit 2FA code via SMS or email. The CLI prompts for the code interactively. After that, the refresh token in `~/.profiles/<profile>/ring_token.json` keeps the session alive — no further prompts.
+On first login the SDK exchanges your email + password for an access/refresh token, and Ring sends a 6-digit 2FA code via SMS or email. The CLI prompts for the code interactively. After that, the refresh token in `~/authentication_profiles/<profile>/ring_token.json` keeps the session alive — no further prompts.
 
 ```bash
 # First-time login (interactive 2FA prompt)
@@ -186,7 +186,7 @@ ring events list --device "Front Door" --limit 20 > events.json
 
 ## Configuration
 
-`auth login` writes the email and password to `.profiles/<profile>/.env` and persists the OAuth token (with refresh) to `.profiles/<profile>/ring_token.json`. Both files live under the CLI's installed directory; never edit them by hand.
+`auth login` writes the email and password to `authentication_profiles/<profile>/.env` and persists the OAuth token (with refresh) to `authentication_profiles/<profile>/ring_token.json`. Both files live under the CLI's installed directory; never edit them by hand.
 
 This CLI does not read `CLIENT_ID`, `CLIENT_SECRET`, redirect URIs, webhook URIs, or HMAC keys from the Ring developer console.
 

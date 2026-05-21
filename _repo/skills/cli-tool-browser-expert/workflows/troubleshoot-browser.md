@@ -57,7 +57,7 @@ This is the most common issue. The selector is wrong.
 **Debug steps:**
 1. Check if profile.json marker exists:
    ```bash
-   ls ~/.local/share/cli-tools/<cli_name>/.profiles/default/profile.json
+   ls ~/.local/share/cli-tools/<cli_name>/authentication_profiles/default/profile.json
    ```
 
 2. If marker exists but session is expired, the session data is stale:

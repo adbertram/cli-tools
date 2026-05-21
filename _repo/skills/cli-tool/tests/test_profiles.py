@@ -6,7 +6,7 @@ credentials, no auth subcommand) and intentionally have no profile system —
 those CLIs are skipped here.
 
 Profile data (cache, browser-data, auth markers) AND per-profile ``.env``
-files must be stored in ~/.local/share/cli-tools/<name>/.profiles/, NOT
+files must be stored in ~/.local/share/cli-tools/<name>/authentication_profiles/, NOT
 inside the tool directory. The single source of truth for this path is
 ``cli_tools_shared.config.get_profiles_base_dir``.
 """
@@ -21,7 +21,7 @@ from cli_tools_shared.config import get_profiles_base_dir
 def _get_user_data_profiles_dir(cli_name: str) -> Path:
     """Get the expected user-data profiles directory for a CLI tool."""
     base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "cli-tools" / cli_name / ".profiles"
+    return base / "cli-tools" / cli_name / "authentication_profiles"
 
 
 def _skip_if_no_auth(cli_name, test_config):
@@ -43,7 +43,7 @@ def _skip_if_no_auth(cli_name, test_config):
 def test_only_one_default_profile(cli_name, cli_dir, cli_executable, test_config):
     """All auth-capable CLIs: exactly one profile .env has IS_DEFAULT_PROFILE=1.
 
-    Profiles live at ``~/.local/share/cli-tools/<tool>/.profiles/<name>/.env``
+    Profiles live at ``~/.local/share/cli-tools/<tool>/authentication_profiles/<name>/.env``
     (XDG-compliant user data dir). The path is resolved via
     ``cli_tools_shared.config.get_profiles_base_dir`` — the single source of
     truth — so this test never hardcodes the location.
@@ -116,17 +116,17 @@ def test_env_example_has_is_default_profile(cli_name, cli_dir, test_config):
 
 
 def test_profiles_dir_gitignored(cli_name, cli_tools_root):
-    """All CLIs: .profiles/ is ignored by the repo root .gitignore."""
+    """All CLIs: authentication_profiles/ is ignored by the repo root .gitignore."""
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (
         f"Repo root .gitignore not found while checking '{cli_name}'. "
-        f"Fix: Create .gitignore with .profiles/ and .env.* entries."
+        f"Fix: Create .gitignore with authentication_profiles/ and .env.* entries."
     )
 
     content = gitignore.read_text()
-    assert ".profiles/" in content or ".profiles" in content, (
-        f"Repo root .gitignore missing .profiles/ entry for '{cli_name}'. "
-        f"Fix: Add '.profiles/' to .gitignore."
+    assert "authentication_profiles/" in content or "authentication_profiles" in content, (
+        f"Repo root .gitignore missing authentication_profiles/ entry for '{cli_name}'. "
+        f"Fix: Add 'authentication_profiles/' to .gitignore."
     )
 
 
@@ -135,7 +135,7 @@ def test_env_star_gitignored(cli_name, cli_tools_root):
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (
         f"Repo root .gitignore not found while checking '{cli_name}'. "
-        f"Fix: Create .gitignore with .profiles/ and .env.* entries."
+        f"Fix: Create .gitignore with authentication_profiles/ and .env.* entries."
     )
 
     content = gitignore.read_text()
@@ -146,28 +146,28 @@ def test_env_star_gitignored(cli_name, cli_tools_root):
 
 
 def test_no_profiles_in_tool_dir(cli_name, cli_dir):
-    """All CLIs: .profiles/ must NOT exist inside the tool directory.
+    """All CLIs: authentication_profiles/ must NOT exist inside the tool directory.
 
     Profile data (browser sessions, cache, auth state) is machine-specific
-    and must live in ~/.local/share/cli-tools/<name>/.profiles/ instead.
+    and must live in ~/.local/share/cli-tools/<name>/authentication_profiles/ instead.
     If this test fails, the auto-migration hasn't run yet — invoke any
     CLI command (e.g. `<cli> auth status`) to trigger it.
     """
-    old_profiles = cli_dir / ".profiles"
+    old_profiles = cli_dir / "authentication_profiles"
     assert not old_profiles.exists(), (
-        f"'{cli_name}' has .profiles/ inside tool directory ({old_profiles}). "
-        f"Profile data must be in ~/.local/share/cli-tools/{cli_name}/.profiles/. "
+        f"'{cli_name}' has authentication_profiles/ inside tool directory ({old_profiles}). "
+        f"Profile data must be in ~/.local/share/cli-tools/{cli_name}/authentication_profiles/. "
         f"Fix: Run any command (e.g. '{cli_name} auth status') to trigger auto-migration."
     )
 
 
 def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, test_config):
-    """All auth-capable CLIs with profile data: stored in ~/.local/share/cli-tools/<name>/.profiles/.
+    """All auth-capable CLIs with profile data: stored in ~/.local/share/cli-tools/<name>/authentication_profiles/.
 
     Skips if the tool has never created profile data (no profiles anywhere).
     The user-data profiles dir is created by BaseConfig as the parent for
     profile-specific data (browser sessions, cache). The 'default/' subdirectory
-    is only created when profile data is actually written, so an empty .profiles/
+    is only created when profile data is actually written, so an empty authentication_profiles/
     directory is acceptable.
     """
     _skip_if_no_auth(cli_name, test_config)
@@ -175,7 +175,7 @@ def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, tes
     import subprocess
 
     user_data_dir = _get_user_data_profiles_dir(cli_name)
-    old_dir = cli_dir / ".profiles"
+    old_dir = cli_dir / "authentication_profiles"
 
     if not user_data_dir.exists() and not old_dir.exists():
         pytest.skip(f"'{cli_name}' has no profile data yet")

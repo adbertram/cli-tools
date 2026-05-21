@@ -46,7 +46,7 @@ cj <command-group> <action> [arguments] [options]
 
 <configuration>
 Three publisher-account env vars live in the profile env file at
-`~/.local/share/cli-tools/cj/.profiles/<profile>/.env`.  They are
+`~/.local/share/cli-tools/cj/authentication_profiles/<profile>/.env`.  They are
 distinct CJ ids -- conflating them returns HTTP 400 from CJ.
 
 | Env var | Purpose | Required by |
@@ -136,7 +136,7 @@ After every `cj` command, inspect stdout. If it is JSON with `type: "ai_instruct
 
 **Symptom:** `cj auth status` reported `credential_types.browser_session.authenticated: true`. The very next call, `cj relationships apply --dry-run 7453049`, exited 1 with `Authentication required. Missing credentials: - browser_session: browser session expired`. The two surfaces inspected the same on-disk session and produced opposite verdicts.
 
-**Cause:** `auth status` uses `AuthVerifier._check_browser`, which is filesystem-only (`browser.has_session()` — marker + non-empty `auth-state.json`). The command-dispatch credential gate (`cli_tools_shared.command_registry._check_credentials`) for `BROWSER_SESSION` walked a different path: it tried `_check_browser_saved_auth` (which needs `AUTH_STORAGE_KEY` or `AUTH_COOKIE_PATTERNS` declared on the browser subclass), got `None` because the CJ browser declares neither, then fell back to `browser.is_authenticated()` — a **live** navigation to `AUTH_CHECK_URL` that can fail when cookies are stale even while the filesystem session is intact. Two checks of the same thing, two different verdicts.
+**Cause:** `auth status` used `AuthVerifier._check_browser`, which trusted only filesystem session markers. The command-dispatch credential gate (`cli_tools_shared.command_registry._check_credentials`) for `BROWSER_SESSION` walked a different path: it tried `_check_browser_saved_auth` (which needs `AUTH_STORAGE_KEY` or `AUTH_COOKIE_PATTERNS` declared on the browser subclass), got `None` because the CJ browser declares neither, then fell back to `browser.is_authenticated()` — a **live** navigation to `AUTH_CHECK_URL` that can fail when cookies are stale even while the filesystem session is intact. Two checks of the same thing, two different verdicts.
 
 **Fix:** In `cli_tools_shared/command_registry.py::_check_credentials`, when `_check_browser_saved_auth` returns `None` (no `AUTH_STORAGE_KEY` and no `AUTH_COOKIE_PATTERNS`), fall back to `browser.has_session()` — the same filesystem inspection `auth status` uses — instead of `browser.is_authenticated()`. The credential gate and `auth status` now agree on every browser-session CLI by construction. Commands that genuinely need a live check (the real apply path in `cj relationships apply`) still perform `browser.is_authenticated()` themselves at the point of use; the difference is the credential gate no longer rejects dry-runs and reads based on a transient live-navigation failure.
 

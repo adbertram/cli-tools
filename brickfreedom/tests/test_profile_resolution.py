@@ -5,7 +5,7 @@ from brickfreedom_cli.config import get_config
 
 def test_get_config_reads_migrated_default_profile(tmp_path, monkeypatch):
     data_home = tmp_path / "data-home"
-    profile_dir = data_home / "cli-tools" / "brickfreedom" / ".profiles" / "default"
+    profile_dir = data_home / "cli-tools" / "brickfreedom" / "authentication_profiles" / "default"
     profile_dir.mkdir(parents=True)
     env_file = profile_dir / ".env"
     env_file.write_text("IS_DEFAULT_PROFILE=1\nBASE_URL=https://example.com\n")

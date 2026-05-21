@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
+from cli_tools_shared.config import BaseConfig, config_env_path_for_tool, get_profiles_base_dir
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -175,6 +175,29 @@ def test_migrates_default_env_to_user_data_dir(tmp_path, isolated_data_home):
     assert config._get("API_URL") == "https://migrated.example.com"
 
 
+def test_migrates_non_auth_env_values_to_tool_root_config(tmp_path, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path)
+    (tool_dir / ".env").write_text(
+        "IS_DEFAULT_PROFILE=1\n"
+        "API_URL=https://auth.example.com\n"
+        "BASE_URL=https://config.example.com\n"
+        "CACHE_ENABLED=false\n"
+    )
+
+    config = CustomConfig(tool_dir=tool_dir)
+
+    profile_env = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    root_env = config_env_path_for_tool(tool_dir.name)
+    assert profile_env.exists()
+    assert root_env.exists()
+    assert "API_URL=https://auth.example.com" in profile_env.read_text()
+    assert "BASE_URL" not in profile_env.read_text()
+    root_content = root_env.read_text()
+    assert "BASE_URL=https://config.example.com" in root_content
+    assert "CACHE_ENABLED=false" in root_content
+    assert config.base_url == "https://config.example.com"
+
+
 def test_migrates_named_profile_envs(tmp_path, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     (tool_dir / ".env").write_text(
@@ -235,24 +258,25 @@ def test_migration_with_collision_drops_repo_copy(tmp_path, isolated_data_home):
 
 
 # ---------------------------------------------------------------------------
-# Legacy ``tool_dir/.profiles/`` browser-state migration
+# Source-tree ``tool_dir/authentication_profiles/`` browser-state migration
 # ---------------------------------------------------------------------------
 
 
-def test_migrates_legacy_profiles_dir(tmp_path, isolated_data_home):
+def test_migrates_source_authentication_profiles_dir(tmp_path, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
-    legacy = tool_dir / ".profiles" / "default"
-    legacy.mkdir(parents=True)
-    (legacy / "auth-state.json").write_text("{\"cookies\": []}")
+    legacy = tool_dir / "authentication_profiles" / "default"
+    cookies = legacy / "browser-data" / "chromium-profile" / "Default" / "Cookies"
+    cookies.parent.mkdir(parents=True)
+    cookies.write_text("")
 
     (tool_dir / ".env").write_text("IS_DEFAULT_PROFILE=1\nAPI_URL=https://x\n")
 
     CustomConfig(tool_dir=tool_dir)
 
     new_dir = get_profiles_base_dir(tool_dir.name) / "default"
-    assert (new_dir / "auth-state.json").exists()
+    assert (new_dir / "browser-data" / "chromium-profile" / "Default" / "Cookies").exists()
     assert (new_dir / ".env").exists()
-    assert not (tool_dir / ".profiles").exists()
+    assert not (tool_dir / "authentication_profiles").exists()
 
 
 # ---------------------------------------------------------------------------

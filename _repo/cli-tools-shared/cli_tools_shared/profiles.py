@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import Union
 
 from .config import (
+    _merge_config_values,
+    _read_env_values,
+    _split_env_values,
+    _write_env_values,
+    config_env_path_for_tool,
     env_path_for_profile,
     get_profiles_base_dir,
     profile_name_from_path,
@@ -30,8 +35,9 @@ class _ToolDirShim:
 
     Lets ``list_profiles(tool_dir)`` / ``create_profile(tool_dir, ...)`` etc.
     keep working on tools that pass a path instead of a Config. The shim
-    derives ``tool_name`` from the directory name; per-account state lives
-    under ``~/.local/share/cli-tools/<tool_name>/.profiles/``.
+    derives ``tool_name`` from the directory name; authentication profile
+    state lives under
+    ``~/.local/share/cli-tools/<tool_name>/authentication_profiles/``.
     """
 
     def __init__(self, tool_dir: Path):
@@ -97,8 +103,23 @@ def create_profile(config_or_dir, name: str) -> Path:
     tool_dir = getattr(adapter, "tool_dir", None)
     example = (tool_dir / ".env.example") if tool_dir else None
     if example is not None and example.exists():
-        shutil.copy2(example, target)
-        _set_is_default_in_file(target, False)
+        if hasattr(adapter, "_auth_field_names"):
+            auth_values, config_values = _split_env_values(
+                _read_env_values(example),
+                adapter._auth_field_names(),
+                adapter._root_config_field_names(),
+            )
+            auth_values["IS_DEFAULT_PROFILE"] = "0"
+            config_path = getattr(
+                adapter,
+                "config_env_file_path",
+                config_env_path_for_tool(adapter.profile_data_dir_name()),
+            )
+            _merge_config_values(config_path, config_values)
+            _write_env_values(target, auth_values)
+        else:
+            shutil.copy2(example, target)
+            _set_is_default_in_file(target, False)
     else:
         target.write_text("IS_DEFAULT_PROFILE=0\n")
 
@@ -134,24 +155,12 @@ def delete_profile(config_or_dir, name: str):
             "Set another profile as default first with 'auth profiles set-default <name>'."
         )
 
-    # Under the per-profile-dir layout, ``.env`` lives inside the profile
-    # data directory. Removing the data dir removes the .env in one shot.
     scope_name = adapter.profile_data_dir_name()
     profile_data_dir = get_profiles_base_dir(scope_name) / name
     if profile_data_dir.exists():
         shutil.rmtree(profile_data_dir)
     elif target.exists():
-        # Custom layouts (e.g., Copilot) where the env file is not inside
-        # the data dir — fall back to removing just the env file.
         target.unlink()
-
-    # Legacy in-tool-dir data location for older installs that pre-date
-    # the user-data migration.
-    tool_dir = getattr(adapter, "tool_dir", None)
-    if tool_dir:
-        legacy_data_dir = tool_dir / ".profiles" / name
-        if legacy_data_dir.exists():
-            shutil.rmtree(legacy_data_dir)
 
 
 def _set_is_default_in_file(env_path: Path, is_default: bool):

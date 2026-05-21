@@ -93,8 +93,7 @@ def _check_credentials(
             # Single source of truth: the persistent Chromium profile on
             # disk. ``config.has_saved_session()`` is the only gate. The
             # previous ``AUTH_STORAGE_KEY`` / ``AUTH_COOKIE_PATTERNS``
-            # offline checks operated on the deleted ``auth-state.json``
-            # snapshot; they are gone. CLIs that need a stricter live
+            # offline snapshot checks are gone. CLIs that need a stricter live
             # check (one that proves cookies are still valid server-side)
             # MUST perform it themselves at the point of use — that is
             # not the gate's job.

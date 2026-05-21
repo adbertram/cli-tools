@@ -264,7 +264,7 @@ BASE_URL=https://brickfreedom.com
 HEADLESS=true
 ```
 
-Browser session data is stored in `.profiles/` directory for persistence between commands.
+Browser session data is stored in `authentication_profiles/` directory for persistence between commands.
 
 ## Exit Codes
 
@@ -306,7 +306,7 @@ This CLI uses Pydantic models for type-safe data handling. All commands return s
 
 - **First run**: Run `playwright install chromium` after pip install
 - **Headless mode**: Set `HEADLESS=false` to see the browser (useful for debugging)
-- **Session persistence**: Login sessions are saved in `.profiles/` and reused automatically
+- **Session persistence**: Login sessions are saved in `authentication_profiles/` and reused automatically
 - **Rate limiting**: Be respectful of the site's terms of service
 
 ## Debugging

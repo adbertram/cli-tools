@@ -180,12 +180,14 @@ type to `--auth-type browser_session`).
 ├── pyproject.toml
 └── README.md
 
-# Profile data lives outside the tool dir (auto-managed by BaseConfig):
-~/.local/share/cli-tools/<name>/.profiles/
-└── default/
-    ├── cache/            # Cached responses
-    ├── browser-data/     # Storage state snapshot + session marker
-    └── profile.json      # Auth marker
+# User profile data lives outside the tool dir (auto-managed by BaseConfig):
+~/.local/share/cli-tools/<name>/
+└── authentication_profiles/
+    └── default/
+        ├── .env              # Runtime credentials/config
+        ├── cache/            # Cached responses
+        ├── browser-data/     # Storage state snapshot + session marker
+        └── profile.json      # Auth marker
 ```
 
 **Note:** No `commands/auth.py` — auth is handled by `create_auth_app()`
@@ -332,8 +334,8 @@ def normalize_items(raw_items):
     → calls config.get_browser() → BrowserAutomation subclass instance
     → BrowserAutomation.authenticate() opens persistent browser to LOGIN_URL
     → User logs in manually in visible browser
-    → base class writes profile.json + auth-state.json under
-      get_profile_data_dir()/browser-data/  → has_session() returns True
+    → persistent Chromium profile is written under
+      get_profile_data_dir()/browser-data/chromium-profile/  → has_session() returns True
 
 [User: mysite auth login --credential-type browser_session]  (hybrid CLIs)
     → skips API credential prompts, goes directly to browser login
@@ -346,9 +348,9 @@ def normalize_items(raw_items):
       credential_types.browser_session.
 ```
 
-`auth status` is a passive read of the auth-state snapshot. If you need a
-live check, use `mysite auth test` (which DOES launch the browser to verify
-the session is still valid against AUTH_CHECK_URL).
+`auth status` reports the standard profile/credential JSON. If a CLI needs a
+live browser check, use `mysite auth test` or the domain command that exercises
+the authenticated page.
 
 ### Session Isolation
 

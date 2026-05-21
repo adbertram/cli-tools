@@ -159,6 +159,12 @@ These rules are intentionally short here; individual tools keep service-specific
 - Browser-backed tools should reuse shared browser/profile helpers instead of custom browser lifecycle code.
 - Credentials belong in the CLI-tools secret manager or the tool-owned profile/config path, never in source files.
 
+## User Profile Storage
+
+Each tool's user profile folder is `~/.local/share/cli-tools/<tool>`. Non-authentication configuration for the tool lives in `~/.local/share/cli-tools/<tool>/.env`.
+
+Authentication-related data lives under `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/`, including the profile `.env`, OAuth tokens, API keys, browser session data, auth markers, and auth-tied cache/state.
+
 ## Repository Layout
 
 ```text

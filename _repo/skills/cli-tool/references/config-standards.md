@@ -1,36 +1,52 @@
 # Configuration Standards
 
-**MANDATORY**: Every CLI tool **must** use `cli_tools_shared.config.BaseConfig` and the per-profile `.env` layout for runtime configuration. No credentials or tokens should ever be hardcoded or stored in the CLI source repo.
+**MANDATORY**: Every CLI tool **must** use `cli_tools_shared.config.BaseConfig` for user-data path resolution. Non-authentication configuration belongs in the root tool user-data `.env`; authentication-related data belongs in the active authentication profile. No credentials or tokens should ever be hardcoded or stored in the CLI source repo.
 
 | Rule | Description |
 |------|-------------|
-| **Per-profile `.env` file required** | Runtime credentials, OAuth tokens, API keys, and config are stored in the user-data profile `.env` managed by `BaseConfig` |
+| **Root config `.env` file** | Non-authentication settings are stored in `~/.local/share/cli-tools/<tool>/.env` |
+| **Per-authentication-profile `.env` file required** | Credentials, OAuth tokens, API keys, and auth-related config are stored in `authentication_profiles/<profile>/.env` |
 | **`.env.example` file** | Template documenting all required variables (committed to git) |
 | **`Config` inherits `BaseConfig`** | Use `cli_tools_shared.config.BaseConfig` for path resolution + migration |
 | **Singleton pattern** | Use `get_config()` to access configuration |
 | **Token persistence** | OAuth tokens must be saved back to `.env` after refresh |
 | **Secret manager for reusable CLI secrets** | Follow `references/secrets.md` |
 
-## .env File Location
+## User Profile and .env Location
 
-`.env` files live in the per-account user-data directory, **NOT** in the cli-tools source repo:
+The user profile folder for a tool is:
 
 ```
-~/.local/share/cli-tools/<tool>/.profiles/
-└── <profile-name>/
-    ├── .env              ← credentials (active profile's IS_DEFAULT_PROFILE=1)
-    ├── auth-state.json   ← Playwright cookies / localStorage (browser auth)
-    ├── profile.json      ← session marker
-    └── cache/            ← cached responses
+~/.local/share/cli-tools/<tool>
 ```
 
-Each profile is fully self-contained in its own directory. The cli-tools source repo holds only `.env.example` (the template, no creds).
+All user-specific runtime configuration and state for that tool belongs under this folder, **NOT** in the cli-tools source repo.
 
-This layout is enforced by `BaseConfig.__init__` in `cli-tools-shared`. On first instantiation per tool, it migrates any pre-existing `<repo>/.env` and `<repo>/.env.<name>` files into the per-profile dirs (idempotent). After migration the source repo contains no per-account state.
+Non-authentication configuration lives at the tool root:
+
+```
+~/.local/share/cli-tools/<tool>/.env
+```
+
+Authentication profiles live under the `authentication_profiles` directory:
+
+```
+~/.local/share/cli-tools/<tool>/
+└── authentication_profiles/
+    └── <profile-name>/
+        ├── .env              ← auth data (active profile's IS_DEFAULT_PROFILE=1)
+        ├── browser-data/     ← persistent Chromium profile for browser auth
+        ├── profile.json      ← auth marker
+        └── cache/            ← cached responses
+```
+
+Each authentication profile is fully self-contained for auth-related state. The cli-tools source repo holds only `.env.example` (the template, no creds).
+
+This layout is owned by `BaseConfig.__init__` in `cli-tools-shared`. On first instantiation per tool, it splits any pre-existing `<repo>/.env` and `<repo>/.env.<name>` files: auth-related fields move into the matching authentication profile, and non-auth settings move into the root tool `.env`. After migration the source repo contains no per-account state.
 
 ## CLI-Tools Secret Manager Boundary
 
-Reusable CLI-tool credentials are governed by `references/secrets.md`. That boundary does not replace `BaseConfig`: `auth login`, token refresh, and browser session state still write the active profile's `.env` and related profile files.
+Reusable CLI-tool credentials are governed by `references/secrets.md`. That boundary does not replace `BaseConfig`: `auth login`, token refresh, and browser session state still write the active authentication profile's `.env` and related profile files.
 
 ## Config Class Pattern
 
@@ -52,17 +68,23 @@ class Config(BaseConfig):
         )
 ```
 
-`BaseConfig.__init__` sets `self.env_file_path` to the resolved profile's `.env` and loads it via dotenv. Tools should never compute paths from `Path(__file__).resolve().parent.parent` — that pattern resolves to the source repo, which is wrong under the new layout.
+`BaseConfig.__init__` sets `self.config_env_file_path` to the tool-level config `.env`, sets `self.env_file_path` to the resolved authentication profile `.env`, and loads both via dotenv. Tools should never compute paths from `Path(__file__).resolve().parent.parent` — that pattern resolves to the source repo, which is wrong under the user profile layout.
 
 For tools that manage their own custom field set (instead of declaring `CREDENTIAL_TYPES`), set `CREDENTIAL_TYPES: list = []` and override `has_credentials` / `save_*` / `clear_credentials`. The path resolution and migration still inherit from `BaseConfig`.
 
-## What Goes in the Profile `.env`
+## What Goes in the Root `.env`
+- API base URLs
+- Cache enable/TTL settings
+- Browser display settings such as `HEADLESS`
+- Non-auth service behavior settings
+
+## What Goes in the Authentication Profile `.env`
 - API keys and secrets
 - OAuth client IDs and secrets
 - OAuth access tokens and refresh tokens
 - Token expiration timestamps
 - Account/workspace IDs
-- Any other service-specific configuration
+- Authentication selectors, auth-method switches, and other auth-specific settings
 
 ## Environment Variable Naming
 ```bash

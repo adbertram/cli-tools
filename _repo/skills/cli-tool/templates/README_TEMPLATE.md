@@ -154,11 +154,18 @@ ID          Name                    Created
 
 ## Configuration
 
-Runtime configuration is stored in the active profile's `.env` file under `~/.local/share/cli-tools/{toolname}/.profiles/`. The source repo only carries `.env.example`.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/{toolname}/.env`. Authentication data is stored in the active profile at `~/.local/share/cli-tools/{toolname}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
 
 Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
 
-Profile environment variables:
+Root config variables:
+
+```bash
+# Optional non-authentication configuration
+{TOOLNAME}_BASE_URL=https://api.example.com
+```
+
+Authentication profile variables:
 
 ```bash
 # Required credentials
@@ -170,9 +177,6 @@ Profile environment variables:
 {TOOLNAME}_ACCESS_TOKEN=<jwt_token>
 {TOOLNAME}_REFRESH_TOKEN=<refresh_token>
 {TOOLNAME}_TOKEN_EXPIRES_AT=<timestamp>
-
-# Optional configuration
-{TOOLNAME}_ACCOUNT_ID=your_account_id
 ```
 
 You can also set these as environment variables directly.

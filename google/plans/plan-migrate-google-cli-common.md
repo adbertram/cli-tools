@@ -43,7 +43,7 @@ token.json
 credentials.json
 __pycache__/
 *.egg-info/
-.profiles/
+authentication_profiles/
 ```
 
 **Verify:** File exists at `google/.gitignore`.
@@ -436,8 +436,8 @@ IS_DEFAULT_PROFILE=0
 # GOOGLE_SEARCHCONSOLE_SITE=
 
 # credentials.json and token.json are stored in the profile data directory:
-# Linux/macOS: ~/.local/share/cli-tools/google/.profiles/<profile-name>/
-# Windows: %APPDATA%/cli-tools/google/.profiles/<profile-name>/
+# Linux/macOS: ~/.local/share/cli-tools/google/authentication_profiles/<profile-name>/
+# Windows: %APPDATA%/cli-tools/google/authentication_profiles/<profile-name>/
 #
 # Place your OAuth credentials.json in that directory before running: google auth login
 ```
@@ -476,7 +476,7 @@ google searchconsole index --help    # --profile option present
 
 **Auth flow test (requires credentials.json):**
 1. `google auth profiles create personal` — creates `.env.personal`
-2. Place `credentials.json` in the profile data dir (`~/.local/share/cli-tools/google/.profiles/personal/`)
+2. Place `credentials.json` in the profile data dir (`~/.local/share/cli-tools/google/authentication_profiles/personal/`)
 3. `google auth login --profile personal` — runs OAuth flow, writes `token.json`
 4. `google auth status --profile personal` — should show `authenticated: true`
 5. `google drive list --profile personal` — should return files
@@ -487,7 +487,7 @@ google searchconsole index --help    # --profile option present
 
 | Requirement | Steps | Verification |
 |---|---|---|
-| Per-profile .profiles/ isolation | 3, 4 | token_path uses get_profile_data_dir() |
+| Per-profile authentication_profiles/ isolation | 3, 4 | token_path uses get_profile_data_dir() |
 | credentials.json per-profile | 3, 6 | credentials_path reads from profile data dir |
 | --profile on ALL commands | 5a-5h | Every command has --profile option |
 | CredentialType.CUSTOM + has_credentials() override | 3 | has_credentials() checks token.json |

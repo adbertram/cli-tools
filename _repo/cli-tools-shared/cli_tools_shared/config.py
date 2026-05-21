@@ -8,9 +8,14 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from dotenv import load_dotenv, set_key
+from dotenv import dotenv_values, load_dotenv, set_key
 
-from .credentials import CredentialType, combined_all_fields, combined_required_fields
+from .credentials import (
+    CredentialType,
+    combined_all_fields,
+    combined_login_prompts,
+    combined_required_fields,
+)
 from .exceptions import ConfigError
 
 
@@ -18,6 +23,9 @@ from .exceptions import ConfigError
 
 def _set_key_with_retry(env_path: str, name: str, value: str, max_retries: int = 3):
     """Wrap set_key with retry for Windows PermissionError (Dropbox file locks)."""
+    path = Path(env_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(exist_ok=True)
     for attempt in range(max_retries):
         try:
             set_key(env_path, name, value)
@@ -67,24 +75,36 @@ def profile_name_from_path(env_path: Path) -> str:
     The env file is always named ``.env``; the profile name is the
     parent-directory name. Example::
 
-        ~/.local/share/cli-tools/impact/.profiles/default/.env  →  "default"
-        ~/.local/share/cli-tools/impact/.profiles/staging/.env  →  "staging"
+        ~/.local/share/cli-tools/impact/authentication_profiles/default/.env  →  "default"
+        ~/.local/share/cli-tools/impact/authentication_profiles/staging/.env  →  "staging"
     """
     return env_path.parent.name
+
+
+def get_tool_data_dir(tool_name: str) -> Path:
+    """Get the platform-appropriate root user-data directory for a tool."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "cli-tools" / tool_name
+
+
+def config_env_path_for_tool(tool_name: str) -> Path:
+    """Get the root env file for non-authentication configuration."""
+    return get_tool_data_dir(tool_name) / ".env"
 
 
 def env_path_for_profile(tool_name: str, profile_name: str) -> Path:
     """Get env file path for a profile name.
 
-    Per-account configuration lives entirely outside the cli-tools source
-    repo, under the platform user-data directory::
+    Authentication configuration lives outside the cli-tools source repo,
+    under the platform user-data directory::
 
-        ~/.local/share/cli-tools/<tool>/.profiles/<profile>/.env
+        ~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/.env
 
-    Each profile is fully self-contained: ``.env`` (creds) lives next to
-    ``browser-data/chromium-profile/`` (persistent Chromium user-data-dir
-    holding cookies, localStorage, IndexedDB, service workers, and cache)
-    and any ``cache/`` data for that profile.
+    Non-authentication configuration lives in the tool-level env file:
+    ``~/.local/share/cli-tools/<tool>/.env``.
     """
     return get_profiles_base_dir(tool_name) / profile_name / ".env"
 
@@ -92,8 +112,8 @@ def env_path_for_profile(tool_name: str, profile_name: str) -> Path:
 def list_env_files(tool_name: str) -> list:
     """List all profile env files for a tool.
 
-    Scans ``~/.local/share/cli-tools/<tool>/.profiles/*/.env`` and returns
-    the paths sorted by profile name.
+    Scans ``~/.local/share/cli-tools/<tool>/authentication_profiles/*/.env``
+    and returns the paths sorted by profile name.
     """
     base = get_profiles_base_dir(tool_name)
     if not base.exists():
@@ -125,19 +145,99 @@ def _set_is_default_in_file(env_path: Path, is_default: bool) -> None:
     env_path.write_text("\n".join(updated) + "\n")
 
 
-def _initialize_default_profile(tool_dir: Path, tool_name: str) -> None:
-    """Create the default profile env file when a tool has no profiles."""
+_AUTH_METADATA_FIELDS = {"IS_DEFAULT_PROFILE"}
+_AUTH_FIELD_PREFIXES = ("AUTH_", "OAUTH_")
+_AUTH_FIELD_NAMES = {"AUTHORIZATION_CODE", "REDIRECT_URI"}
+_DEFAULT_ROOT_CONFIG_FIELDS = {
+    "BASE_URL",
+    "CACHE_ENABLED",
+    "CACHE_TTL",
+    "HEADLESS",
+    "BROWSER_USER_AGENT",
+    "BROWSER_WINDOW_SIZE",
+    "CLI_COMMAND",
+    "CLI_PATH",
+}
+
+
+def _is_auth_env_field(name: str, auth_fields: set[str]) -> bool:
+    return (
+        name in _AUTH_METADATA_FIELDS
+        or name in _AUTH_FIELD_NAMES
+        or name in auth_fields
+        or name.startswith(_AUTH_FIELD_PREFIXES)
+    )
+
+
+def _read_env_values(env_path: Path) -> dict[str, str]:
+    return {
+        key: "" if value is None else str(value)
+        for key, value in dotenv_values(env_path).items()
+    }
+
+
+def _write_env_values(env_path: Path, values: dict[str, str]) -> None:
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+
+
+def _split_env_values(
+    values: dict[str, str],
+    auth_fields: set[str],
+    root_config_fields: set[str],
+) -> tuple[dict[str, str], dict[str, str]]:
+    auth_values: dict[str, str] = {}
+    config_values: dict[str, str] = {}
+    for key, value in values.items():
+        if key in root_config_fields and not _is_auth_env_field(key, auth_fields):
+            config_values[key] = value
+        else:
+            auth_values[key] = value
+    return auth_values, config_values
+
+
+def _merge_config_values(config_path: Path, values: dict[str, str]) -> None:
+    if not values:
+        return
+    existing = _read_env_values(config_path) if config_path.exists() else {}
+    merged = dict(existing)
+    for key, value in values.items():
+        if key in existing and existing[key] != value:
+            raise ConfigError(
+                f"Conflicting non-auth configuration value for {key} in {config_path}. "
+                "Non-auth configuration is tool-wide; remove the conflicting profile value."
+            )
+        merged[key] = value
+    _write_env_values(config_path, merged)
+
+
+def _initialize_default_profile(
+    tool_dir: Path,
+    tool_name: str,
+    auth_fields: set[str],
+    root_config_fields: set[str],
+) -> None:
+    """Create root config and default auth profile env files when missing."""
+    example = tool_dir / ".env.example"
+    auth_values: dict[str, str] = {}
+    config_values: dict[str, str] = {}
+    if example.exists():
+        auth_values, config_values = _split_env_values(
+            _read_env_values(example),
+            auth_fields,
+            root_config_fields,
+        )
+
+    config_path = config_env_path_for_tool(tool_name)
+    if config_values and not config_path.exists():
+        _write_env_values(config_path, config_values)
+
     if list_env_files(tool_name):
         return
 
     target = env_path_for_profile(tool_name, "default")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    example = tool_dir / ".env.example"
-    if example.exists():
-        shutil.copy2(example, target)
-        _set_is_default_in_file(target, True)
-    else:
-        target.write_text("IS_DEFAULT_PROFILE=1\n")
+    auth_values["IS_DEFAULT_PROFILE"] = "1"
+    _write_env_values(target, auth_values)
 
 
 def _read_toml_project_name(pyproject_path: Path) -> Optional[str]:
@@ -299,93 +399,110 @@ def resolve_tool_dir(dist_name: str) -> Path:
 
 
 def get_profiles_base_dir(tool_name: str) -> Path:
-    """Get the platform-appropriate .profiles/ directory for a tool.
-
-    Uses user data directories:
-    - Linux/macOS: ~/.local/share/cli-tools/<tool-name>/.profiles/
-    - Windows: %APPDATA%/cli-tools/<tool-name>/.profiles/
-
-    Args:
-        tool_name: Name of the CLI tool (directory name).
-    """
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "cli-tools" / tool_name / ".profiles"
+    """Get the platform-appropriate authentication_profiles directory."""
+    return get_tool_data_dir(tool_name) / "authentication_profiles"
 
 
 def _migrate_legacy_profiles_dir(tool_dir: Path, tool_name: str) -> None:
-    """Move legacy ``tool_dir/.profiles/`` into the user-data layout.
+    """Move source-tree authentication profile data into user data.
 
-    Older installs stored per-profile runtime data (browser cookies,
-    cache) inside the source repo. Move it under
-    ``~/.local/share/cli-tools/<tool>/.profiles/`` so the source tree
-    stays generic. Idempotent: skips when the destination is already
-    populated.
+    Per-profile runtime data (browser cookies, cache) belongs under
+    ``~/.local/share/cli-tools/<tool>/authentication_profiles/`` so the
+    source tree stays generic and the on-disk layout is consistent.
     """
-    old_dir = tool_dir / ".profiles"
+    old_dir = tool_dir / "authentication_profiles"
     if not old_dir.exists():
         return
     new_dir = get_profiles_base_dir(tool_name)
     if new_dir.exists() and any(new_dir.iterdir()):
-        # Destination already populated — drop the legacy copy.
         shutil.rmtree(old_dir)
         return
     new_dir.parent.mkdir(parents=True, exist_ok=True)
     if new_dir.exists():
         shutil.rmtree(new_dir)
-    shutil.copytree(old_dir, new_dir)
-    shutil.rmtree(old_dir)
+    shutil.move(str(old_dir), str(new_dir))
     print(
         f"[cli-tools-shared] migrated profile data: {old_dir} -> {new_dir}",
         file=sys.stderr,
     )
 
 
-def _migrate_env_files(tool_dir: Path, tool_name: str) -> None:
-    """Move legacy ``tool_dir/.env*`` files into the per-profile layout.
+def _migrate_env_files(
+    tool_dir: Path,
+    tool_name: str,
+    auth_fields: set[str],
+    root_config_fields: set[str],
+) -> None:
+    """Move legacy source-tree env files into user data.
 
     The legacy layout stored credentials inside the cli-tools source repo
     (``tool_dir/.env`` for the default profile, ``tool_dir/.env.<name>``
-    for named profiles). The new layout keeps the source repo generic and
-    moves credentials into the user-data directory so they are per-machine
-    and never sync-conflict via Dropbox::
+    for named profiles). Split each file so auth-related fields stay in
+    ``authentication_profiles/<profile>/.env`` and non-auth configuration
+    moves into the tool-level config file::
 
-        ~/.local/share/cli-tools/<tool>/.profiles/<profile>/.env
+        ~/.local/share/cli-tools/<tool>/.env
 
     Idempotent. Once a tool has been migrated, subsequent calls do nothing.
     """
+    tool_data_dir = get_tool_data_dir(tool_name)
+    tool_data_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_env_path_for_tool(tool_name)
+
     bare = tool_dir / ".env"
     if bare.exists():
-        target = get_profiles_base_dir(tool_name) / "default" / ".env"
-        if not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(bare), str(target))
+        auth_values, config_values = _split_env_values(
+            _read_env_values(bare),
+            auth_fields,
+            root_config_fields,
+        )
+        auth_values.setdefault("IS_DEFAULT_PROFILE", "1")
+        _merge_config_values(config_path, config_values)
+        target = env_path_for_profile(tool_name, "default")
+        if auth_values and not target.exists():
+            _write_env_values(target, auth_values)
             print(
                 f"[cli-tools-shared] migrated {bare} -> {target}",
                 file=sys.stderr,
             )
-        else:
-            # Both exist — local copy is authoritative. Drop the repo copy
-            # to keep the source repo clean of credentials.
-            bare.unlink()
+        bare.unlink()
 
-    # Named profiles: ``.env.<profile_name>``
     for src in sorted(tool_dir.glob(".env.*")):
         if src.name == ".env.example":
             continue
         profile_name = src.name[len(".env."):]
-        target = get_profiles_base_dir(tool_name) / profile_name / ".env"
-        if not target.exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(target))
+        auth_values, config_values = _split_env_values(
+            _read_env_values(src),
+            auth_fields,
+            root_config_fields,
+        )
+        auth_values.setdefault("IS_DEFAULT_PROFILE", "0")
+        _merge_config_values(config_path, config_values)
+        target = env_path_for_profile(tool_name, profile_name)
+        if auth_values and not target.exists():
+            _write_env_values(target, auth_values)
             print(
                 f"[cli-tools-shared] migrated {src} -> {target}",
                 file=sys.stderr,
             )
-        else:
-            src.unlink()
+        src.unlink()
+
+
+def _normalize_profile_env_files(tool_name: str, auth_fields: set[str], root_config_fields: set[str]) -> None:
+    """Move non-auth fields out of profile env files into root config."""
+    config_path = config_env_path_for_tool(tool_name)
+    for env_file in list_env_files(tool_name):
+        values = _read_env_values(env_file)
+        auth_values, config_values = _split_env_values(
+            values,
+            auth_fields,
+            root_config_fields,
+        )
+        if not config_values:
+            continue
+        auth_values.setdefault("IS_DEFAULT_PROFILE", "0")
+        _merge_config_values(config_path, config_values)
+        _write_env_values(env_file, auth_values)
 
 
 class BaseConfig:
@@ -441,6 +558,25 @@ class BaseConfig:
     CUSTOM_LOGIN_PROMPTS: list = []
     CUSTOM_EPHEMERAL_FIELDS: list = []
     CUSTOM_SENSITIVE_FIELDS: list = []
+    ROOT_CONFIG_FIELDS: tuple = ()
+
+    def _auth_field_names(self) -> set[str]:
+        fields = set(combined_all_fields(self.CREDENTIAL_TYPES, config=self))
+        fields.update(combined_required_fields(self.CREDENTIAL_TYPES, config=self))
+        fields.update(
+            field_name
+            for field_name, _prompt_text, _hide in combined_login_prompts(
+                self.CREDENTIAL_TYPES,
+                config=self,
+            )
+        )
+        fields.update(_AUTH_METADATA_FIELDS)
+        return fields
+
+    def _root_config_field_names(self) -> set[str]:
+        fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
+        fields.update(getattr(self, "ROOT_CONFIG_FIELDS", ()) or ())
+        return fields
 
     def __init__(self, tool_dir: Path, profile: str = None):
         """Initialize config by resolving the profile and loading the env file.
@@ -450,7 +586,7 @@ class BaseConfig:
             2. Whichever .env* file has IS_DEFAULT_PROFILE=1
 
         Args:
-            tool_dir: Root directory of the CLI tool (contains .env files).
+            tool_dir: Root directory of the CLI tool (contains .env.example).
             profile: Optional explicit profile name.
         """
         if self.CREDENTIAL_TYPES is None:
@@ -460,22 +596,33 @@ class BaseConfig:
         self.tool_dir = tool_dir
         self._tool_name = tool_dir.name
         self.profile = profile
+        self.config_env_file_path = config_env_path_for_tool(self._tool_name)
+        auth_fields = self._auth_field_names()
+        root_config_fields = self._root_config_field_names()
 
         # One-shot migrations from legacy in-repo layout to user-data layout.
-        # Order matters: move browser-state first so the env migration can
-        # slot ``.env`` into per-profile dirs that already hold the
-        # ``browser-data/`` subtree from the legacy move.
+        # Order matters: move profile state first so the env migration can
+        # strip ``.env`` out of any migrated per-profile directories.
         # Idempotent — both helpers no-op once migration has completed.
         _migrate_legacy_profiles_dir(self.tool_dir, self._tool_name)
-        _migrate_env_files(self.tool_dir, self._tool_name)
-        _initialize_default_profile(self.tool_dir, self._tool_name)
+        _migrate_env_files(self.tool_dir, self._tool_name, auth_fields, root_config_fields)
+        _initialize_default_profile(
+            self.tool_dir,
+            self._tool_name,
+            auth_fields,
+            root_config_fields,
+        )
+        _normalize_profile_env_files(self._tool_name, auth_fields, root_config_fields)
 
         self.env_file_path = self._resolve_env_file(profile)
+
+        if self.config_env_file_path.exists():
+            load_dotenv(self.config_env_file_path, override=True)
 
         if self.env_file_path.exists():
             # Clear standard credential env vars before loading to prevent
             # stale values from a previously loaded profile
-            for field in combined_all_fields(self.CREDENTIAL_TYPES, config=self):
+            for field in auth_fields:
                 os.environ.pop(field, None)
             os.environ.pop("IS_DEFAULT_PROFILE", None)
             load_dotenv(self.env_file_path, override=True)
@@ -526,9 +673,8 @@ class BaseConfig:
                 "Only one .env file should have IS_DEFAULT_PROFILE=1."
             )
 
-        # No IS_DEFAULT_PROFILE=1 marker on any profile — fall back to a
-        # profile literally named "default" if one exists (legacy support
-        # for env files migrated from the bare ``.env`` location).
+        # No IS_DEFAULT_PROFILE=1 marker on any profile — fall back to the
+        # default profile env file if it exists.
         default_path = env_path_for_profile(self._tool_name, "default")
         if default_path.exists():
             return default_path
@@ -544,14 +690,19 @@ class BaseConfig:
         val = os.getenv(name)
         return val if val else None
 
+    def _env_file_for_field(self, name: str) -> Path:
+        if _is_auth_env_field(name, self._auth_field_names()):
+            return self.env_file_path
+        return self.config_env_file_path
+
     def _set(self, name: str, value: str):
-        """Set an env var in both the .env file and os.environ."""
-        _set_key_with_retry(str(self.env_file_path), name, value)
+        """Set an env var in the owning env file and os.environ."""
+        _set_key_with_retry(str(self._env_file_for_field(name)), name, value)
         os.environ[name] = value
 
     def _clear(self, name: str):
-        """Clear an env var from the .env file and os.environ."""
-        _set_key_with_retry(str(self.env_file_path), name, "")
+        """Clear an env var from the owning env file and os.environ."""
+        _set_key_with_retry(str(self._env_file_for_field(name)), name, "")
         os.environ.pop(name, None)
 
     # ==================== Standard Properties ====================
@@ -706,15 +857,7 @@ class BaseConfig:
     # ==================== Profile Data Directories ====================
 
     def get_profiles_dir(self) -> Path:
-        """Get .profiles/ directory for runtime data.
-
-        Uses platform-appropriate user data directories:
-        - Linux/macOS: ~/.local/share/cli-tools/<tool-name>/.profiles/
-        - Windows: %APPDATA%/cli-tools/<tool-name>/.profiles/
-
-        Migration from the legacy ``tool_dir/.profiles/`` location runs
-        once during ``BaseConfig.__init__`` via ``_migrate_legacy_profiles_dir``.
-        """
+        """Get the authentication_profiles directory for runtime data."""
         return get_profiles_base_dir(self._tool_name)
 
     def get_profile_data_dir(self) -> Path:
@@ -771,11 +914,9 @@ class BaseConfig:
 
     # ==================== Profile Discovery Hooks ====================
     #
-    # Subclasses that store profiles outside ``tool_dir`` (e.g., XDG layout
-    # under ``~/.config/<app>/profiles/<name>.env``) override these to teach
-    # the shared profiles/auth machinery where to look. Default behavior
-    # preserves the legacy ``<tool_dir>/.env`` + ``<tool_dir>/.env.<name>``
-    # convention so existing CLIs see no change.
+    # Subclasses that store profiles outside the shared cli-tools layout
+    # (e.g., XDG ``~/.config/<app>/profiles/<name>.env``) override these to
+    # teach the shared profiles/auth machinery where to look.
 
     def list_profile_paths(self) -> list:
         """Return all profile env-file paths managed by this Config."""

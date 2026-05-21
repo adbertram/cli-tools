@@ -110,7 +110,7 @@ Keys are deterministic hashes from the method name + all arguments:
 ```
 method: list_orders(platform="bricklink", status="paid")
 key:    list_orders_a1b2c3d4e5f6g7h8
-file:   ~/.local/share/cli-tools/<name>/.profiles/default/cache/list_orders_a1b2c3d4e5f6g7h8.json
+file:   ~/.local/share/cli-tools/<name>/authentication_profiles/default/cache/list_orders_a1b2c3d4e5f6g7h8.json
 ```
 
 - Positional args included in order
@@ -143,17 +143,18 @@ def get_item(self, item_id: str) -> dict:  # return type hint required
 ## Cache Storage Layout
 
 ```
-~/.local/share/cli-tools/<name>/.profiles/
-└── default/
-    ├── cache/
-    │   ├── list_items_c7932d7e885e9cca.json
-    │   ├── get_item_a1b2c3d4e5f6g7h8.json
-    │   └── search_x9y8z7w6v5u4t3s2.json
-    └── browser-data/
-        └── ...
+~/.local/share/cli-tools/<name>/
+└── authentication_profiles/
+    └── default/
+        ├── cache/
+        │   ├── list_items_c7932d7e885e9cca.json
+        │   ├── get_item_a1b2c3d4e5f6g7h8.json
+        │   └── search_x9y8z7w6v5u4t3s2.json
+        └── browser-data/
+            └── ...
 ```
 
-Cache files live under the active profile's `storage_dir/cache/` directory (in `~/.local/share/cli-tools/<name>/`).
+Cache files live under the active authentication profile's `cache/` directory inside the tool user profile folder (`~/.local/share/cli-tools/<name>/`).
 
 ## Cache Hit Tracking
 

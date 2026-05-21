@@ -10,7 +10,7 @@ scripts/*.log
 .env
 .env.*
 !.env.example
-.profiles/
+authentication_profiles/
 google/credentials.json
 google/token.json
 

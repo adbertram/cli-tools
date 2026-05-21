@@ -122,7 +122,7 @@ youtube auth login
 # Required scopes: youtube, youtube.upload, youtube.force-ssl.
 ```
 
-The credentials and OAuth token are stored under `~/.local/share/cli-tools/youtube/.profiles/<profile>/`.
+The credentials and OAuth token are stored under `~/.local/share/cli-tools/youtube/authentication_profiles/<profile>/`.
 
 **Other auth commands:**
 

@@ -24,7 +24,7 @@ def test_token_cache_round_trip(monkeypatch, tmp_path):
     assert config.load_token() == token
     assert config.token_file.name == "ring_token.json"
     assert config.token_file.parent.name == "default"
-    assert config.token_file.parent.parent.name == ".profiles"
+    assert config.token_file.parent.parent.name == "authentication_profiles"
 
     config.clear_token()
 

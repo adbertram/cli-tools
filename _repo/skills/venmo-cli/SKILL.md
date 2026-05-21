@@ -60,7 +60,7 @@ The CLI does NOT prompt for a username or password. Both are stored once in the 
 <cli-tools-root>/_repo/_secret-manager/secrets.sh set venmo-username
 <cli-tools-root>/_repo/_secret-manager/secrets.sh set venmo-password
 ```
-Never store them in `.env`. After `venmo auth login` succeeds, a long-lived access token + trusted device id are persisted to `~/.local/share/cli-tools/venmo/.profiles/<profile>/.env` — they survive across sessions.
+Never store them in `.env`. After `venmo auth login` succeeds, a long-lived access token + trusted device id are persisted to `~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/.env` — they survive across sessions.
 </principle>
 
 <principle name="OTP Handling">

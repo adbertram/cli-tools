@@ -40,7 +40,7 @@ cj relationships apply-bulk targets.txt --delay 4
 
 ## Configuration
 
-Per-profile environment variables live under `~/.local/share/cli-tools/cj-cli/.profiles/<profile>/.env`. `cj auth login` writes them for you.
+Per-profile environment variables live under `~/.local/share/cli-tools/cj-cli/authentication_profiles/<profile>/.env`. `cj auth login` writes them for you.
 
 | Variable | Purpose |
 |----------|---------|
@@ -103,7 +103,7 @@ cj advertisers list --relationship notjoined \
 cj relationships apply-bulk targets.txt --stop-on-error --table
 ```
 
-`apply` calls the REST API first to detect an existing relationship and skip the click when the publisher is already joined, pending, or declined. Failures capture a Playwright screenshot under `~/.local/share/cli-tools/cj-cli/.profiles/<profile>/apply-screenshots/`.
+`apply` calls the REST API first to detect an existing relationship and skip the click when the publisher is already joined, pending, or declined. Failures capture a Playwright screenshot under `~/.local/share/cli-tools/cj-cli/authentication_profiles/<profile>/apply-screenshots/`.
 
 ### Links (`cj links`)
 

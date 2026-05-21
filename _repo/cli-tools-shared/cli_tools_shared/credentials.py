@@ -20,13 +20,13 @@ class _CredentialConfig:
 _CONFIGS = {
     "api_key": _CredentialConfig(
         required_fields=("API_KEY",),
-        all_fields=("API_KEY", "BASE_URL"),
+        all_fields=("API_KEY",),
         login_prompts=(("API_KEY", "API key", True),),
         sensitive_fields=("API_KEY",),
     ),
     "personal_access_token": _CredentialConfig(
         required_fields=("PERSONAL_ACCESS_TOKEN",),
-        all_fields=("PERSONAL_ACCESS_TOKEN", "BASE_URL"),
+        all_fields=("PERSONAL_ACCESS_TOKEN",),
         login_prompts=(("PERSONAL_ACCESS_TOKEN", "Personal access token", True),),
         sensitive_fields=("PERSONAL_ACCESS_TOKEN",),
     ),
@@ -34,7 +34,7 @@ _CONFIGS = {
         required_fields=("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN"),
         all_fields=(
             "CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN",
-            "REFRESH_TOKEN", "TOKEN_EXPIRES_AT", "BASE_URL",
+            "REFRESH_TOKEN", "TOKEN_EXPIRES_AT",
         ),
         login_prompts=(
             ("CLIENT_ID", "Client ID", False),
@@ -47,7 +47,7 @@ _CONFIGS = {
         required_fields=("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN"),
         all_fields=(
             "CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN",
-            "REFRESH_TOKEN", "TOKEN_EXPIRES_AT", "REDIRECT_URI", "BASE_URL",
+            "REFRESH_TOKEN", "TOKEN_EXPIRES_AT", "REDIRECT_URI",
         ),
         login_prompts=(
             ("CLIENT_ID", "Client ID", False),
@@ -59,16 +59,14 @@ _CONFIGS = {
     ),
     "username_password": _CredentialConfig(
         required_fields=("USERNAME", "PASSWORD"),
-        all_fields=("USERNAME", "PASSWORD", "BASE_URL"),
+        all_fields=("USERNAME", "PASSWORD"),
         login_prompts=(
             ("USERNAME", "Username", False),
             ("PASSWORD", "Password", True),
         ),
         sensitive_fields=("PASSWORD",),
     ),
-    "browser_session": _CredentialConfig(
-        all_fields=("BASE_URL",),
-    ),
+    "browser_session": _CredentialConfig(),
     "custom": _CredentialConfig(),
     "no_auth": _CredentialConfig(),
 }

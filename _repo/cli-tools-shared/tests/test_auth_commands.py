@@ -177,14 +177,14 @@ def test_logout_clears_browser_session_via_config(tmp_path, monkeypatch):
         "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n"
     )
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     def get_config(profile=None):
@@ -264,11 +264,11 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     # Patch get_profiles_base_dir to use isolated path
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     def get_config(profile=None):
@@ -281,7 +281,7 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     result = CliRunner().invoke(app, ["login"], input="test-key\n")
 
     assert result.exit_code == 0, result.output
-    profile_dir = tmp_path / "data" / "tool" / ".profiles" / "default"
+    profile_dir = tmp_path / "data" / "tool" / "authentication_profiles" / "default"
     env_file = profile_dir / ".env"
     assert env_file.exists(), f"Expected default profile env file at {env_file}"
     content = env_file.read_text()
@@ -302,12 +302,12 @@ def test_base_config_initializes_default_profile_when_none_exist(tmp_path, monke
 
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     config = _Cfg(tool_dir=tool_dir)
 
-    env_file = tmp_path / "data" / "tool" / ".profiles" / "default" / ".env"
+    env_file = tmp_path / "data" / "tool" / "authentication_profiles" / "default" / ".env"
     assert config.env_file_path == env_file
     assert env_file.exists()
     assert "IS_DEFAULT_PROFILE=1" in env_file.read_text()
@@ -326,14 +326,14 @@ def test_login_bootstraps_named_profile_when_missing(tmp_path, monkeypatch):
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     # Pre-create a "default" profile so the new "staging" should NOT become default
@@ -370,14 +370,14 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     tool_dir.mkdir()
     (tool_dir / ".env.example").write_text("API_KEY=\nIS_DEFAULT_PROFILE=1\n")
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     default_dir = base_profiles_dir / "default"
@@ -423,14 +423,14 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
         "REFRESH_TOKEN=\nTOKEN_EXPIRES_AT=\nIS_DEFAULT_PROFILE=1\n"
     )
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     default_dir = base_profiles_dir / "default"
@@ -611,14 +611,14 @@ def _make_auth_app_in_tmp(
         example_lines.append(env_seed)
     (tool_dir / ".env.example").write_text("\n".join(example_lines) + "\n")
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     def get_config(profile=None):
@@ -877,14 +877,14 @@ def test_auth_status_dual_auth_browser_session_is_not_overridden_by_api_test(tmp
         "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n"
     )
 
-    base_profiles_dir = tmp_path / "data" / "tool" / ".profiles"
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
     monkeypatch.setattr(
         "cli_tools_shared.config.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
     monkeypatch.setattr(
         "cli_tools_shared.profiles.get_profiles_base_dir",
-        lambda name: tmp_path / "data" / name / ".profiles",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
     )
 
     def get_config(profile=None):

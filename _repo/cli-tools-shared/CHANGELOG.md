@@ -4,13 +4,13 @@
 
 ### Breaking changes
 - BrowserAutomation now uses a persistent Chromium user-data-dir at
-  `~/.local/share/cli-tools/<tool>/.profiles/<profile>/browser-data/chromium-profile/`.
+  `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/browser-data/chromium-profile/`.
   Cookies, localStorage, IndexedDB, service workers, and cache all persist natively.
-- `auth-state.json` is deleted. The httpx fast-path
+- The browser-state snapshot file is deleted. The httpx fast-path
   (`BrowserAuthState.from_config`) now reads cookies live from the
   browser-harness daemon via CDP.
 - Users must re-run `<tool> auth login` once on upgrade. Orphaned legacy files
-  under `~/Library/Caches/cli-tools-browser/` and old `auth-state.json`
+  under `~/Library/Caches/cli-tools-browser/` and old snapshot
   snapshots are ignored.
 
 ### Behavior changes

@@ -56,6 +56,12 @@ This handles: directory structure, uv tool installation (isolated venv + symlink
 **Any secret that must be stored or retrieved for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials.
 </principle>
 
+<principle name="User Profile Folder">
+The tool user profile folder is `~/.local/share/cli-tools/<tool>`. Non-authentication configuration lives in `~/.local/share/cli-tools/<tool>/.env`, never in the source tree.
+
+Authentication-related data lives under `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/`, including the profile `.env`, credentials, tokens, browser session data, auth markers, and auth-tied cache/state; see `references/config-standards.md`.
+</principle>
+
 <principle name="Browser Parser Validation (MANDATORY)">
 **NEVER write browser parsers from guesswork.** Validate every parser against real DOM snapshots captured via the BrowserAutomation page. See `references/templates.md` for browser CLI workflow.
 </principle>

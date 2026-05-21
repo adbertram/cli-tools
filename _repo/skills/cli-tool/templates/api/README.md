@@ -108,11 +108,18 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 
 ## Configuration
 
-Runtime configuration is stored in the active profile's `.env` file under `~/.local/share/cli-tools/{{name}}/.profiles/`. The source repo only carries `.env.example`.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/{{name}}/.env`. Authentication data is stored in the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
 
 Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
 
-Profile environment variables:
+Root config variables:
+
+```bash
+# Optional: API base URL
+{{NAME}}_BASE_URL={{base_url}}
+```
+
+Authentication profile variables:
 
 ```bash
 # API Key
@@ -126,9 +133,6 @@ Profile environment variables:
 {{NAME}}_ACCESS_TOKEN=<access_token>
 {{NAME}}_REFRESH_TOKEN=<refresh_token>
 {{NAME}}_TOKEN_EXPIRES_AT=<timestamp>
-
-# Optional: API base URL
-{{NAME}}_BASE_URL={{base_url}}
 ```
 
 ## Exit Codes

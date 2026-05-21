@@ -810,7 +810,7 @@ This ensures posts work seamlessly with WordPress's modern block editor.
 Profile `.env` files live under the CLI data directory:
 
 ```
-~/.local/share/cli-tools/wordpress/.profiles/<profile>/.env
+~/.local/share/cli-tools/wordpress/authentication_profiles/<profile>/.env
 ```
 
 ### .env Format

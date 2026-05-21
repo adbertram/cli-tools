@@ -10,7 +10,7 @@ class Config(BaseConfig):
     """Configuration manager for Things CLI authentication and settings.
 
     Inherits per-account env-file resolution and migration from BaseConfig:
-    credentials live at ``~/.local/share/cli-tools/things/.profiles/<profile>/.env``,
+    credentials live at ``~/.local/share/cli-tools/things/authentication_profiles/<profile>/.env``,
     not in the source repo.
     """
 

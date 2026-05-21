@@ -77,10 +77,10 @@ The secret manager does not replace `cli_tools_shared.config.BaseConfig`.
 `auth login`, OAuth refresh, profile switching, and browser session state still write the active profile under:
 
 ```text
-~/.local/share/cli-tools/<tool>/.profiles/<profile>/
+~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/
 ```
 
-That profile directory contains runtime state such as `.env`, `auth-state.json`, `profile.json`, and cache files.
+The tool user profile folder is `~/.local/share/cli-tools/<tool>`. Non-authentication configuration lives in its root `.env`; authentication profile directories contain auth state such as `.env`, browser session data, `profile.json`, and auth-tied cache files.
 
 Use the secret manager as the cross-session source for reusable raw credentials that an agent or script needs before or during a CLI auth flow. Let the CLI's normal auth flow persist runtime tokens and sessions through `BaseConfig`.
 

@@ -3,9 +3,8 @@
 After the persistent-profile refactor, the BROWSER_SESSION gate uses ONLY
 ``config.has_saved_session()`` — the single source of truth shared with
 ``auth status``. The previous ``AUTH_STORAGE_KEY`` / ``AUTH_COOKIE_PATTERNS``
-offline checks operated on the deleted ``auth-state.json`` snapshot and
-have been removed. CLIs that need a stricter live check perform it at the
-point of use, not in the gate.
+offline snapshot checks have been removed. CLIs that need a stricter live
+check perform it at the point of use, not in the gate.
 """
 
 from unittest.mock import MagicMock, patch
@@ -90,9 +89,9 @@ def test_browser_session_gate_does_not_call_live_is_authenticated():
 
 def test_browser_session_gate_does_not_consider_browser_class_attributes():
     """Old contract: gate looked at ``AUTH_STORAGE_KEY`` / ``AUTH_COOKIE_PATTERNS``
-    on the browser subclass to do an offline disk check against
-    ``auth-state.json``. New contract: those class attrs no longer affect
-    the gate — only the persistent profile on disk does.
+    on the browser subclass to do an offline disk snapshot check. New contract:
+    those class attrs no longer affect the gate — only the persistent profile
+    on disk does.
     """
     config = _config_with_session(False)
     browser = config.get_browser.return_value

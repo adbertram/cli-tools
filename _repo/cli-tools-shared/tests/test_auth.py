@@ -1,8 +1,8 @@
 """Unit tests for BrowserAutomation after the persistent-profile refactor.
 
 Persistent Chromium user-data-dir is the single source of truth. There is
-no ``auth-state.json`` snapshot; httpx-backed code paths fetch cookies live
-via ``live_cookies()`` (see ``test_http_session.py``).
+no separate snapshot file; httpx-backed code paths fetch cookies live via
+``live_cookies()`` (see ``test_http_session.py``).
 
 Tests covering deleted machinery (``_save_auth_state``, ``_state_file_path``,
 ``profile.json`` markers, ``state_save``/``state_load`` round-trips,
@@ -150,14 +150,10 @@ def test_live_cookies_opens_browser_when_not_already_open(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-def test_get_page_does_not_load_storage_state_even_when_auth_state_file_exists(tmp_path, monkeypatch):
-    """A stale ``auth-state.json`` left over from the old layout must not be
-    consulted. get_page() opens the persistent profile directly.
-    """
+def test_get_page_opens_persistent_profile_without_storage_state_load(tmp_path, monkeypatch):
+    """get_page() opens the persistent profile directly."""
     browser = _TestBrowser(_TestConfig(tmp_path))
     service = _Service()
-    # Pre-create a legacy auth-state.json that the OLD code would have read.
-    (tmp_path / "auth-state.json").write_text('{"cookies": [], "origins": []}')
     # state_load is gone — confirm it cannot be invoked.
     assert not hasattr(service, "state_load"), "test service must not provide state_load"
 

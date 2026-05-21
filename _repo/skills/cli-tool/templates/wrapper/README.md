@@ -100,18 +100,22 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 
 ## Configuration
 
-The wrapper stores minimal runtime configuration in the active profile's `.env` file. Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+The wrapper stores non-authentication configuration in `~/.local/share/cli-tools/{{name}}/.env`. Authentication data belongs to the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
 
-Profile environment variables:
+Root config variables:
 
 ```bash
-IS_DEFAULT_PROFILE=1
-
 # Underlying CLI command (defaults to {{cli_command}})
 CLI_COMMAND={{cli_command}}
 
 # Optional: Full path to CLI executable
 # CLI_PATH=
+```
+
+Authentication profile variables:
+
+```bash
+IS_DEFAULT_PROFILE=1
 ```
 
 ## Exit Codes

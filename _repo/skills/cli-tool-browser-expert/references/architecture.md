@@ -105,7 +105,7 @@ def _check_browser(self) -> Optional[bool]:
 | Method | Description |
 |--------|-------------|
 | `get_browser()` | Returns None by default. Override to return BrowserAutomation subclass. |
-| `get_browser_data_dir()` | Returns `~/.local/share/cli-tools/<tool>/.profiles/<profile>/browser-data/` |
+| `get_browser_data_dir()` | Returns `~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/browser-data/` |
 | `has_saved_session()` | True if `profile.json` marker exists |
 | `has_credentials()` | For BROWSER_SESSION: requires `has_saved_session()` |
 | `clear_session()` | `shutil.rmtree` on profile directory |
@@ -156,7 +156,7 @@ Credential validity is determined purely by `has_saved_session()` (profile.json 
 
 ```
 ~/.local/share/cli-tools/<tool>/
-  .profiles/
+  authentication_profiles/
     <profile_name>/
       .env                    # Profile environment variables
       browser-data/           # Persistent browser data (managed by BrowserHarnessService)

@@ -384,7 +384,7 @@ def test_auth_logout_has_profile_flag(cli_name, cli_dir, help_cache, test_config
 
 def test_env_has_is_default_profile(cli_name, cli_dir, cli_executable, help_cache, test_config, command_filter):
     """All auth-capable CLIs: exactly one profile under
-    ``~/.local/share/cli-tools/<tool>/.profiles/<name>/.env`` has
+    ``~/.local/share/cli-tools/<tool>/authentication_profiles/<name>/.env`` has
     ``IS_DEFAULT_PROFILE=1``. The default-profile directory may be named
     anything (``default``, ``adam-bertram``, ``work``, etc.); the ``IS_DEFAULT_PROFILE=1``
     line in the .env is what makes a profile the default, NOT the directory name.
@@ -727,7 +727,7 @@ def test_auth_runtime_state_uses_profile_data_dir(cli_name, cli_dir, help_cache,
     if not cli_pkg.exists():
         pytest.skip(f"{cli_name} package directory not found")
 
-    auth_state_markers = ("token.json", "robots.json", "session.json", "profile.json", "auth-state.json")
+    auth_state_markers = ("token.json", "robots.json", "session.json", "profile.json")
     violations = []
     for py_file in cli_pkg.rglob("*.py"):
         if "__pycache__" in py_file.parts:

@@ -57,8 +57,7 @@ class BrowserAuthState:
 
     Cookies are read live from the running browser-harness daemon via CDP
     (``config.get_browser().live_cookies()``). The persistent Chromium
-    user-data-dir is the single source of truth — there is no on-disk
-    ``auth-state.json`` snapshot.
+    user-data-dir is the single source of truth.
     """
 
     cookies: tuple[BrowserCookie, ...]

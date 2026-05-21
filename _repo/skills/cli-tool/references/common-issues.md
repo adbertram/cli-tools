@@ -107,7 +107,7 @@ Error: Missing credentials. Run 'myservice auth login' first.
 env | grep -i MYSERVICE
 
 # Check the profile .env managed by BaseConfig
-cat ~/.local/share/cli-tools/myservice/.profiles/default/.env
+cat ~/.local/share/cli-tools/myservice/authentication_profiles/default/.env
 
 # Check reusable CLI secrets before asking Adam for the value; see references/secrets.md
 
@@ -419,19 +419,19 @@ uv tool install -e <cli-tools-root>/myservice --force --refresh
 **Symptom:**
 ```
 '<cli>' has no default profile .env at
-  /Users/<user>/.local/share/cli-tools/<cli>/.profiles/default/.env.
+  /Users/<user>/.local/share/cli-tools/<cli>/authentication_profiles/default/.env.
 All auth-capable CLI tools must auto-initialise the default profile
 via BaseConfig on first invocation.
 ```
 
 **Cause:** `BaseConfig.__init__` is responsible for auto-initialising the default profile under
-`~/.local/share/cli-tools/<tool>/.profiles/default/.env` (XDG-compliant user data dir) on first
+`~/.local/share/cli-tools/<tool>/authentication_profiles/default/.env` (inside the tool user profile folder) on first
 invocation. If `Config(...)` is never constructed when the CLI runs — for example because
 `create_auth_app(get_config_fn=...)` is not wired up, or `main.py` skips the standard auth app
 factory — the directory is never created and the profile compliance tests fail.
 
 Do NOT create a `.env` in the CLI source tree. Profile data is user-machine state and must live
-under the user data dir, not inside `<cli-tools-root>/<cli>/`. The single source of
+under the tool user profile folder (`~/.local/share/cli-tools/<tool>`), not inside `<cli-tools-root>/<cli>/`. The single source of
 truth for the path is `cli_tools_shared.config.get_profiles_base_dir(<cli>)`.
 
 **Fix:** Use the standard scaffolding. Ensure `main.py` calls `create_auth_app(get_config_fn=get_config)`
@@ -442,13 +442,13 @@ instance. Then either:
    `BaseConfig` to auto-initialise the default profile, OR
 2. Run `<cli> auth login` to capture real credentials.
 
-Both paths produce the same on-disk result: `~/.local/share/cli-tools/<cli>/.profiles/default/.env`
+Both paths produce the same on-disk result: `~/.local/share/cli-tools/<cli>/authentication_profiles/default/.env`
 with `IS_DEFAULT_PROFILE=1`.
 
 **Verification:**
 ```bash
 <cli> --help > /dev/null
-ls ~/.local/share/cli-tools/<cli>/.profiles/default/.env   # must exist
+ls ~/.local/share/cli-tools/<cli>/authentication_profiles/default/.env   # must exist
 <cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <cli>  # both tests pass
 ```
 

@@ -28,13 +28,13 @@
 ### Wave: Clarify Task
 
 **Q:** Where should per-profile tokens be stored?
-**A:** Profile data dir — .profiles/<name>/token.json using config.get_profile_data_dir()
+**A:** Profile data dir — authentication_profiles/<name>/token.json using config.get_profile_data_dir()
 
 **Q:** Do profiles share one OAuth app (credentials.json) or each gets its own?
 **A:** Per-profile — each profile gets its own credentials.json
 
 **Q:** How should initial setup work after removing --oauth-client-id/--oauth-client-secret?
-**A:** Drop flags, file only — users must place credentials.json in .profiles/<name>/ manually before first login
+**A:** Drop flags, file only — users must place credentials.json in authentication_profiles/<name>/ manually before first login
 
 **Q:** What should CUSTOM_REQUIRED_FIELDS contain?
 **A:** Empty + override — CUSTOM_REQUIRED_FIELDS=[] and override has_credentials() to check token.json exists in profile data dir
@@ -57,7 +57,7 @@
 **A:** Use create_auth_app(); it mounts the standard profiles app under auth.
 
 **Q:** Where should per-profile credentials.json be stored?
-**A:** In .profiles/<name>/ alongside token.json
+**A:** In authentication_profiles/<name>/ alongside token.json
 
 **Q:** Remove redundant pip install cli-tools-shared from install.sh?
 **A:** Leave as-is
@@ -65,7 +65,7 @@
 ### Wave: Success & Scope
 
 **Q:** What should .gitignore contain?
-**A:** Standard set: .env, .env.*, .venv/, token.json, credentials.json, __pycache__/, *.egg-info/, .profiles/
+**A:** Standard set: .env, .env.*, .venv/, token.json, credentials.json, __pycache__/, *.egg-info/, authentication_profiles/
 
 **Q:** What's Phase 1 scope?
 **A:** Phase 1 = refactoring the global client to properly support profiles. Phase 2 = full framework migration (BaseConfig, create_auth_app, auth profiles command, test compliance, filters, etc.)
@@ -73,12 +73,12 @@
 ### Wave: Token Migration
 
 **Q:** Auto-copy existing token.json to default profile?
-**A:** No .profiles/default — all profiles go in .profiles/<name> folders with explicitly named profiles. No auto-migration; require fresh login.
+**A:** No authentication_profiles/default — all profiles go in authentication_profiles/<name> folders with explicitly named profiles. No auto-migration; require fresh login.
 
 ## Key Decisions
 
 1. **Two-phase approach**: Phase 1 = profile-aware client. Phase 2 = cli-tools-shared framework migration.
-2. **Per-profile isolation**: Each profile gets its own directory in .profiles/<name>/ containing both credentials.json and token.json.
+2. **Per-profile isolation**: Each profile gets its own directory in authentication_profiles/<name>/ containing both credentials.json and token.json.
 3. **CredentialType.CUSTOM** with empty required fields + has_credentials() override checking token.json existence.
 4. **--profile on ALL commands** — not just auth, but drive, gmail, calendar, etc.
 5. **No auto-migration** of existing token.json — require fresh auth login per profile.

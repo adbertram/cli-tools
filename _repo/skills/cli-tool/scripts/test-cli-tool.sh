@@ -85,7 +85,7 @@ done
 
 if [[ ${#FORBIDDEN_ROOT_ENV_FILES[@]} -gt 0 ]]; then
     joined=$(printf '%s, ' "${FORBIDDEN_ROOT_ENV_FILES[@]}")
-    json_error "Root .env files are not allowed in CLI tool folders. Store profile env files under ~/.local/share/cli-tools/<tool>/.profiles/<profile>/.env. Offending files: ${joined%, }" >&2
+    json_error "Root .env files are not allowed in CLI tool source folders. Store non-auth config under ~/.local/share/cli-tools/<tool>/.env and auth profile env files under ~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/.env. Offending files: ${joined%, }" >&2
     exit 1
 fi
 

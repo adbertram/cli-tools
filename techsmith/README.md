@@ -182,7 +182,7 @@ This CLI uses shared browser tooling from `cli-tools-shared`:
 
 - **BrowserAutomation**: interactive login, saved Playwright auth state, and rendered DOM interaction
 - **BrowserAuthenticatedHttpClient**: direct authenticated HTTP reads from saved browser cookies
-- **BrowserAuthState**: validated loading of `auth-state.json` from the active profile
+- **BrowserAuthState**: validated live cookies from the active browser profile
 - **Relay/embedded JSON helpers**: parse page payloads locally before launching a browser
 
 ### Customizing for Your Site

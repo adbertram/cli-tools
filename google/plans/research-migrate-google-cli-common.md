@@ -90,7 +90,7 @@ def drive_list(
 
 ### Per-Profile File Layout
 ```
-.profiles/
+authentication_profiles/
 ├── adam-personal/
 │   ├── credentials.json    # OAuth app definition
 │   ├── token.json          # Access/refresh tokens

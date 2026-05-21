@@ -2,9 +2,9 @@
 
 Persistent Chromium user-data-dir model: cookies, localStorage, IndexedDB,
 service workers, and cache all persist natively in
-``<browser_data_dir>/chromium-profile/``. There is no ``auth-state.json``
-snapshot — httpx-backed code paths fetch cookies live from the running
-browser-harness daemon via :meth:`BrowserAutomation.live_cookies`.
+``<browser_data_dir>/chromium-profile/``. HTTP-backed code paths fetch cookies
+live from the running browser-harness daemon via
+:meth:`BrowserAutomation.live_cookies`.
 
 CLI tools subclass :class:`BrowserAutomation` and declare class-level hooks::
 
@@ -305,8 +305,7 @@ class BrowserAutomation:
 
         Opens a headless browser against the persistent profile when the
         daemon is not already running. The persistent Chromium profile is
-        the single source of truth — this method replaces the previous
-        on-disk ``auth-state.json`` snapshot.
+        the single source of truth.
         """
         svc = self._get_service()
         if not svc._opened:

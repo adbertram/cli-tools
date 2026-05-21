@@ -170,7 +170,7 @@ Search commands do case-insensitive wildcard matching across normalized output f
 Profile data is stored outside the repo under:
 
 ```text
-~/.local/share/cli-tools/g2/.profiles/<profile>/
+~/.local/share/cli-tools/g2/authentication_profiles/<profile>/
 ```
 
 The active profile `.env` contains:

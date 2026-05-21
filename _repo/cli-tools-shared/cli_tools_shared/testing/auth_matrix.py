@@ -56,7 +56,7 @@ def seed_auth_profiles(
     base_profiles_dir: Path,
     profiles: Iterable[AuthProfileSeed],
 ) -> list[AuthProfilePaths]:
-    """Create a deterministic auth-state matrix."""
+    """Create a deterministic authentication matrix."""
     return [
         seed_auth_profile(
             base_profiles_dir,
