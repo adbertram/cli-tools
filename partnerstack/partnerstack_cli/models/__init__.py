@@ -1,6 +1,5 @@
 """PartnerStack CLI models."""
 from .base import CLIModel
-from .ai_instruction import AIInstruction
 from .reward import (
     Company,
     Customer,
@@ -16,7 +15,6 @@ from .application import Application, create_application
 from .form_template import FormTemplate, create_form_template
 
 __all__ = [
-    "AIInstruction",
     "CLIModel",
     "Company",
     "Customer",

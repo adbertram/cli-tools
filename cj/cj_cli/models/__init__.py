@@ -6,7 +6,6 @@ scaffold have been removed -- they were generic stand-ins and never
 mapped to anything CJ-specific.
 """
 
-from .ai_instruction import AIInstruction
 from .advertiser import (
     Advertiser,
     AdvertiserDetail,
@@ -22,7 +21,6 @@ from .base import CLIModel
 from .link import Link, create_link
 
 __all__ = [
-    "AIInstruction",
     "Advertiser",
     "AdvertiserDetail",
     "ApplyOutcome",

@@ -1,7 +1,6 @@
 """Google Lighthouse CLI models."""
 
 from .base import CLIModel
-from .ai_instruction import AIInstruction
 from .audit import (
     AuditArtifacts,
     AuditMetrics,
@@ -11,7 +10,6 @@ from .audit import (
 )
 
 __all__ = [
-    "AIInstruction",
     "CLIModel",
     "AuditArtifacts",
     "AuditMetrics",

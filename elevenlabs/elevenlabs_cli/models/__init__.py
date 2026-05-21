@@ -1,6 +1,5 @@
 """ElevenLabs CLI models."""
 from .base import CLIModel
-from .ai_instruction import AIInstruction
 from .item import (
     ElevenLabsModel,
     Model,
@@ -22,7 +21,6 @@ from .item import (
 )
 
 __all__ = [
-    "AIInstruction",
     "CLIModel",
     "ElevenLabsModel",
     "Model",

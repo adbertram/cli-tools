@@ -1,5 +1,4 @@
 """Ring CLI models — all entities exposed as Pydantic models."""
-from .ai_instruction import AIInstruction
 from .base import CLIModel
 from .item import (
     Device,
@@ -17,7 +16,6 @@ from .item import (
 )
 
 __all__ = [
-    "AIInstruction",
     "CLIModel",
     "Device",
     "DeviceFamily",

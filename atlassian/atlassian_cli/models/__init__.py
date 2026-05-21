@@ -22,7 +22,6 @@ Usage:
     print_json(item)
 """
 from .base import CLIModel
-from .ai_instruction import AIInstruction
 from .item import (
     # Models
     Item,
@@ -37,7 +36,6 @@ from .item import (
 
 __all__ = [
     # Base
-    "AIInstruction",
     "CLIModel",
     # Models
     "Item",
