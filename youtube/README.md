@@ -140,7 +140,10 @@ youtube auth login --profile work         # Authenticate a named profile
 
 ```bash
 youtube auth profiles list
-youtube auth profiles create myprofile
+youtube auth profiles create myprofile --auth-type google_oauth_desktop
+youtube auth profiles create myprofile --auth-type google_oauth_desktop \
+  --auth-param CLIENT_ID=your-client-id \
+  --auth-param CLIENT_SECRET=your-client-secret
 youtube auth profiles set-default myprofile
 youtube auth profiles delete myprofile
 ```

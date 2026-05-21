@@ -165,7 +165,21 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "usage_instructions": "Create a new profile. NAME is required (positional, e.g., 'staging' or 'production')."
+              "options": [
+                {
+                  "name": "--auth-type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Authentication type for this profile. Valid values: google_oauth_desktop"
+                },
+                {
+                  "name": "--auth-param",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values."
+                }
+              ],
+              "usage_instructions": "Create a new profile. NAME is required. You must pass `--auth-type google_oauth_desktop`. Provide `CLIENT_ID` and `CLIENT_SECRET` either interactively when prompted or up front with repeated `--auth-param FIELD=VALUE` options."
             },
             "set-default": {
               "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",

@@ -255,7 +255,8 @@ def update_channel(
             part="brandingSettings",
             body={"id": channel_id, "brandingSettings": branding_settings},
         ).execute()
-        row = _normalize_channel(updated)
+        current["brandingSettings"] = updated["brandingSettings"]
+        row = _normalize_channel(current)
 
         if table:
             _render_rows([row], table, properties, "No channel found.")

@@ -6,7 +6,7 @@ from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.output import print_error, print_info
 
 from ..api_client import SCOPES, reset_api_client
-from ..config import get_config
+from ..config import YOUTUBE_PROFILE_AUTH_TYPE, get_config
 
 
 def _print_setup_instructions():
@@ -26,6 +26,8 @@ def _print_setup_instructions():
 def _youtube_login_handler(config, force: bool):
     """Handle YouTube OAuth2 flow — builds credentials.json from prompted ID/secret."""
     from google_auth_oauthlib.flow import InstalledAppFlow
+
+    config._set(config.PROFILE_AUTH_TYPE_FIELD, YOUTUBE_PROFILE_AUTH_TYPE)
 
     # Force clears the existing OAuth token. Static client credentials are
     # collected by cli_tools_shared before this handler runs.

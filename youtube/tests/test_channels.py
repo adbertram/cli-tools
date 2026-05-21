@@ -106,7 +106,7 @@ def test_channels_update_fails_before_api_call_for_too_small_banner(monkeypatch,
     assert "Banner image is too small" in result.stderr
 
 
-def test_channels_update_uploads_banner_and_preserves_branding(monkeypatch, tmp_path):
+def test_channels_update_uploads_banner_and_formats_partial_update_response(monkeypatch, tmp_path):
     banner_path = tmp_path / "banner.png"
     _save_image(
         banner_path,
@@ -158,9 +158,6 @@ def test_channels_update_uploads_banner_and_preserves_branding(monkeypatch, tmp_
             return FakeRequest(
                 {
                     "id": body["id"],
-                    "snippet": {"title": "Brick Channel", "customUrl": "@brick"},
-                    "statistics": {"subscriberCount": "5", "videoCount": "2", "viewCount": "10"},
-                    "contentDetails": {"relatedPlaylists": {"uploads": "UU123"}},
                     "brandingSettings": body["brandingSettings"],
                 }
             )

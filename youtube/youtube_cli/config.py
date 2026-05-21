@@ -5,6 +5,12 @@ from typing import Optional
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
+YOUTUBE_PROFILE_AUTH_TYPE = "google_oauth_desktop"
+YOUTUBE_PROFILE_AUTH_PROMPTS = (
+    ("CLIENT_ID", "OAuth Client ID", False),
+    ("CLIENT_SECRET", "OAuth Client Secret", True),
+)
+
 
 class Config(BaseConfig):
     """Configuration manager for Youtube CLI.
@@ -18,17 +24,18 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     CUSTOM_REQUIRED_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
-    CUSTOM_ALL_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
+    CUSTOM_ALL_FIELDS = ["AUTH_TYPE", "CLIENT_ID", "CLIENT_SECRET"]
+    PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"
+    PROFILE_AUTH_TYPES = {
+        YOUTUBE_PROFILE_AUTH_TYPE: YOUTUBE_PROFILE_AUTH_PROMPTS,
+    }
     LOGIN_INSTRUCTIONS = (
         "Create OAuth credentials at: https://console.cloud.google.com/apis/credentials\n"
         "  Click 'Create Credentials' > 'OAuth client ID' > type: 'Desktop app'\n"
         "  (Desktop app type auto-allows http://localhost redirect URIs)\n"
         "  Then enable the YouTube Data API v3 in the same project."
     )
-    CUSTOM_LOGIN_PROMPTS = [
-        ("CLIENT_ID", "OAuth Client ID", False),
-        ("CLIENT_SECRET", "OAuth Client Secret", True),
-    ]
+    CUSTOM_LOGIN_PROMPTS = YOUTUBE_PROFILE_AUTH_PROMPTS
     CUSTOM_EPHEMERAL_FIELDS = []
     CUSTOM_SENSITIVE_FIELDS = ["CLIENT_SECRET"]
 
