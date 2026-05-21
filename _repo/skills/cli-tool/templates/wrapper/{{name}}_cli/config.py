@@ -1,37 +1,40 @@
 """Configuration management for {{Name}} CLI wrapper."""
-import os
+
 import shutil
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv, set_key
+
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 
 
-class Config:
+class Config(BaseConfig):
     """Configuration manager for {{Name}} CLI wrapper."""
 
-    def __init__(self):
-        """Initialize configuration by loading from .env file."""
-        config_dir = Path(__file__).resolve().parent.parent
-        cli_env_path = config_dir / ".env"
+    DIST_NAME = "{{name}}-cli"
+    CREDENTIAL_TYPES = []
+    DEFAULT_BASE_URL = ""
+    ROOT_CONFIG_FIELDS = ("CLI_COMMAND", "CLI_PATH")
 
-        self.tool_dir = config_dir
-        self.env_file_path = cli_env_path
+    def __init__(self, profile: Optional[str] = None):
+        super().__init__(
+            tool_dir=resolve_tool_dir(self.DIST_NAME),
+            profile=profile,
+        )
 
-        if cli_env_path.exists():
-            load_dotenv(cli_env_path, override=True)
-        else:
-            cli_env_path.parent.mkdir(parents=True, exist_ok=True)
-            cli_env_path.touch()
+    @property
+    def storage_dir(self) -> Path:
+        """Profile-aware storage directory for wrapper runtime state."""
+        return self.get_profile_data_dir()
 
     @property
     def cli_command(self) -> str:
         """Get the underlying CLI command name."""
-        return os.getenv("CLI_COMMAND", "{{cli_command}}")
+        return self._get("CLI_COMMAND") or "{{cli_command}}"
 
     @property
     def cli_path(self) -> Optional[str]:
         """Get optional full path to CLI executable."""
-        return os.getenv("CLI_PATH")
+        return self._get("CLI_PATH")
 
     def get_cli_executable(self) -> str:
         """Get the CLI executable path, falling back to command name."""
@@ -46,38 +49,31 @@ class Config:
     def get_cli_version(self) -> Optional[str]:
         """Get the version of the underlying CLI (if available)."""
         import subprocess
+
         try:
             result = subprocess.run(
                 [self.get_cli_executable(), "--version"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                check=False,
             )
             if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
+                output = result.stdout.strip() or result.stderr.strip()
+                return output or None
+        except subprocess.SubprocessError:
+            return None
         return None
 
     def save_setting(self, key: str, value: str):
         """Save a setting to the .env file and update environment."""
-        set_key(self.env_file_path, key, value)
-        # Also update os.environ so subsequent reads get the new value
-        os.environ[key] = value
+        self._set(key.upper(), value)
 
     def clear_settings(self):
         """Clear all settings from .env file and environment."""
-        # Track keys before clearing file
-        if self.env_file_path.exists():
-            # Read existing keys to clear from os.environ
-            from dotenv import dotenv_values
-            existing = dotenv_values(self.env_file_path)
-            for key in existing:
-                os.environ.pop(key, None)
-            self.env_file_path.write_text("")
+        self._clear("CLI_COMMAND")
+        self._clear("CLI_PATH")
 
-
-# Global config instance - singleton pattern
 _config: Optional[Config] = None
 
 

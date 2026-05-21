@@ -14,9 +14,7 @@ The Slack CLI uses a bespoke multi-workspace model (workspaces.json, WorkspaceCr
 
 ## Prerequisites
 
-- `cli-tools-shared` installed in `.venv` (already done per install.sh)
-- `.venv` named correctly (install.sh creates `.venv`) — old `venv/` directory must be removed or renamed
-- Compliance test runner: `cd <cli-tools-root>/_repo/skills/cli-tool/tests && pytest --cli-name slack`
+- Compliance test runner: `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name slack`
 
 ## Implementation Steps
 
@@ -119,7 +117,7 @@ def reset_config():
     _configs = {}
 ```
 
-**Verify:** `cd <cli-tools-root>/slack && source .venv/bin/activate && python -c "from slack_cli.config import get_config; c = get_config(); print(c.CREDENTIAL_TYPES)"`
+**Verify:** `~/.local/share/uv/tools/slack-cli/bin/python -c "from slack_cli.config import get_config; c = get_config(); print(c.CREDENTIAL_TYPES)"`
 
 ---
 
@@ -235,13 +233,13 @@ app = create_auth_app(get_config, tool_name="slack", login_handler=slack_login_h
 
 **Important:** The `create_auth_app()` generates login, logout, status, refresh, and test (because `test_connection()` is implemented on Config). All previously failing auth tests should pass after this step.
 
-**Verify:** `source .venv/bin/activate && slack auth --help` (should show login, logout, status, refresh, test commands with --profile/-p flags on all of them)
+**Verify:** `slack auth --help` (should show login, logout, status, refresh, test commands with --profile/-p flags on all of them)
 
 ---
 
 ### CHECKPOINT: Verify steps 1-4
 
-**Run:** `cd <cli-tools-root>/_repo/skills/cli-tool/tests && source <cli-tools-root>/slack/.venv/bin/activate && pytest --cli-name slack -k "auth or basic_setup or config" -v 2>&1 | tail -30`
+**Run:** `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name slack --pytest-args "-k 'auth or basic_setup or config' -v"`
 
 **Expected:** auth tests passing: login (with --force, --profile), status (with --table, --profile, exit 0), logout (with --profile), test, profiles subcommands present. Config test passing (BaseConfig import found).
 
@@ -475,7 +473,7 @@ COMMAND_CREDENTIALS = {
 
 ### CHECKPOINT: Verify steps 10-21
 
-**Run:** `cd <cli-tools-root>/slack && source .venv/bin/activate && python -c "from slack_cli.main import app; print('Import OK')" && slack --help`
+**Run:** `~/.local/share/uv/tools/slack-cli/bin/python -c "from slack_cli.main import app; print('Import OK')" && slack --help`
 
 **Expected:** CLI imports without errors. All command groups appear. `workspace` is gone. `profiles` is present. No `auth workspace` commands visible.
 
@@ -485,27 +483,12 @@ COMMAND_CREDENTIALS = {
 
 ---
 
-### Step 22: Ensure .venv is used and venv/ is removed
+### Step 22: Reinstall package
 
-**Action:** The compliance test `test_venv_directory_named_correctly` requires `.venv` (not `venv`). The install.sh already creates `.venv`. Verify the old `venv/` is gone.
-
-**Run:** `ls <cli-tools-root>/slack/venv/` — if it exists, rename it:
-```bash
-mv <cli-tools-root>/slack/venv <cli-tools-root>/slack/venv.bak
-```
-
-**Verify:** `ls <cli-tools-root>/slack/.venv/bin/slack` (exists) and `ls <cli-tools-root>/slack/venv/` (does not exist)
-
----
-
-### Step 23: Reinstall package in .venv
-
-**Action:** After all code changes, reinstall the package in the `.venv` so the `slack` executable reflects the latest code.
+**Action:** After all code changes, reinstall the package so the `slack` executable reflects the latest code.
 
 ```bash
-cd <cli-tools-root>/slack
-source .venv/bin/activate
-pip install -e . --quiet
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh slack
 ```
 
 **Verify:** `slack --help` works. `slack auth --help` shows login/logout/status/test/refresh with --profile/-p flags.
@@ -534,7 +517,6 @@ pytest --cli-name slack -v 2>&1 | tail -50
 
 **Unit smoke test (no auth needed):**
 ```bash
-cd <cli-tools-root>/slack && source .venv/bin/activate
 slack --help
 slack auth --help
 slack auth login --help    # must have --force/-F and --profile/-p
@@ -580,4 +562,3 @@ slack users list --limit 5
 - [ ] `filters.py` is byte-for-byte identical to cloudflare's template
 - [ ] All 12 command modules have `COMMAND_CREDENTIALS` dict
 - [ ] `workspace` command group is gone
-- [ ] `venv/` directory is gone (only `.venv/` exists)

@@ -20,3 +20,9 @@ def test_validate_script_skips_auth_group_for_no_auth_clis():
     assert 'auth_group_exists=skipped' in script_text
     assert '[ "$is_no_auth_cli" = "true" ] || required+=(auth_group_exists)' in script_text
 
+
+def test_test_script_validates_auth_profile_secret_placeholders():
+    script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
+
+    assert "validate_auth_profile_secret_placeholders" in script_text
+    assert 'PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}"' in script_text

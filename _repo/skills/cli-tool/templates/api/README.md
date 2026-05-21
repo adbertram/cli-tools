@@ -1,12 +1,12 @@
 # {{Name}} CLI
 
-A command-line interface for the [{{Name}} API]({{docs_url}}). {{description}}
+A command-line interface for [{{Name}}]({{docs_url}}). {{description}}
 
 ## Installation
 
 ```bash
-cd {{name}}
-pip install -e .
+cd <cli-tools-root>/{{name}}
+uv tool install -e . --force --refresh
 ```
 
 After installation, the `{{name}}` command will be available in your terminal.
@@ -14,71 +14,44 @@ After installation, the `{{name}}` command will be available in your terminal.
 ## Quick Start
 
 ```bash
-# Authenticate with {{Name}}
-{{name}} auth login
+{{AUTH_QUICK_START}}# List items
+{{name}} items list --limit 10
 
-# List items
-{{name}} items list
+# Show table output
+{{name}} items list --limit 10 --table
 
-# Get a specific item
-{{name}} items get ITEM_ID
+# Get one item
+{{name}} items get ITEM_ID --table
 ```
 
 ## Commands
 
-### Authentication
+{{AUTH_COMMANDS_SECTION}}{{AUTH_PROFILES_SECTION}}### Items
 
 ```bash
-# Login with API key
-{{name}} auth login
-{{name}} auth login --api-key YOUR_API_KEY
+# List items
+{{name}} items list --limit 25
 
-# Check authentication status
-{{name}} auth status
-{{name}} auth status
+# List items with table output
+{{name}} items list --limit 25 --table
 
-# Clear stored credentials
-{{name}} auth logout
-```
+# Filter items
+{{name}} items list --filter "status:eq:active"
 
-### Profiles (`{{name}} auth profiles`)
-
-```bash
-# List all profiles
-{{name}} auth profiles list
-
-# Show a profile
-{{name}} auth profiles get default
-
-# Switch default profile
-{{name}} auth profiles set-default PROFILE_NAME
-
-# Create a new profile
-{{name}} auth profiles create PROFILE_NAME
-```
-
-### Items
-
-```bash
-# List all items (JSON output)
-{{name}} items list
-
-# List items with table format
-{{name}} items list
-
-# Limit results
-{{name}} items list --limit 10
+# Restrict output fields
+{{name}} items list --properties "id,name"
 
 # Get a specific item
-{{name}} items get ITEM_ID
-{{name}} items get ITEM_ID
+{{name}} items get ITEM_ID --table
+
+# Search items
+{{name}} items search "widget" --limit 10
 ```
 
 ## Output Formats
 
-All commands support two output formats:
-
-- **JSON** (default): Machine-readable output for scripting and piping
+- JSON is the default output format.
+- Add `--table` / `-t` for human-readable table output.
 
 ## AI Instruction Results
 
@@ -92,56 +65,61 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 {{name}} items list --limit 2
 ```
 
+```json
+[
+  {
+    "id": "item-1",
+    "name": "Example Item",
+    "status": "active"
+  }
+]
+```
+
 ### Table Output Example
 
 ```bash
-{{name}} items list --limit 5
+{{name}} items list --limit 5 --table
 ```
 
 ## Options Reference
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--limit` | `-l` | Maximum number of results (default: 50) |
-| `--offset` | `-o` | Offset for pagination |
+| `--table` | `-t` | Display data as a table |
+| `--limit` | `-l` | Maximum number of results |
+| `--filter` | `-f` | Filter results using `field:op:value` syntax |
+| `--properties` | `-p` | Restrict output to selected fields |
 | `--version` | `-v` | Show version and exit |
+| `--no-cache` |  | Bypass cached read responses for this execution |
 
 ## Configuration
 
-Non-authentication configuration is stored in `~/.local/share/cli-tools/{{name}}/.env`. Authentication data is stored in the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/{{name}}/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
 
 Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+
+Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 Root config variables:
 
 ```bash
-# Optional: API base URL
-{{NAME}}_BASE_URL={{base_url}}
+# Optional: override the default API base URL
+BASE_URL={{base_url}}
+
+# Optional: response cache settings
+CACHE_ENABLED=true
+CACHE_TTL=3600
 ```
 
-Authentication profile variables:
-
-```bash
-# API Key
-{{NAME}}_API_KEY=your_api_key
-
-# Or OAuth credentials
-{{NAME}}_CLIENT_ID=your_client_id
-{{NAME}}_CLIENT_SECRET=your_client_secret
-
-# OAuth tokens (managed automatically after login)
-{{NAME}}_ACCESS_TOKEN=<access_token>
-{{NAME}}_REFRESH_TOKEN=<refresh_token>
-{{NAME}}_TOKEN_EXPIRES_AT=<timestamp>
-```
-
+{{AUTH_CONFIG_SECTION}}
+{{CACHE_SECTION}}
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
 | 1 | General error |
-| 2 | Authentication/credential error |
+| 2 | Client/config/authentication error |
 | 130 | User interrupted (Ctrl+C) |
 
 ## Examples
@@ -149,7 +127,7 @@ Authentication profile variables:
 ### List Items and Filter with jq
 
 ```bash
-{{name}} items list | jq '.items[].id'
+{{name}} items list --properties "id,name" | jq '.[].id'
 ```
 
 ### Export Items to JSON File
@@ -168,11 +146,11 @@ Commands return plain JSON records. The default item record shape is:
 | `name` | Item display name |
 | `status` | Item status |
 
-Update `normalize_item()` and `normalize_item_detail()` in `client.py` to map the API response into the documented command output. Add local models only when validation, polymorphism, or serialization removes real complexity.
+Update `normalize_item()` and `normalize_item_detail()` in `client.py` to map the API response into the documented command output. Replace the placeholder `list_items()`, `get_item()`, and `search_items()` methods with the service's real endpoints. Add local models only when validation, polymorphism, or serialization removes real complexity.
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - Dependencies (installed automatically):
   - typer
   - python-dotenv

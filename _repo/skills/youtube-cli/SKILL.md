@@ -1,6 +1,6 @@
 ---
 name: "youtube-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Use this skill for ALL YouTube video, transcript, and channel-management operations. DO NOT use yt-dlp or the YouTube Data API directly. YouTube downloader (yt-dlp) PLUS YouTube Data API v3 channel management -- download videos/subtitles/transcripts AND list/get/upload/update/delete videos on the authenticated user's own channel. Triggers: youtube, youtube cli, youtube transcript, youtube subtitles, youtube captions, download youtube video, youtube channel download, youtube upload, upload to youtube, youtube channel videos, list my youtube videos, schedule youtube upload, delete youtube video, update youtube video, youtube oauth, youtube data api"
+description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Use this skill for ALL YouTube video, transcript, owned-channel discovery, owned-channel banner updates, and channel-management operations. DO NOT use yt-dlp or the YouTube Data API directly. YouTube downloader (yt-dlp) PLUS YouTube Data API v3 channel discovery and management -- download videos/subtitles/transcripts, list/update owned channels, and list/get/upload/update/delete videos on the authenticated user's own channel. Triggers: youtube, youtube cli, youtube transcript, youtube subtitles, youtube captions, download youtube video, youtube channel download, youtube upload, upload to youtube, youtube channels list, youtube channels update, youtube banner upload, youtube banner image, youtube channel videos, list my youtube videos, schedule youtube upload, delete youtube video, update youtube video, youtube oauth, youtube data api"
 ---
 
 <objective>
@@ -22,6 +22,9 @@ youtube <group> <action> [args] [options]
 | Download to folder | `youtube videos download "URL" -o ~/videos/` |
 | Multiple videos | `youtube videos download "URL1" "URL2"` |
 | OAuth login (one-time) | `youtube auth login` (prompts for Client ID/Secret, opens browser) |
+| List owned channels | `youtube channels list -t` |
+| Get one owned channel | `youtube channels get CHANNEL_ID` |
+| Update channel banner | `youtube channels update CHANNEL_ID --banner-image ./banner.png` |
 | List my channel videos | `youtube channel videos list -t` |
 | Get my video metadata | `youtube channel videos get VIDEO_ID` |
 | Upload a video | `youtube channel videos upload PATH --title "T" --privacy private` |
@@ -39,13 +42,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 <principle name="Command Groups">
 - **videos** — Download public YouTube videos (single URLs, multiple URLs, or entire channels) via yt-dlp. Includes `videos list` and `videos get` for any public channel.
 - **transcripts** — Download YouTube video transcripts/subtitles in various formats (srt, vtt, txt) via yt-dlp.
+- **channels** — List YouTube channels available under the authenticated Google account/profile via `channels.list(mine=true)`. Includes `channels list`, `channels get`, and `channels update` for banner-image uploads on owned channels. Requires `youtube auth login` first.
 - **channel** — Manage the authenticated user's OWN channel via the YouTube Data API v3. Subgroup `channel videos` exposes `list`, `get`, `upload`, `update`, `delete`. Requires `youtube auth login` first.
 - **auth** — OAuth login/logout/status/refresh/test plus `auth profiles ...` for multi-account workflows. Uses Google OAuth Desktop client credentials and stores token.json per profile.
 </principle>
 
 <principle name="Authentication">
 Public download commands (`videos download`, `videos list`, `videos get`, `transcripts download`) require NO auth.
-Channel-management commands (`channel videos ...`) require OAuth: run `youtube auth login` once, paste a Client ID + Secret from a Google Cloud "Desktop app" OAuth client, and complete the browser consent flow. Required scopes: `youtube`, `youtube.upload`, `youtube.force-ssl`.
+Owned-channel discovery (`channels ...`) and channel-management commands (`channel videos ...`) require OAuth: run `youtube auth login` once, paste a Client ID + Secret from a Google Cloud "Desktop app" OAuth client, and complete the browser consent flow. Required scopes: `youtube`, `youtube.upload`, `youtube.force-ssl`.
 </principle>
 </essential_principles>
 

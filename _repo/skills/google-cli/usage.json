@@ -1,7 +1,7 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-04-29T20:45:18.016435+00:00",
+  "discovered_at": "2026-05-21T14:32:26.494022+00:00",
   "total_commands": 94,
   "global_options": [
     {
@@ -47,7 +47,7 @@
               "short": "-c"
             }
           ],
-          "usage_instructions": "Authenticate with Google OAuth2. Use --force/-F to re-authenticate. Optionally provide --oauth-client-id and --oauth-client-secret for custom OAuth apps."
+          "usage_instructions": "Authenticate with Google OAuth2. Use --profile/-p to save credentials to a named profile, --force/-F to clear existing credentials before re-authenticating, and --credential-type/-c to authenticate only one configured credential type."
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",

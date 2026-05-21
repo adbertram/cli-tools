@@ -231,7 +231,7 @@ def login():
     print_success("Successfully authenticated")
 ```
 
-3. Update `.env.example` and `config.py` with new variable names. Do not put real secrets in repo files. Reusable CLI credentials are governed by `references/secrets.md`.
+3. Update `.env.example` and `config.py` with new variable names. Do not put real secrets in repo files. Reusable CLI credentials are governed by `references/secrets.md` and must not be stored in any `.env` file by an agent or human.
 
 ### Adding Multiple Credential Types
 

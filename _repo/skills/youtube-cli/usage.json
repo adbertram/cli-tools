@@ -1,8 +1,8 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp) plus channel management (Data API v3)",
-  "discovered_at": "2026-05-21T00:41:32.876714+00:00",
-  "total_commands": 18,
+  "discovered_at": "2026-05-21T16:33:24.567812+00:00",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -12,6 +12,7 @@
       "short": "-v"
     }
   ],
+  "usage_instructions": "Use the `youtube` CLI for public video/transcript downloads plus authenticated owned-channel and channel-video management. Commands follow `youtube <group> <action>` or `youtube channel videos <action>`. Consult `usage.json` before execution instead of guessing flags or argument order.",
   "commands": {
     "auth": {
       "help": "Manage authentication",
@@ -50,7 +51,7 @@
           "usage_instructions": "Clear stored OAuth token and credentials for the active or named profile. Use --profile/-p to target a specific profile."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "options": [
             {
               "name": "--profile",
@@ -464,7 +465,7 @@
                   "name": "--properties",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Properties to include in output",
+                  "help": "Comma-separated fields to include in output",
                   "short": "-p"
                 },
                 {
@@ -658,11 +659,135 @@
               "usage_instructions": "Permanently delete a video. VIDEO_ID is required (positional). Prompts for confirmation unless --yes/-y is passed. Use --profile to target a non-default profile."
             }
           },
-          "usage_instructions": "Manage videos owned by the authenticated user. Use `list` to enumerate uploads, `get` for full metadata, `upload` to push a local file, `update` to change title/description/tags/privacy/thumbnail, and `delete` to remove a video."
+          "usage_instructions": "Manage videos on the authenticated user's YouTube channel. Use `channel videos list|get|upload|update|delete` for the active OAuth profile."
         }
       },
-      "usage_instructions": "Manage the authenticated user's own YouTube channel via the YouTube Data API v3. All subcommands require `youtube auth login` first."
+      "usage_instructions": "Manage the authenticated user's own YouTube channel through the nested `channel videos ...` commands."
+    },
+    "channels": {
+      "help": "Inspect owned channels and channel-creation guidance",
+      "commands": {
+        "create": {
+          "help": "Explain how to create a YouTube channel when the API does not support it.",
+          "usage_instructions": "Explain the supported manual web flow for creating a YouTube channel. This command is intentionally non-mutating because the API does not expose channel creation."
+        },
+        "list": {
+          "help": "List YouTube channels available to the authenticated account.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of channels",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "List owned YouTube channels returned by channels.list(mine=true). Use --limit/-l to cap results, --filter/-f to narrow fields like title or subscriber_count, --properties/-p to trim output fields, --table/-t for formatted output, and --profile to target a non-default OAuth profile."
+        },
+        "get": {
+          "help": "Get one owned YouTube channel by channel ID.",
+          "arguments": [
+            {
+              "name": "channel_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "YouTube channel ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Get one owned YouTube channel by ID from the active OAuth profile. CHANNEL_ID is required (positional). Use --properties/-p to trim output fields, --table/-t for formatted output, and --profile to target a non-default profile."
+        },
+        "update": {
+          "help": "Update one owned YouTube channel.",
+          "arguments": [
+            {
+              "name": "channel_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "YouTube channel ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--banner-image",
+              "type": "FILE",
+              "required": true,
+              "help": "Path to banner image file (PNG/JPEG, minimum 2048x1152)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ],
+          "usage_instructions": "Upload and apply a new banner image for one owned YouTube channel. CHANNEL_ID is required (positional) and must belong to the authenticated profile. --banner-image is required and must point to a PNG/JPEG that is at least 2048x1152. The CLI rejects smaller images before any API call, and normalizes larger or oversize files to a 2560x1440 upload-ready copy under 6 MB. Use --properties/-p to trim output fields, --table/-t for formatted output, and --profile to target a non-default OAuth profile."
+        }
+      },
+      "usage_instructions": "Inspect and update YouTube channels available to the authenticated account. Use `channels list` and `channels get` to inspect owned channels, `channels update` to upload/apply a banner image with pre-upload validation and normalization, and `channels create` for the non-mutating manual-flow explanation."
     }
-  },
-  "usage_instructions": "Use for downloading YouTube videos and transcripts (yt-dlp public commands) AND managing the authenticated user's own channel via the YouTube Data API v3 (channel videos list/get/upload/update/delete). Public download commands need no auth; channel management requires `youtube auth login` with OAuth client credentials."
+  }
 }

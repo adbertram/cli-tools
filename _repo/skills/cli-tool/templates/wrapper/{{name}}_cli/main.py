@@ -3,8 +3,6 @@
 import typer
 from typing import List, Optional
 from cli_tools_shared import create_app, run_app
-from cli_tools_shared.auth_commands import create_auth_app
-from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.filters import (
     FilterValidationError,
     apply_filters,
@@ -15,11 +13,15 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 
 from . import __version__
 from .client import get_client
-from .config import get_config
 
 COLUMNS = ["id", "name", "status"]
 
-app = create_app(name="{{name}}", help="CLI wrapper for {{cli_command}}", version=__version__)
+app = create_app(
+    name="{{name}}",
+    help="CLI wrapper for {{cli_command}}",
+    version=__version__,
+    cache_support=False,
+)
 items_app = typer.Typer(help="Manage {{name}} items", no_args_is_help=True)
 
 
@@ -110,8 +112,6 @@ def search_items(
 
 
 app.add_typer(items_app, name="items")
-app.add_typer(create_auth_app(get_config, tool_name="{{name}}"), name="auth")
-app.add_typer(create_cache_app(get_config), name="cache")
 
 
 def main():

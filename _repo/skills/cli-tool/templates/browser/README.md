@@ -5,8 +5,8 @@ A command-line interface for [{{Name}}]({{base_url}}) using browser automation. 
 ## Installation
 
 ```bash
-cd {{name}}
-pip install -e .
+cd <cli-tools-root>/{{name}}
+uv tool install -e . --force --refresh
 ```
 
 Browser automation is driven by `browser-harness` (CDP), a transitive
@@ -18,79 +18,16 @@ After installation, the `{{name}}` command will be available in your terminal.
 ## Quick Start
 
 ```bash
-# Login to {{Name}}
-{{name}} auth login
-
-# Check login status
-{{name}} auth status
-
-# Search for items
-{{name}} search query "search terms"
+{{AUTH_QUICK_START}}# Search for items
+{{name}} search query "search terms" --limit 10 --table
 
 # Get item details
-{{name}} search item ITEM_ID
+{{name}} search item ITEM_ID --table
 ```
 
 ## Commands
 
-### Authentication (`{{name}} auth`)
-
-```bash
-# Interactive login (opens browser, auto-monitors for auth)
-{{name}} auth login
-
-# Force re-authentication (clears existing session)
-{{name}} auth login --force
-
-# Check authentication status
-{{name}} auth status
-
-# Test authentication against live browser
-{{name}} auth test
-
-# Clear stored session
-{{name}} auth logout
-```
-
-### Multiple Profiles
-
-Support for multiple authentication profiles (useful for different accounts):
-
-```bash
-# Login with named profile
-{{name}} auth login --profile work
-
-# Use named profile for status check
-{{name}} auth status --profile work
-
-# Set default profile via environment variable
-export {{NAME}}_DEFAULT_PROFILE=work
-{{name}} auth status  # Uses 'work' profile
-
-# Logout specific profile
-{{name}} auth logout --profile work
-
-# Profiles stored as:
-# - profile.json (default profile)
-# - profile-work.json (named profile 'work')
-# - profile-adam.json (named profile 'adam')
-```
-
-### Profiles (`{{name}} auth profiles`)
-
-```bash
-# List all profiles
-{{name}} auth profiles list
-
-# Show a profile
-{{name}} auth profiles get default
-
-# Switch default profile
-{{name}} auth profiles set-default PROFILE_NAME
-
-# Create a new profile
-{{name}} auth profiles create PROFILE_NAME
-```
+{{AUTH_COMMANDS_SECTION}}{{AUTH_PROFILES_SECTION}}
 
 ### Search (`{{name}} search`)
 
@@ -99,24 +36,28 @@ export {{NAME}}_DEFAULT_PROFILE=work
 {{name}} search query "search terms"
 
 # Search with table format
-{{name}} search query "search terms"
+{{name}} search query "search terms" --table
 
 # Limit results
 {{name}} search query "search terms" --limit 10
 
+# Filter results
+{{name}} search list --filter "status:eq:active"
+
+# Restrict output fields
+{{name}} search list --properties "id,name"
+
 # Get item details
 {{name}} search item ITEM_ID
-{{name}} search item https://example.com/item/123
 
 # List all items
-{{name}} search list
+{{name}} search list --table
 ```
 
 ## Output Formats
 
-All commands support two output formats:
-
-- **JSON** (default): Machine-readable output for scripting and piping
+- JSON is the default output format.
+- Add `--table` / `-t` for human-readable table output.
 
 ## AI Instruction Results
 
@@ -128,40 +69,49 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--limit` | `-l` | Maximum number of results (default: 50) |
-| `--yes` | `-y` | Skip confirmation prompts |
+| `--table` | `-t` | Display data as a table |
+| `--limit` | `-l` | Maximum number of results |
+| `--filter` | `-f` | Filter results using `field:op:value` syntax |
+| `--properties` | `-p` | Restrict output to selected fields |
 | `--version` | `-v` | Show version and exit |
+| `--no-cache` |  | Bypass cached read responses for this execution |
 
 ## Configuration
 
-Non-authentication configuration is stored in `~/.local/share/cli-tools/{{name}}/.env`. Authentication data is stored in the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/{{name}}/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
 
 Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+
+Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 Root config variables:
 
 ```bash
-# Base URL
-{{NAME}}_BASE_URL={{base_url}}
+# Optional: override the default site URL
+BASE_URL={{base_url}}
 
 # Browser settings (true = invisible, false = visible browser)
-{{NAME}}_HEADLESS=true
+HEADLESS=true
+
+# Optional browser-harness runtime settings
+# BROWSER_USER_AGENT=
+# BROWSER_WINDOW_SIZE=1440,900
+
+# Response cache settings
+CACHE_ENABLED=true
+CACHE_TTL=3600
 ```
 
-Authentication profile variables:
+Browser-auth selectors, login URLs, and other authenticated-page signals are defined in `browser.py` as `BrowserAutomation` class constants. Validate them against a real page snapshot before shipping.
+
+## Cache
 
 ```bash
-# Login credentials (optional - for automated login if supported)
-{{NAME}}_USERNAME=your_username
-{{NAME}}_PASSWORD=your_password
+# Clear cached read responses
+{{name}} cache clear
 
-# Authentication Configuration
-{{NAME}}_AUTH_COOKIE_NAMES=session.*,auth,token,sid  # Regex patterns for auth cookies
-{{NAME}}_AUTH_SELECTOR=                               # CSS selector indicating authenticated state
-{{NAME}}_AUTH_URL_PATTERN=                            # URL pattern indicating login page
-{{NAME}}_AUTH_TIMEOUT=60                              # Seconds to wait for login
-{{NAME}}_AUTH_POLL_INTERVAL=2                         # Seconds between auth checks
-{{NAME}}_DEFAULT_PROFILE=default                      # Default profile name
+# Bypass the cache for one execution
+{{name}} --no-cache search list --limit 10
 ```
 
 Browser session data is stored in the profile data directory for persistence between commands.
@@ -188,30 +138,15 @@ This CLI uses `cli_tools_shared.auth.BrowserAutomation` with browser-harness-bac
 
 ### Customizing for Your Site
 
-1. **Update `client.py`**: Configure `BROWSER_CONFIG` with your site's URLs and selectors
-2. **Implement Methods**: Add domain-specific methods (search, list, etc.)
-3. **Add Commands**: Create new command files in `commands/` directory
-
-Example site configuration in `client.py`:
-
-```python
-BROWSER_CONFIG = BrowserConfig(
-    base_url="https://example.com",
-    login_url="/login",
-    login_check_url="/dashboard",
-    login_indicators=["/login", "/signin"],
-    logged_in_selector=".user-menu",
-    username_selector="input[name='email']",
-    password_selector="input[name='password']",
-    submit_selector="button[type='submit']",
-)
-```
+1. Update `browser.py` with the real login/authenticated selectors and URLs.
+2. Implement the placeholder methods in `client.py`.
+3. Normalize extracted page data in `parsers.py` to the documented command output.
 
 ## Browser Automation Notes
 
 - **First run**: Run `{{name}} auth login` to launch the persistent browser session and complete login
-- **Headless mode**: Set `{{NAME}}_HEADLESS=false` to see the browser (useful for debugging)
-- **Session persistence**: Login sessions are saved in `.browser-data/` and reused automatically
+- **Headless mode**: Set `HEADLESS=false` to watch the browser during debugging
+- **Session persistence**: Login sessions are saved under the active profile's browser-data directory
 - **Rate limiting**: Be respectful of the site's terms of service
 
 ## Debugging
@@ -220,7 +155,7 @@ To debug browser automation issues:
 
 ```bash
 # Run with visible browser
-export {{NAME}}_HEADLESS=false
+export HEADLESS=false
 {{name}} search query "test"
 ```
 
@@ -238,7 +173,7 @@ Capture real DOM data first, then update `normalize_items()` and `normalize_item
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - Dependencies (installed automatically):
   - typer
   - python-dotenv

@@ -94,6 +94,7 @@ Create todos from:
    - "AI Review: Verify auth status makes actual API call (CRITICAL)"
    - "AI Review: Verify auth uses cli_tools_shared (not custom auth module)"
    - "AI Review: Verify --force only clears ephemeral state (tokens/sessions), not static credentials"
+   - "AI Review: Verify reusable credentials are routed through the CLI-tools secret manager, not any `.env` file"
    - "AI Review: Verify activity logging covers important code paths"
    - "AI Review: Verify browser CLI uses base class is_authenticated() (no custom auth-check methods)" *(browser CLIs only)*
    - "AI Review: Verify auth status/test use AuthVerifier (no duplicated browser/credential checking)" *(all auth CLIs)*
@@ -155,6 +156,11 @@ The `auth status` command MUST make an actual API call to verify credentials are
 - Return success only if the API call succeeds
 - Distinguish between "not configured" and "configured but invalid"
 
+**CRITICAL secret storage requirements:**
+- Reusable human-supplied secrets (API keys, usernames, passwords, client secrets, long-lived bearer tokens) MUST be stored and retrieved through the CLI-tools secret manager
+- Agents and docs MUST NOT instruct users to place those values in any `.env` file
+- `.env` files are limited to non-secret config and CLI-managed runtime auth state
+
 ### Fix Process
 
 For fix todos:
@@ -212,6 +218,7 @@ Only after ALL todos are complete, present:
 - Error handling: [Verified NO silent error swallowing - all API errors surface to user]
 - auth status: [Verified makes actual API call to validate credentials]
 - --force ephemeral: [Verified --force only clears tokens/sessions, not static credentials]
+- Secret storage: [Verified reusable credentials use secret manager instead of `.env`]
 - Activity logging: [Verified get_activity_logger used in client and command files]
 - Browser auth delegation: [Verified uses base class is_authenticated() — no custom is_logged_in/_ensure_logged_in] *(browser CLIs only)*
 
@@ -321,7 +328,7 @@ Add mapping in `tests/cli_test_config.toml`:
 <browser_cli_features>
 ## Browser CLI Template Features
 
-Browser CLIs should be nearly identical to the `_repo/_templates/browser/` template. The template provides:
+Browser CLIs should be nearly identical to the `_repo/skills/cli-tool/templates/browser/` template. The template provides:
 
 ### Authentication System
 - **`auth.py`** - Complete auth detection and session management

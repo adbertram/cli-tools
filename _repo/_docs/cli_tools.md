@@ -111,7 +111,6 @@
 | `powerpoint-slide-recorder` | Record narrated PowerPoint slides |
 | `progress-servicenow` | Progress ServiceNow Employee Center - manage tickets, view requests, browse catalog |
 | `quartile` | CLI interface for Quartile (browser automation) |
-| `rakuten` | Rakuten Advertising Publisher API CLI -- list advertiser programs via OAuth |
 | `raptive` | Raptive ad dashboard via browser automation |
 | `reclaim` | Browser CLI for Reclaim.ai site page inspection with saved browser-session auth |
 | `reminders` | Manage macOS Reminders via EventKit framework |
@@ -120,7 +119,6 @@
 | `ring` | Ring doorbells, cameras, chimes — devices, events, snapshots, recordings, motion detection, lights, siren |
 | `roboshadow` | Browser automation CLI for RoboShadow account workflows |
 | `roomba` | Control iRobot Roomba vacuums |
-| `scrunch` | Scrunch AI API - brand visibility, AI search analytics, competitors, personas, prompts, and agent traffic |
 | `sectigo` | Inspect verified metadata and auth scaffolding for the Sectigo affiliate program. |
 | `setme` | SetMe browser automation scaffold |
 | `ship7` | Browser automation for Ship7 site workflows |

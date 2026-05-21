@@ -3,7 +3,6 @@
 import typer
 from typing import List, Optional
 from cli_tools_shared import create_app, run_app
-from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.filters import (
     FilterValidationError,
@@ -16,6 +15,8 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 from . import __version__
 from .client import get_client
 from .config import get_config
+
+{{AUTH_IMPORT}}
 
 COLUMNS = ["id", "name", "status"]
 
@@ -110,7 +111,7 @@ def search_items(
 
 
 app.add_typer(items_app, name="items")
-app.add_typer(create_auth_app(get_config, tool_name="{{name}}"), name="auth")
+{{AUTH_MOUNT}}
 app.add_typer(create_cache_app(get_config), name="cache")
 
 

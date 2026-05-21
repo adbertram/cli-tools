@@ -30,7 +30,7 @@ _repo/_scripts/install-cli-tool.sh wordpress
 | --- | --- |
 | [`cli-tools-shared`](_repo/cli-tools-shared/) | Shared command, browser-auth, cache, profile, and output helpers used by tool packages. |
 | [`secret-manager`](_repo/_secret-manager/) | CLI-tools Keychain helper for credentials that belong to CLI tooling. |
-| [`_templates`](_repo/_templates/) | Starter templates for new API, browser, and wrapper CLIs. |
+| [`cli-tool templates`](_repo/skills/cli-tool/templates/) | Starter templates for new API, browser, and wrapper CLIs. |
 | [`skills`](_repo/skills/) | Codex/agent skills for operating and maintaining the tools. |
 
 ## Tool Catalog
@@ -175,7 +175,7 @@ cli-tools/
     README.md
   _repo/cli-tools-shared/        # shared runtime library
   _repo/_secret-manager/          # credential helper for CLI tooling
-  _repo/_templates/              # new-tool templates
+  _repo/skills/cli-tool/templates/  # new-tool templates
   _repo/skills/            # operating skills and validation scripts
 ```
 

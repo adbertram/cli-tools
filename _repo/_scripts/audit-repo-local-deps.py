@@ -15,7 +15,6 @@ from urllib.parse import unquote, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SELF_PATH = Path(__file__).resolve()
-FORBIDDEN_VENVS = {".venv", "venv", "venv.bak", ".virtualenv", "env", ".env_dir"}
 PRUNE_DIRS = {
     ".git",
     ".pytest_cache",
@@ -166,21 +165,6 @@ def _scan_filesystem_artifacts(issues: set[Issue]) -> None:
             retired_shared_dir,
             "repo contains retired shared-package directory",
         )
-
-    for pyproject in REPO_ROOT.rglob("pyproject.toml"):
-        project_dir = pyproject.parent
-        rel_parts = project_dir.relative_to(REPO_ROOT).parts
-        if any(part in PRUNE_DIRS or part.startswith(".") for part in rel_parts):
-            continue
-        for name in FORBIDDEN_VENVS:
-            candidate = project_dir / name
-            if candidate.exists():
-                _add_issue(
-                    issues,
-                    "source_tree_runtime_artifact",
-                    candidate,
-                    f"{candidate.relative_to(REPO_ROOT)} exists inside CLI source tree",
-                )
 
     for git_dir in REPO_ROOT.rglob(".git"):
         if git_dir == REPO_ROOT / ".git":

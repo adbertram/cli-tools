@@ -36,12 +36,13 @@ Three template types are available. Each creates a complete CLI structure with d
 │       ├── __init__.py
 │       ├── auth.py       # login, status, logout
 │       └── items.py      # Resource commands
-├── .env
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
+
+Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
 
 ### Key Components
 
@@ -146,7 +147,7 @@ binary. There is no separate "install playwright" step.
 The browser template integrates with the shared `cli-tools-shared`
 infrastructure:
 
-- **`config.py`** extends `BaseConfig` — profiles, credentials, `.env` management
+- **`config.py`** extends `BaseConfig` — profiles, runtime auth state, `.env` management
 - **`browser.py`** subclasses `BrowserAutomation` and declares hooks only
   (no methods beyond `__init__`). The base class handles every auth lifecycle
   step using those hooks.
@@ -174,7 +175,6 @@ type to `--auth-type browser_session`).
 │   └── commands/
 │       ├── __init__.py
 │       └── search.py     # Search/scrape commands
-├── .env
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
@@ -184,7 +184,7 @@ type to `--auth-type browser_session`).
 ~/.local/share/cli-tools/<name>/
 └── authentication_profiles/
     └── default/
-        ├── .env              # Runtime credentials/config
+        ├── .env              # CLI-managed runtime auth state / config
         ├── cache/            # Cached responses
         ├── browser-data/     # Storage state snapshot + session marker
         └── profile.json      # Auth marker
@@ -192,6 +192,8 @@ type to `--auth-type browser_session`).
 
 **Note:** No `commands/auth.py` — auth is handled by `create_auth_app()`
 from `cli-tools-shared`.
+
+Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The user-data `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 ### Key Components
 
@@ -399,12 +401,13 @@ example built on `BrowserAutomation` from `cli_tools_shared`.
 │       ├── __init__.py
 │       ├── auth.py       # OPTIONAL: Delegates to underlying CLI (see below)
 │       └── items.py      # Parses underlying CLI output
-├── .env
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
+
+Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
 
 ### Key Components
 

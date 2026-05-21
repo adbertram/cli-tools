@@ -11,12 +11,18 @@ Two categories:
 
 import shutil
 import tempfile
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from cli_tools_shared.credentials import CredentialType, combined_ephemeral_fields
-from cli_tools_shared.config import BaseConfig
+import cli_tools_shared.config as config_module
+from cli_tools_shared.credentials import (
+    CredentialType,
+    combined_ephemeral_fields,
+    combined_sensitive_fields,
+)
+from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
 
 
 # ==================== Per-CLI Structural Tests ====================
@@ -220,26 +226,66 @@ class TestBaseConfigClearEphemeral:
     """Verify BaseConfig.clear_ephemeral() preserves static credentials."""
 
     def _make_config(self, cred_types, env_vars):
-        """Create a BaseConfig subclass with given types and populate env vars."""
+        """Create a BaseConfig subclass with canonical profile placeholders."""
         tmp = tempfile.mkdtemp()
-        env_path = Path(tmp) / ".env"
+        data_home = Path(tmp) / "share"
+        data_home.mkdir()
+        tool_dir = Path(tmp) / "exampletool"
+        tool_dir.mkdir()
 
-        lines = [f"{k}={v}" for k, v in env_vars.items()]
+        monkeypatch = pytest.MonkeyPatch()
+        monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+        env_path = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        sensitive_fields = set(combined_sensitive_fields(cred_types))
+        secret_store = {}
+        lines = []
+        for key, value in env_vars.items():
+            if key in sensitive_fields and value:
+                secret_name = f"{tool_dir.name}-{key.lower().replace('_', '-')}"
+                secret_store[secret_name] = value
+                lines.append(f"{key}=secret://{secret_name}")
+                continue
+            lines.append(f"{key}={value}")
         lines.append("IS_DEFAULT_PROFILE=1")
         env_path.write_text("\n".join(lines) + "\n")
+
+        def fake_run_secret_manager(command: str, secret_name: str, *, secret_value=None):
+            if command == "get":
+                if secret_name not in secret_store:
+                    return subprocess.CompletedProcess([], 1, stdout="", stderr="missing")
+                return subprocess.CompletedProcess([], 0, stdout=f"{secret_store[secret_name]}\n", stderr="")
+            if command == "has":
+                return subprocess.CompletedProcess(
+                    [],
+                    0 if secret_name in secret_store else 1,
+                    stdout="",
+                    stderr="",
+                )
+            if command == "set":
+                secret_store[secret_name] = secret_value
+                return subprocess.CompletedProcess([], 0, stdout="", stderr="")
+            if command == "delete":
+                existed = secret_name in secret_store
+                secret_store.pop(secret_name, None)
+                return subprocess.CompletedProcess([], 0 if existed else 1, stdout="", stderr="")
+            raise AssertionError(f"Unexpected secret manager command: {command}")
+
+        monkeypatch.setattr(config_module, "_run_secret_manager", fake_run_secret_manager)
 
         class TestConfig(BaseConfig):
             CREDENTIAL_TYPES = cred_types
             DEFAULT_BASE_URL = "https://test.example.com"
 
             def __init__(self):
-                super().__init__(tool_dir=Path(tmp))
+                super().__init__(tool_dir=tool_dir)
 
-        return TestConfig(), tmp
+        config = TestConfig()
+        return config, tmp, monkeypatch
 
     def test_api_key_preserved_after_clear_ephemeral(self):
         """clear_ephemeral() on API_KEY type preserves the API key."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.API_KEY],
             {"API_KEY": "my-secret-key-1234"},
         )
@@ -249,10 +295,11 @@ class TestBaseConfigClearEphemeral:
             "clear_ephemeral() must NOT clear API_KEY"
         )
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_oauth_tokens_cleared_after_clear_ephemeral(self):
         """clear_ephemeral() on OAUTH clears tokens but keeps client creds."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.OAUTH],
             {
                 "CLIENT_ID": "my-client-id",
@@ -274,10 +321,11 @@ class TestBaseConfigClearEphemeral:
         assert config.client_secret == "my-client-secret", "CLIENT_SECRET must be preserved"
 
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_pat_preserved_after_clear_ephemeral(self):
         """clear_ephemeral() on PERSONAL_ACCESS_TOKEN preserves the PAT."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.PERSONAL_ACCESS_TOKEN],
             {"PERSONAL_ACCESS_TOKEN": "ghp_abc123"},
         )
@@ -287,10 +335,11 @@ class TestBaseConfigClearEphemeral:
             "clear_ephemeral() must NOT clear PERSONAL_ACCESS_TOKEN"
         )
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_username_password_preserved_after_clear_ephemeral(self):
         """clear_ephemeral() on USERNAME_PASSWORD preserves username and password."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.USERNAME_PASSWORD],
             {"USERNAME": "admin", "PASSWORD": "secret"},
         )
@@ -299,10 +348,11 @@ class TestBaseConfigClearEphemeral:
         assert config.username == "admin", "clear_ephemeral() must NOT clear USERNAME"
         assert config.password == "secret", "clear_ephemeral() must NOT clear PASSWORD"
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_mixed_api_key_oauth_clear_ephemeral(self):
         """Mixed API_KEY + OAUTH: clear_ephemeral clears tokens, preserves key."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.API_KEY, CredentialType.OAUTH],
             {
                 "API_KEY": "my-api-key",
@@ -320,10 +370,11 @@ class TestBaseConfigClearEphemeral:
         assert config.refresh_token is None, "REFRESH_TOKEN must be cleared"
 
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_clear_credentials_clears_everything(self):
         """Contrast: clear_credentials() DOES clear all fields (for logout)."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.API_KEY],
             {"API_KEY": "my-key"},
         )
@@ -331,10 +382,11 @@ class TestBaseConfigClearEphemeral:
         config.clear_credentials()
         assert config.api_key is None, "clear_credentials() should clear API_KEY"
         shutil.rmtree(tmp)
+        monkeypatch.undo()
 
     def test_clear_ephemeral_clears_browser_session(self):
         """clear_ephemeral() also removes browser session data directory."""
-        config, tmp = self._make_config(
+        config, tmp, monkeypatch = self._make_config(
             [CredentialType.API_KEY],
             {"API_KEY": "my-key"},
         )
@@ -350,3 +402,4 @@ class TestBaseConfigClearEphemeral:
             "clear_ephemeral() must clear browser session data"
         )
         shutil.rmtree(tmp)
+        monkeypatch.undo()

@@ -21,7 +21,7 @@ Alternatives considered:
 
 - Existing Python 3.8+ environment (will update to 3.14 requirement)
 - pytest installed for testing
-- Access to template files at `<cli-tools-root>/_repo/_templates/api/`
+- Access to template files at `<cli-tools-root>/_repo/skills/cli-tool/templates/api/`
 
 ## Implementation Steps
 
@@ -32,7 +32,7 @@ Alternatives considered:
 
 ### Step 2: Create filters.py module
 **File:** `<cli-tools-root>/podio/podio_cli/filters.py`
-**Action:** Copy `<cli-tools-root>/_repo/_templates/api/{{name}}_cli/filters.py` to podio_cli directory. This provides:
+**Action:** Copy `<cli-tools-root>/_repo/skills/cli-tool/templates/api/{{name}}_cli/filters.py` to podio_cli directory. This provides:
 - `OPERATORS` set with all standard operators (eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull, contains, startswith, endswith)
 - `validate_filters()` function that raises `FilterValidationError` on invalid syntax
 - `apply_filters()` function for client-side filtering
@@ -42,7 +42,7 @@ Alternatives considered:
 
 ### Step 3: Create filter_map.py module
 **File:** `<cli-tools-root>/podio/podio_cli/filter_map.py`
-**Action:** Copy `<cli-tools-root>/_repo/_templates/api/{{name}}_cli/filter_map.py` to podio_cli directory. This provides the `FilterMap` class for:
+**Action:** Copy `<cli-tools-root>/_repo/skills/cli-tool/templates/api/{{name}}_cli/filter_map.py` to podio_cli directory. This provides the `FilterMap` class for:
 - Mapping CLI arguments to standard filter syntax
 - Translating standard filters to API parameters
 - Handling parameter merging when multiple filters target same API param

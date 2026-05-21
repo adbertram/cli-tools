@@ -73,8 +73,47 @@ fi
 
 CLI_DIR="$REPO_ROOT/$CLI_NAME"
 if [[ ! -d "$CLI_DIR" ]]; then
-    json_error "CLI tool directory not found: $CLI_DIR" >&2
-    exit 1
+    RESOLVED_CLI_DIR="$(
+        CLI_NAME="$CLI_NAME" python3 - <<'PY'
+import os
+import sys
+from pathlib import Path
+import subprocess
+
+cli_name = os.environ["CLI_NAME"]
+exe = Path.home() / ".local" / "bin" / cli_name
+if not exe.exists():
+    raise SystemExit(1)
+
+first_line = exe.read_text().splitlines()[0].strip()
+if not first_line.startswith("#!"):
+    raise SystemExit(1)
+
+launcher_python = first_line[2:]
+dist_name = f"{cli_name}-cli"
+result = subprocess.run(
+    [
+        launcher_python,
+        "-c",
+        "from cli_tools_shared.config import resolve_tool_dir; "
+        f"print(resolve_tool_dir({dist_name!r}))",
+    ],
+    capture_output=True,
+    text=True,
+)
+if result.returncode != 0:
+    raise SystemExit(1)
+
+print(result.stdout.strip())
+PY
+    )"
+
+    if [[ -n "$RESOLVED_CLI_DIR" && -d "$RESOLVED_CLI_DIR" ]]; then
+        CLI_DIR="$RESOLVED_CLI_DIR"
+    else
+        json_error "CLI tool directory not found: $CLI_DIR" >&2
+        exit 1
+    fi
 fi
 
 FORBIDDEN_ROOT_ENV_FILES=()
@@ -86,6 +125,26 @@ done
 if [[ ${#FORBIDDEN_ROOT_ENV_FILES[@]} -gt 0 ]]; then
     joined=$(printf '%s, ' "${FORBIDDEN_ROOT_ENV_FILES[@]}")
     json_error "Root .env files are not allowed in CLI tool source folders. Store non-auth config under ~/.local/share/cli-tools/<tool>/.env and auth profile env files under ~/.local/share/cli-tools/<tool>/authentication_profiles/<profile>/.env. Offending files: ${joined%, }" >&2
+    exit 1
+fi
+
+if ! PLACEHOLDER_VALIDATION_ERROR="$(
+    PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}" \
+    CLI_NAME="$CLI_NAME" \
+    python3 - <<'PY'
+import os
+
+from cli_tools_shared.config import validate_auth_profile_secret_placeholders
+from cli_tools_shared.exceptions import ConfigError
+
+try:
+    validate_auth_profile_secret_placeholders(os.environ["CLI_NAME"])
+except ConfigError as exc:
+    print(str(exc))
+    raise SystemExit(1)
+PY
+)"; then
+    json_error "$PLACEHOLDER_VALIDATION_ERROR" >&2
     exit 1
 fi
 
@@ -102,8 +161,7 @@ $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
 uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee "$RAW_OUTPUT_FILE" >&2
 EXIT_CODE=$?
-RAW_OUTPUT=$(<"$RAW_OUTPUT_FILE")
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \
-    EXIT_CODE="$EXIT_CODE" RAW_OUTPUT="$RAW_OUTPUT" \
+    EXIT_CODE="$EXIT_CODE" RAW_OUTPUT_FILE="$RAW_OUTPUT_FILE" \
     python3 "$SKILL_DIR/scripts/junit_to_json.py"

@@ -1,13 +1,11 @@
 """{{Name}} wrapper client using subprocess to call the underlying CLI."""
 
-import fnmatch
 import subprocess
-from typing import Dict, List, Optional, Union
+from typing import List, Optional
 
 from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
-from .parsers import OutputFormat, parse_cli_output
 
 
 def normalize_item(raw: dict) -> dict:
@@ -58,57 +56,21 @@ class {{Name}}Client:
             raise ClientError(f"{self.config.cli_command} error: {message}")
         return result
 
-    def _parse_output(self, output: str, format: OutputFormat = OutputFormat.AUTO) -> Union[Dict, List, str]:
-        return parse_cli_output(output, format)
-
-    def auth_login(self, **kwargs) -> Dict[str, object]:
-        result = self._run_command(["login"], check=False)
-        return {
-            "success": result.returncode == 0,
-            "message": result.stdout.strip() if result.returncode == 0 else result.stderr.strip(),
-        }
-
-    def auth_logout(self) -> Dict[str, object]:
-        result = self._run_command(["logout"], check=False)
-        return {
-            "success": result.returncode == 0,
-            "message": result.stdout.strip() if result.returncode == 0 else result.stderr.strip(),
-        }
-
-    def auth_status(self) -> Dict[str, object]:
-        result = self._run_command(["status"], check=False)
-        return {
-            "authenticated": result.returncode == 0,
-            "cli_command": self.config.cli_command,
-            "cli_available": True,
-            "cli_version": self.config.get_cli_version(),
-            "output": result.stdout.strip() if result.returncode == 0 else None,
-            "error": result.stderr.strip() if result.returncode != 0 else None,
-        }
-
     def list_items(self, limit: int = 100) -> List[dict]:
-        result = self._run_command(["ls"])
-        raw_items = self._parse_output(result.stdout)
-        if not isinstance(raw_items, list):
-            raise ClientError("Expected list output from the underlying CLI parser.")
-        return [normalize_item(raw) for raw in raw_items[:limit]]
+        raise NotImplementedError(
+            "Implement list_items() with the wrapped CLI's real list command and normalize the parsed records."
+        )
 
     def get_item(self, item_id: str) -> dict:
-        result = self._run_command(["show", item_id])
-        raw_item = self._parse_output(result.stdout)
-        if not isinstance(raw_item, dict):
-            raise ClientError("Expected object output from the underlying CLI parser.")
-        return normalize_item_detail(raw_item)
+        raise NotImplementedError(
+            "Implement get_item() with the wrapped CLI's real detail command and normalize the parsed record."
+        )
 
     def search_items(self, query: str, limit: int = 100) -> List[dict]:
-        pattern = query.lower()
-        if "*" not in pattern:
-            pattern = f"*{pattern}*"
-        results = []
-        for item in self.list_items(limit=limit):
-            if any(fnmatch.fnmatch(str(value).lower(), pattern) for value in item.values()):
-                results.append(item)
-        return results[:limit]
+        raise NotImplementedError(
+            "Implement search_items() with the wrapped CLI's real search flow or delegate to list_items() "
+            "plus deterministic client-side filtering."
+        )
 
 
 _client: Optional[{{Name}}Client] = None

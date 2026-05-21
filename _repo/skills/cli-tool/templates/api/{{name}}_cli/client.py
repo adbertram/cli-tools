@@ -1,11 +1,11 @@
 """{{Name}} API client."""
 
-import fnmatch
 import random
 import time
 from typing import Dict, List, Optional
 
 import requests
+from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
 
@@ -37,13 +37,28 @@ class {{Name}}Client:
 
     def __init__(
         self,
+        config=None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         jitter: float = DEFAULT_JITTER,
     ):
-        self.config = get_config()
-        if not self.config.has_credentials():
+        self.config = config or get_config()
+        credential_types = list(getattr(self.config, "CREDENTIAL_TYPES", []))
+        has_browser_session = CredentialType.BROWSER_SESSION in credential_types
+        has_non_browser_auth = any(ct != CredentialType.BROWSER_SESSION for ct in credential_types)
+
+        if has_browser_session and has_non_browser_auth:
+            if not hasattr(self.config, "has_api_credentials"):
+                raise ClientError(
+                    "Config.has_api_credentials() is required when API credentials are combined "
+                    "with browser_session."
+                )
+            authenticated = self.config.has_api_credentials()
+        else:
+            authenticated = self.config.has_credentials()
+
+        if not authenticated:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
@@ -147,27 +162,22 @@ class {{Name}}Client:
 
     @cached
     def list_items(self, limit: int = 100) -> List[dict]:
-        response = self._make_request("GET", "/items", params={"limit": limit})
-        raw_items = response["items"]
-        if not isinstance(raw_items, list):
-            raise ClientError("Expected 'items' to be a list.")
-        return [normalize_item(item) for item in raw_items]
+        raise NotImplementedError(
+            "Implement list_items() with the service's real list endpoint and return normalized dict records."
+        )
 
     @cached
     def get_item(self, item_id: str) -> dict:
-        response = self._make_request("GET", f"/items/{item_id}")
-        return normalize_item_detail(response["item"])
+        raise NotImplementedError(
+            "Implement get_item() with the service's real detail endpoint and return a normalized dict record."
+        )
 
     @cached
     def search_items(self, query: str, limit: int = 100) -> List[dict]:
-        pattern = query.lower()
-        if "*" not in pattern:
-            pattern = f"*{pattern}*"
-        results = []
-        for item in self.list_items(limit=limit):
-            if any(fnmatch.fnmatch(str(value).lower(), pattern) for value in item.values()):
-                results.append(item)
-        return results[:limit]
+        raise NotImplementedError(
+            "Implement search_items() with the service's real search flow or delegate to list_items() "
+            "plus deterministic client-side filtering."
+        )
 
 
 _client: Optional[{{Name}}Client] = None

@@ -1,7 +1,7 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-05-20T16:05:41.744416+00:00",
+  "discovered_at": "2026-05-21T15:12:27.796418+00:00",
   "total_commands": 68,
   "global_options": [
     {
@@ -38,13 +38,6 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom')",
-              "short": "-c"
             }
           ],
           "usage_instructions": "Use `ata-blog auth login` with the documented arguments and options shown below."
@@ -1212,8 +1205,7 @@
                   "type": "INTEGER",
                   "required": false,
                   "help": "Maximum plugins to return",
-                  "short": "-l",
-                  "default": "100"
+                  "short": "-l"
                 },
                 {
                   "name": "--filter",

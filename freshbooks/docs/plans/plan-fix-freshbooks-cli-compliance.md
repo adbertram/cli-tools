@@ -5,7 +5,7 @@ The FreshBooks CLI requires compliance fixes including missing infrastructure (i
 
 ## Why This Approach
 - Groups changes by file to minimize context switching
-- Follows existing template patterns from `_repo/_templates/api/` for retry logic and models
+- Follows existing template patterns from `_repo/skills/cli-tool/templates/api/` for retry logic and models
 - Prioritizes critical failures (blocking issues) before warnings
 - Uses the simplest possible changes that satisfy compliance requirements
 

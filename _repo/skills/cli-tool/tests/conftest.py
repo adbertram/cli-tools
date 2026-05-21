@@ -179,6 +179,43 @@ def pytest_configure(config):
         )
 
 
+def _resolve_cli_dir_from_launcher(cli_name: str) -> Path:
+    """Resolve a CLI's source directory via its installed launcher interpreter."""
+    exe_path = Path.home() / ".local" / "bin" / cli_name
+    if not exe_path.exists():
+        exe_path_win = exe_path.with_suffix(".exe")
+        if exe_path_win.exists():
+            exe_path = exe_path_win
+        else:
+            raise FileNotFoundError(f"CLI executable not found at {exe_path}")
+
+    first_line = exe_path.read_text().splitlines()[0].strip()
+    if not first_line.startswith("#!"):
+        raise RuntimeError(f"Launcher at {exe_path} has no shebang")
+
+    launcher_python = first_line[2:]
+    dist_name = f"{cli_name}-cli"
+    result = subprocess.run(
+        [
+            launcher_python,
+            "-c",
+            (
+                "from cli_tools_shared.config import resolve_tool_dir; "
+                f"print(resolve_tool_dir({dist_name!r}))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+
+    resolved = Path(result.stdout.strip())
+    if not resolved.is_dir():
+        raise RuntimeError(f"Resolved path is not a directory: {resolved}")
+    return resolved
+
+
 @pytest.fixture(scope="session")
 def test_config() -> Dict:
     """Load test configuration from TOML file."""
@@ -206,9 +243,15 @@ def cli_name(request) -> str:
 def cli_dir(cli_name, cli_tools_root) -> Path:
     """Get CLI directory path."""
     path = cli_tools_root / cli_name
-    if not path.exists():
-        pytest.fail(f"CLI directory not found: {path}")
-    return path
+    if path.exists():
+        return path
+
+    try:
+        return _resolve_cli_dir_from_launcher(cli_name)
+    except Exception as exc:
+        pytest.fail(
+            f"CLI directory not found at {path}, and launcher-based resolution failed: {exc}"
+        )
 
 
 @pytest.fixture(scope="session")

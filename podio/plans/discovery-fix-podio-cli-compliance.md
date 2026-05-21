@@ -61,10 +61,10 @@
 **A:** all list commands should have an --app-id parameter to filter by app but if not provided, should return all resources in ALL apps
 
 **Q:** I found `_apply_client_filter()` duplicated in task.py, app.py, webform.py, conversation.py, and comment.py with slightly different implementations. Should I create a centralized filters.py module like kick CLI has?
-**A:** look at how the cli-tools/_repo/_templates/api does it and replicate its filtering
+**A:** look at how the cli-tools/_repo/skills/cli-tool/templates/api does it and replicate its filtering
 
 **Q:** The test expects filter_translator.py but other CLIs use filters.py. Should I create filter_translator.py (which translates CLI filters to API filters), filters.py (which does client-side filtering), or both?
-**A:** find the cli-tools/_repo/_templates/api template and use that approach
+**A:** find the cli-tools/_repo/skills/cli-tool/templates/api template and use that approach
 
 ### Wave: Technical Decisions
 
@@ -143,7 +143,7 @@
 ## Key Decisions
 
 1. **Positional Arguments Issue**: Instead of changing Podio CLI, modify the pytest test to emit a warning instead of failure for required positional arguments
-2. **Filter System**: Use the cli-tools/_repo/_templates/api template approach for filters.py and filter_translator.py
+2. **Filter System**: Use the cli-tools/_repo/skills/cli-tool/templates/api template approach for filters.py and filter_translator.py
 3. **Filter Operators**: Use all operators that CLI standards require
 4. **Task List API Error**: Add default --completed=false filter when no filters provided
 5. **File List Command**: Add new file list command to satisfy get/list pairing requirement

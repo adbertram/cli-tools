@@ -46,9 +46,9 @@ BREW_PACKAGE_MAP = {
     "fzf": "fzf",
 }
 
-# IMPORTANT: Templates in this repo's skills/cli-tool/templates/ use Path(__file__).resolve().parent.parent in config.py
-# The .resolve() is MANDATORY - it ensures the CLI finds its .env file regardless of cwd.
-# Do NOT remove .resolve() from the templates or CLIs will fail when run from other directories.
+# IMPORTANT: Auth-capable templates must resolve tool_dir via
+# cli_tools_shared.config.resolve_tool_dir(DIST_NAME), not from __file__.
+# Wrapper templates still use shared config paths for CLI_COMMAND / CLI_PATH.
 
 
 def print_step(msg: str):
@@ -306,6 +306,9 @@ Examples:
 
     # Validate type-specific requirements
     if args.type == "wrapper":
+        if args.auth_type != ["none"]:
+            print_error("Wrapper scaffolds support only --auth-type none. Extend the wrapper intentionally if it needs shared auth.")
+            sys.exit(1)
         if not args.cli_command:
             print_error("--cli-command is required for wrapper type")
             sys.exit(1)
@@ -368,6 +371,107 @@ Examples:
         credential_type_names = [AUTH_TYPE_MAP[at] for at in args.auth_type]
         credential_types_str = ", ".join(f"CredentialType.{name_}" for name_ in credential_type_names)
 
+    auth_import = ""
+    auth_mount = ""
+    auth_quick_start = ""
+    auth_commands_section = ""
+    auth_profiles_section = ""
+    auth_config_section = ""
+    if not no_auth:
+        auth_import = "from cli_tools_shared.auth_commands import create_auth_app"
+        auth_mount = f'app.add_typer(create_auth_app(get_config, tool_name="{name}"), name="auth")'
+        auth_quick_start = (
+            f"# Authenticate with {name_pascal}\n"
+            f"{name} auth login\n\n"
+        )
+        auth_commands_section = f"""### Authentication (`{name} auth`)
+
+```bash
+# Interactive login
+{name} auth login
+
+# Force re-authentication
+{name} auth login --force
+
+# Check authentication status
+{name} auth status
+
+# Run the configured live auth test
+{name} auth test
+
+# Clear saved credentials/session
+{name} auth logout
+```
+
+"""
+        auth_profiles_section = f"""### Profiles (`{name} auth profiles`)
+
+```bash
+# List all profiles
+{name} auth profiles list
+
+# Show a profile
+{name} auth profiles get default
+
+# Switch the default profile
+{name} auth profiles set-default PROFILE_NAME
+
+# Create a profile
+{name} auth profiles create PROFILE_NAME
+
+# Delete a profile
+{name} auth profiles delete PROFILE_NAME
+```
+
+"""
+        auth_config_section = f"""Authentication profile variables (CLI-managed runtime auth state):
+
+```bash
+IS_DEFAULT_PROFILE=1
+ACCESS_TOKEN=<access_token_written_by_cli>
+REFRESH_TOKEN=<refresh_token_written_by_cli>
+TOKEN_EXPIRES_AT=2026-01-01T00:00:00Z
+```
+
+Reusable raw credentials belong in the CLI-tools secret manager, not in `.env` files. If this CLI persists secret-manager references into the active profile, they look like:
+
+```bash
+API_KEY=secret://{name}-api-key
+PERSONAL_ACCESS_TOKEN=secret://{name}-personal-access-token
+CLIENT_ID=secret://{name}-client-id
+CLIENT_SECRET=secret://{name}-client-secret
+USERNAME=secret://{name}-username
+PASSWORD=secret://{name}-password
+```
+
+"""
+
+    cache_section = ""
+    if args.type == "api":
+        cache_section = f"""## Cache
+
+```bash
+# Clear cached read responses
+{name} cache clear
+
+# Bypass the cache for one execution
+{name} --no-cache items list --limit 10
+```
+
+"""
+    elif args.type == "browser":
+        cache_section = f"""## Cache
+
+```bash
+# Clear cached read responses
+{name} cache clear
+
+# Bypass the cache for one execution
+{name} --no-cache search list --limit 10
+```
+
+"""
+
     # Build replacements dict
     cli_command = args.cli_command or name
     replacements = {
@@ -380,6 +484,13 @@ Examples:
         "{{description}}": args.description or (f"Wrapper for {cli_command}" if args.type == "wrapper" else f"Interact with {name_pascal}"),
         "{{docs_url}}": args.docs_url or args.base_url or "",
         "{{credential_types}}": credential_types_str,
+        "{{AUTH_IMPORT}}": auth_import,
+        "{{AUTH_MOUNT}}": auth_mount,
+        "{{AUTH_QUICK_START}}": auth_quick_start,
+        "{{AUTH_COMMANDS_SECTION}}": auth_commands_section,
+        "{{AUTH_PROFILES_SECTION}}": auth_profiles_section,
+        "{{AUTH_CONFIG_SECTION}}": auth_config_section,
+        "{{CACHE_SECTION}}": cache_section,
     }
     
     print(f"\n\033[1m Creating CLI tool: {name}\033[0m")
@@ -440,8 +551,12 @@ Examples:
     print(f"  3. Define the command output fields in README.md")
     print(f"  4. Update client.py normalizers to return those dict records")
     print(f"  5. Test: {name} --help")
-    print(f"\nInstalled via uv: ~/.local/bin/{name}")
-    print("  (Works immediately - no need to source anything)")
+    if args.no_install:
+        print(f"\nuv install skipped (--no-install).")
+        print(f"  Run 'uv tool install -e {output_dir} --force --refresh' when you want the launcher installed.")
+    else:
+        print(f"\nInstalled via uv: ~/.local/bin/{name}")
+        print("  (Works immediately - no need to source anything)")
     print(f"\nOutput-contract-first architecture:")
     print(f"  - main.py: Typer command contract, shared filtering, properties, and rendering")
     print(f"  - client.py: data retrieval plus normalizers that return public dict records")
@@ -460,7 +575,7 @@ Examples:
             brew_pkg = get_brew_package_name(cli_command)
             print(f"\nNote: '{cli_command}' CLI is NOT installed. Install with:")
             print(f"  brew install {brew_pkg}")
-        print(f"  Customize client.py auth methods and parsers.py for your CLI's output format.")
+        print(f"  Customize client.py command methods and parsers.py for your CLI's output format.")
 
 
 if __name__ == "__main__":

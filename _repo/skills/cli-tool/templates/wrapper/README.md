@@ -4,18 +4,13 @@ A standardized command-line wrapper for [{{cli_command}}]({{docs_url}}). {{descr
 
 ## Prerequisites
 
-This CLI wraps the `{{cli_command}}` command-line tool. You must install it first:
-
-```bash
-# Install {{cli_command}} (customize for your tool)
-# Example: brew install {{cli_command}}
-```
+This CLI wraps the `{{cli_command}}` command-line tool. Install that tool first.
 
 ## Installation
 
 ```bash
-cd {{name}}
-pip install -e .
+cd <cli-tools-root>/{{name}}
+uv tool install -e . --force --refresh
 ```
 
 After installation, the `{{name}}` command will be available in your terminal.
@@ -23,74 +18,52 @@ After installation, the `{{name}}` command will be available in your terminal.
 ## Quick Start
 
 ```bash
-# Check if underlying CLI is available
-{{name}} auth status
-
-# Login (delegates to {{cli_command}})
-{{name}} auth login
+# Verify the wrapped CLI is available
+{{name}} --help
 
 # List items
-{{name}} items list
+{{name}} items list --limit 10
+
+# Show table output
+{{name}} items list --limit 10 --table
 ```
 
 ## How It Works
 
-This CLI is a **wrapper** around the `{{cli_command}}` command-line tool:
+This CLI is a wrapper around `{{cli_command}}`:
 
-- **Auth commands** delegate directly to `{{cli_command}}`'s authentication
-- **Data commands** call `{{cli_command}}`, parse the output, and present it in standard JSON/table format
-- **Configuration** is minimal - the underlying CLI handles credentials
+- The wrapped CLI owns authentication unless you extend this scaffold intentionally.
+- Wrapper commands should call `{{cli_command}}`, parse deterministic output, and present standard JSON/table output.
+- Wrapper-local configuration stores only settings such as `CLI_COMMAND` / `CLI_PATH`.
 
 ## Commands
-
-### Authentication
-
-Authentication is handled by the underlying `{{cli_command}}` CLI.
-
-```bash
-# Login via {{cli_command}}
-{{name}} auth login
-
-# Check status
-{{name}} auth status
-{{name}} auth status
-
-# Logout
-{{name}} auth logout
-```
-
-### Profiles (`{{name}} auth profiles`)
-
-```bash
-# List all profiles
-{{name}} auth profiles list
-
-# Show a profile
-{{name}} auth profiles get default
-
-# Switch default profile
-{{name}} auth profiles set-default PROFILE_NAME
-
-# Create a new profile
-{{name}} auth profiles create PROFILE_NAME
-```
 
 ### Items
 
 ```bash
 # List items
-{{name}} items list
-{{name}} items list
+{{name}} items list --limit 25
 
-# Get specific item
-{{name}} items get <item-id>
+# List items with table output
+{{name}} items list --limit 25 --table
+
+# Filter items
+{{name}} items list --filter "status:eq:active"
+
+# Restrict output fields
+{{name}} items list --properties "id,name"
+
+# Get a specific item
+{{name}} items get ITEM_ID --table
+
+# Search items
+{{name}} items search "widget" --limit 10
 ```
 
 ## Output Formats
 
-All commands support two output formats:
-
-- **JSON** (default): Machine-readable output for scripting and piping
+- JSON is the default output format.
+- Add `--table` / `-t` for human-readable table output.
 
 ## AI Instruction Results
 
@@ -100,7 +73,7 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 
 ## Configuration
 
-The wrapper stores non-authentication configuration in `~/.local/share/cli-tools/{{name}}/.env`. Authentication data belongs to the active profile at `~/.local/share/cli-tools/{{name}}/authentication_profiles/<profile>/.env`. Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+The wrapper stores non-authentication configuration in `~/.local/share/cli-tools/{{name}}/.env`. Do not put reusable credentials in any `.env` file. This scaffold does not generate auth commands; if the wrapped CLI needs credentials, configure them through the wrapped CLI itself or extend this wrapper intentionally.
 
 Root config variables:
 
@@ -108,14 +81,8 @@ Root config variables:
 # Underlying CLI command (defaults to {{cli_command}})
 CLI_COMMAND={{cli_command}}
 
-# Optional: Full path to CLI executable
+# Optional: full path to the wrapped CLI executable
 # CLI_PATH=
-```
-
-Authentication profile variables:
-
-```bash
-IS_DEFAULT_PROFILE=1
 ```
 
 ## Exit Codes
@@ -124,7 +91,7 @@ IS_DEFAULT_PROFILE=1
 |------|---------|
 | 0 | Success |
 | 1 | General error |
-| 2 | Authentication/CLI not available error |
+| 2 | Client/configuration error |
 | 130 | User interrupted (Ctrl+C) |
 
 ## Examples
@@ -132,7 +99,7 @@ IS_DEFAULT_PROFILE=1
 ### List Items and Filter with jq
 
 ```bash
-{{name}} items list | jq '.[].name'
+{{name}} items list --properties "id,name" | jq '.[].name'
 ```
 
 ### Export to JSON File
@@ -151,12 +118,12 @@ Commands return plain JSON records. The default item record shape is:
 | `name` | Item display name |
 | `status` | Item status |
 
-Update `parse_cli_output()`, `normalize_item()`, and `normalize_item_detail()` to map the underlying CLI output into the documented command output. Add local models only when validation, polymorphism, or serialization removes real complexity.
+Update `list_items()`, `get_item()`, `search_items()`, and `parse_cli_output()` to match the wrapped CLI's real command shape and output format. Keep the parser deterministic; do not add auto-detection or fallback parsing paths. Add local models only when validation, polymorphism, or serialization removes real complexity.
 
 ## Requirements
 
-- Python 3.9+
-- `{{cli_command}}` CLI installed and in PATH
+- Python 3.11+
+- `{{cli_command}}` installed and available in PATH
 - Dependencies (installed automatically):
   - typer
   - python-dotenv

@@ -23,27 +23,6 @@ if [ ! -d "$TOOL_DIR" ]; then
 fi
 
 # ============================================================================
-# Source-tree venv guard: never tolerate a virtualenv inside the CLI source dir
-# ============================================================================
-# `uv run`, `uv sync`, `uv pip install` (without VIRTUAL_ENV pinned), or any
-# bare `python -m venv .venv` invoked from within a CLI tool source tree will
-# create a `<tool>/.venv/` that gets Dropbox-synced, shadows the real uv tool
-# venv at ~/.local/share/uv/tools/<pkg>/, breaks editable-install resolution,
-# and trips the cli-tools-shared compliance test_no_venv_in_cli_tool_source
-# assertion. We delete every forbidden virtualenv directory before installing
-# so every install starts from a clean source tree. The compliance test in
-# _repo/cli-tools-shared/tests/test_no_venv_in_cli_tool_sources.py defines the
-# canonical forbidden set; we mirror it here.
-SOURCE_VENVS_REMOVED=()
-for venv_name in .venv venv .virtualenv env .env_dir; do
-    candidate="$TOOL_DIR/$venv_name"
-    if [ -d "$candidate" ]; then
-        rm -rf "$candidate"
-        SOURCE_VENVS_REMOVED+=("$venv_name")
-    fi
-done
-
-# ============================================================================
 # Install via uv tool install (editable mode, force reinstall)
 # ============================================================================
 # When pyproject.toml's requires-python has an upper bound (e.g. ">=3.13,<3.14"),
@@ -233,12 +212,6 @@ EDITABLE_LOCATION_JSON="null"
 SHARED_EDITABLE_LOCATION_JSON="null"
 [ -n "$SHARED_EDITABLE_LOCATION" ] && SHARED_EDITABLE_LOCATION_JSON="\"$SHARED_EDITABLE_LOCATION\""
 
-# Serialize SOURCE_VENVS_REMOVED as a JSON array
-SOURCE_VENVS_REMOVED_JSON="[]"
-if [ ${#SOURCE_VENVS_REMOVED[@]} -gt 0 ]; then
-    SOURCE_VENVS_REMOVED_JSON=$(printf '%s\n' "${SOURCE_VENVS_REMOVED[@]}" | python3 -c "import sys,json; print(json.dumps([line.rstrip() for line in sys.stdin if line.strip()]))")
-fi
-
 cat <<EOF
 {
   "success": $SUCCESS,
@@ -249,7 +222,6 @@ cat <<EOF
   "editable_location": $EDITABLE_LOCATION_JSON,
   "shared_editable_install": "$SHARED_EDITABLE_INSTALL",
   "shared_editable_location": $SHARED_EDITABLE_LOCATION_JSON,
-  "help_works": $HELP_WORKS,
-  "source_venvs_removed": $SOURCE_VENVS_REMOVED_JSON
+  "help_works": $HELP_WORKS
 }
 EOF

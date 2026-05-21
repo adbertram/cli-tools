@@ -1,6 +1,7 @@
 """Installation and packaging tests (uv tool install)."""
 
 import json
+import os
 import pytest
 import re
 import subprocess
@@ -8,6 +9,14 @@ import tomllib
 from pathlib import Path
 
 from cli_test_utils import run_cli_command, get_uv_tool_venv_dir
+
+
+def _find_cli_tools_root(cli_dir: Path) -> Path | None:
+    """Find the cli-tools repo root from a CLI directory."""
+    for candidate in [cli_dir, *cli_dir.parents]:
+        if (candidate / "_repo" / "cli-tools-shared").is_dir():
+            return candidate
+    return None
 
 
 def test_uv_tool_registered(cli_name, cli_dir, command_filter):
@@ -115,7 +124,11 @@ def test_cli_tools_shared_uses_local_editable_repo_when_available(cli_name, cli_
     if not any("cli-tools-shared" in dep for dep in deps):
         pytest.skip(f"{cli_name} does not depend on cli-tools-shared")
 
-    local_shared_dir = cli_dir.parent / "_repo" / "cli-tools-shared"
+    cli_tools_root = _find_cli_tools_root(cli_dir)
+    if cli_tools_root is None:
+        pytest.skip(f"Could not locate cli-tools root for {cli_dir}")
+
+    local_shared_dir = cli_tools_root / "_repo" / "cli-tools-shared"
     if not local_shared_dir.is_dir():
         pytest.skip(f"Local cli-tools-shared repo not found at {local_shared_dir}")
 
@@ -172,10 +185,18 @@ def test_cli_tools_shared_uses_repo_local_source(cli_name, cli_dir, command_filt
         f"{cli_name}/pyproject.toml declares cli-tools-shared as '{cts_dep.strip()}'. "
         'Fix: use "cli-tools-shared" in dependencies.'
     )
+    cli_tools_root = _find_cli_tools_root(cli_dir)
+    if cli_tools_root is None:
+        pytest.skip(f"Could not locate cli-tools root for {cli_dir}")
+
+    expected_relative_path = os.path.relpath(
+        cli_tools_root / "_repo" / "cli-tools-shared",
+        cli_dir,
+    )
     source = data.get("tool", {}).get("uv", {}).get("sources", {}).get("cli-tools-shared")
-    assert source == {"path": "../_repo/cli-tools-shared", "editable": True}, (
+    assert source == {"path": expected_relative_path, "editable": True}, (
         f"{cli_name}/pyproject.toml must map cli-tools-shared to the local sibling package. "
-        'Fix: add [tool.uv.sources] cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }.'
+        f"Fix: add [tool.uv.sources] cli-tools-shared = {{ path = {expected_relative_path!r}, editable = true }}."
     )
 
 

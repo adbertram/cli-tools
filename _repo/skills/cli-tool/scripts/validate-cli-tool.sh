@@ -36,17 +36,6 @@ EXPECTED_SHEBANG_PREFIX="#!$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME/bin/pyt
 dir_exists=false
 [ -d "$TOOL_DIR" ] && dir_exists=true
 
-no_source_venv=true
-source_venvs_found=()
-if [ "$dir_exists" = "true" ]; then
-    for venv_name in .venv venv .virtualenv env .env_dir; do
-        if [ -d "$TOOL_DIR/$venv_name" ]; then
-            no_source_venv=false
-            source_venvs_found+=("$venv_name")
-        fi
-    done
-fi
-
 uv_tool_installed=false
 uv tool list 2>/dev/null | grep -q "$CLI_NAME" && uv_tool_installed=true
 
@@ -140,7 +129,7 @@ if [ -f "$TOOL_DIR/pyproject.toml" ] && grep -q "cli-tools-shared" "$TOOL_DIR/py
 fi
 
 # Required checks (must all be true for all_passed).
-required=(dir_exists no_source_venv uv_tool_installed executable_exists help_works
+required=(dir_exists uv_tool_installed executable_exists help_works
           symlink_exists shebang_correct uses_create_app uses_run_app)
 [ "$is_no_auth_cli" = "true" ] || required+=(auth_group_exists)
 [ "$is_wrapper" = "true" ] || required+=(no_cache_works)
@@ -156,8 +145,6 @@ done
 CLI_NAME="$CLI_NAME" \
 ALL_PASSED="$all_passed" \
 DIR_EXISTS="$dir_exists" \
-NO_SOURCE_VENV="$no_source_venv" \
-SOURCE_VENVS_FOUND="${source_venvs_found[*]}" \
 UV_TOOL_INSTALLED="$uv_tool_installed" \
 EXECUTABLE_EXISTS="$executable_exists" \
 HELP_WORKS="$help_works" \
@@ -184,16 +171,11 @@ def coerce(v):
     if v == "skipped": return "skipped"
     return v or None
 
-def coerce_list(v):
-    return [item for item in (v or "").split() if item]
-
 print(json.dumps({
     "cli_name": os.environ["CLI_NAME"],
     "all_passed": coerce(os.environ["ALL_PASSED"]),
     "checks": {
         "dir_exists": coerce(os.environ["DIR_EXISTS"]),
-        "no_source_venv": coerce(os.environ["NO_SOURCE_VENV"]),
-        "source_venvs_found": coerce_list(os.environ["SOURCE_VENVS_FOUND"]),
         "uv_tool_installed": coerce(os.environ["UV_TOOL_INSTALLED"]),
         "executable_exists": coerce(os.environ["EXECUTABLE_EXISTS"]),
         "help_works": coerce(os.environ["HELP_WORKS"]),

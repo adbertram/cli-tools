@@ -8,7 +8,7 @@ environment variables passed from the shell wrapper:
     COMMAND    – optional command filter
     JUNIT      – path to the pytest --junitxml file
     EXIT_CODE  – pytest exit code (string)
-    RAW_OUTPUT – pytest stdout/stderr captured by the wrapper
+    RAW_OUTPUT_FILE – path to pytest stdout/stderr captured by the wrapper
 
 Emits a single JSON document on stdout.
 """
@@ -27,7 +27,15 @@ def main() -> int:
     command = os.environ.get("COMMAND") or None
     junit_path = os.environ.get("JUNIT", "")
     exit_code = int(os.environ.get("EXIT_CODE", "1"))
-    raw_output = os.environ.get("RAW_OUTPUT", "")
+    raw_output_file = os.environ.get("RAW_OUTPUT_FILE", "")
+    raw_output = ""
+    if raw_output_file:
+        try:
+            raw_output = open(raw_output_file, encoding="utf-8").read()
+        except OSError:
+            raw_output = ""
+    else:
+        raw_output = os.environ.get("RAW_OUTPUT", "")
 
     summary = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0}
     failures: list[dict] = []

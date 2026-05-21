@@ -1,8 +1,8 @@
 {
   "tool": "copilot",
   "description": "CLI interface for Microsoft Copilot Studio agents via Dataverse API",
-  "discovered_at": "2026-05-20T16:06:50.988757+00:00",
-  "total_commands": 179,
+  "discovered_at": "2026-05-21T16:34:32.744198+00:00",
+  "total_commands": 178,
   "global_options": [
     {
       "name": "--version",
@@ -229,10 +229,10 @@
       "usage_instructions": "Run `copilot cache --help` for exact arguments and options."
     },
     "config": {
-      "help": "Manage copilot configuration paths, profiles, and migration.",
+      "help": "Manage copilot configuration paths, profiles, and secrets.",
       "commands": {
         "show": {
-          "help": "Show effective config paths, active profile, and keychain status.",
+          "help": "Show effective config paths and active profile.",
           "options": [
             {
               "name": "--json",
@@ -244,7 +244,7 @@
           "usage_instructions": "Run `copilot config show --help` for exact arguments and options."
         },
         "path": {
-          "help": "Print a single resolved path (useful for shell scripting).",
+          "help": "Print a single resolved path.",
           "arguments": [
             {
               "name": "kind",
@@ -255,33 +255,8 @@
           ],
           "usage_instructions": "Run `copilot config path --help` for exact arguments and options."
         },
-        "migrate": {
-          "help": "Migrate legacy in-repo .env files to ``~/.config/copilot/`` + keychain. Idempotent: a ``.env.migrated`` marker is written next to each consumed legacy file. Re-running on a fully-migrated system is a clean no-op. The legacy ``.env`` files are NOT deleted — the user is prompted to review the output and remove them manually.",
-          "options": [
-            {
-              "name": "--yes",
-              "type": "bool",
-              "required": false,
-              "help": "Auto-confirm — store every secret in the keychain without prompting",
-              "short": "-y"
-            },
-            {
-              "name": "--skip-secrets",
-              "type": "bool",
-              "required": false,
-              "help": "Migrate non-secret values only; leave secrets untouched"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Show what would happen without writing anything"
-            }
-          ],
-          "usage_instructions": "Run `copilot config migrate --help` for exact arguments and options."
-        },
         "set-secret": {
-          "help": "Store a secret in the OS keychain for a profile.",
+          "help": "Store a secret in the CLI-tools secret manager for a profile.",
           "arguments": [
             {
               "name": "key",
@@ -2223,7 +2198,7 @@
                   "name": "agent_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Agent ID (GUID)"
+                  "help": "Agent ID (GUID) or model name"
                 }
               ],
               "examples": [
@@ -4616,6 +4591,28 @@
                       "short": "-u"
                     },
                     {
+                      "name": "--filter",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Filter: field:op:value (e.g., name:ilike:%sharepoint%)",
+                      "short": "-f"
+                    },
+                    {
+                      "name": "--limit",
+                      "type": "INTEGER",
+                      "required": false,
+                      "help": "Maximum number of tools to return",
+                      "short": "-l",
+                      "default": "100"
+                    },
+                    {
+                      "name": "--properties",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Comma-separated list of fields to include in output",
+                      "short": "-p"
+                    },
+                    {
                       "name": "--table",
                       "type": "bool",
                       "required": false,
@@ -4625,7 +4622,9 @@
                   ],
                   "examples": [
                     "copilot tool mcp tools list --url \"https://mcp.example.com/sse\"",
-                    "copilot tool mcp tools list --url \"https://mcp.example.com/sse\" --table"
+                    "copilot tool mcp tools list --url \"https://mcp.example.com/sse\" --table",
+                    "copilot tool mcp tools list --url \"https://mcp.example.com/sse\" --filter \"name:ilike:%site%\"",
+                    "copilot tool mcp tools list --url \"https://mcp.example.com/sse\" --properties \"name,description\""
                   ],
                   "usage_instructions": "Run `copilot tool mcp tools list --help` for exact arguments and options."
                 },

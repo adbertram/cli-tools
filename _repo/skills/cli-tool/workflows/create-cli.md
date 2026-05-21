@@ -340,20 +340,22 @@ def list_items(self, limit: int = 100) -> list[dict]:
 
 ## Step 6: Update .env.example
 
-Add all required environment variable names. `.env.example` documents shape only; it must not contain real values. Reusable CLI credentials are governed by `references/secrets.md`.
+Add all required environment variable names. `.env.example` documents shape only; it must not contain real values. Reusable CLI credentials are governed by `references/secrets.md` and must not be written into `.env.example` or any other `.env` file by an agent or human.
 
 ```bash
-# API type example
-<NAME>_API_KEY=your_api_key_here
+# API type example (shape only)
+API_KEY=
 <NAME>_BASE_URL=https://api.example.com
 
-# OAuth example
-<NAME>_CLIENT_ID=your_client_id
-<NAME>_CLIENT_SECRET=your_client_secret
+# OAuth example (shape only; secret values come from the secret manager)
+CLIENT_ID=
+CLIENT_SECRET=
 <NAME>_ACCESS_TOKEN=
 <NAME>_REFRESH_TOKEN=
 <NAME>_TOKEN_EXPIRES_AT=
 ```
+
+Document the boundary anywhere credentials are mentioned: reusable human-supplied secrets come from `<cli-tools-root>/_repo/_secret-manager/secrets.sh`; only CLI-managed runtime auth state belongs in profile `.env` files.
 
 ## Step 6.5: Code Simplification Pass (Post-Implementation)
 
@@ -481,6 +483,7 @@ Verify that:
 - Direct dependencies are used by runtime package code
 - Metadata-only command modules contain only `COMMAND_CREDENTIALS`
 - Browser subclasses contain declarative hook constants only
+- README, `.env.example`, and auth guidance route reusable human-supplied secrets to the CLI-tools secret manager instead of any `.env` file
 
 ### 9.6 Report AI Review Findings
 
@@ -492,6 +495,7 @@ Present findings in this format:
 - Dedicated filter commands: [None found / VIOLATION: found filter command]
 - Exponential retry: [Correctly implemented / Missing or incorrect]
 - Lean architecture: [Smallest clear implementation / VIOLATION: unused helpers, models, or dependencies]
+- Secret storage guidance: [Reusable credentials routed to secret manager / VIOLATION: guidance stores secrets in `.env`]
 ```
 
 **Fix any issues found before proceeding.** Re-run test-cli-tool.sh after fixes.
