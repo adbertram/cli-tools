@@ -310,6 +310,69 @@ exit 99
     assert "unlock-keychain" not in security_log_text
 
 
+def test_set_fails_when_security_writes_error_to_stderr_with_zero_exit(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "add-generic-password" ]]; then
+    echo "security: SecKeychainItemCreateFromContent (/Users/adam/Library/Keychains/login.keychain-db): User interaction is not allowed." >&2
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "set", "example-secret", "topsecret"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "User interaction is not allowed" in result.stderr
+
+
+def test_get_fails_when_security_reports_missing_item_on_stderr_with_zero_exit(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "find-generic-password" ]]; then
+    echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "get", "example-secret"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "The specified item could not be found in the keychain" in result.stderr
+    assert result.stdout == ""
+
+
 def test_has_returns_missing_only_for_keychain_not_found_status(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
