@@ -12,6 +12,8 @@ from .config import get_config
 from .usage import record_usage
 
 _RATE_LIMIT_DELAYS = [30, 60, 120, 240]
+_FILES_LIST_TIMEOUT_MS = 25_000
+_MODELS_LIST_TIMEOUT_MS = 25_000
 T = TypeVar("T")
 
 
@@ -47,7 +49,12 @@ def _retry_on_rate_limit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return fn(*args, **kwargs)
 
 
-def _record_response_usage(response, model: str, operation: str = "generate") -> None:
+def _record_response_usage(
+    response,
+    model: str,
+    operation: str = "generate",
+    config=None,
+) -> None:
     """Record usage from a response's usage_metadata."""
     if response.usage_metadata:
         meta = response.usage_metadata
@@ -58,6 +65,7 @@ def _record_response_usage(response, model: str, operation: str = "generate") ->
             total_tokens=meta.total_token_count or 0,
             cached_tokens=meta.cached_content_token_count or 0,
             operation=operation,
+            config=config,
         )
 
 
@@ -132,15 +140,30 @@ class GeminiClient:
             time.sleep(5)
         raise ClientError(f"File processing timed out after {timeout} seconds")
 
-    def list_files(self) -> List[types.File]:
+    def list_files(self, limit: int = 100) -> List[types.File]:
         """
-        List all uploaded files.
+        List uploaded files up to the requested limit.
 
         Returns:
             List of File objects
         """
         try:
-            files = list(_retry_on_rate_limit(self.client.files.list))
+            page_size = min(limit, 100)
+            pager = self.client.files.list(
+                config={
+                    "page_size": page_size,
+                    "http_options": {"timeout": _FILES_LIST_TIMEOUT_MS},
+                }
+            )
+            files = list(pager.page)
+
+            while len(files) < limit:
+                try:
+                    next_page = pager.next_page()
+                except IndexError:
+                    break
+                files.extend(next_page[: limit - len(files)])
+
             return files
         except Exception as e:
             raise ClientError(f"Failed to list files: {e}")
@@ -242,7 +265,7 @@ class GeminiClient:
             )
 
             # Record usage
-            _record_response_usage(response, model, operation)
+            _record_response_usage(response, model, operation, self.config)
 
             # Extract text parts directly to avoid warning about non-text parts (e.g., thought_signature)
             text_parts = [
@@ -334,7 +357,7 @@ class GeminiClient:
                 )
 
                 # Record usage
-                _record_response_usage(response, model, "video_analyze")
+                _record_response_usage(response, model, "video_analyze", self.config)
 
                 # Extract text parts directly to avoid warning about non-text parts (e.g., thought_signature)
                 text_parts = [
@@ -435,7 +458,7 @@ class GeminiClient:
             )
 
             # Record usage
-            _record_response_usage(response, model, "image_generate")
+            _record_response_usage(response, model, "image_generate", self.config)
 
             # Extract results
             result = {
@@ -461,15 +484,31 @@ class GeminiClient:
 
     # ==================== Model Operations ====================
 
-    def list_models(self) -> List[Any]:
+    def list_models(self, limit: int = 100) -> List[Any]:
         """
-        List available Gemini models.
+        List available Gemini models up to the requested limit.
 
         Returns:
             List of available models
         """
         try:
-            models = list(_retry_on_rate_limit(self.client.models.list))
+            page_size = min(limit, 100)
+            pager = _retry_on_rate_limit(
+                self.client.models.list,
+                config={
+                    "page_size": page_size,
+                    "http_options": {"timeout": _MODELS_LIST_TIMEOUT_MS},
+                },
+            )
+            models = list(pager.page)
+
+            while len(models) < limit:
+                try:
+                    next_page = pager.next_page()
+                except IndexError:
+                    break
+                models.extend(next_page[: limit - len(models)])
+
             return models
         except Exception as e:
             raise ClientError(f"Failed to list models: {e}")

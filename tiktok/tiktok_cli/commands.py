@@ -1,10 +1,16 @@
 """Transcripts commands for TikTok CLI."""
+COMMAND_CREDENTIALS = {
+    "download": [
+        "custom"
+    ]
+}
+
 import typer
 from typing import List
 from pathlib import Path
 
-from .client import get_client, ClientError
 from cli_tools_shared.output import print_success, print_error, print_info, print_table
+from .client import get_client, ClientError
 
 app = typer.Typer(help="Download TikTok video transcripts")
 

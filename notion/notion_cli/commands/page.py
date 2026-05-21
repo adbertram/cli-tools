@@ -5,7 +5,7 @@ from typing import Optional, List
 from pathlib import Path
 
 from ..client import get_client
-from ..filters import validate_filters, apply_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (
     print_json,
     print_table,
@@ -1865,7 +1865,8 @@ def blocks_list(
     """
     try:
         client = get_client()
-        blocks = client.get_block_children_all(page_id, recursive=recursive)
+        fetch_limit = None if recursive else limit
+        blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
 
         if not blocks:
             typer.echo("No blocks found.")

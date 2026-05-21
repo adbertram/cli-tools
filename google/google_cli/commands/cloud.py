@@ -24,6 +24,13 @@ services_app = typer.Typer(help="Manage Google Cloud API services")
 app.add_typer(services_app, name="services")
 
 
+def _normalize_project(project: dict) -> dict:
+    """Return the CLI-facing shape for a Cloud project."""
+    normalized = dict(project)
+    normalized["id"] = project["projectId"]
+    return normalized
+
+
 @projects_app.command("list")
 def projects_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of projects to list"),
@@ -57,7 +64,7 @@ def projects_list(
             if not page_token:
                 break
 
-        all_projects = all_projects[:limit]
+        all_projects = [_normalize_project(project) for project in all_projects[:limit]]
 
         if properties:
             all_projects = [{k: v for k, v in p.items() if k in properties} for p in all_projects]
@@ -87,7 +94,9 @@ def projects_get(
         client = get_client(profile=profile)
         service = client.get_cloud_resource_manager_service()
 
-        project = service.projects().get(name=f"projects/{project_id}").execute()
+        project = _normalize_project(
+            service.projects().get(name=f"projects/{project_id}").execute()
+        )
 
         if table:
             print_table([project], ['displayName', 'projectId', 'state'],

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.output import print_json, print_table, print_success, handle_error
-from ..filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack users")
 

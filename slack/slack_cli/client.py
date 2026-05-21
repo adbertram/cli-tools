@@ -1,13 +1,17 @@
 """Slack API client with automatic token management."""
 import json
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 import requests
 
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 from cli_tools_shared.data_cache import cached
+from cli_tools_shared.filters import validate_filters, FilterValidationError
 
 
 # Load API operations token requirements from JSON

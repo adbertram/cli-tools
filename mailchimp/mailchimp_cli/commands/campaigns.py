@@ -4,8 +4,10 @@ import typer
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from ..client import get_client
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
+
+from ..client import get_client
 
 app = typer.Typer(help="Manage email campaigns")
 
@@ -52,9 +54,11 @@ def _campaign_sponsor_domains(client, campaign_id: str, sponsor_domains: Optiona
 @app.command("list")
 def campaigns_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    count: int = typer.Option(10, "--count", "-c", help="Number of campaigns to return"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of campaigns to return"),
     offset: int = typer.Option(0, "--offset", "-o", help="Offset for pagination"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (save, paused, schedule, sending, sent)"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
     include_rss_child_campaigns: bool = typer.Option(
         False, "--include-rss-child-campaigns", help="Include RSS child campaigns (individual sends from RSS campaigns)"
     ),
@@ -99,41 +103,27 @@ def campaigns_list(
             result["total_items"] = len(campaigns)
         elif include_rss_child_campaigns:
             # Include all campaigns, including RSS child campaigns
-            result = client.list_campaigns(count=count, offset=offset, **kwargs)
+            result = client.list_campaigns(count=limit, offset=offset, **kwargs)
             campaigns = result.get("campaigns", [])
         else:
             # Default behavior: exclude RSS child campaigns
-            result = client.list_campaigns(count=count, offset=offset, **kwargs)
+            result = client.list_campaigns(count=limit, offset=offset, **kwargs)
             all_campaigns = result.get("campaigns", [])
             # Filter out campaigns with parent_campaign_id (RSS children)
             campaigns = [c for c in all_campaigns if not c.get("parent_campaign_id")]
-            result["campaigns"] = campaigns
 
-        campaigns = result.get("campaigns", [])
+        for campaign in campaigns:
+            matched_domains = _campaign_sponsor_domains(client, campaign.get("id"), sponsor_domain)
+            if sponsor_domain:
+                campaign["sponsor_domains"] = matched_domains
+
+        campaigns = apply_filters(campaigns, filter)
+        campaigns = apply_limit(campaigns, limit)
+        campaigns = apply_properties_filter(campaigns, properties)
 
         if table:
-            table_data = []
-            for campaign in campaigns:
-                settings = campaign.get("settings", {})
-                row = {
-                    "id": campaign.get("id", ""),
-                    "type": campaign.get("type", ""),
-                    "status": campaign.get("status", ""),
-                    "subject": settings.get("subject_line", "N/A"),
-                    "created": campaign.get("create_time", "")[:10],
-                }
-                # Include parent_campaign_id if showing RSS children
-                if include_rss_child_campaigns or rss_parent_id:
-                    row["parent_id"] = campaign.get("parent_campaign_id", "")
-
-                matched_domains = _campaign_sponsor_domains(client, campaign.get("id"), sponsor_domain)
-                if sponsor_domain:
-                    row["sponsor_domains"] = ",".join(matched_domains)
-
-                table_data.append(row)
-
-            columns = ["id", "type", "status", "subject", "created"]
-            headers = ["ID", "Type", "Status", "Subject", "Created"]
+            columns = [field.strip() for field in properties.split(",")] if properties else ["id", "type", "status", "settings.subject_line", "create_time"]
+            headers = [column.replace("_", " ").replace(".", " ").title() for column in columns]
             if include_rss_child_campaigns or rss_parent_id:
                 columns.insert(-1, "parent_id")
                 headers.insert(-1, "Parent ID")
@@ -141,13 +131,9 @@ def campaigns_list(
                 columns.append("sponsor_domains")
                 headers.append("Sponsor Domains")
 
-            print_table(table_data, columns, headers)
+            print_table(campaigns, columns, headers)
         else:
-            for campaign in campaigns:
-                matched_domains = _campaign_sponsor_domains(client, campaign.get("id"), sponsor_domain)
-                if sponsor_domain:
-                    campaign["sponsor_domains"] = matched_domains
-            print_json(result)
+            print_json(campaigns)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

@@ -4,6 +4,11 @@ These commands use the YouTube Data API v3 with OAuth (NOT yt-dlp). They
 operate on the user's own channel (videos owned by the authenticated user).
 """
 COMMAND_CREDENTIALS = {
+    "delete": ["custom"],
+    "get": ["custom"],
+    "list": ["custom"],
+    "update": ["custom"],
+    "upload": ["custom"],
     "videos": ["custom"],
 }
 

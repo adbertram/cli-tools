@@ -1,4 +1,8 @@
 """Main entry point for Pinterest CLI."""
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 from . import __version__
 from .config import get_config
 from cli_tools_shared import create_app, run_app

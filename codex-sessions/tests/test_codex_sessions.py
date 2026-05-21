@@ -8,6 +8,8 @@ from typer.testing import CliRunner
 
 from codex_sessions_cli.client import CodexSessionsClient
 from codex_sessions_cli.main import app
+from codex_sessions_cli.models import TimelineEventType, create_timeline_event
+from codex_sessions_cli.parsers import load_rollout_index
 
 
 SESSION_ID = "019db111-1111-7111-8111-111111111111"
@@ -258,6 +260,44 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertIn("tool_call", [event.event_type for event in timeline])
             self.assertEqual(timeline[-1].event_type, "message")
 
+    def test_subagent_activity_scan_does_not_materialize_all_tool_calls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "list_tool_calls",
+                side_effect=AssertionError("subagent scans must not go through list_tool_calls"),
+            ):
+                subagents = client.list_subagent_activity(project_path=project_path, limit=1)
+                subagent = client.get_subagent_activity("call-subagent")
+
+            self.assertEqual(len(subagents), 1)
+            self.assertEqual(subagents[0].id, "call-subagent")
+            self.assertEqual(subagent.id, "call-subagent")
+
+    def test_tool_call_scan_stops_without_full_materialization(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_apply_limit",
+                side_effect=AssertionError("tool call scans must stop before list materialization"),
+            ):
+                tool_calls = client.list_tool_calls(project_path=project_path, limit=1)
+                tool_call = client.get_tool_call("call-subagent")
+
+            self.assertEqual(len(tool_calls), 1)
+            self.assertEqual(tool_calls[0].id, "call-subagent")
+            self.assertEqual(tool_call.id, "call-subagent")
+
     def test_parses_legacy_top_level_rollout_records(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -271,6 +311,20 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(sessions[0].project_path, project_path)
             self.assertEqual(sessions[0].message_count, 2)
             self.assertIsNone(sessions[0].cli_version)
+
+    def test_rollout_index_reads_last_record_without_full_file_iteration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            rollout_path = write_rollout(codex_home, project_path)
+            content = rollout_path.read_text()
+            rollout_path.write_text(content + "\n\n")
+
+            index = load_rollout_index(rollout_path)
+
+            self.assertEqual(index.session_id, SESSION_ID)
+            self.assertEqual(index.cwd, project_path)
+            self.assertEqual(index.last_activity, "2026-04-21T15:00:08.000Z")
 
     def test_preserves_structured_session_meta_source(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -365,7 +419,48 @@ class CodexSessionsClientTests(unittest.TestCase):
                 [f"{missing_path}: file not found"],
             )
 
+    def test_session_scoped_queries_do_not_broad_scan_all_rollouts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_load_rollouts",
+                side_effect=AssertionError("session-scoped queries must not broad-scan all rollouts"),
+            ):
+                session = client.get_session(SESSION_ID)
+                tool_calls = client.list_tool_calls(session_id=SESSION_ID)
+                timeline = client.list_timeline(session_id=SESSION_ID)
+
+            self.assertEqual(session.id, SESSION_ID)
+            self.assertEqual([call.name for call in tool_calls], ["spawn_agent", "exec_command", "update_plan"])
+            self.assertEqual(timeline[0].event_type, "message")
+            self.assertEqual(timeline[-1].event_type, "session")
+
 class CodexSessionsCliTests(unittest.TestCase):
+    def test_auth_status_uses_shared_profiles_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+
+            runner = CliRunner()
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}, clear=False):
+                result = runner.invoke(app, ["auth", "status"])
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            data = json.loads(result.output)
+            self.assertEqual(sorted(data.keys()), ["profiles"])
+            self.assertEqual(len(data["profiles"]), 1)
+            profile = data["profiles"][0]
+            self.assertEqual(profile["name"], "default")
+            self.assertTrue(profile["authenticated"])
+            self.assertIn("custom", profile["credential_types"])
+            self.assertEqual(profile["credential_types"]["custom"]["api_test"], "passed")
+
     def test_sessions_list_outputs_json_for_matching_project_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -402,6 +497,49 @@ class CodexSessionsCliTests(unittest.TestCase):
             data = json.loads(result.output)
             self.assertEqual(data[0]["event_type"], "session")
             self.assertIn("tool_call", [event["event_type"] for event in data])
+
+    def test_timeline_list_passes_requested_limit_to_client(self):
+        class FakeClient:
+            def __init__(self):
+                self.limit = None
+
+            def list_timeline(self, project, project_path, session_id, since, limit):
+                self.limit = limit
+                return [
+                    create_timeline_event(
+                        {
+                            "id": "event-1",
+                            "time": "2026-04-21T15:00:00.000Z",
+                            "session_id": SESSION_ID,
+                            "event_type": TimelineEventType.SESSION,
+                        }
+                    )
+                ]
+
+        fake_client = FakeClient()
+        runner = CliRunner()
+        with patch("codex_sessions_cli.commands.timeline.get_client", return_value=fake_client):
+            result = runner.invoke(app, ["timeline", "list", "--limit", "1"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(fake_client.limit, 1)
+
+    def test_timeline_get_outputs_single_event_from_list_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+
+            runner = CliRunner()
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                list_result = runner.invoke(app, ["timeline", "list", "--limit", "1"])
+
+                self.assertEqual(list_result.exit_code, 0, list_result.output)
+                event_id = json.loads(list_result.output)[0]["id"]
+                get_result = runner.invoke(app, ["timeline", "get", event_id])
+
+            self.assertEqual(get_result.exit_code, 0, get_result.output)
+            self.assertEqual(json.loads(get_result.output)["id"], event_id)
 
 
 if __name__ == "__main__":

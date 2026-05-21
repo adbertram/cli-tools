@@ -5,37 +5,45 @@ This CLI uses the auth contract exposed by ``python-ring-doorbell``:
 Ring Partner API client credentials or hosted OAuth/account-linking endpoints.
 
 The shared ``create_auth_app`` from ``cli_tools_shared`` handles prompting for
-``USERNAME``, ``PASSWORD``, and the Ring 2FA code via ``AUTH_EXTRA_PROMPTS``,
-then delegates token acquisition to ``_login_handler``.
+``USERNAME`` and ``PASSWORD``, then delegates token acquisition to
+``_login_handler``. The SDK only sends the 2FA code after the token exchange
+starts, so the OTP read happens inside the SDK callback.
 """
+import sys
+
 from cli_tools_shared.auth_commands import create_auth_app
+import typer
 
 from ..client import RingClient
 from ..config import get_config
 
 
+def _read_otp_code() -> str:
+    typer.echo("Enter Ring 2FA code: ", nl=False, err=True)
+    code = sys.stdin.readline().strip()
+    if not code:
+        raise typer.BadParameter("Ring 2FA code is required")
+    return code
+
+
 def _login_handler(config, force: bool):
     """Custom login handler for ring-doorbell's consumer OAuth + 2FA flow.
 
-    ``create_auth_app`` has already prompted for USERNAME, PASSWORD and
-    OTP_CODE via ``AUTH_EXTRA_PROMPTS``. We exchange them for an OAuth
-    token via the ring-doorbell SDK and persist it in the profile data
-    directory. The OTP code is cleared after a successful exchange so a
-    stale code is never reused.
+    ``create_auth_app`` has already prompted for USERNAME and PASSWORD.
+    The Ring SDK triggers MFA during token exchange, then calls the OTP
+    callback so the prompt happens after Ring has sent the code.
     """
     if force:
         config.clear_token()
-
-    otp_code = config._get("OTP_CODE")
 
     client = RingClient(config=config)
     client.login(
         username=config.email,
         password=config.password,
-        otp_callback=lambda: otp_code,
+        otp_callback=_read_otp_code,
     )
 
-    # OTP codes are single-use — never persist them across runs.
+    # Clear legacy persisted OTP values from older auth flows.
     config._set("OTP_CODE", "")
 
 

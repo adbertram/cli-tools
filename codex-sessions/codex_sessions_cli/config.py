@@ -12,7 +12,7 @@ from cli_tools_shared.credentials import CredentialType
 class Config(BaseConfig):
     """Configuration manager for CodexSessions CLI wrapper."""
 
-    CREDENTIAL_TYPES = [CredentialType.NO_AUTH]
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DIST_NAME = "codex-sessions-cli"
 
     def __init__(self, profile=None):
@@ -36,6 +36,20 @@ class Config(BaseConfig):
         if configured:
             return Path(configured).expanduser()
         return Path.home() / ".codex"
+
+    def test_connection(self) -> dict:
+        """Verify the local Codex transcript store is readable."""
+        codex_home = self.codex_home
+        sessions_dir = codex_home / "sessions"
+        exists = codex_home.exists()
+        return {
+            "api_test": "passed" if exists else f"failed: {codex_home} does not exist",
+            "codex_home": str(codex_home),
+            "sessions_dir": str(sessions_dir),
+            "cli_command": self.cli_command,
+            "cli_available": self.is_cli_available(),
+            "cli_version": self.get_cli_version(),
+        }
 
     def get_cli_executable(self) -> str:
         """Get the CLI executable path, falling back to command name."""

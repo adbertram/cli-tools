@@ -553,6 +553,7 @@ class NotionClient:
         block_id: str,
         recursive: bool = True,
         max_workers: int = DEFAULT_MAX_WORKERS,
+        limit: Optional[int] = None,
     ) -> List[Dict]:
         """
         Get all child blocks of a block (handles pagination).
@@ -563,6 +564,7 @@ class NotionClient:
             block_id: The block or page ID
             recursive: If True, recursively fetch children of nested blocks
             max_workers: Max concurrent requests for parallel fetching (default: 5)
+            limit: Maximum number of top-level blocks to fetch
 
         Returns:
             List of all child blocks (with nested children if recursive=True)
@@ -573,11 +575,22 @@ class NotionClient:
 
         # First, get all top-level blocks (with pagination)
         while has_more:
+            page_size = 100
+            if limit is not None:
+                remaining = limit - len(all_blocks)
+                if remaining <= 0:
+                    break
+                page_size = min(remaining, 100)
+
             result = self.get_block_children(
                 block_id=block_id,
+                page_size=page_size,
                 start_cursor=start_cursor,
             )
             all_blocks.extend(result.get("results", []))
+            if limit is not None and len(all_blocks) >= limit:
+                all_blocks = all_blocks[:limit]
+                break
             has_more = result.get("has_more", False)
             start_cursor = result.get("next_cursor")
 

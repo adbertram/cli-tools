@@ -8,7 +8,7 @@ from .config import get_config
 
 
 def _item_dir(item_id: str) -> Path:
-    return get_config().storage_dir / item_id
+    return get_config().cache_dir / item_id
 
 
 def get_cached_image_paths(item_id: str) -> List[str]:
@@ -39,7 +39,7 @@ def _get_extension(url: str, content_type: Optional[str] = None) -> str:
 
 
 def download_images(item_id: str, image_urls: List[str]) -> List[str]:
-    """Download images to data/{item_id}/ and return local paths.
+    """Download images to cache/{item_id}/ and return local paths.
 
     Skips URLs that fail to download.
     """

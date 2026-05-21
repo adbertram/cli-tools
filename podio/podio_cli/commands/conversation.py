@@ -1,7 +1,13 @@
 """Conversation (message) commands for Podio CLI."""
 
 COMMAND_CREDENTIALS = {
+    "add-participants": [
+        "oauth_authorization_code"
+    ],
     "create": [
+        "oauth_authorization_code"
+    ],
+    "create-on-object": [
         "oauth_authorization_code"
     ],
     "events": [
@@ -47,9 +53,9 @@ from typing import Optional, List, Any
 from pathlib import Path
 import typer
 
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
-from ..filters import apply_filters, validate_filters, FilterValidationError
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio conversations (messages)")

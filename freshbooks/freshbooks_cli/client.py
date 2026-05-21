@@ -78,10 +78,17 @@ class FreshBooksClient:
             raise ClientError(
                 "No refresh token available. Please re-authenticate."
             )
+        redirect_uri = self.config.redirect_uri or self.config.OAUTH_REDIRECT_URI
+        if not redirect_uri:
+            raise ClientError(
+                "No redirect URI configured. Set REDIRECT_URI in .env or "
+                "OAUTH_REDIRECT_URI on Config."
+            )
 
         data = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
+            "redirect_uri": redirect_uri,
             "client_id": self.config.client_id,
             "client_secret": self.config.client_secret,
         }

@@ -23,12 +23,12 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from dotenv import dotenv_values
 
 from cli_tools_shared.command_registry import _check_credentials
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import handle_error, print_json, print_table
 
+from ..browser import update_webstore_listing
 from ..client import get_client as get_google_client
 from ..models.webstore import WebStoreReleaseResult, WebStoreUploadExtensionResult
 from ..config import get_config
@@ -60,35 +60,33 @@ def get_client(profile: Optional[str] = None) -> ChromeWebStoreClient:
     return ChromeWebStoreClient(credentials=google_client.creds)
 
 
-def resolve_item_ids(publisher_id: Optional[str], item_id: Optional[str]) -> tuple[str, str]:
+def resolve_item_ids(
+    publisher_id: Optional[str],
+    item_id: Optional[str],
+    profile: Optional[str] = None,
+) -> tuple[str, str]:
     """Resolve Web Store item IDs from options or environment."""
     resolved_publisher_id = publisher_id
     if resolved_publisher_id is None:
-        resolved_publisher_id = get_webstore_setting("CWS_PUBLISHER_ID")
+        resolved_publisher_id = get_webstore_setting("CWS_PUBLISHER_ID", profile=profile)
     if resolved_publisher_id is None or len(resolved_publisher_id) == 0:
         raise ValueError("Chrome Web Store publisher ID required. Pass --publisher-id or set CWS_PUBLISHER_ID.")
 
     resolved_item_id = item_id
     if resolved_item_id is None:
-        resolved_item_id = get_webstore_setting("CWS_EXTENSION_ID")
+        resolved_item_id = get_webstore_setting("CWS_EXTENSION_ID", profile=profile)
     if resolved_item_id is None or len(resolved_item_id) == 0:
         raise ValueError("Chrome Web Store item ID required. Pass --item-id or set CWS_EXTENSION_ID.")
 
     return resolved_publisher_id, resolved_item_id
 
 
-def get_webstore_setting(name: str) -> Optional[str]:
-    """Read a Web Store setting from environment or the current directory .env."""
+def get_webstore_setting(name: str, profile: Optional[str] = None) -> Optional[str]:
+    """Read a Web Store setting from environment or the active profile env."""
     if name in os.environ and len(os.environ[name]) > 0:
         return os.environ[name]
 
-    env_path = Path.cwd() / ".env"
-    if env_path.is_file():
-        value = dotenv_values(env_path).get(name)
-        if isinstance(value, str) and len(value) > 0:
-            return value
-
-    return None
+    return get_config(profile=profile)._get(name)
 
 
 def package_extension(
@@ -163,7 +161,7 @@ def list_items(
         if limit < 1:
             items = []
         else:
-            resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+            resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
             item = get_client(profile=profile).fetch_status(resolved_publisher_id, resolved_item_id)
             items = [item.model_dump(mode="json")]
         if filter:
@@ -188,7 +186,7 @@ def status(
 ):
     """Fetch Chrome Web Store item status."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         result = get_client(profile=profile).fetch_status(resolved_publisher_id, resolved_item_id)
         if table:
             print_table([result], ["item_id", "taken_down", "warned"], ["Item ID", "Taken Down", "Warned"])
@@ -219,7 +217,7 @@ def upload(
 ):
     """Upload a package to an existing Chrome Web Store item."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         result = get_client(profile=profile).upload_package(resolved_publisher_id, resolved_item_id, package)
         if table:
             print_table([result], ["item_id", "crx_version", "upload_state"], ["Item ID", "CRX Version", "Upload State"])
@@ -242,7 +240,7 @@ def upload_extension(
 ):
     """Package and upload extension."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         package_result = package_extension(extension_dir, output_dir, verify_command, exclude)
         upload_result = get_client(profile=profile).upload_package(
             resolved_publisher_id,
@@ -274,7 +272,7 @@ def publish(
 ):
     """Submit a Chrome Web Store item for publishing."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         result = get_client(profile=profile).publish_item(
             resolved_publisher_id,
             resolved_item_id,
@@ -310,7 +308,7 @@ def release(
 ):
     """Package, upload, and publish extension."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         package_result = package_extension(extension_dir, output_dir, verify_command, exclude)
         client = get_client(profile=profile)
         upload_result = client.upload_package(
@@ -354,11 +352,11 @@ def update_listing(
 ):
     """Update Store Listing overview fields and image assets through the dashboard."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         listing = parse_listing_file(listing_file)
         browser = get_config(profile=profile).get_browser()
         try:
-            result = browser.update_listing(resolved_publisher_id, resolved_item_id, listing)
+            result = update_webstore_listing(browser, resolved_publisher_id, resolved_item_id, listing)
         finally:
             browser.close()
         if table:
@@ -378,7 +376,7 @@ def cancel_submission(
 ):
     """Cancel the active Chrome Web Store submission for an item."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         result = get_client(profile=profile).cancel_submission(resolved_publisher_id, resolved_item_id)
         if table:
             print_table([result], ["name", "action", "success"], ["Name", "Action", "Success"])
@@ -398,7 +396,7 @@ def rollout(
 ):
     """Set a higher target deploy percentage for the published revision."""
     try:
-        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id)
+        resolved_publisher_id, resolved_item_id = resolve_item_ids(publisher_id, item_id, profile=profile)
         result = get_client(profile=profile).set_published_deploy_percentage(
             resolved_publisher_id,
             resolved_item_id,

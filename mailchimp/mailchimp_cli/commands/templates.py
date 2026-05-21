@@ -1,9 +1,11 @@
 """Templates commands for Mailchimp CLI."""
 import typer
-from typing import Optional
+from typing import List, Optional
+
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.output import print_json, print_table, handle_error
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
 
 app = typer.Typer(help="Manage email templates")
 
@@ -11,9 +13,11 @@ app = typer.Typer(help="Manage email templates")
 @app.command("list")
 def templates_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    count: int = typer.Option(10, "--count", "-c", help="Number of templates to return"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of templates to return"),
     offset: int = typer.Option(0, "--offset", "-o", help="Offset for pagination"),
     template_type: Optional[str] = typer.Option(None, "--type", help="Filter by type (user, base, gallery)"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """
     List all templates.
@@ -31,27 +35,18 @@ def templates_list(
         if template_type:
             kwargs["type"] = template_type
 
-        result = client.list_templates(count=count, offset=offset, **kwargs)
+        result = client.list_templates(count=limit, offset=offset, **kwargs)
         templates = result.get("templates", [])
+        templates = apply_filters(templates, filter)
+        templates = apply_limit(templates, limit)
+        templates = apply_properties_filter(templates, properties)
 
         if table:
-            table_data = []
-            for template in templates:
-                table_data.append({
-                    "id": template.get("id", ""),
-                    "type": template.get("type", ""),
-                    "name": template.get("name", ""),
-                    "category": template.get("category", "N/A"),
-                    "created": template.get("date_created", "")[:10] if template.get("date_created") else "N/A",
-                })
-
-            print_table(
-                table_data,
-                ["id", "type", "name", "category", "created"],
-                ["ID", "Type", "Name", "Category", "Created"],
-            )
+            columns = [field.strip() for field in properties.split(",")] if properties else ["id", "type", "name", "category", "date_created"]
+            headers = [column.replace("_", " ").replace(".", " ").title() for column in columns]
+            print_table(templates, columns, headers)
         else:
-            print_json(result)
+            print_json(templates)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

@@ -49,7 +49,7 @@ class Config(BaseConfig):
         from .client import GeminiClient, ClientError
         try:
             client = GeminiClient(config=self)
-            models = client.list_models()
+            models = client.list_models(limit=1)
             return {
                 "api_test": "passed",
                 "models_available": len(models),

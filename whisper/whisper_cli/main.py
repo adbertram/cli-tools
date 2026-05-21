@@ -11,8 +11,8 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import transcripts
-app.add_typer(transcripts.app, name="transcripts", help="Transcription operations")
+from . import commands
+app.add_typer(commands.app, name="transcripts", help="Transcription operations")
 
 
 def main():

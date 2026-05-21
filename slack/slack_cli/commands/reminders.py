@@ -28,8 +28,8 @@ import typer
 from typing import List, Optional
 
 from ..client import get_client, ClientError
-from ..filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack reminders")
 
@@ -519,5 +519,4 @@ def delete_reminder(
 
     except Exception as e:
         raise typer.Exit(handle_error(e))
-
 

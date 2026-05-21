@@ -24,7 +24,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-        self._ensure_repo_default_env_stub()
 
     @property
     def OAUTH_TOKEN_URL(self) -> str:
@@ -57,13 +56,6 @@ class Config(BaseConfig):
             "account_id": payload.get("id"),
             "username": payload.get("username"),
         }
-
-    def _ensure_repo_default_env_stub(self) -> None:
-        """Keep a repo-local .env stub present for CLI compliance tests."""
-        repo_env = self.tool_dir / ".env"
-        if not repo_env.exists():
-            repo_env.write_text("IS_DEFAULT_PROFILE=1\n")
-
 
 _configs = {}
 

@@ -153,6 +153,14 @@ class MswordClient:
 
         return comments
 
+    def get_comment(self, file_path: str, comment_id: str) -> Comment:
+        """Return a single comment by ID from a Word document."""
+        comments = self.extract_comments(file_path)
+        for comment in comments:
+            if comment.id == comment_id:
+                return comment
+        raise ClientError(f"Comment not found: {comment_id}")
+
     def add_comment(
         self, file_path: str, text: str, author: str, reference_text: str, occurrence: int = 1
     ) -> AddCommentResult:

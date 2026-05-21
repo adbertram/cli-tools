@@ -8,8 +8,9 @@ import random
 import time
 import requests
 
+from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
+
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 from .models import Map, MapDetail, ExportUrls, create_map, create_map_detail
 
 
@@ -194,8 +195,6 @@ class MindmeisterClient:
         if filters:
             try:
                 validate_filters(filters)
-                # MindMeister v1 API doesn't have rich filtering
-                # Client-side filtering would be applied after fetch
             except FilterValidationError as e:
                 raise ClientError(f"Invalid filter: {e}")
 
@@ -205,10 +204,12 @@ class MindmeisterClient:
         maps_data = rsp.get("maps", {})
         raw_maps = maps_data.get("map", [])
 
-        # Handle single map (dict) vs multiple (list)
         if isinstance(raw_maps, dict):
             raw_maps = [raw_maps]
 
+        if filters:
+            raw_maps = apply_filters(raw_maps, filters)
+        raw_maps = raw_maps[:limit]
         return [create_map(m) for m in raw_maps]
 
     def get_map(self, map_id: str) -> MapDetail:

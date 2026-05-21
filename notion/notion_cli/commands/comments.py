@@ -5,7 +5,7 @@ from typing import Optional, List
 
 from ..client import DEFAULT_MAX_WORKERS, get_client
 from ..output import _chunk_code_content, print_json, print_table, handle_error
-from ..filters import apply_filters
+from cli_tools_shared.filters import apply_filters
 
 app = typer.Typer(help="Manage comments on pages and blocks")
 

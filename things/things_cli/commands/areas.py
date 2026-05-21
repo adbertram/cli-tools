@@ -4,9 +4,9 @@ from typing import Optional, List
 
 from pydantic import BaseModel
 
+from cli_tools_shared.filters import apply_filters
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error
-from ..filters import apply_filters
 
 
 app = typer.Typer(help="Manage areas", no_args_is_help=True)

@@ -1,4 +1,6 @@
 """Main entry point for Podio CLI."""
+import warnings
+
 from . import __version__
 from .client import ClientError
 from cli_tools_shared import create_app, run_app
@@ -6,6 +8,8 @@ from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
 
 from .config import get_config
+
+warnings.filterwarnings("ignore", module="urllib3")
 
 # Create main Typer app
 app = create_app(name="podio", help="CLI interface for Podio API - Manage apps, items, tasks, and more", version=__version__)

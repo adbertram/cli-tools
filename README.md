@@ -5,7 +5,7 @@ One repo for service-specific command-line tools. Each tool is a small Python CL
 ## At a Glance
 
 - 83 active CLI packages outside `_personal`.
-- One install command for any tool: `scripts/install-cli-tool.sh <tool-folder>`.
+- One install command for any tool: `_repo/_scripts/install-cli-tool.sh <tool-folder>`.
 - JSON is the default data output for automation and piping.
 - Human status messages belong on stderr; stdout stays clean for data.
 - Browser-backed tools use shared profile/auth helpers from `cli-tools-shared`.
@@ -13,25 +13,25 @@ One repo for service-specific command-line tools. Each tool is a small Python CL
 ## Install a Tool
 
 ```bash
-scripts/install-cli-tool.sh <tool-folder>
+_repo/_scripts/install-cli-tool.sh <tool-folder>
 ```
 
 Examples:
 
 ```bash
-scripts/install-cli-tool.sh airtable
-scripts/install-cli-tool.sh amazon
-scripts/install-cli-tool.sh wordpress
+_repo/_scripts/install-cli-tool.sh airtable
+_repo/_scripts/install-cli-tool.sh amazon
+_repo/_scripts/install-cli-tool.sh wordpress
 ```
 
 ## Shared Building Blocks
 
 | Component | Purpose |
 | --- | --- |
-| [`cli-tools-shared`](cli-tools-shared/) | Shared command, browser-auth, cache, profile, and output helpers used by tool packages. |
-| [`secret-manager`](secret-manager/) | CLI-tools Keychain helper for credentials that belong to CLI tooling. |
-| [`_templates`](_templates/) | Starter templates for new API, browser, and wrapper CLIs. |
-| [`skills`](skills/) | Codex/agent skills for operating and maintaining the tools. |
+| [`cli-tools-shared`](_repo/cli-tools-shared/) | Shared command, browser-auth, cache, profile, and output helpers used by tool packages. |
+| [`secret-manager`](_repo/_secret-manager/) | CLI-tools Keychain helper for credentials that belong to CLI tooling. |
+| [`_templates`](_repo/_templates/) | Starter templates for new API, browser, and wrapper CLIs. |
+| [`skills`](_repo/skills/) | Codex/agent skills for operating and maintaining the tools. |
 
 ## Tool Catalog
 
@@ -167,16 +167,16 @@ cli-tools/
     pyproject.toml
     <tool>_cli/
     README.md
-  cli-tools-shared/        # shared runtime library
-  secret-manager/          # credential helper for CLI tooling
-  _templates/              # new-tool templates
-  skills/                  # operating skills and validation scripts
+  _repo/cli-tools-shared/        # shared runtime library
+  _repo/_secret-manager/          # credential helper for CLI tooling
+  _repo/_templates/              # new-tool templates
+  _repo/skills/            # operating skills and validation scripts
 ```
 
 ## Add or Refresh a Tool
 
 ```bash
-scripts/install-cli-tool.sh <tool-folder>
+_repo/_scripts/install-cli-tool.sh <tool-folder>
 ```
 
 For implementation and validation work, use the repo-owned `cli-tool` skill and its validation scripts so new tools match the existing command, output, auth, and installation contracts.

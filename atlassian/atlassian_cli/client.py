@@ -96,31 +96,22 @@ class AtlassianClient:
         limit: int = 100,
         filters: Optional[List[str]] = None,
     ) -> List[Item]:
-        """Search for items on Atlassian.
-
-        TODO: Implement for your site. Prefer direct HTTP:
-            html = self._fetch_authenticated_text(self._url(f"/search?q={query}"))
-            raw = extract_items_from_snapshot(html)
-            return [create_item(d) for d in raw[:limit]]
-
-        If the site only renders data after JavaScript:
-            page = self._get_page(self._url(f"/search?q={query}"))
-            snapshot = self._snapshot(page)
-            raw = extract_items_from_snapshot(snapshot)
-            return [create_item(d) for d in raw[:limit]]
-        """
-        raise NotImplementedError("Implement search for Atlassian")
+        """Search the Atlassian affiliate program record."""
+        query_normalized = query.casefold()
+        return [
+            item
+            for item in self.list_items(limit=limit, filters=filters)
+            if query_normalized in item.name.casefold()
+            or (item.description is not None and query_normalized in item.description.casefold())
+        ][:limit]
 
     @cached
     def get_item(self, item_id: str) -> ItemDetail:
-        """Get details for a specific item.
-
-        TODO: Implement for your site. Prefer direct HTTP:
-            html = self._fetch_authenticated_text(self._url(f"/item/{item_id}"))
-            raw = extract_items_from_snapshot(html)
-            return create_item_detail(raw[0]) if raw else create_item_detail({"id": item_id})
-        """
-        raise NotImplementedError("Implement get_item for Atlassian")
+        """Get details for the Atlassian affiliate program record."""
+        for item in self.list_items(limit=1):
+            if item.id == item_id:
+                return create_item_detail(item.model_dump())
+        raise ClientError(f"Atlassian item not found: {item_id}")
 
     @cached
     def list_items(
@@ -128,14 +119,10 @@ class AtlassianClient:
         limit: int = 100,
         filters: Optional[List[str]] = None,
     ) -> List[Item]:
-        """List items from Atlassian.
-
-        TODO: Implement for your site. Prefer direct HTTP:
-            html = self._fetch_authenticated_text(self._url("/items"))
-            raw = extract_items_from_snapshot(html)
-            return [create_item(d) for d in raw[:limit]]
-        """
-        raise NotImplementedError("Implement list_items for Atlassian")
+        """List the Atlassian affiliate program record."""
+        html = self._fetch_authenticated_text(self.config.base_url)
+        raw = extract_items_from_snapshot(html)
+        return [create_item(data) for data in raw[:limit]]
 
 
 _client: Optional[AtlassianClient] = None

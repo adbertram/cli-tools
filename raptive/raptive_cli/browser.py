@@ -18,15 +18,20 @@ class RaptiveBrowser(BrowserAutomation):
     AUTH_STORAGE_KEY = "token"
     SESSION_NAME = "raptive"
 
-    def fetch_json(self, url: str) -> Any:
-        """Fetch JSON using page's session cookies."""
-        page = self.get_page()
-        return page.evaluate("""async (url) => {
+
+def _raptive_fetch_json(self, url: str) -> Any:
+    """Fetch JSON using page's session cookies."""
+    page = self.get_page()
+    return page.evaluate(
+        """async (url) => {
             const r = await fetch(url, {credentials: 'include'});
             return r.ok ? r.json() : {_error: true, status: r.status};
-        }""", url)
+        }""",
+        url,
+    )
 
 
 # Backward compatibility aliases
+RaptiveBrowser.fetch_json = _raptive_fetch_json
 BrowserService = RaptiveBrowser
 BrowserError = BrowserAutomationError

@@ -11,7 +11,7 @@ from ..output import (
     print_success,
     print_warning,
 )
-from ..filters import apply_filters
+from cli_tools_shared.filters import apply_filters
 
 app = typer.Typer(help="Manage database field schemas (properties)")
 option_app = typer.Typer(help="Manage field options for select/multi_select/status fields")

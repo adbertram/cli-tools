@@ -6,6 +6,7 @@ from ..client import get_client
 from .common import emit_list, emit_one
 
 app = typer.Typer(help="Query skill mentions in Codex user prompts", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
 SKILL_COLUMNS = ["time", "session_id", "name", "source"]
 SKILL_HEADERS = ["Time", "Session", "Name", "Source"]

@@ -33,8 +33,8 @@ CLI-tools macOS keychain (service `cli-tools`) under these names:
 Store them once via the CLI-tools secret manager from the repo root:
 
 ```bash
-secret-manager/secrets.sh set venmo-username
-secret-manager/secrets.sh set venmo-password
+_repo/_secret-manager/secrets.sh set venmo-username
+_repo/_secret-manager/secrets.sh set venmo-password
 ```
 
 Then run the interactive login. Venmo sends a 6-digit OTP via SMS; the CLI prompts

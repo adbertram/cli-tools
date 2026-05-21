@@ -1,9 +1,11 @@
 """Audiences/Lists commands for Mailchimp CLI."""
 import typer
-from typing import Optional
+from typing import List, Optional
+
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.output import print_json, print_table, handle_error, print_success
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
 
 app = typer.Typer(help="Manage Mailchimp audiences/lists")
 
@@ -11,8 +13,10 @@ app = typer.Typer(help="Manage Mailchimp audiences/lists")
 @app.command("list")
 def audiences_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    count: int = typer.Option(10, "--count", "-c", help="Number of audiences to return"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of audiences to return"),
     offset: int = typer.Option(0, "--offset", "-o", help="Offset for pagination"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """
     List all audiences/lists in the account.
@@ -24,28 +28,19 @@ def audiences_list(
     """
     try:
         client = get_client()
-        result = client.list_audiences(count=count, offset=offset)
+        result = client.list_audiences(count=limit, offset=offset)
 
         lists = result.get("lists", [])
+        lists = apply_filters(lists, filter)
+        lists = apply_limit(lists, limit)
+        lists = apply_properties_filter(lists, properties)
 
         if table:
-            table_data = []
-            for lst in lists:
-                stats = lst.get("stats", {})
-                table_data.append({
-                    "id": lst.get("id", ""),
-                    "name": lst.get("name", ""),
-                    "members": stats.get("member_count", 0),
-                    "unsubscribed": stats.get("unsubscribe_count", 0),
-                })
-
-            print_table(
-                table_data,
-                ["id", "name", "members", "unsubscribed"],
-                ["ID", "Name", "Members", "Unsubscribed"],
-            )
+            columns = [field.strip() for field in properties.split(",")] if properties else ["id", "name", "stats.member_count", "stats.unsubscribe_count"]
+            headers = [column.replace("_", " ").replace(".", " ").title() for column in columns]
+            print_table(lists, columns, headers)
         else:
-            print_json(result)
+            print_json(lists)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

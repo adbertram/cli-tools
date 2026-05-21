@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 import requests
 
+from cli_tools_shared.filters import validate_filters, FilterValidationError
+
 from .config import get_config
-from .filters import validate_filters, FilterValidationError
 
 
 class ClientError(Exception):

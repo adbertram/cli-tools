@@ -1,7 +1,9 @@
 """Main entry point for Snagit CLI."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
+from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
+from .config import get_config
 
 app = create_app(
     name="snagit",
@@ -12,7 +14,7 @@ app = create_app(
 
 # Register command modules
 from . import commands as capture
-app.add_typer(capture.app, name="capture", help="Manage Snagit capture files")
+register_commands(app, get_config, capture, name="capture", help="Manage Snagit capture files")
 
 
 def main():

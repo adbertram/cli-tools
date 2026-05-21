@@ -77,10 +77,13 @@ def files_list(
     """
     try:
         client = get_client()
-        files = client.list_files()
+        files = client.list_files(limit=limit)
 
         if not files:
-            print_json([])
+            if table:
+                print_table([], [], [])
+            else:
+                print_json([])
             return
 
         file_data = []

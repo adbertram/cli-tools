@@ -7,13 +7,6 @@ from cli_tools_shared.auth_commands import create_auth_app
 
 from ..config import get_config
 
-COMMAND_CREDENTIALS = {
-    "login": ["custom"],
-    "logout": ["custom"],
-    "status": ["custom"],
-    "test": ["custom"],
-}
-
 
 def _test_handler(config):
     """Test Photos library accessibility."""

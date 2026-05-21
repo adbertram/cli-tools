@@ -172,7 +172,7 @@ wheels = [
 [[package]]
 name = "cli-tools-shared"
 version = "0.2.0"
-source = { editable = "../cli-tools-shared" }
+source = { editable = "../_repo/cli-tools-shared" }
 dependencies = [
     { name = "browser-harness" },
     { name = "pydantic" },
@@ -854,7 +854,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
-    { name = "cli-tools-shared", editable = "../cli-tools-shared" },
+    { name = "cli-tools-shared", editable = "../_repo/cli-tools-shared" },
     { name = "mammoth", specifier = ">=1.6.0" },
     { name = "markdown", specifier = ">=3.5.0" },
     { name = "pydantic", specifier = ">=2.0.0" },

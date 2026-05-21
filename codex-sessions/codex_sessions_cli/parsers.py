@@ -42,6 +42,15 @@ class ParsedRollout:
     meta: Dict[str, Any]
 
 
+@dataclass(frozen=True)
+class RolloutIndex:
+    path: Path
+    session_id: str
+    cwd: str
+    created_at: str
+    last_activity: str
+
+
 def parse_cli_output(output: str, format: OutputFormat = OutputFormat.AUTO) -> Any:
     """Parse JSON or line output retained for compatibility with wrapper helpers."""
     text = output.strip()
@@ -60,6 +69,55 @@ def iter_rollout_paths(codex_home: Path) -> Iterable[Path]:
             yield from sorted(root.rglob(f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"))
 
 
+def _read_first_nonempty_line(path: Path) -> Optional[str]:
+    """Read the first non-empty line from a JSONL file."""
+    with path.open("rb") as handle:
+        for raw_line in handle:
+            if raw_line.strip():
+                return raw_line.decode("utf-8")
+    return None
+
+
+def _read_last_nonempty_line(path: Path) -> Optional[str]:
+    """Read the last non-empty line from a JSONL file without scanning the whole file."""
+    block_size = 64 * 1024
+    with path.open("rb") as handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        if position == 0:
+            return None
+
+        tail = b""
+        while position > 0:
+            read_size = min(block_size, position)
+            position -= read_size
+            handle.seek(position)
+            tail = handle.read(read_size) + tail
+            stripped = tail.rstrip(b" \t\r\n")
+            if stripped:
+                tail = stripped
+                break
+            tail = b""
+
+        if not tail:
+            return None
+
+        newline_index = tail.rfind(b"\n")
+        if newline_index != -1:
+            return tail[newline_index + 1 :].decode("utf-8")
+
+        while position > 0:
+            newline_index = tail.rfind(b"\n")
+            if newline_index != -1:
+                return tail[newline_index + 1 :].decode("utf-8")
+            read_size = min(block_size, position)
+            position -= read_size
+            handle.seek(position)
+            tail = handle.read(read_size) + tail
+
+        return tail.decode("utf-8")
+
+
 def load_rollout(path: Path) -> ParsedRollout:
     """Load a Codex rollout JSONL file and return parsed records."""
     raw_lines = load_jsonl_records(path)
@@ -68,6 +126,66 @@ def load_rollout(path: Path) -> ParsedRollout:
     if "type" not in raw_lines[0] and "id" in raw_lines[0]:
         return load_legacy_rollout(path, raw_lines)
     return load_current_rollout(path, raw_lines)
+
+
+def load_rollout_index(path: Path) -> RolloutIndex:
+    """Load only the metadata needed to order and filter rollout files."""
+    first_line = _read_first_nonempty_line(path)
+    last_line = _read_last_nonempty_line(path)
+
+    if first_line is None or last_line is None:
+        raise ValueError(f"{path} is empty")
+
+    try:
+        first_raw = json.loads(first_line)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{path}:1 invalid JSON: {error.msg}") from error
+    if "type" not in first_raw and "id" in first_raw:
+        parsed = load_rollout(path)
+        return RolloutIndex(
+            path=path,
+            session_id=parsed.meta["id"],
+            cwd=parsed.meta["cwd"],
+            created_at=parsed.meta["timestamp"],
+            last_activity=max_timestamp(parsed.records),
+        )
+    try:
+        last_raw = json.loads(last_line)
+    except json.JSONDecodeError:
+        parsed = load_rollout(path)
+        return RolloutIndex(
+            path=path,
+            session_id=parsed.meta["id"],
+            cwd=parsed.meta["cwd"],
+            created_at=parsed.meta["timestamp"],
+            last_activity=max_timestamp(parsed.records),
+        )
+    payload = first_raw.get("payload")
+    if first_raw.get("type") != "session_meta" or not isinstance(payload, dict):
+        parsed = load_rollout(path)
+        return RolloutIndex(
+            path=path,
+            session_id=parsed.meta["id"],
+            cwd=parsed.meta["cwd"],
+            created_at=parsed.meta["timestamp"],
+            last_activity=max_timestamp(parsed.records),
+        )
+
+    require_keys(payload, ("id", "cwd", "timestamp"), path)
+    last_payload = last_raw.get("payload")
+    last_timestamp = last_raw.get("timestamp")
+    if last_timestamp is None and isinstance(last_payload, dict):
+        last_timestamp = last_payload.get("timestamp")
+    if not isinstance(last_timestamp, str):
+        last_timestamp = payload["timestamp"]
+
+    return RolloutIndex(
+        path=path,
+        session_id=str(payload["id"]),
+        cwd=str(payload["cwd"]),
+        created_at=str(payload["timestamp"]),
+        last_activity=last_timestamp,
+    )
 
 
 def load_jsonl_records(path: Path) -> List[Dict[str, Any]]:

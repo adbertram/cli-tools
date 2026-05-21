@@ -2,9 +2,9 @@
 
 from typing import Any, Iterable, Optional
 
+from cli_tools_shared.filters import apply_properties_filter
 from pydantic import BaseModel
 
-from ..filters import apply_properties_filter
 from ..parsers import format_local_time
 
 

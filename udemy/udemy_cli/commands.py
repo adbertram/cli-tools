@@ -1,19 +1,15 @@
 """Course commands for Udemy CLI."""
 COMMAND_CREDENTIALS = {
     "get": [
-        "personal_access_token",
-        "browser_session"
+        "personal_access_token"
     ],
     "list": [
-        "personal_access_token",
-        "browser_session"
+        "personal_access_token"
     ],
     "management": [
-        "personal_access_token",
         "browser_session"
     ],
     "update": [
-        "personal_access_token",
         "browser_session"
     ]
 }

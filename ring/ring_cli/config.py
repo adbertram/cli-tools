@@ -35,12 +35,7 @@ class Config(BaseConfig):
 
     USER_AGENT = "ring-cli/0.1.0"
 
-    # Ring sends a 6-digit MFA code via SMS/email at the moment of login;
-    # the user is prompted for it up front. The code is cleared after a
-    # successful token exchange (single-use).
-    AUTH_EXTRA_PROMPTS = [
-        ("OTP_CODE", "Ring 2FA code (sent to your phone/email at login)", False),
-    ]
+    AUTH_EXTRA_PROMPTS = []
 
     def __init__(self, profile=None):
         super().__init__(

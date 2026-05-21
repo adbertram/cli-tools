@@ -21,8 +21,13 @@ class Config(BaseConfig):
 
     @property
     def storage_dir(self) -> Path:
-        """Get storage directory for cached data (used by @cached decorator)."""
-        d = self.tool_dir / "data"
+        """Get profile data directory used by shared cache helpers."""
+        return self.get_profile_data_dir()
+
+    @property
+    def cache_dir(self) -> Path:
+        """Get the per-profile cache directory."""
+        d = self.storage_dir / "cache"
         d.mkdir(parents=True, exist_ok=True)
         return d
 

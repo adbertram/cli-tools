@@ -97,20 +97,17 @@ class GlobiflowClient:
             raise AuthenticationRequired("Run 'globiflow auth login' to authenticate.")
 
         url = f"{self.BASE_URL}{path}" if not path.startswith("http") else path
-        self.browser.page.goto(url, wait_until="domcontentloaded")
-        self.browser.page.wait_for_timeout(2000)  # Allow redirects to settle
-        self.browser.restore_session()
+        page = self.browser.get_page(url)
+        page.wait_for_timeout(2000)  # Allow redirects to settle
 
-        current_url = self.browser.page.url
+        current_url = page.url
         if path != "/" and (current_url == self.BASE_URL or current_url == f"{self.BASE_URL}/"):
             raise AuthenticationRequired("Globiflow browser session expired. Run 'globiflow auth login --force'.")
-
-        self.browser.save_session()
 
     def navigate(self, path: str):
         """Navigate to a path on Globiflow."""
         url = f"{self.BASE_URL}{path}" if not path.startswith("http") else path
-        self.browser.page.goto(url)
+        self.browser.get_page(url)
 
     # ==================== Trigger Methods ====================
 
@@ -269,7 +266,7 @@ class GlobiflowClient:
         import re
 
         self.ensure_authenticated("/flows.php")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for tree to load
         page.wait_for_selector('[role="treeitem"]', timeout=10000)
@@ -385,7 +382,7 @@ class GlobiflowClient:
         import re
 
         self.ensure_authenticated("/flows.php")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for tree to load
         page.wait_for_selector('[role="treeitem"]', timeout=10000)
@@ -494,7 +491,7 @@ class GlobiflowClient:
 
         # Navigate to the flow creation page with app_id and trigger type
         self.ensure_authenticated(f"/configureflow.php?i={app_id}&t={trigger_code}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for the flow configuration form to load
         page.wait_for_selector("#flowName", timeout=10000)
@@ -742,7 +739,7 @@ class GlobiflowClient:
         import re
 
         self.ensure_authenticated("/flows.php")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for tree to load
         page.wait_for_selector('[role="treeitem"]', timeout=10000)
@@ -821,7 +818,7 @@ class GlobiflowClient:
 
         # Navigate directly to the flow configuration page
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for the page to load
         page.wait_for_timeout(2000)
@@ -1455,7 +1452,7 @@ class GlobiflowClient:
             List of step models (specific types based on action_type)
         """
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for the actions section to load
         page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
@@ -1530,7 +1527,7 @@ class GlobiflowClient:
             Specific step model (e.g., HttpCallStep, VariableCalcStep)
         """
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for the actions section to load
         page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
@@ -1601,7 +1598,7 @@ class GlobiflowClient:
             ClientError: If step not found or fields don't match step type
         """
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Wait for the actions section to load
         page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
@@ -1717,7 +1714,7 @@ class GlobiflowClient:
             })
         """
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
-        page = self.browser.page
+        page = self.browser.get_page()
 
         # Get current step count before adding
         steps_before = page.locator("#actions li").count()

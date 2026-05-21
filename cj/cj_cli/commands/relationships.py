@@ -654,13 +654,16 @@ def _apply_single(advertiser_id: str, dry_run: bool = False) -> ApplyResult:
     # Confirm the application registered.  CJ's REST relationship_status
     # is the source of truth -- the UI banner shape varies per advertiser.
     confirmed = False
+    confirmation_errors: list[str] = []
     for confirm_selector in _APPLY_CONFIRM_SELECTORS:
         try:
             page.wait_for_selector(confirm_selector, timeout=4000)
             confirmed = True
             break
-        except Exception:
-            continue
+        except Exception as exc:
+            confirmation_errors.append(
+                f"{confirm_selector}: {type(exc).__name__}: {exc}"
+            )
 
     # Always re-poll REST -- it is the authoritative check, regardless
     # of which (if any) UI confirmation rendered.
@@ -680,7 +683,8 @@ def _apply_single(advertiser_id: str, dry_run: bool = False) -> ApplyResult:
             outcome=ApplyOutcome.FAILED,
             detail=(
                 f"Clicked {last_selector} but no UI confirmation appeared "
-                f"and REST relationship_status is still notjoined."
+                f"and REST relationship_status is still notjoined. "
+                f"Confirmation checks: {'; '.join(confirmation_errors)}"
             ),
             screenshot_path=shot,
         )

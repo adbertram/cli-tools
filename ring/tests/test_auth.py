@@ -1,4 +1,5 @@
 from ring_cli.commands.auth import _login_handler
+from ring_cli.commands.auth import _read_otp_code
 
 
 class FakeConfig:
@@ -6,7 +7,7 @@ class FakeConfig:
         self.email = "user@example.com"
         self.password = "secret"
         self.clear_token_calls = 0
-        self.saved = {"OTP_CODE": "123456"}
+        self.saved = {"OTP_CODE": "legacy-code"}
 
     def clear_token(self):
         self.clear_token_calls += 1
@@ -31,6 +32,7 @@ def test_login_handler_clears_cached_token_when_forced(monkeypatch):
             calls["otp_code"] = otp_callback()
 
     monkeypatch.setattr("ring_cli.commands.auth.RingClient", FakeRingClient)
+    monkeypatch.setattr("ring_cli.commands.auth._read_otp_code", lambda: "123456")
 
     config = FakeConfig()
     _login_handler(config, force=True)
@@ -56,9 +58,21 @@ def test_login_handler_keeps_cached_token_without_force(monkeypatch):
             assert otp_callback() == "123456"
 
     monkeypatch.setattr("ring_cli.commands.auth.RingClient", FakeRingClient)
+    monkeypatch.setattr("ring_cli.commands.auth._read_otp_code", lambda: "123456")
 
     config = FakeConfig()
     _login_handler(config, force=False)
 
     assert config.clear_token_calls == 0
     assert config.saved["OTP_CODE"] == ""
+
+
+def test_read_otp_code_uses_stdin(monkeypatch, capsys):
+    class FakeStdin:
+        def readline(self):
+            return "654321\n"
+
+    monkeypatch.setattr("ring_cli.commands.auth.sys.stdin", FakeStdin())
+
+    assert _read_otp_code() == "654321"
+    assert capsys.readouterr().err == "Enter Ring 2FA code: "

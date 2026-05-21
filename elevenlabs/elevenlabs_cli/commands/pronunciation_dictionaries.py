@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import typer
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import handle_error, print_json, print_table
 
 from ..client import get_client

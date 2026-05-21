@@ -8,6 +8,3 @@ class FacebookBrowser(BrowserAutomation):
     AUTH_CHECK_URL = "https://m.facebook.com/"
     AUTH_URL_PATTERN = r"/login"
     AUTH_COOKIE_PATTERNS = ["c_user"]  # c_user cookie exists when logged into Facebook
-
-    def __init__(self, config):
-        super().__init__(config)

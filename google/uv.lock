@@ -233,7 +233,7 @@ wheels = [
 [[package]]
 name = "cli-tools-shared"
 version = "0.2.0"
-source = { editable = "../cli-tools-shared" }
+source = { editable = "../_repo/cli-tools-shared" }
 dependencies = [
     { name = "browser-harness" },
     { name = "pydantic" },
@@ -427,7 +427,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cli-tools-shared", editable = "../cli-tools-shared" },
+    { name = "cli-tools-shared", editable = "../_repo/cli-tools-shared" },
     { name = "google-api-python-client", specifier = ">=2.0.0" },
     { name = "google-auth-httplib2", specifier = ">=0.1.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.0.0" },

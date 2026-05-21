@@ -4,7 +4,7 @@ import typer
 from typing import Optional, List, Dict
 
 from ..client import get_client
-from ..filters import validate_filters, FilterValidationError, apply_filters
+from cli_tools_shared.filters import validate_filters, FilterValidationError, apply_filters
 from cli_tools_shared import FilterMap
 from ..output import (
     print_json,
@@ -413,7 +413,7 @@ def database_list(
 
     Note: Filtering is performed client-side as the Notion search API has limited filter support.
     """
-    from ..filters import apply_filters
+    from cli_tools_shared.filters import apply_filters
 
     try:
         client = get_client()

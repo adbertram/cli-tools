@@ -4,6 +4,9 @@ COMMAND_CREDENTIALS = {
     "create": [
         "oauth_authorization_code"
     ],
+    "create-field": [
+        "oauth_authorization_code"
+    ],
     "delete": [
         "oauth_authorization_code"
     ],
@@ -16,7 +19,13 @@ COMMAND_CREDENTIALS = {
     "list": [
         "oauth_authorization_code"
     ],
+    "list-field": [
+        "oauth_authorization_code"
+    ],
     "update": [
+        "oauth_authorization_code"
+    ],
+    "update-field": [
         "oauth_authorization_code"
     ],
     "validate": [
@@ -31,9 +40,9 @@ import sys
 from pathlib import Path
 from typing import Optional, Any
 
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_success, print_warning, handle_api_error, format_response
-from ..filters import apply_filters, validate_filters, FilterValidationError
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio webhooks")

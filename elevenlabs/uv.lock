@@ -159,7 +159,7 @@ wheels = [
 [[package]]
 name = "cli-tools-shared"
 version = "0.2.0"
-source = { editable = "../cli-tools-shared" }
+source = { editable = "../_repo/cli-tools-shared" }
 dependencies = [
     { name = "browser-harness" },
     { name = "pydantic" },
@@ -212,7 +212,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cli-tools-shared", editable = "../cli-tools-shared" },
+    { name = "cli-tools-shared", editable = "../_repo/cli-tools-shared" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.31.0" },

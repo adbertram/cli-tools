@@ -7,6 +7,7 @@ COMMAND_CREDENTIALS = {
 
 import typer
 
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table, command
 
 from ..client import get_client
@@ -43,8 +44,6 @@ def account_list(
     rows = [account.model_dump(mode="json")]
 
     if filter:
-        from ..filters import apply_filters
-
         rows = apply_filters(rows, filter)
 
     if properties and rows:

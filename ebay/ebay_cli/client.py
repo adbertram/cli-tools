@@ -16,6 +16,7 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0  # seconds
 DEFAULT_MAX_DELAY = 30.0  # seconds
 DEFAULT_JITTER = 0.1  # 10% jitter
+DEFAULT_REQUEST_TIMEOUT = (10.0, 30.0)  # (connect, read) seconds
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -37,6 +38,7 @@ class EbayClient:
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         jitter: float = DEFAULT_JITTER,
+        request_timeout: tuple[float, float] = DEFAULT_REQUEST_TIMEOUT,
     ):
         """
         Initialize eBay client from configuration.
@@ -48,6 +50,7 @@ class EbayClient:
             base_delay: Base delay in seconds for exponential backoff (default: 1.0)
             max_delay: Maximum delay in seconds between retries (default: 30.0)
             jitter: Random jitter factor to prevent thundering herd (default: 0.1)
+            request_timeout: Requests connect/read timeout tuple in seconds
         """
         if config:
             self.config = config
@@ -64,6 +67,7 @@ class EbayClient:
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.jitter = jitter
+        self.request_timeout = request_timeout
 
     def get_browser(self):
         """Return the shared browser automation instance."""
@@ -261,6 +265,7 @@ class EbayClient:
                     headers=self.headers,
                     json=data,
                     params=params,
+                    timeout=self.request_timeout,
                 )
                 last_response = response
 
@@ -274,6 +279,7 @@ class EbayClient:
                             headers=self.headers,
                             json=data,
                             params=params,
+                            timeout=self.request_timeout,
                         )
                         last_response = response
                     except Exception as e:

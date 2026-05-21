@@ -94,19 +94,19 @@ fitnesspal measurements list --properties "date,value"
 ```bash
 # Get net calories report
 fitnesspal reports get
-fitnesspal reports get --name NetCalories
+fitnesspal reports list --name "Net Calories"
 
 # Get total calories report
-fitnesspal reports get --name TotalCalories --category Nutrition
+fitnesspal reports list --name "Total Calories" --category Nutrition
 
 # Filter by date range
-fitnesspal reports get --from 2024-01-01 --to 2024-01-31
+fitnesspal reports list --from 2024-01-01 --to 2024-01-31
 
 # Table format with limit
-fitnesspal reports get --table --limit 7
+fitnesspal reports list --table --limit 7
 
 # Filter report values
-fitnesspal reports get --filter "value:gt:1500"
+fitnesspal reports list --filter "value:gt:1500"
 ```
 
 ### Food

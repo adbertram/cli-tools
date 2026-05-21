@@ -1,3 +1,7 @@
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 """Main entry point for Mindmeister CLI."""
 from . import __version__
 from .client import ClientError

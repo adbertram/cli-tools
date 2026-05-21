@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+COMMAND_CREDENTIALS = {
+    "run": ["custom"],
+    "list": ["custom"],
+    "get": ["custom"],
+}
+
 from typing import List, Optional
 
 import typer

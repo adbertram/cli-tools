@@ -90,9 +90,9 @@ class Config(BaseConfig):
 _config: Optional[Config] = None
 
 
-def get_config() -> Config:
+def get_config(profile: Optional[str] = None) -> Config:
     """Get or create the global config instance."""
     global _config
-    if _config is None:
-        _config = Config()
+    if _config is None or profile is not None:
+        _config = Config(profile=profile)
     return _config

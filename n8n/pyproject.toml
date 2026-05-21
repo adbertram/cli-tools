@@ -23,4 +23,4 @@ where = ["."]
 include = ["n8n_cli*"]
 
 [tool.uv.sources]
-cli-tools-shared = { path = "../cli-tools-shared", editable = true }
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

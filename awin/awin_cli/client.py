@@ -12,6 +12,7 @@ import time
 
 import requests
 
+from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filters import (
     FilterValidationError,
@@ -148,6 +149,7 @@ class AwinClient:
 
     # ---- Publishers ---------------------------------------------------------
 
+    @cached
     def list_publishers(self, filters: Optional[List[str]] = None) -> List[Publisher]:
         """List publisher accounts accessible to the authenticated user.
 
@@ -171,6 +173,7 @@ class AwinClient:
 
     # ---- Programmes (joined advertiser programmes) --------------------------
 
+    @cached
     def list_programmes(
         self,
         publisher_id: Optional[str] = None,

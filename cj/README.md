@@ -105,6 +105,23 @@ cj relationships apply-bulk targets.txt --stop-on-error --table
 
 `apply` calls the REST API first to detect an existing relationship and skip the click when the publisher is already joined, pending, or declined. Failures capture a Playwright screenshot under `~/.local/share/cli-tools/cj-cli/.profiles/<profile>/apply-screenshots/`.
 
+### Links (`cj links`)
+
+```bash
+# List creatives for one advertiser.
+cj links list 4837117 --limit 20
+cj links list 4837117 --type "Text Link" --filter "promotion_type:eq:coupon" --table
+cj links list 4837117 --properties "link_id,link_name,click_url"
+
+# Inspect one creative.
+cj links get 14729571 --table
+
+# Build a deep-link tracking URL without calling the API.
+cj links deeplink 4837117 "https://www.example.com/product" --sid "blog-post-slug"
+```
+
+`links list` uses CJ's Link Search API and supports the standard CLI list flags: `--table`, `--limit`, `--filter`, and `--properties`. `links deeplink` is local URL generation and requires only `CJ_PUBLISHER_ACCOUNT_ID`.
+
 ### Cache (`cj cache`)
 
 ```bash

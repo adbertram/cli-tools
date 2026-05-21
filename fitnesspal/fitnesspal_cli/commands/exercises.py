@@ -4,7 +4,7 @@ from typing import Optional, List
 from datetime import date as dt_date, timedelta
 
 from ..client import get_client
-from ..filters import validate_filters, apply_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from cli_tools_shared.output import print_json, print_table, handle_error
 from cli_tools_shared.exceptions import ClientError
 

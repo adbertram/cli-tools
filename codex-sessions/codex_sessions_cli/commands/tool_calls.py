@@ -6,6 +6,7 @@ from ..client import get_client
 from .common import emit_list, emit_one
 
 app = typer.Typer(help="Query Codex tool call history", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
 TOOL_COLUMNS = ["time", "session_id", "name", "status", "exit_code"]
 TOOL_HEADERS = ["Time", "Session", "Tool", "Status", "Exit"]

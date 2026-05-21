@@ -3,7 +3,7 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from ..filters import validate_filters, apply_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from cli_tools_shared.output import print_json, print_table, handle_error
 from cli_tools_shared.exceptions import ClientError
 
@@ -21,7 +21,7 @@ app = typer.Typer(help="View nutrition and fitness reports", no_args_is_help=Tru
 
 @app.command("list")
 def reports_list(
-    report_name: str = typer.Option("NetCalories", "--name", "-n", help="Report metric (e.g., NetCalories, TotalCalories)"),
+    report_name: str = typer.Option("Net Calories", "--name", "-n", help="Report metric (e.g., Net Calories, Total Calories)"),
     category: str = typer.Option("Nutrition", "--category", "-c", help="Report category (e.g., Nutrition, Exercise)"),
     from_date: Optional[str] = typer.Option(None, "--from", help="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = typer.Option(None, "--to", help="End date (YYYY-MM-DD)"),
@@ -35,8 +35,8 @@ def reports_list(
 
     Examples:
         fitnesspal reports list
-        fitnesspal reports list --name NetCalories
-        fitnesspal reports list --name TotalCalories --category Nutrition
+        fitnesspal reports list --name "Net Calories"
+        fitnesspal reports list --name "Total Calories" --category Nutrition
         fitnesspal reports list --from 2024-01-01 --to 2024-01-31
         fitnesspal reports list --table --limit 7
         fitnesspal reports list --filter "value:gt:1500"
@@ -80,7 +80,7 @@ def reports_list(
 @app.command("get")
 def reports_get(
     date: str = typer.Argument(..., help="Date to get report for (YYYY-MM-DD)"),
-    report_name: str = typer.Option("NetCalories", "--name", "-n", help="Report metric (e.g., NetCalories, TotalCalories)"),
+    report_name: str = typer.Option("Net Calories", "--name", "-n", help="Report metric (e.g., Net Calories, Total Calories)"),
     category: str = typer.Option("Nutrition", "--category", "-c", help="Report category (e.g., Nutrition, Exercise)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -89,7 +89,7 @@ def reports_get(
 
     Examples:
         fitnesspal reports get 2024-01-15
-        fitnesspal reports get 2024-01-15 --name TotalCalories
+        fitnesspal reports get 2024-01-15 --name "Total Calories"
         fitnesspal reports get 2024-01-15 --table
     """
     try:

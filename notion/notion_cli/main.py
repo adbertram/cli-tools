@@ -1,4 +1,8 @@
 """Main entry point for Notion CLI."""
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 from . import __version__
 from .client import ClientError
 from cli_tools_shared import create_app, run_app

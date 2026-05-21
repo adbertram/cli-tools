@@ -3,7 +3,7 @@
 Translates standard CLI filter format (field:op:value) to Google API-specific query syntax.
 """
 from typing import List, Optional, Tuple
-from .filters import OPERATORS
+from cli_tools_shared.filters import OPERATORS
 
 # Extended operators that map to standard ones
 OPERATOR_ALIASES = {

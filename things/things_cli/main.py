@@ -1,7 +1,11 @@
 """Main entry point for Things CLI."""
+import warnings
+
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from .client import ClientError
+
+warnings.filterwarnings("ignore", module="urllib3")
 
 app = create_app(
     name="things",

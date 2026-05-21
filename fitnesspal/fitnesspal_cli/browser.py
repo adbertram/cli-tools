@@ -5,8 +5,6 @@ After login, the python-myfitnesspal library reads browser cookies directly.
 """
 from cli_tools_shared.auth import BrowserAutomation
 
-from .config import get_config
-
 
 class MyFitnessPalBrowser(BrowserAutomation):
     """MyFitnessPal browser automation.
@@ -18,10 +16,6 @@ class MyFitnessPalBrowser(BrowserAutomation):
 
     SESSION_NAME = "fitnesspal"
     LOGIN_URL = "https://www.myfitnesspal.com/account/login"
-    AUTH_CHECK_URL = "https://www.myfitnesspal.com/food/diary"
-    AUTH_URL_PATTERN = r"/account/login"
-    AUTH_COOKIE_PATTERNS = ["MFP_TOKEN", "user-id"]
-
-    def __init__(self, config=None):
-        config = config or get_config()
-        super().__init__(config)
+    AUTH_CHECK_URL = "https://www.myfitnesspal.com/"
+    AUTH_URL_PATTERN = r"/account/login|/user/login"
+    AUTH_COOKIE_PATTERNS = [r"^__Secure-next-auth\.session-token$"]

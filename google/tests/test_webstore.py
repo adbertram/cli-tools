@@ -11,10 +11,11 @@ from google_cli.client import ClientError
 from google_cli.commands import webstore as webstore_commands
 from google_cli.main import app
 from google_cli.browser import (
-    ChromeWebStoreBrowser,
     STORE_LISTING_FIELD_LABELS,
+    _assert_listing_is_editable,
     _extract_dashboard_status_text,
     _mark_file_input_script,
+    _set_file_input,
     _update_text_fields_script,
 )
 from google_cli.models.webstore import (
@@ -312,16 +313,6 @@ def test_listing_update_command_passes_listing_data_to_browser(monkeypatch, tmp_
     calls = []
 
     class FakeBrowser:
-        def update_listing(self, publisher_id, item_id, listing):
-            calls.append((publisher_id, item_id, listing))
-            return WebStoreListingUpdateResult(
-                item_id=item_id,
-                dashboard_url="https://chrome.google.com/webstore/devconsole/pub-123/ext-123/edit",
-                updated_fields=["title", "summary"],
-                uploaded_assets=listing.screenshots,
-                save_status="saved",
-            )
-
         def close(self):
             calls.append(("close",))
 
@@ -330,6 +321,19 @@ def test_listing_update_command_passes_listing_data_to_browser(monkeypatch, tmp_
             return FakeBrowser()
 
     monkeypatch.setattr(webstore_commands, "get_config", lambda profile=None: FakeConfig())
+    monkeypatch.setattr(
+        webstore_commands,
+        "update_webstore_listing",
+        lambda browser, publisher_id, item_id, listing: (
+            calls.append((publisher_id, item_id, listing)) or WebStoreListingUpdateResult(
+                item_id=item_id,
+                dashboard_url="https://chrome.google.com/webstore/devconsole/pub-123/ext-123/edit",
+                updated_fields=["title", "summary"],
+                uploaded_assets=listing.screenshots,
+                save_status="saved",
+            )
+        ),
+    )
 
     webstore_commands.update_listing(
         listing_file=listing_file,
@@ -370,7 +374,6 @@ Status: {self.status}
 ID: mjcpgmoefpffompneljbkkndhconnnff
 """
 
-    browser = ChromeWebStoreBrowser(config=object())
     for status in (
         "Pending review",
         "In review",
@@ -379,7 +382,7 @@ ID: mjcpgmoefpffompneljbkkndhconnnff
         "Review in progress",
     ):
         with pytest.raises(ClientError, match="not editable while review is in progress"):
-            browser._assert_listing_is_editable(FakeService(status))
+            _assert_listing_is_editable(FakeService(status))
 
 
 def test_text_field_update_rejects_disabled_review_field():
@@ -429,11 +432,7 @@ def test_file_upload_sets_each_listing_asset_individually(tmp_path):
 
     page = FakePage()
 
-    ChromeWebStoreBrowser(config=object())._set_file_input(
-        page,
-        "screenshots",
-        [str(first), str(second)],
-    )
+    _set_file_input(page, "screenshots", [str(first), str(second)])
 
     assert calls == [str(first), str(second)]
     assert page.selectors == [
@@ -852,35 +851,34 @@ def test_list_command_reads_configured_item_and_outputs_array(monkeypatch):
     assert json.loads(result.stdout) == [{"item_id": "ext-from-env", "warned": False}]
 
 
-def test_status_command_reads_ids_from_local_dotenv(monkeypatch, tmp_path):
+def test_status_command_reads_ids_from_profile_env(monkeypatch):
     class FakeClient:
         def fetch_status(self, publisher_id, item_id):
-            assert publisher_id == "pub-from-dotenv"
-            assert item_id == "ext-from-dotenv"
+            assert publisher_id == "pub-from-profile"
+            assert item_id == "ext-from-profile"
             return WebStoreStatus(
-                name="publishers/pub-from-dotenv/items/ext-from-dotenv",
-                item_id="ext-from-dotenv",
+                name="publishers/pub-from-profile/items/ext-from-profile",
+                item_id="ext-from-profile",
                 taken_down=False,
                 warned=False,
             )
 
+    class FakeConfig:
+        def _get(self, name):
+            return {
+                "CWS_PUBLISHER_ID": "pub-from-profile",
+                "CWS_EXTENSION_ID": "ext-from-profile",
+            }.get(name)
+
     monkeypatch.delenv("CWS_PUBLISHER_ID", raising=False)
     monkeypatch.delenv("CWS_EXTENSION_ID", raising=False)
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text(
-        "\n".join(
-            [
-                "CWS_PUBLISHER_ID=pub-from-dotenv",
-                "CWS_EXTENSION_ID=ext-from-dotenv",
-            ]
-        )
-    )
+    monkeypatch.setattr(webstore_commands, "get_config", lambda profile=None: FakeConfig())
     monkeypatch.setattr(webstore_commands, "get_client", lambda profile=None: FakeClient())
 
     result = CliRunner().invoke(app, ["webstore", "status"])
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout)["item_id"] == "ext-from-dotenv"
+    assert json.loads(result.stdout)["item_id"] == "ext-from-profile"
 
 
 def test_fetch_status_uses_v2_endpoint_and_returns_model():

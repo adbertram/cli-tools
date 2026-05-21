@@ -12,10 +12,10 @@ from requests.exceptions import ChunkedEncodingError, ConnectionError, RequestEx
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filter_map import FilterMap
+from cli_tools_shared.filters import apply_filters, apply_limit, parse_filter_string, validate_filters
 from cli_tools_shared.token_manager import TokenManager
 
 from .config import Config, get_config
-from .filters import apply_filters, apply_limit, parse_filter_string, validate_filters
 from .models import Board, Pin, UserAccount
 
 DEFAULT_MAX_RETRIES = 3

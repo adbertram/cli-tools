@@ -2,6 +2,7 @@
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
+from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
 from .config import get_config
 
@@ -14,7 +15,7 @@ app = create_app(
 
 # Register command modules
 from . import commands
-app.add_typer(commands.app, name="transcripts", help="Download TikTok video transcripts")
+register_commands(app, get_config, commands, name="transcripts", help="Download TikTok video transcripts")
 app.add_typer(create_auth_app(get_config, tool_name="tiktok"), name="auth")
 
 

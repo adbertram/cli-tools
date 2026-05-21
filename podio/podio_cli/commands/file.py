@@ -27,9 +27,9 @@ from typing import Optional
 from pathlib import Path
 import typer
 
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
-from ..filters import apply_filters, validate_filters, FilterValidationError
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio files")

@@ -6,6 +6,7 @@ from ..client import get_client
 from .common import emit_list, emit_one
 
 app = typer.Typer(help="List and query Codex projects", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
 PROJECT_COLUMNS = ["name", "full_path", "session_count", "last_activity"]
 PROJECT_HEADERS = ["Name", "Path", "Sessions", "Last Activity"]

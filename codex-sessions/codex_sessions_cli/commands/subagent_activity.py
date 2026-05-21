@@ -6,6 +6,7 @@ from ..client import get_client
 from .common import emit_list, emit_one
 
 app = typer.Typer(help="Query Codex subagent invocations", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
 SUBAGENT_COLUMNS = ["time", "session_id", "agent_type", "name", "status"]
 SUBAGENT_HEADERS = ["Time", "Session", "Agent Type", "Name", "Status"]

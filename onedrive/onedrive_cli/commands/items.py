@@ -9,7 +9,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from ..client import get_client
-from cli_tools_shared import FilterMap
+from ..filter_map import apply_filters
 from cli_tools_shared.output import print_json, print_table, print_success, print_info, handle_error
 
 
@@ -83,8 +83,10 @@ def items_list(
     """
     try:
         client = get_client()
-        # FilterMap translates filters to API parameters where supported
         items = client.list_items(drive_id=drive_id, path=path, limit=limit, filters=filter)
+
+        if filter:
+            items = apply_filters([model_to_dict(item) for item in items], filter)
 
         # Apply properties field selection
         if properties:

@@ -3,9 +3,10 @@
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
+from cli_tools_shared.command_registry import register_commands
 
 from .client import ClientError
-from .commands import app as audits_app
+from . import commands
 from .config import get_config
 
 app = create_app(
@@ -15,7 +16,7 @@ app = create_app(
     cache_support=False,
 )
 
-app.add_typer(audits_app, name="audits", help="Manage Lighthouse audits")
+register_commands(app, get_config, commands, name="audits", help="Manage Lighthouse audits")
 app.add_typer(create_auth_app(get_config, tool_name="google-lighthouse"), name="auth")
 
 

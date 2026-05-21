@@ -1,10 +1,9 @@
 """Browser automation for Chrome Web Store Developer Dashboard listing edits."""
-from pathlib import Path
 import json
+from pathlib import Path
 import re
 
 from cli_tools_shared.auth import BrowserAutomation
-from cli_tools_shared.http_session import BrowserAuthState
 
 from .client import ClientError
 from .models.webstore import WebStoreListingData, WebStoreListingUpdateResult
@@ -32,114 +31,116 @@ class ChromeWebStoreBrowser(BrowserAutomation):
     SESSION_NAME = "google-webstore"
     AUTH_CHECK_TTL = 0
 
-    def auth_state(self) -> BrowserAuthState:
-        """Load the saved browser auth state for browser-authenticated helpers."""
-        return BrowserAuthState.from_config(self.config)
+def update_webstore_listing(
+    browser: ChromeWebStoreBrowser,
+    publisher_id: str,
+    item_id: str,
+    listing: WebStoreListingData,
+) -> WebStoreListingUpdateResult:
+    """Update the Store Listing tab for an existing Chrome Web Store item."""
+    dashboard_url = STORE_LISTING_URL_TEMPLATE.format(
+        publisher_id=publisher_id,
+        item_id=item_id,
+    )
+    service = browser.get_page(dashboard_url)
+    service.wait_for_load_state("networkidle", timeout=60000)
+    service.wait_for_timeout(2000)
+    _assert_listing_is_editable(service)
 
-    def update_listing(
-        self,
-        publisher_id: str,
-        item_id: str,
-        listing: WebStoreListingData,
-    ) -> WebStoreListingUpdateResult:
-        """Update the Store Listing tab for an existing Chrome Web Store item."""
-        dashboard_url = STORE_LISTING_URL_TEMPLATE.format(
-            publisher_id=publisher_id,
-            item_id=item_id,
+    updated_fields = _update_text_fields(service, listing)
+    updated_fields.append(_update_category(service, listing.category))
+    uploaded_assets = _upload_assets(service, listing)
+    _save_listing(service)
+
+    return WebStoreListingUpdateResult(
+        item_id=item_id,
+        dashboard_url=dashboard_url,
+        updated_fields=updated_fields,
+        uploaded_assets=uploaded_assets,
+        save_status="saved",
+    )
+
+
+def _assert_listing_is_editable(service) -> None:
+    status_text = _extract_dashboard_status_text(
+        service.evaluate("() => document.body.innerText")
+    )
+    if status_text is not None and REVIEW_LOCKED_STATUS_PATTERN.search(status_text):
+        raise ClientError(
+            f"Chrome Web Store item is in {status_text}. "
+            "Store Listing fields are not editable while review is in progress."
         )
-        service = self.get_page(dashboard_url)
-        service.wait_for_load_state("networkidle", timeout=60000)
-        service.wait_for_timeout(2000)
-        self._assert_listing_is_editable(service)
 
-        updated_fields = self._update_text_fields(service, listing)
-        updated_fields.append(self._update_category(service, listing.category))
-        uploaded_assets = self._upload_assets(service, listing)
-        self._save_listing(service)
 
-        return WebStoreListingUpdateResult(
-            item_id=item_id,
-            dashboard_url=dashboard_url,
-            updated_fields=updated_fields,
-            uploaded_assets=uploaded_assets,
-            save_status="saved",
+def _update_text_fields(service, listing: WebStoreListingData) -> list[str]:
+    fields = [
+        {
+            "name": field_name,
+            "labels": labels,
+            "value": getattr(listing, field_name),
+        }
+        for field_name, labels in STORE_LISTING_FIELD_LABELS.items()
+    ]
+    script = _update_text_fields_script(fields)
+    result = service.evaluate(script)
+    if not isinstance(result, list):
+        raise ClientError("Dashboard text-field update did not return updated field names.")
+    expected = [field["name"] for field in fields]
+    if result != expected:
+        raise ClientError(
+            "Dashboard text-field update returned unexpected fields: "
+            + ", ".join(str(item) for item in result)
         )
+    return result
 
-    def _assert_listing_is_editable(self, service) -> None:
-        status_text = _extract_dashboard_status_text(
-            service.evaluate("() => document.body.innerText")
-        )
-        if status_text is not None and REVIEW_LOCKED_STATUS_PATTERN.search(status_text):
-            raise ClientError(
-                f"Chrome Web Store item is in {status_text}. "
-                "Store Listing fields are not editable while review is in progress."
-            )
 
-    def _update_text_fields(self, service, listing: WebStoreListingData) -> list[str]:
-        fields = [
-            {
-                "name": field_name,
-                "labels": labels,
-                "value": getattr(listing, field_name),
-            }
-            for field_name, labels in STORE_LISTING_FIELD_LABELS.items()
-        ]
-        script = _update_text_fields_script(fields)
-        result = service.evaluate(script)
-        if not isinstance(result, list):
-            raise ClientError("Dashboard text-field update did not return updated field names.")
-        expected = [field["name"] for field in fields]
-        if result != expected:
-            raise ClientError(
-                "Dashboard text-field update returned unexpected fields: "
-                + ", ".join(str(item) for item in result)
-            )
-        return result
+def _update_category(service, category: str) -> str:
+    result = service.evaluate(_update_category_script(category))
+    if result != "category":
+        raise ClientError(f"Dashboard category update returned unexpected result: {result}")
+    return result
 
-    def _update_category(self, service, category: str) -> str:
-        result = service.evaluate(_update_category_script(category))
-        if result != "category":
-            raise ClientError(f"Dashboard category update returned unexpected result: {result}")
-        return result
 
-    def _upload_assets(self, service, listing: WebStoreListingData):
-        page = service._get_page()
-        uploaded = []
-        screenshot_paths = [asset.path for asset in listing.screenshots]
-        self._set_file_input(page, "screenshots", screenshot_paths)
-        uploaded.extend(listing.screenshots)
+def _upload_assets(service, listing: WebStoreListingData):
+    page = service._get_page()
+    uploaded = []
+    screenshot_paths = [asset.path for asset in listing.screenshots]
+    _set_file_input(page, "screenshots", screenshot_paths)
+    uploaded.extend(listing.screenshots)
 
-        if listing.small_promo_tile is not None:
-            self._set_file_input(page, "small promo", [listing.small_promo_tile.path])
-            uploaded.append(listing.small_promo_tile)
+    if listing.small_promo_tile is not None:
+        _set_file_input(page, "small promo", [listing.small_promo_tile.path])
+        uploaded.append(listing.small_promo_tile)
 
-        if listing.marquee_promo_image is not None:
-            self._set_file_input(page, "marquee", [listing.marquee_promo_image.path])
-            uploaded.append(listing.marquee_promo_image)
+    if listing.marquee_promo_image is not None:
+        _set_file_input(page, "marquee", [listing.marquee_promo_image.path])
+        uploaded.append(listing.marquee_promo_image)
 
-        return uploaded
+    return uploaded
 
-    def _set_file_input(self, page, section_name: str, paths: list[str]) -> None:
-        for path in paths:
-            if not Path(path).is_file():
-                raise ClientError(f"Listing asset does not exist: {path}")
 
-        marker = f"cws-upload-{section_name.replace(' ', '-')}"
-        for path in paths:
-            script = _mark_file_input_script(section_name, marker)
-            marked = page.evaluate(script)
-            if marked is not True:
-                raise ClientError(f"Could not find Chrome Web Store upload control for {section_name}.")
-            locator = page.locator(f'input[type="file"][data-cws-upload-marker="{marker}"]')
-            locator.set_input_files(path)
-            page.wait_for_timeout(1000)
+def _set_file_input(page, section_name: str, paths: list[str]) -> None:
+    for path in paths:
+        if not Path(path).is_file():
+            raise ClientError(f"Listing asset does not exist: {path}")
 
-    def _save_listing(self, service) -> None:
-        clicked = service.evaluate(_click_save_button_script())
-        if clicked is not True:
-            raise ClientError("Could not find enabled Chrome Web Store save button.")
-        service.wait_for_load_state("networkidle", timeout=60000)
-        service.wait_for_timeout(2000)
+    marker = f"cws-upload-{section_name.replace(' ', '-')}"
+    for path in paths:
+        script = _mark_file_input_script(section_name, marker)
+        marked = page.evaluate(script)
+        if marked is not True:
+            raise ClientError(f"Could not find Chrome Web Store upload control for {section_name}.")
+        locator = page.locator(f'input[type="file"][data-cws-upload-marker="{marker}"]')
+        locator.set_input_files(path)
+        page.wait_for_timeout(1000)
+
+
+def _save_listing(service) -> None:
+    clicked = service.evaluate(_click_save_button_script())
+    if clicked is not True:
+        raise ClientError("Could not find enabled Chrome Web Store save button.")
+    service.wait_for_load_state("networkidle", timeout=60000)
+    service.wait_for_timeout(2000)
 
 
 def _update_text_fields_script(fields: list[dict]) -> str:

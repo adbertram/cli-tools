@@ -1,53 +1,61 @@
-"""Parse playwright page snapshot YAML to extract Techsmith data.
-
-playwright page snapshot returns JSON with a 'file' key pointing to a YAML
-accessibility tree. This module provides functions to extract structured data
-from that YAML text.
-
-Common YAML patterns to match:
-    - link "Title text" [ref=e1]:
-        /url: https://example.com/item/123
-    - generic [ref=e2]: Some value
-
-See facebook_marketplace/parsers.py for a complete example implementation.
-"""
+"""Parse the TechSmith affiliate page into CLI records."""
+from html import unescape
+from html.parser import HTMLParser
 import re
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 
-def extract_items_from_snapshot(snapshot_text: str) -> List[Dict]:
-    """Extract items from a playwright page snapshot YAML.
+class _TechSmithPageParser(HTMLParser):
+    """Collect metadata from the TechSmith affiliate page."""
 
-    TODO: Implement for your specific site. The snapshot is an accessibility
-    tree in YAML format. Find the patterns that identify your items and parse
-    them into dicts.
+    def __init__(self):
+        super().__init__()
+        self.meta: dict[str, str] = {}
 
-    Args:
-        snapshot_text: Raw YAML text from playwright page snapshot
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+        if tag.casefold() != "meta":
+            return
 
-    Returns:
-        List of dicts with item data (id, title, url, price, etc.)
+        attr_map = {name.casefold(): value for name, value in attrs if value is not None}
+        key = attr_map.get("property") or attr_map.get("name")
+        content = attr_map.get("content")
+        if key is not None and content is not None:
+            self.meta[key] = content
 
-    Example implementation (link-based items):
-        items = []
-        lines = snapshot_text.split('\\n')
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            link_match = re.match(r'^\\s*- link "(.+?)"\\s+\\[ref=', line)
-            if link_match:
-                link_text = link_match.group(1)
-                if i + 1 < len(lines):
-                    url_line = lines[i + 1]
-                    url_match = re.search(r'/item/(\\d+)/', url_line)
-                    if url_match:
-                        items.append({
-                            "id": url_match.group(1),
-                            "title": link_text,
-                            "url": f"/item/{url_match.group(1)}/",
-                        })
-            i += 1
-        return items
-    """
-    # TODO: Implement site-specific parsing
-    return []
+
+def extract_items_from_snapshot(page_text: str) -> List[Dict]:
+    """Extract the TechSmith affiliate program record from page HTML."""
+    parser = _TechSmithPageParser()
+    parser.feed(page_text)
+
+    title = parser.meta.get("og:title")
+    url = parser.meta.get("og:url")
+    description = parser.meta.get("description")
+
+    if not title:
+        raise ValueError("TechSmith page did not contain og:title metadata.")
+    if not url:
+        raise ValueError("TechSmith page did not contain og:url metadata.")
+    if not description:
+        raise ValueError("TechSmith page did not contain description metadata.")
+
+    return [
+        {
+            "id": _slug_from_url(url),
+            "name": _clean(title),
+            "status": "active",
+            "description": _clean(description),
+        }
+    ]
+
+
+def _slug_from_url(url: str) -> str:
+    path = urlparse(url).path.strip("/")
+    if not path:
+        raise ValueError(f"TechSmith canonical URL has no path: {url}")
+    return path.split("/")[-1]
+
+
+def _clean(value: str) -> str:
+    return re.sub(r"\s+", " ", unescape(value)).strip()

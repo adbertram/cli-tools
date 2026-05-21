@@ -27,4 +27,4 @@ include = ["doordash_cli*"]
 doordash_cli = ["data/*.json", "data/queries/*.graphql"]
 
 [tool.uv.sources]
-cli-tools-shared = { path = "../cli-tools-shared", editable = true }
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

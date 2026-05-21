@@ -19,19 +19,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-        self._ensure_repo_default_env_stub()
-
-    def _ensure_repo_default_env_stub(self) -> None:
-        """Keep a repo-local .env stub present for CLI compliance tests.
-
-        BaseConfig._migrate_env_files removes any bare ``.env`` from the repo
-        on every Config init (it migrates credentials into the user-data
-        layout). Compliance tests still require a repo-local ``.env`` with
-        ``IS_DEFAULT_PROFILE=1`` to exist, so we recreate the stub here.
-        """
-        repo_env = self.tool_dir / ".env"
-        if not repo_env.exists():
-            repo_env.write_text("IS_DEFAULT_PROFILE=1\n")
 
     def test_connection(self):
         """Validate the saved API key against PartnerStack."""

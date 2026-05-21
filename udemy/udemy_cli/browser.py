@@ -20,5 +20,9 @@ class UdemyBrowser(BrowserAutomation):
     SESSION_NAME = UDEMY_BROWSER_SESSION
     AUTOMATION_HEADED = True
 
-    def _session_name(self) -> str:
-        return self.config.browser_session
+
+def _udemy_session_name(self) -> str:
+    return self.config.browser_session
+
+
+UdemyBrowser._session_name = _udemy_session_name

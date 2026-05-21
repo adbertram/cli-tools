@@ -42,7 +42,7 @@ app = typer.Typer(help="Search creatives and generate affiliate tracking URLs", 
 COMMAND_CREDENTIALS = {
     "list": ["personal_access_token"],
     "get": ["personal_access_token"],
-    "deeplink": [],
+    "deeplink": ["no_auth"],
 }
 
 
@@ -77,6 +77,9 @@ def links_list(
     advertiser_id: str = typer.Argument(..., help="CJ advertiser ID to list creatives for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of records (CJ caps page size at 100)"),
+    filter: Optional[List[str]] = typer.Option(
+        None, "--filter", "-f", help="Client-side filter (field:op:value)"
+    ),
     link_type: Optional[str] = typer.Option(
         None,
         "--type",
@@ -121,6 +124,10 @@ def links_list(
             page=page,
             limit=limit,
         )
+
+        if filter:
+            from ..client import _apply_filters
+            rows = _apply_filters(rows, filter)
 
         if properties:
             fields = [f.strip() for f in properties.split(",")]

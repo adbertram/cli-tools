@@ -1,10 +1,12 @@
 """Members/Subscribers commands for Mailchimp CLI."""
 import typer
 import hashlib
-from typing import Optional
+from typing import List, Optional
+
+from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
+from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
 
 app = typer.Typer(help="Manage list members/subscribers")
 
@@ -18,9 +20,11 @@ def email_to_hash(email: str) -> str:
 def members_list(
     list_id: str = typer.Argument(..., help="The list/audience ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    count: int = typer.Option(10, "--count", "-c", help="Number of members to return"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of members to return"),
     offset: int = typer.Option(0, "--offset", "-o", help="Offset for pagination"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (subscribed, unsubscribed, cleaned, pending)"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """
     List members of a specific audience/list.
@@ -38,27 +42,18 @@ def members_list(
         if status:
             kwargs["status"] = status
 
-        result = client.list_members(list_id, count=count, offset=offset, **kwargs)
+        result = client.list_members(list_id, count=limit, offset=offset, **kwargs)
         members = result.get("members", [])
+        members = apply_filters(members, filter)
+        members = apply_limit(members, limit)
+        members = apply_properties_filter(members, properties)
 
         if table:
-            table_data = []
-            for member in members:
-                merge_fields = member.get("merge_fields", {})
-                table_data.append({
-                    "email": member.get("email_address", ""),
-                    "status": member.get("status", ""),
-                    "name": f"{merge_fields.get('FNAME', '')} {merge_fields.get('LNAME', '')}".strip() or "N/A",
-                    "subscribed": member.get("timestamp_opt", "N/A"),
-                })
-
-            print_table(
-                table_data,
-                ["email", "status", "name", "subscribed"],
-                ["Email", "Status", "Name", "Subscribed Date"],
-            )
+            columns = [field.strip() for field in properties.split(",")] if properties else ["email_address", "status", "merge_fields.FNAME", "timestamp_opt"]
+            headers = [column.replace("_", " ").replace(".", " ").title() for column in columns]
+            print_table(members, columns, headers)
         else:
-            print_json(result)
+            print_json(members)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

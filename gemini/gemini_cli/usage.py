@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 
+from .config import get_config
+
 # Pricing per 1M tokens (as of Dec 2025)
 # https://ai.google.dev/gemini-api/docs/pricing
 PRICING = {
@@ -54,14 +56,15 @@ PRICING = {
 }
 
 
-def get_usage_file() -> Path:
+def get_usage_file(config=None) -> Path:
     """Get path to usage tracking file."""
-    return Path(__file__).parent / ".usage.json"
+    active_config = config or get_config()
+    return active_config.get_profile_data_dir() / "usage.json"
 
 
-def load_usage_data() -> Dict[str, Any]:
+def load_usage_data(config=None) -> Dict[str, Any]:
     """Load usage data from file."""
-    usage_file = get_usage_file()
+    usage_file = get_usage_file(config)
     if usage_file.exists():
         try:
             return json.loads(usage_file.read_text())
@@ -70,9 +73,10 @@ def load_usage_data() -> Dict[str, Any]:
     return {"requests": [], "daily_totals": {}}
 
 
-def save_usage_data(data: Dict[str, Any]) -> None:
+def save_usage_data(data: Dict[str, Any], config=None) -> None:
     """Save usage data to file."""
-    usage_file = get_usage_file()
+    usage_file = get_usage_file(config)
+    usage_file.parent.mkdir(parents=True, exist_ok=True)
     usage_file.write_text(json.dumps(data, indent=2, default=str))
 
 
@@ -83,6 +87,7 @@ def record_usage(
     total_tokens: int,
     cached_tokens: int = 0,
     operation: str = "generate",
+    config=None,
 ) -> None:
     """
     Record usage from an API call.
@@ -95,7 +100,7 @@ def record_usage(
         cached_tokens: Number of cached tokens (reduced cost)
         operation: Type of operation (generate, analyze_video, etc.)
     """
-    data = load_usage_data()
+    data = load_usage_data(config)
 
     today = date.today().isoformat()
     timestamp = datetime.now().isoformat()
@@ -141,10 +146,10 @@ def record_usage(
     daily["cached_tokens"] += cached_tokens
     daily["estimated_cost"] = round(daily["estimated_cost"] + total_cost, 6)
 
-    save_usage_data(data)
+    save_usage_data(data, config)
 
 
-def get_usage_summary(days: int = 30) -> Dict[str, Any]:
+def get_usage_summary(days: int = 30, config=None) -> Dict[str, Any]:
     """
     Get usage summary for the specified number of days.
 
@@ -154,7 +159,7 @@ def get_usage_summary(days: int = 30) -> Dict[str, Any]:
     Returns:
         Summary dict with totals and daily breakdown
     """
-    data = load_usage_data()
+    data = load_usage_data(config)
 
     # Calculate date range
     today = date.today()
@@ -194,7 +199,7 @@ def get_usage_summary(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_model_breakdown(days: int = 30) -> Dict[str, Dict[str, Any]]:
+def get_model_breakdown(days: int = 30, config=None) -> Dict[str, Dict[str, Any]]:
     """
     Get usage breakdown by model.
 
@@ -204,7 +209,7 @@ def get_model_breakdown(days: int = 30) -> Dict[str, Dict[str, Any]]:
     Returns:
         Dict mapping model names to their usage stats
     """
-    data = load_usage_data()
+    data = load_usage_data(config)
     today = date.today()
 
     models: Dict[str, Dict[str, Any]] = {}
@@ -240,6 +245,6 @@ def get_model_breakdown(days: int = 30) -> Dict[str, Dict[str, Any]]:
     return models
 
 
-def clear_usage_data() -> None:
+def clear_usage_data(config=None) -> None:
     """Clear all usage data."""
-    save_usage_data({"requests": [], "daily_totals": {}})
+    save_usage_data({"requests": [], "daily_totals": {}}, config)

@@ -21,7 +21,7 @@ msword docs read document.docx
 msword docs convert document.docx
 
 # Extract comments with context
-msword docs comments document.docx --table
+msword docs comments list document.docx --table
 ```
 
 ## Commands
@@ -56,19 +56,22 @@ Extract comments with the text they reference.
 
 ```bash
 # Output as JSON
-msword docs comments document.docx
+msword docs comments list document.docx
 
 # Output as table
-msword docs comments document.docx --table
+msword docs comments list document.docx --table
 
 # Limit results
-msword docs comments document.docx --limit 5
+msword docs comments list document.docx --limit 5
 
 # Filter by author
-msword docs comments document.docx --filter "author:Jane"
+msword docs comments list document.docx --filter "author:eq:Jane"
 
 # Select specific fields
-msword docs comments document.docx --properties "author,text,context"
+msword docs comments list document.docx --properties "author,text,context"
+
+# Fetch one comment by ID
+msword docs comments get document.docx 0
 ```
 
 ## Output Formats
@@ -81,13 +84,13 @@ All commands support two output formats:
 ### JSON Output Example
 
 ```bash
-msword docs comments document.docx
+msword docs comments list document.docx
 ```
 
 ### Table Output Example
 
 ```bash
-msword docs comments document.docx --table
+msword docs comments list document.docx --table
 ```
 
 ## Options Reference
@@ -105,10 +108,10 @@ msword docs comments document.docx --table
 
 ```bash
 # Get all comment texts as a list
-msword docs comments document.docx | jq '.[].text'
+msword docs comments list document.docx | jq '.[].text'
 
 # Get comments by a specific author
-msword docs comments document.docx | jq '[.[] | select(.author == "Eve Turzillo")]'
+msword docs comments list document.docx | jq '[.[] | select(.author == "Eve Turzillo")]'
 
 # Convert and save markdown
 msword docs convert document.docx | jq -r '.markdown' > output.md

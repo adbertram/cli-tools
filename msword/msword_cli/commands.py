@@ -11,6 +11,11 @@ from cli_tools_shared.output import handle_error, print_json, print_table
 from .client import get_client
 
 app = typer.Typer(help="Manage Word documents", no_args_is_help=True)
+COMMAND_CREDENTIALS = {
+    "read": ["no_auth"],
+    "convert": ["no_auth"],
+    "comments": ["no_auth"],
+}
 
 
 def model_to_dict(item):
@@ -117,6 +122,27 @@ def comments_list(
                 print_table(comments, ["author", "text", "context"], ["Author", "Comment", "Context"])
         else:
             print_json(comments)
+    except Exception as error:
+        raise typer.Exit(handle_error(error))
+
+
+@comments_app.command("get")
+def comments_get(
+    file: str = typer.Argument(..., help="Path to the .docx file"),
+    comment_id: str = typer.Argument(..., help="Comment ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Get a single comment from a Word document."""
+    try:
+        comment = get_client().get_comment(file, comment_id)
+        if table:
+            rows = [
+                {"field": key, "value": value}
+                for key, value in model_to_dict(comment).items()
+            ]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+            return
+        print_json(comment)
     except Exception as error:
         raise typer.Exit(handle_error(error))
 

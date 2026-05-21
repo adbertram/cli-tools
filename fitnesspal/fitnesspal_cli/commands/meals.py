@@ -3,7 +3,7 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from ..filters import validate_filters, apply_filters, FilterValidationError
+from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from cli_tools_shared.output import print_json, print_table, handle_error
 from cli_tools_shared.exceptions import ClientError
 

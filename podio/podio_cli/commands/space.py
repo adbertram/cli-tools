@@ -1,6 +1,9 @@
 """Space commands for Podio CLI."""
 
 COMMAND_CREDENTIALS = {
+    "find-by-url": [
+        "oauth_authorization_code"
+    ],
     "get": [
         "oauth_authorization_code"
     ],
@@ -11,10 +14,10 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, Any
 
+from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..config import get_config
 from ..output import print_json, print_output, print_error, print_warning, handle_api_error, format_response
-from ..filters import apply_filters, validate_filters, FilterValidationError
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio spaces")
@@ -123,5 +126,4 @@ def find_space_by_url_deprecated(
     """[DEPRECATED] Use 'podio space get --url <url>' instead."""
     print_warning("'podio space find-by-url' is deprecated. Use 'podio space get --url <url>' instead.")
     return get_space(url=url, table=table)
-
 

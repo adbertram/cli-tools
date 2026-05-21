@@ -6,10 +6,10 @@ A command-line interface for [Ring](https://ring.com/) doorbells, cameras, chime
 
 ## Installation
 
-The CLI installs itself when scaffolded via `<cli-tools-root>/skills/cli-tool/scripts/new-cli-tool`. To reinstall manually:
+The CLI installs itself when scaffolded via `<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool`. To reinstall manually:
 
 ```bash
-<cli-tools-root>/skills/cli-tool/scripts/install-cli-tool.sh ring
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh ring
 ```
 
 After installation, the `ring` command is on PATH.

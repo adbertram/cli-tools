@@ -514,7 +514,7 @@ def _bundle_cli_source(cli_name: str, tools_dir: str, pkg_dir: Path):
     shutil.copytree(src, dst, ignore=_BUNDLE_IGNORE)
 
     # Bundle cli-tools-shared alongside the CLI source
-    common_src = Path(tools_dir) / "cli-tools-shared"
+    common_src = Path(tools_dir) / "_repo" / "cli-tools-shared"
     if common_src.is_dir():
         common_dst = dst / "cli-tools-shared"
         if common_dst.exists():

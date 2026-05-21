@@ -19,13 +19,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-        self._ensure_repo_default_env_stub()
-
-    def _ensure_repo_default_env_stub(self) -> None:
-        """Keep a repo-local .env stub for compliance tests."""
-        repo_env = self.tool_dir / ".env"
-        if not repo_env.exists():
-            repo_env.write_text("IS_DEFAULT_PROFILE=1\n")
 
     @property
     def storage_dir(self) -> Path:

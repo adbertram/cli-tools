@@ -240,7 +240,7 @@ wheels = [
 [[package]]
 name = "cli-tools-shared"
 version = "0.2.0"
-source = { editable = "../cli-tools-shared" }
+source = { editable = "../_repo/cli-tools-shared" }
 dependencies = [
     { name = "browser-harness" },
     { name = "pydantic" },
@@ -784,7 +784,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
-    { name = "cli-tools-shared", editable = "../cli-tools-shared" },
+    { name = "cli-tools-shared", editable = "../_repo/cli-tools-shared" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "playwright", specifier = ">=1.40.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },

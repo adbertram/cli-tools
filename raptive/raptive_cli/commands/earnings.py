@@ -5,8 +5,8 @@ import typer
 
 from ..client import get_client, ClientError
 from ..dates import get_date_range
-from ..filters import apply_filters
 from ..output import print_json, print_table, handle_error, apply_limit, apply_properties
+from cli_tools_shared.filters import apply_filters
 
 COMMAND_CREDENTIALS = {
     "brand-safety": [

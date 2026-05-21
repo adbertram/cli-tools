@@ -6,6 +6,7 @@ from ..client import get_client
 from .common import emit_list, emit_one
 
 app = typer.Typer(help="Query update-plan items from Codex sessions", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
 TODO_COLUMNS = ["time", "session_id", "status", "content"]
 TODO_HEADERS = ["Time", "Session", "Status", "Content"]

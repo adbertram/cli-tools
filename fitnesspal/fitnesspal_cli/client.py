@@ -1,7 +1,10 @@
 """MyFitnessPal client wrapping the python-myfitnesspal library."""
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Dict, List, Optional
+from urllib.parse import quote, urlencode, urljoin
+
+import requests
 
 from cli_tools_shared.http_session import BrowserAuthState, BrowserAuthStateError
 from cli_tools_shared.exceptions import ClientError
@@ -26,24 +29,33 @@ from .models import (
 )
 
 
+class _BrowserAuthStateConfig:
+    """Provide BrowserAuthState the exact browser instance that must be closed."""
+
+    def __init__(self, config, browser):
+        self._browser = browser
+        self._tool_name = getattr(config, "_tool_name", "fitnesspal")
+
+    def get_browser(self):
+        return self._browser
+
+
 def _load_cookiejar():
-    """Load saved browser session cookies into a CookieJar.
-
-    Reads cookies from the common auth-state.json saved by BrowserAutomation
-    and converts them into a RequestsCookieJar for myfitnesspal.Client.
-
-    Returns:
-        CookieJar backed by the active cli_tools_shared browser profile.
-    """
+    """Load live MyFitnessPal cookies into a CookieJar."""
     import requests.cookies
     from .config import get_config
 
     config = get_config()
-    auth_state = BrowserAuthState.from_config(config)
-    cookies = auth_state.cookies_for_host(
-        "www.myfitnesspal.com",
-        allowed_domains=("myfitnesspal.com",),
-    )
+    browser = config.get_browser()
+    try:
+        auth_state = BrowserAuthState.from_config(_BrowserAuthStateConfig(config, browser))
+        cookies = auth_state.cookies_for_host(
+            "www.myfitnesspal.com",
+            allowed_domains=("myfitnesspal.com",),
+        )
+    finally:
+        browser.close()
+
     if not cookies:
         raise BrowserAuthStateError("Saved MyFitnessPal browser state contains no myfitnesspal.com cookies.")
 
@@ -148,6 +160,75 @@ def _exercise_to_model(exercise) -> ExerciseGroup:
             )
         )
     return ExerciseGroup(name=exercise.name, entries=entries)
+
+
+def _ensure_upper_lower_bound(lower_bound: Optional[date], upper_bound: Optional[date]) -> tuple[date, date]:
+    """Mirror python-myfitnesspal's default 30-day date window behavior."""
+    if upper_bound is None:
+        upper_bound = date.today()
+    if lower_bound is None:
+        lower_bound = upper_bound - timedelta(days=30)
+    if lower_bound > upper_bound:
+        lower_bound, upper_bound = upper_bound, lower_bound
+    return upper_bound, lower_bound
+
+
+def _normalize_measurement_type(measurement: str) -> str:
+    """Map supported CLI measurement names to the current API values."""
+    normalized = measurement.strip().lower()
+    if normalized != "weight":
+        raise ClientError(
+            "MyFitnessPal's current measurements API supports only Weight. "
+            "Use --measurement Weight."
+        )
+    return normalized
+
+
+def _get_api_session_and_headers() -> tuple[requests.Session, dict[str, str]]:
+    """Create an authenticated API session from the saved browser cookies."""
+    session = requests.Session()
+    session.cookies.update(_load_cookiejar())
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36"
+            )
+        }
+    )
+
+    response = session.get(
+        "https://www.myfitnesspal.com/user/auth_token?refresh=true",
+        timeout=(10.0, 30.0),
+    )
+    if not response.ok:
+        raise ClientError(
+            f"Unable to fetch MyFitnessPal authentication token (HTTP {response.status_code}): "
+            f"{response.text[:300]}"
+        )
+
+    auth_data = response.json()
+    return session, {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {auth_data['access_token']}",
+        "mfp-client-id": "mfp-main-js",
+        "mfp-user-id": str(auth_data["user_id"]),
+    }
+
+
+def _get_api_json(session: requests.Session, headers: dict[str, str], url: str) -> dict:
+    """GET JSON from MyFitnessPal's API using explicit token headers."""
+    response = session.get(url, headers=headers, timeout=(10.0, 30.0))
+    if not response.ok:
+        raise ClientError(
+            f"MyFitnessPal request failed (HTTP {response.status_code}): {response.text[:300]}"
+        )
+    return response.json()
+
+
+def _get_numeric(value: object) -> float:
+    """Extract MyFitnessPal's numeric measurement value from API output."""
+    return float(str(value).split()[0])
 
 
 class FitnesspalClient:
@@ -270,26 +351,46 @@ class FitnesspalClient:
         Returns:
             List of MeasurementEntry models sorted by date
         """
-        mfp = self._get_mfp()
-
+        session, headers = _get_api_session_and_headers()
         lb = _parse_date(lower_bound) if lower_bound else None
         ub = _parse_date(upper_bound) if upper_bound else None
-
-        raw = mfp.get_measurements(measurement, lower_bound=lb, upper_bound=ub)
+        ub, lb = _ensure_upper_lower_bound(lb, ub)
+        measurement_type = _normalize_measurement_type(measurement)
 
         entries = []
-        for d, val in sorted(raw.items(), reverse=True):
-            entries.append(
-                MeasurementEntry(date=d.isoformat(), value=val)
+        for day_offset in range((ub - lb).days + 1):
+            entry_date = ub - timedelta(days=day_offset)
+            url = (
+                urljoin("https://api.myfitnesspal.com/", "/v2/measurements")
+                + "?"
+                + urlencode(
+                    {
+                        "entry_date": entry_date.isoformat(),
+                        "types": measurement_type,
+                    }
+                )
             )
+            payload = _get_api_json(session, headers, url)
+            for item in payload.get("items", []):
+                value = item["value"]
+                unit = item.get("unit")
+                rendered_value = f"{value} {unit}" if unit else str(value)
+                entries.append(
+                    MeasurementEntry(
+                        date=item["date"],
+                        value=_get_numeric(rendered_value),
+                    )
+                )
+                if len(entries) >= limit:
+                    return entries
 
-        return entries[:limit]
+        return entries
 
     # ==================== Reports ====================
 
     def get_report(
         self,
-        report_name: str = "NetCalories",
+        report_name: str = "Net Calories",
         report_category: str = "Nutrition",
         lower_bound: Optional[str] = None,
         upper_bound: Optional[str] = None,
@@ -298,7 +399,7 @@ class FitnesspalClient:
         """Get report data for a given metric and date range.
 
         Args:
-            report_name: Report metric name (default: 'NetCalories')
+            report_name: Report metric name (default: 'Net Calories')
             report_category: Report category (default: 'Nutrition')
             lower_bound: Start date (YYYY-MM-DD)
             upper_bound: End date (YYYY-MM-DD)
@@ -307,24 +408,30 @@ class FitnesspalClient:
         Returns:
             List of ReportEntry models sorted by date
         """
-        mfp = self._get_mfp()
-
+        session, headers = _get_api_session_and_headers()
         lb = _parse_date(lower_bound) if lower_bound else None
         ub = _parse_date(upper_bound) if upper_bound else None
+        ub, lb = _ensure_upper_lower_bound(lb, ub)
 
-        raw = mfp.get_report(
-            report_name=report_name,
-            report_category=report_category,
-            lower_bound=lb,
-            upper_bound=ub,
+        url = (
+            urljoin(
+                "https://www.myfitnesspal.com/",
+                f"api/services/reports/results/{report_category.lower()}/{quote(report_name, safe='')}",
+            )
+            + f"/{(date.today() - lb).days}.json"
         )
+        payload = _get_api_json(session, headers, url)
+        results = payload.get("outcome", {}).get("results")
+        if results is None:
+            raise ClientError("MyFitnessPal report response did not include outcome.results.")
 
         entries = []
-        for d, val in sorted(raw.items(), reverse=True):
-            entries.append(
-                ReportEntry(date=d.isoformat(), value=val)
-            )
+        for index, item in enumerate(results):
+            entry_date = date.today() - timedelta(days=len(results)) + timedelta(days=index + 1)
+            if ub >= entry_date >= lb:
+                entries.append(ReportEntry(date=entry_date.isoformat(), value=item["total"]))
 
+        entries.sort(key=lambda item: item.date, reverse=True)
         return entries[:limit]
 
     # ==================== Food ====================
@@ -416,15 +523,16 @@ class FitnesspalClient:
         Returns:
             List of RecipeListItem models
         """
-        mfp = self._get_mfp()
-
-        raw = mfp.get_recipes()
-
-        items = []
-        for recipe_id, title in raw.items():
-            items.append(RecipeListItem(id=recipe_id, name=title))
-
-        return items[:limit]
+        session, headers = _get_api_session_and_headers()
+        url = "https://api.myfitnesspal.com/v2/recipes?" + urlencode({"limit": limit})
+        payload = _get_api_json(session, headers, url)
+        return [
+            RecipeListItem(
+                id=item["id"],
+                name=item["name"],
+            )
+            for item in payload["items"][:limit]
+        ]
 
     def _api_headers(self) -> dict:
         """Get authenticated headers for the MFP v2 API."""

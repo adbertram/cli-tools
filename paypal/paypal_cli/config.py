@@ -10,6 +10,8 @@ class Config(BaseConfig):
     DIST_NAME = "paypal-cli"
     CREDENTIAL_TYPES = [CredentialType.OAUTH]
     DEFAULT_BASE_URL = "https://api-m.paypal.com"
+    OAUTH_TOKEN_EXPIRES = False
+    OAUTH_STATIC_REQUIRED_FIELDS = ("CLIENT_ID", "CLIENT_SECRET")
 
     def __init__(self, profile=None):
         super().__init__(
@@ -36,35 +38,29 @@ class Config(BaseConfig):
         return missing
 
     def test_connection(self) -> dict:
-        """Test API credentials by requesting an OAuth token.
-
-        Returns dict with 'authenticated' bool and optional details.
-        """
+        """Test API credentials by requesting an OAuth token."""
         import requests
         import base64
-        try:
-            credentials = base64.b64encode(
-                f"{self.client_id}:{self.client_secret}".encode()
-            ).decode()
-            response = requests.post(
-                f"{self.api_base_url}/v1/oauth2/token",
-                headers={
-                    "Authorization": f"Basic {credentials}",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                data="grant_type=client_credentials",
-                timeout=10,
-            )
-            if response.ok:
-                data = response.json()
-                return {
-                    "authenticated": True,
-                    "app_id": data.get("app_id", ""),
-                    "scope": data.get("scope", "")[:100],
-                }
-            return {"authenticated": False, "error": f"HTTP {response.status_code}"}
-        except Exception as e:
-            return {"authenticated": False, "error": str(e)}
+        credentials = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
+        response = requests.post(
+            f"{self.api_base_url}/v1/oauth2/token",
+            headers={
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data="grant_type=client_credentials",
+            timeout=10,
+        )
+        if response.ok:
+            data = response.json()
+            return {
+                "api_test": "passed",
+                "app_id": data.get("app_id", ""),
+                "scope": data.get("scope", "")[:100],
+            }
+        return {"api_test": f"failed: HTTP {response.status_code}"}
 
 
 _configs = {}

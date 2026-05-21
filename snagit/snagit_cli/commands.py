@@ -1,9 +1,21 @@
 """Capture commands for Snagit CLI."""
+COMMAND_CREDENTIALS = {
+    "export": [
+        "no_auth"
+    ],
+    "list": [
+        "no_auth"
+    ],
+    "view": [
+        "no_auth"
+    ]
+}
+
 import typer
 from typing import Optional
 
-from .client import get_client
 from cli_tools_shared.output import print_json, print_table, handle_error
+from .client import get_client
 
 app = typer.Typer(help="Manage Snagit capture files")
 

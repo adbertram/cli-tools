@@ -3,9 +3,10 @@ import typer
 from typing import List, Optional
 
 from ..client import get_client
-from .common import emit_list
+from .common import emit_list, emit_one
 
 app = typer.Typer(help="View Codex session activity timelines", no_args_is_help=True)
+COMMAND_CREDENTIALS = {"list": ["custom"], "consolidated": ["custom"], "get": ["custom"]}
 
 TIMELINE_COLUMNS = ["time", "session_id", "event_type", "name", "status", "text"]
 TIMELINE_HEADERS = ["Time", "Session", "Type", "Name", "Status", "Text"]
@@ -24,7 +25,7 @@ def list_timeline(
     errors_only: bool = typer.Option(False, "--errors-only", "-e", help="Show only error events"),
 ):
     """List timeline events across sessions."""
-    items = get_client().list_timeline(project, project_path, session_id, since, limit=10_000)
+    items = get_client().list_timeline(project, project_path, session_id, since, limit=limit)
     if errors_only:
         items = [item for item in items if item.status in {"error", "failed", "timed_out"}]
     emit_list(items[:limit], table, TIMELINE_COLUMNS, TIMELINE_HEADERS, filter=filter, properties=properties)
@@ -46,11 +47,9 @@ def consolidated_timeline(
 
 @app.command("get")
 def get_timeline(
-    session_id: str = typer.Argument(..., help="Session UUID"),
+    event_id: str = typer.Argument(..., help="Timeline event ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    limit: int = typer.Option(500, "--limit", "-l", help="Maximum entries"),
-    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields"),
 ):
-    """Get timeline events for a specific session."""
-    emit_list(get_client().get_timeline(session_id, limit=limit), table, TIMELINE_COLUMNS, TIMELINE_HEADERS, filter=filter, properties=properties)
+    """Get a single timeline event by ID."""
+    emit_one(get_client().get_timeline_event(event_id), table, TIMELINE_COLUMNS, properties=properties)

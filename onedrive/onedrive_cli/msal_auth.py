@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Optional
 
 import msal
+import requests
 
 from .config import get_config
 
-# psdxautomation@progress.com app registration
-# Has delegated permissions: Files.ReadWrite.All, User.Read
-CLIENT_ID = "12d53a00-9654-4398-9855-a8517fb732c4"
+# Microsoft Graph PowerShell public client application.
+CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 
 # Scopes required for OneDrive operations
 # Note: offline_access is automatically requested by MSAL for refresh tokens
@@ -84,7 +84,7 @@ def _get_app(cache: Optional[msal.SerializableTokenCache] = None) -> msal.Public
 
     return msal.PublicClientApplication(
         client_id=CLIENT_ID,
-        authority="https://login.microsoftonline.com/db266a67-cbe0-4d26-ae1a-d0581fe03535",
+        authority="https://login.microsoftonline.com/common",
         token_cache=cache,
     )
 
@@ -120,6 +120,19 @@ def _get_az_cli_token() -> str:
     return token
 
 
+def _verify_drive_access(token: str) -> None:
+    """Verify the token can access the OneDrive API surface this CLI uses."""
+    response = requests.get(
+        "https://graph.microsoft.com/v1.0/me/drive",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        timeout=30,
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"Microsoft Graph drive access failed ({response.status_code}): {response.text}"
+        )
+
+
 def _get_az_cli_status() -> dict:
     """Check Azure CLI authentication status.
 
@@ -141,14 +154,10 @@ def _get_az_cli_status() -> dict:
 
     data = json.loads(result.stdout)
 
-    # Verify we can actually get a Graph token
-    token_result = subprocess.run(
-        [az_cmd, "account", "get-access-token", "--resource", "https://graph.microsoft.com"],
-        capture_output=True,
-        text=True,
-    )
-    if token_result.returncode != 0:
-        return {"authenticated": False, "error": "Azure CLI logged in but cannot get Graph token."}
+    try:
+        _verify_drive_access(_get_az_cli_token())
+    except RuntimeError as exc:
+        return {"authenticated": False, "error": str(exc)}
 
     return {
         "authenticated": True,
@@ -202,6 +211,10 @@ def _get_msal_status() -> dict:
     result = app.acquire_token_silent(SCOPES, account=account)
 
     if result and "access_token" in result:
+        try:
+            _verify_drive_access(result["access_token"])
+        except RuntimeError as exc:
+            return {"authenticated": False, "error": str(exc)}
         _save_cache(cache)
         return {
             "authenticated": True,
@@ -325,11 +338,14 @@ def test_handler(config) -> dict:
         return {"api_test": "failed: AUTH_METHOD not set"}
 
     try:
-        # Force a fresh config load to pick up the right profile
-        token = get_access_token()
-        if token:
-            return {"api_test": "passed", "auth_method": method}
-        return {"api_test": "failed: no token returned"}
+        if method == "az_cli":
+            token = _get_az_cli_token()
+        elif method == "msal_device_code":
+            token = _get_msal_token()
+        else:
+            return {"api_test": f"failed: unknown AUTH_METHOD {method!r}"}
+        _verify_drive_access(token)
+        return {"api_test": "passed", "auth_method": method}
     except Exception as e:
         return {"api_test": f"failed: {e}"}
 

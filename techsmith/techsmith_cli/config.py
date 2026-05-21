@@ -12,8 +12,6 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.techsmith.com/resources/affiliate-partners/"
     DIST_NAME = "techsmith-cli"
-    SESSION_NAME = "techsmith"
-    LOGIN_URL = "https://www.techsmith.com/resources/affiliate-partners/"
 
     def __init__(self, profile=None):
         super().__init__(

@@ -1,4 +1,8 @@
 """Main entry point for TwelveLabs CLI."""
+import warnings
+
+warnings.filterwarnings("ignore", module="urllib3")
+
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.cache_commands import create_cache_app

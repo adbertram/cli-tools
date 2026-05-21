@@ -8,7 +8,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from ..client import get_client
-from cli_tools_shared import FilterMap
+from ..filter_map import apply_filters
 from cli_tools_shared.output import print_json, print_table, handle_error
 
 
@@ -68,6 +68,9 @@ def drives_list(
     try:
         client = get_client()
         drives = client.list_drives(limit=limit)
+
+        if filter:
+            drives = apply_filters([model_to_dict(drive) for drive in drives], filter)
 
         # Apply properties field selection
         if properties:

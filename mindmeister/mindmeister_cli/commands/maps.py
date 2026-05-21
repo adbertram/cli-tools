@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from ..client import get_client
 from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error
-from ..filters import apply_filters
 
 
 app = typer.Typer(help="Manage MindMeister mind maps", no_args_is_help=True)
@@ -63,13 +62,7 @@ def maps_list(
     try:
         client = get_client()
         maps = client.list_maps(limit=limit, filters=filter)
-
-        # Convert pydantic models to dicts for filtering
         maps_dicts = [m.model_dump() if hasattr(m, 'model_dump') else m for m in maps]
-
-        # Apply client-side filtering
-        if filter:
-            maps_dicts = apply_filters(maps_dicts, filter)
 
         # Apply properties field selection
         if properties:

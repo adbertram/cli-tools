@@ -111,7 +111,7 @@ def list_videos(
     videos = client.list_channel_videos(channel, exclude_shorts=exclude_shorts)
 
     if filter:
-        from ..filters import apply_filters
+        from cli_tools_shared.filters import apply_filters
         videos = apply_filters(videos, filter)
 
     if limit > 0:

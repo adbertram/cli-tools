@@ -115,6 +115,9 @@ class RingClient:
             raise ClientError(
                 f"Stored Ring token is no longer valid: {exc}. Run 'ring auth login --force'."
             )
+        except Exception:
+            await auth.async_close()
+            raise
 
         self._auth = auth
         self._ring = ring

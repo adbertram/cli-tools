@@ -27,7 +27,7 @@ class Config(BaseConfig):
     @property
     def headless(self) -> bool:
         """Get headless browser mode setting."""
-        return (self._get("HEADLESS") or "true").lower() == "true"
+        return (self._get("HEADLESS") or "false").lower() == "true"
 
     @property
     def auth_indicator_selector(self) -> Optional[str]:

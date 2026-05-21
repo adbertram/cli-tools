@@ -26,9 +26,9 @@ from typing import Optional, List
 from pathlib import Path
 
 from ..client import get_client, ClientError
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import print_json, print_table, handle_error, print_info, print_error
 from cli_tools_shared import FilterMap
-from ..filters import apply_filters
 
 app = typer.Typer(help="Manage Globiflow flows")
 steps_app = typer.Typer(help="Manage flow steps")
