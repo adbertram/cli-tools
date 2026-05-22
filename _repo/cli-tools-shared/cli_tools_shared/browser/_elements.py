@@ -39,7 +39,14 @@ def _css_js(selector: str) -> str:
 
 
 def _scoped_css_js(parent_js: str, selector: str) -> str:
-    return f"({parent_js}).flatMap(p => Array.from(p.querySelectorAll({json.dumps(selector)})))"
+    scoped_selector = selector
+    if selector.lstrip().startswith((">", "+", "~")):
+        scoped_selector = f":scope {selector.lstrip()}"
+    return (
+        f"({parent_js}).flatMap("
+        f"p => Array.from(p.querySelectorAll({json.dumps(scoped_selector)}))"
+        f")"
+    )
 
 
 def _text_js(text_part: str) -> str:
@@ -175,6 +182,19 @@ class _ServiceLocator:
         result = self._svc.evaluate(f"() => ({self._find_js}).map(el => el.textContent || '')")
         return result if isinstance(result, list) else []
 
+    def text_content(self) -> Optional[str]:
+        return self._eval_on_first("return el.textContent;")
+
+    def inner_text(self) -> Optional[str]:
+        return self._eval_on_first("return el.innerText || el.textContent || '';")
+
+    def get_attribute(self, name: str) -> Optional[str]:
+        return self._eval_on_first(f"return el.getAttribute({json.dumps(name)});")
+
+    def input_value(self) -> str:
+        value = self._eval_on_first("return 'value' in el ? el.value : '';")
+        return value if isinstance(value, str) else ""
+
     # --- chaining ---
 
     def all(self) -> List[_ServiceLocator]:
@@ -235,3 +255,44 @@ class _ServiceElement:
 
     def count(self) -> int:
         return 1
+
+    def text_content(self) -> Optional[str]:
+        return self._eval_on_el("if (!el) return null; return el.textContent;")
+
+    def inner_text(self) -> Optional[str]:
+        return self._eval_on_el("if (!el) return null; return el.innerText || el.textContent || '';")
+
+    def get_attribute(self, name: str) -> Optional[str]:
+        return self._eval_on_el(
+            f"if (!el) return null; return el.getAttribute({json.dumps(name)});"
+        )
+
+    def input_value(self) -> str:
+        value = self._eval_on_el("if (!el) return ''; return 'value' in el ? el.value : '';")
+        return value if isinstance(value, str) else ""
+
+    def locator(self, child_selector: str) -> _ServiceLocator:
+        return _ServiceLocator(
+            self._svc,
+            _scoped_css_js(f"[{self._js}].filter(Boolean)", child_selector),
+            _is_js=True,
+        )
+
+    def filter(self, *, has_text=None) -> _ServiceLocator:
+        if has_text is None:
+            return _ServiceLocator(self._svc, f"[{self._js}].filter(Boolean)", _is_js=True)
+        return _ServiceLocator(
+            self._svc,
+            _has_text_filter_js(f"[{self._js}].filter(Boolean)", has_text),
+            _is_js=True,
+        )
+
+    def get_by_placeholder(self, text: str) -> _ServiceLocator:
+        return self.locator(f'[placeholder="{text}"]')
+
+    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
+        return _ServiceLocator(
+            self._svc,
+            _role_js(role, name, scope_js=f"[{self._js}].filter(Boolean)"),
+            _is_js=True,
+        )

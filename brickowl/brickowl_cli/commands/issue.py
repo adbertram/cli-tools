@@ -34,7 +34,7 @@ def issue_list(
         brickowl issue list
         brickowl issue list --table
         brickowl issue list --filter "status:eq:Open"
-        brickowl issue list --properties "order_id,customer,status"
+        brickowl issue list --properties "order_id,details,status"
         brickowl issue list --limit 5
     """
     from ..browser import get_browser
@@ -52,8 +52,8 @@ def issue_list(
             else:
                 print_table(
                     data,
-                    ["order_id", "date", "customer", "issue_type", "status"],
-                    ["Order ID", "Date", "Customer", "Issue Type", "Status"],
+                    ["order_id", "date", "issue_type", "details", "status"],
+                    ["Order ID", "Date", "Issue Type", "Details", "Status"],
                 )
         else:
             print_json(data)

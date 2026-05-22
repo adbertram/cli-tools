@@ -8,7 +8,6 @@ from typing import Dict, List, Optional, Any
 from .config import get_config
 from .browser import GlobiflowBrowser, BrowserError, AuthenticationRequired
 from .models import Flow, FlowDetail, FlowLog, Step, AnyStep, create_step, HttpMethod, RelationshipDirection, Trigger, TriggerType
-from cli_tools_shared.data_cache import cached
 
 
 # Field name to UI selector mapping for step updates
@@ -111,7 +110,6 @@ class GlobiflowClient:
 
     # ==================== Trigger Methods ====================
 
-    @cached
     def list_triggers(self) -> List[Trigger]:
         """List all available trigger types for flows.
 
@@ -252,7 +250,6 @@ class GlobiflowClient:
 
     # ==================== Flow Methods ====================
 
-    @cached
     def list_flows(self) -> List[Flow]:
         """List all flows across all apps.
 
@@ -722,7 +719,6 @@ class GlobiflowClient:
         elif tag_name == "input":
             field.fill(str(value))
 
-    @cached
     def get_flow(self, flow_id: str, include_steps: bool = False) -> FlowDetail:
         """Get detailed information about a specific flow.
 
@@ -798,7 +794,6 @@ class GlobiflowClient:
         # Flow not found
         raise ClientError(f"Flow with ID {flow_id} not found")
 
-    @cached
     def list_flow_logs(self, flow_id: str) -> List[FlowLog]:
         """Get all execution logs for a flow.
 
@@ -878,7 +873,7 @@ class GlobiflowClient:
 
         # Parse flow heading: "Flow: {name} (ID:{flow_id})"
         heading = page.locator("h4").filter(has_text="Flow:").first
-        heading_text = heading.text_content() if heading.count() > 0 else ""
+        heading_text = (heading.text_content() or "") if heading.count() > 0 else ""
 
         heading_match = re.search(r"Flow:\s*(.+?)\s*\(ID:(\d+)\)", heading_text)
         flow_name = heading_match.group(1).strip() if heading_match else ""
@@ -888,7 +883,8 @@ class GlobiflowClient:
         time_savings = None
         saves_link = page.locator("a").filter(has_text=re.compile(r"Saves \d+-\d+ mins")).first
         if saves_link.count() > 0:
-            time_savings = saves_link.text_content().strip()
+            saves_text = saves_link.text_content() or ""
+            time_savings = saves_text.strip() or None
 
         # Check for notes - click Notes tab and get content
         notes = None
@@ -1437,7 +1433,6 @@ class GlobiflowClient:
                     f"Valid fields: {sorted(updatable_fields)}"
                 )
 
-    @cached
     def list_flow_steps(self, flow_id: str) -> List[AnyStep]:
         """List all steps in a flow with their actual configured values.
 
@@ -1515,7 +1510,6 @@ class GlobiflowClient:
 
         return steps
 
-    @cached
     def get_flow_step(self, flow_id: str, step_number: int) -> AnyStep:
         """Get detailed information about a specific step in a flow.
 

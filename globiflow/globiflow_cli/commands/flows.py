@@ -391,9 +391,12 @@ def list_steps(
     """
     try:
         if not flow_id:
-            # Return empty result when no flow_id provided
-            # (listing steps from all flows would be too slow)
-            print_json([])
+            # Listing every step across every flow is intentionally unsupported.
+            # Still honor the caller's requested output format.
+            if table:
+                print_table([], ["step_number", "action_type", "category"], ["Step Number", "Action Type", "Category"])
+            else:
+                print_json([])
             return
 
         client = get_client()

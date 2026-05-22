@@ -104,7 +104,7 @@ class RaptiveClient:
         return "raptive.com"
 
     def _get_jwt_token(self) -> str:
-        """Get the JWT token from saved browser localStorage.
+        """Get the JWT token from the persisted browser profile.
 
         Returns:
             JWT token string.
@@ -112,13 +112,20 @@ class RaptiveClient:
         Raises:
             ClientError: If no token is found.
         """
-        storage = self._get_auth_state().local_storage(self._browser_origin())
-        token = storage.get("token")
-        if not token:
-            raise ClientError(
-                "No JWT token found in saved browser auth state. Run 'raptive auth login' again."
-            )
-        return token
+        browser = self.config.get_browser()
+        try:
+            page = browser.get_page(self.BASE_URL)
+            storage_items = page.localstorage_list()
+        finally:
+            browser.close()
+
+        for item in storage_items:
+            if item.get("key") == "token" and item.get("value"):
+                return item["value"]
+
+        raise ClientError(
+            "No JWT token found in saved browser auth state. Run 'raptive auth login' again."
+        )
 
     def _get_api_client(self) -> BrowserAuthenticatedHttpClient:
         """Get a browser-authenticated HTTP client for Raptive API calls."""

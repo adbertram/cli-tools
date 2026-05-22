@@ -23,9 +23,9 @@ from .config import get_config
 
 class _BrickOwlAutomation(BrowserAutomation):
     SESSION_NAME = "brickowl"
-    LOGIN_URL = "https://www.brickowl.com/login"
+    LOGIN_URL = "https://www.brickowl.com/user?destination=mystore/orders"
     AUTH_CHECK_URL = "https://www.brickowl.com/mystore/orders"
-    AUTH_URL_PATTERN = r"(/login|/user\?destination=login)"
+    AUTH_URL_PATTERN = r"/user(?:$|[/?].*)"
     AUTH_SUCCESS_SELECTOR = "#dLabel .hello"
 
 
@@ -1885,7 +1885,7 @@ class BrickOwlBrowser:
         and parses the table of issue reports.
 
         Returns:
-            List of dicts with keys: order_id, customer, issue_type, status, date, url
+            List of dicts with keys: order_id, details, issue_type, status, date, url
         """
         self._ensure_authenticated()
 
@@ -1911,55 +1911,20 @@ class BrickOwlBrowser:
         reports = self._page.evaluate("""() => {
             const results = [];
             const rows = document.querySelectorAll('table tbody tr');
+            const visibleText = (cell) => {
+                if (!cell) return null;
+                const clone = cell.cloneNode(true);
+                clone.querySelectorAll('[hidden]').forEach(node => node.remove());
+                return clone.textContent.replace(/\\s+/g, ' ').trim() || null;
+            };
 
             for (const row of rows) {
                 const cells = row.querySelectorAll('td');
-                if (cells.length < 3) continue;
-
-                // Extract order ID from a link containing order reference
-                let orderId = null;
-                let orderUrl = null;
-                const links = row.querySelectorAll('a');
-                for (const link of links) {
-                    const href = link.getAttribute('href') || '';
-                    // Match order links like /mystore/orders/outstanding/<id> or /order/view/<id>
-                    const orderMatch = href.match(/(?:orders?\\/(?:outstanding|view|completed)\\/|order_id=)(\\d+)/);
-                    if (orderMatch) {
-                        orderId = orderMatch[1];
-                        orderUrl = href.startsWith('http') ? href : 'https://www.brickowl.com' + href;
-                        break;
-                    }
-                }
-
-                // If no order link found, try to find order ID in cell text
-                if (!orderId) {
-                    for (const cell of cells) {
-                        const text = cell.textContent.trim();
-                        const idMatch = text.match(/#?(\\d{6,})/);
-                        if (idMatch) {
-                            orderId = idMatch[1];
-                            break;
-                        }
-                    }
-                }
-
-                // Parse each cell - adapt to table structure
-                // Common patterns: Date, Order, Customer, Type, Status, Actions
-                const cellTexts = Array.from(cells).map(c => c.textContent.trim());
-
-                // Extract customer name from links
-                let customer = null;
-                for (const link of links) {
-                    const href = link.getAttribute('href') || '';
-                    if (href.includes('/user/') && !href.includes('/login')) {
-                        customer = link.textContent.trim();
-                        break;
-                    }
-                }
+                if (cells.length < 5) continue;
 
                 // Extract resolve URL if present
                 let resolveUrl = null;
-                for (const link of links) {
+                for (const link of row.querySelectorAll('a')) {
                     const href = link.getAttribute('href') || '';
                     const text = link.textContent.trim().toLowerCase();
                     if (text.includes('resolve') || text.includes('close') ||
@@ -1969,56 +1934,22 @@ class BrickOwlBrowser:
                     }
                 }
 
-                // Build result from available data
-                // Try to identify fields by position and content
-                let date = null;
-                let issueType = null;
-                let status = null;
-
-                for (const text of cellTexts) {
-                    // Date detection: contains month names or date patterns
-                    if (!date && /\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\b/i.test(text)) {
-                        date = text;
-                    } else if (!date && /\\d{1,2}[\\/\\-]\\d{1,2}[\\/\\-]\\d{2,4}/.test(text)) {
-                        date = text;
-                    }
-                }
-
-                // Status is often the last meaningful cell or contains keywords
-                for (const text of cellTexts) {
-                    const lower = text.toLowerCase();
-                    if (lower === 'open' || lower === 'closed' || lower === 'resolved' ||
-                        lower === 'pending' || lower === 'escalated' || lower === 'in progress') {
-                        status = text;
-                    }
-                }
-
-                // Issue type - look for known issue types
-                for (const text of cellTexts) {
-                    const lower = text.toLowerCase();
-                    if (lower.includes('missing') || lower.includes('damaged') ||
-                        lower.includes('wrong') || lower.includes('defective') ||
-                        lower.includes('not received') || lower.includes('quality') ||
-                        lower.includes('incomplete') || lower.includes('other') ||
-                        lower.includes('item') || lower.includes('shipping')) {
-                        // Don't capture if it's the date, customer, or status
-                        if (text !== date && text !== customer && text !== status) {
-                            issueType = text;
-                            break;
-                        }
-                    }
-                }
-
-                // If we still don't have categorized fields, use positional approach
-                // Typical layout: [Date, Order#, Customer, Type, Status, Actions]
-                if (!date && cellTexts.length >= 1) date = cellTexts[0];
-                if (!customer && cellTexts.length >= 3) customer = customer || cellTexts[2];
-                if (!issueType && cellTexts.length >= 4) issueType = cellTexts[3];
-                if (!status && cellTexts.length >= 5) status = cellTexts[4];
+                const date = visibleText(cells[0]);
+                const issueType = visibleText(cells[1]);
+                const details = visibleText(cells[2]);
+                const orderCellText = visibleText(cells[3]);
+                const orderLink = cells[3].querySelector('a[href]');
+                const orderId = orderLink?.textContent.trim() || orderCellText;
+                const orderUrl = orderLink
+                    ? (orderLink.href.startsWith('http')
+                        ? orderLink.href
+                        : 'https://www.brickowl.com' + orderLink.getAttribute('href'))
+                    : null;
+                const status = visibleText(cells[4]);
 
                 results.push({
                     order_id: orderId,
-                    customer: customer,
+                    details: details,
                     issue_type: issueType,
                     status: status,
                     date: date,

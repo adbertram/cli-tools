@@ -18,7 +18,7 @@ class GlobiflowBrowser(BrowserAutomation):
     LOGIN_URL = "https://workflow-automation.podio.com"
     AUTH_CHECK_URL = "https://workflow-automation.podio.com/flows.php"
     AUTH_URL_PATTERN = r"/login|podio\.com/login|accounts\.podio\.com"
-    AUTH_COOKIE_PATTERNS = [r"session.*", r"auth", r"token", r"sid"]
+    AUTH_FAILURE_URL_PATTERN = r"^https://workflow-automation\.podio\.com/?(?:[?#].*)?$"
 
 
 BrowserError = BrowserAutomationError

@@ -154,10 +154,10 @@ def get_trigger(
         client = get_client()
         triggers = client.list_triggers()
 
-        # Find the trigger by code
+        # Accept either the trigger code or the human-readable name.
         trigger = None
         for t in triggers:
-            if t.code.upper() == code.upper():
+            if t.code.upper() == code.upper() or t.name.lower() == code.lower():
                 trigger = t
                 break
 

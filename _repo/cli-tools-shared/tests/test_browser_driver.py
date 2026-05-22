@@ -6,6 +6,8 @@ import pytest
 
 from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.browser.driver import BrowserHarnessService
+from cli_tools_shared.browser._elements import _ServiceElement, _scoped_css_js
+from cli_tools_shared.browser._js_fragments import _fill_js
 import cli_tools_shared.browser.driver as driver
 
 
@@ -644,3 +646,96 @@ def test_wait_for_network_idle_delegates_to_helper():
 
     assert service.wait_for_network_idle(timeout=12.5, idle_ms=900) is True
     assert calls == [(12.5, 900)]
+
+
+def test_fill_js_uses_native_input_value_setter():
+    js = _fill_js("secret")
+
+    assert "Object.getOwnPropertyDescriptor" in js
+    assert "HTMLInputElement.prototype" in js
+    assert "HTMLTextAreaElement.prototype" in js
+    assert "__cliToolsDescriptor.set.call" in js
+    assert "dispatchEvent(new Event('input'" in js
+    assert "dispatchEvent(new Event('change'" in js
+
+
+def test_service_element_fill_uses_native_setter_path(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    evaluated: list[str] = []
+
+    monkeypatch.setattr(service, "evaluate", lambda js, arg=None: evaluated.append(js))
+
+    _ServiceElement(service, css='input[name="email"]').fill("user@example.com")
+
+    assert evaluated, "fill() should evaluate JS against the element"
+    js = evaluated[0]
+    assert "Object.getOwnPropertyDescriptor" in js
+    assert "__cliToolsDescriptor.set.call" in js
+
+
+def test_service_locator_text_queries_delegate_to_first_element(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    calls: list[str] = []
+
+    def _evaluate(js, arg=None):
+        calls.append(js)
+        if "textContent" in js:
+            return "Example text"
+        if "getAttribute" in js:
+            return "3"
+        if "'value' in el" in js:
+            return "typed value"
+        return None
+
+    monkeypatch.setattr(service, "evaluate", _evaluate)
+    locator = service.locator('[role="treeitem"]')
+
+    assert locator.text_content() == "Example text"
+    assert locator.inner_text() == "Example text"
+    assert locator.get_attribute("aria-level") == "3"
+    assert locator.input_value() == "typed value"
+    assert len(calls) == 4
+
+
+def test_service_element_text_queries_delegate_to_live_dom(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    calls: list[str] = []
+
+    def _evaluate(js, arg=None):
+        calls.append(js)
+        if "textContent" in js:
+            return "Example text"
+        if "getAttribute" in js:
+            return "value"
+        if "'value' in el" in js:
+            return "typed value"
+        return None
+
+    monkeypatch.setattr(service, "evaluate", _evaluate)
+    element = _ServiceElement(service, css="input[name='email']")
+
+    assert element.text_content() == "Example text"
+    assert element.inner_text() == "Example text"
+    assert element.get_attribute("data-test") == "value"
+    assert element.input_value() == "typed value"
+    assert len(calls) == 4
+
+
+def test_service_element_supports_scoped_locator_chaining():
+    service = BrowserHarnessService("test-session")
+    element = _ServiceElement(service, css="section")
+
+    child = element.locator("input.bulkCheck")
+    by_role = element.get_by_role("button", name="Submit")
+    by_placeholder = element.get_by_placeholder("Email")
+    filtered = element.filter(has_text="Nested")
+
+    assert "[document.querySelector(\"section\")].filter(Boolean)" in child._find_js
+    assert "[document.querySelector(\"section\")].filter(Boolean)" in by_role._find_js
+    assert 'placeholder=\\"Email\\"' in by_placeholder._find_js
+    assert "[document.querySelector(\"section\")].filter(Boolean)" in filtered._find_js
+
+
+def test_scoped_css_js_prefixes_scope_for_leading_combinator():
+    js = _scoped_css_js("baseJs", "> div")
+    assert ':scope > div' in js
