@@ -119,3 +119,32 @@ Service-specific CLIs still own their own auth behavior. Do not shadow a service
 ## Keychain Prompt
 
 The first read of a Keychain item by a new binary may trigger a macOS GUI prompt. That is expected. Ask Adam to click Allow instead of working around the prompt.
+
+## Keychain Item Access Policy
+
+The canonical access policy for CLI-tools Keychain items lives at:
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/access-policy.conf
+```
+
+The apply script is deployment-layout based. It does not require a Git checkout, `.git` metadata, or the `git` binary; it resolves the bundled logger from its installed `_repo/_secret-manager` path.
+
+Apply it with:
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/apply-access-policy.sh --prompt-keychain-password
+```
+
+For noninteractive apply runs, provide the keychain password through stdin or an existing CLI-tools secret:
+
+```bash
+printf '%s\n' "$KEYCHAIN_PASSWORD" | <cli-tools-root>/_repo/_secret-manager/apply-access-policy.sh --keychain-password-stdin
+<cli-tools-root>/_repo/_secret-manager/apply-access-policy.sh --keychain-password-secret <name>
+```
+
+The policy uses `allow-process <partition-id> <path>` records. The path makes the policy reviewable, while the partition ID is what macOS applies with `security set-generic-password-partition-list`. This avoids one-off permissions fixes for launch jobs and other noninteractive CLI-tool workflows.
+
+This policy controls item access. It does not unlock a locked login keychain for a daemon; runtime launch jobs still need to unlock the keychain in the same session before reading secrets.
+
+For n8n Codex nodes on adam-server, configure the node's Codex binary path as `/Applications/Codex.app/Contents/Resources/codex`. That binary is signed by the Team ID in the access policy. Avoid the unsigned Homebrew `codex` shim unless the policy intentionally grants the broader `unsigned:` partition ID.

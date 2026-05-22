@@ -23,3 +23,36 @@ _repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secre
 ```
 
 The unlock secret is copied to a private remote temp file and used to unlock the remote login keychain in the same SSH command before the requested secret operation runs. Without `--remote-unlock-secret`, a locked remote macOS login keychain still requires an interactive terminal.
+
+## Access policy
+
+Keychain item access is standardized in:
+
+```bash
+_repo/_secret-manager/access-policy.conf
+```
+
+The apply script is deployment-layout based. It does not require a Git checkout, `.git` metadata, or the `git` binary; it resolves the bundled logger from its installed `_repo/_secret-manager` path.
+
+Apply it with:
+
+```bash
+_repo/_secret-manager/apply-access-policy.sh --prompt-keychain-password
+```
+
+For noninteractive use, provide the keychain password through stdin or a CLI-tools secret:
+
+```bash
+printf '%s\n' "$KEYCHAIN_PASSWORD" | _repo/_secret-manager/apply-access-policy.sh --keychain-password-stdin
+_repo/_secret-manager/apply-access-policy.sh --keychain-password-secret <name>
+```
+
+The policy applies macOS partition IDs to each target generic-password item in the `cli-tools` service. This controls which signed process classes can read the item without a GUI prompt. It does not replace runtime keychain unlocking; launch jobs that run with a locked login keychain still need to unlock that keychain in the same session before reading secrets.
+
+For n8n Codex nodes on adam-server, set the node's Codex binary path to:
+
+```text
+/Applications/Codex.app/Contents/Resources/codex
+```
+
+That binary is signed by the Team ID declared in `access-policy.conf`. Do not point n8n at the unsigned Homebrew `codex` shim unless the policy intentionally grants the broader `unsigned:` partition ID.
