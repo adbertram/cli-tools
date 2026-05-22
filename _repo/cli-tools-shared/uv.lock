@@ -34,17 +34,6 @@ wheels = [
 ]
 
 [[package]]
-name = "browser-harness"
-version = "0.1.0"
-source = { git = "https://github.com/browser-use/browser-harness.git?rev=f186cd963d67653a737bfaaf43e0edbfe85ddb77#f186cd963d67653a737bfaaf43e0edbfe85ddb77" }
-dependencies = [
-    { name = "cdp-use" },
-    { name = "fetch-use" },
-    { name = "pillow" },
-    { name = "websockets" },
-]
-
-[[package]]
 name = "cdp-use"
 version = "1.4.5"
 source = { registry = "https://pypi.org/simple" }
@@ -161,20 +150,26 @@ name = "cli-tools-shared"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "browser-harness" },
+    { name = "cdp-use" },
+    { name = "fetch-use" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "typer" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "browser-harness", git = "https://github.com/browser-use/browser-harness.git?rev=f186cd963d67653a737bfaaf43e0edbfe85ddb77" },
+    { name = "cdp-use", specifier = "==1.4.5" },
+    { name = "fetch-use", specifier = "==0.4.0" },
+    { name = "pillow", specifier = "==12.2.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.28.0" },
     { name = "typer", specifier = ">=0.9.0" },
+    { name = "websockets", specifier = "==15.0.1" },
 ]
 
 [[package]]

@@ -12,9 +12,15 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     "requests>=2.28.0",
-    "browser-harness @ git+https://github.com/browser-use/browser-harness.git@f186cd963d67653a737bfaaf43e0edbfe85ddb77",
+    "cdp-use==1.4.5",
+    "fetch-use==0.4.0",
+    "pillow==12.2.0",
+    "websockets==15.0.1",
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["cli_tools_shared*"]
+include = ["cli_tools_shared*", "browser_harness*"]
+
+[tool.setuptools.package-data]
+browser_harness = ["LICENSE"]

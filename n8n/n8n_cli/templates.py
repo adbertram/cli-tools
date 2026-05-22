@@ -13,10 +13,6 @@ PACKAGE_JSON = """{
   "author": {
     "name": "Adam"
   },
-  "repository": {
-    "type": "git",
-    "url": ""
-  },
   "main": "index.js",
   "scripts": {
     "build": "tsc && find nodes -name '*.svg' -exec cp {} dist/nodes/%(pascal_name)s/ \\\\;",

@@ -30,8 +30,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
     "playwright>=1.40.0",
-    "cli-tools-shared @ git+https://github.com/adbertram/cli-tools.git#subdirectory=cli-tools-shared",
+    "cli-tools-shared",
 ]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
 ```
 
 **Verify:** `grep "cli-tools-shared" <cli-tools-root>/slack/pyproject.toml`

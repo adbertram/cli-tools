@@ -522,26 +522,16 @@ def _bundle_cli_source(cli_name: str, tools_dir: str, pkg_dir: Path):
         shutil.copytree(common_src, common_dst, ignore=_BUNDLE_IGNORE)
 
         # Ensure cli-tools-shared is a dependency pointing to the bundled copy.
-        # Some CLIs reference it via git+https://, others don't list it at all.
         pyproject_path = dst / "pyproject.toml"
         if pyproject_path.exists():
             content = pyproject_path.read_text()
             local_ref = 'cli-tools-shared @ file:./cli-tools-shared'
 
-            # First try: replace existing git+https:// reference
             patched = re.sub(
-                r'cli-tools-shared\s*@\s*git\+https://[^"]+',
-                local_ref,
+                r'"cli-tools-shared"',
+                f'"{local_ref}"',
                 content,
             )
-
-            # Second try: replace bare "cli-tools-shared" dependency (no @ qualifier)
-            if patched == content:
-                patched = re.sub(
-                    r'"cli-tools-shared"',
-                    f'"{local_ref}"',
-                    content,
-                )
 
             # Last resort: inject the dependency into the list if not present at all
             if patched == content and 'cli-tools-shared' not in content:

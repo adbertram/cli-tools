@@ -144,6 +144,20 @@ The other 15+ `_get_page_for` callers are automatically protected by (3). Do NOT
 
 ## Domain Knowledge
 
+### Browser CLI Auth Checks Must Not Treat Public Landing-Page Cookies As Authentication
+
+**Context:** When a browser-backed CLI reports `auth status authenticated=true` but the first real data page immediately redirects to a public homepage or marketing page.
+
+**Key Facts:**
+- Generic cookies such as `PHPSESSID`, load-balancer cookies (`AWSALB`, `AWSALBCORS`), or other anonymous/session cookies are NOT proof of an authenticated browser session. If a browser subclass declares broad `AUTH_COOKIE_PATTERNS` like `session.*|auth|token|sid`, `BrowserAutomation._check_auth()` will short-circuit on those cookies and can lie.
+- Validate the real `AUTH_CHECK_URL` with the installed launcher or the CLI's own uv-tool interpreter. For Globiflow, live inspection showed `https://workflow-automation.podio.com/flows.php` redirecting to `https://workflow-automation.podio.com/` with zero `[role="treeitem"]` nodes while the page still had `PHPSESSID`, `AWSALB`, and `AWSALBCORS`.
+- The correct fix is declarative at the browser hook layer: remove the misleading cookie-pattern auth check and add an `AUTH_FAILURE_URL_PATTERN` (or other real logged-out marker) that matches the public landing page or redirect target. Do NOT add command-local session-expired heuristics to work around a lying `auth status`.
+- If the corrected auth probe reports `authenticated=false`, treat any remaining compliance execution failures as a genuine live-auth blocker, not a source-code pass condition. Report the blocker and the exact re-authentication command required.
+
+**Gotchas:**
+- If you remove `AUTH_COOKIE_PATTERNS` without adding an `AUTH_FAILURE_URL_PATTERN` or other logged-out marker, `BrowserAutomation` falls back to "not on login page" and can still report false positives on public pages.
+- Browser CLI compliance tests gate live list/get execution on `auth status`. A false positive hides real auth expiry; a truthful `authenticated=false` will expose the missing live session and block execution tests until the profile is re-authenticated.
+
 ### Validating Repo-Owned `*-cli` Skill Existence Across All Tools
 
 **Context:** When the task is to create or repair repo-owned service skill directories under `<cli-tools-root>/_repo/skills/<tool>-cli/` and prove the skill contract passes for every real CLI tool.
@@ -179,7 +193,7 @@ The other 15+ `_get_page_for` callers are automatically protected by (3). Do NOT
 **Context:** When `cli-tools-shared` (or any other shared dependency under `<cli-tools-root>/`) has uncommitted/unreleased changes and you need to run each consumer CLI's pytest suite against the LOCAL source — not the repo-local version each consumer's `pyproject.toml` references through `[tool.uv.sources]`.
 
 **Key Facts:**
-- `uv run pytest` and `uv pip install pytest` (and any other `uv` resolution-touching command) re-sync the env from the consumer's `pyproject.toml` and overwrite any local-editable install of the shared package with the git-pinned version. Every `uv run` invocation can silently revert your local override. Symptom: `uv pip install -e <local>` reports "Installed 1 package in 1ms" with no "Built" step, the dist-info reads the new version, BUT the actual `auth.py` (etc.) is the old version with old line counts — `pip` copied files instead of creating a `.pth`.
+- `uv run pytest` and `uv pip install pytest` (and any other `uv` resolution-touching command) re-sync the env from the consumer's `pyproject.toml` and overwrite any local-editable install of the shared package with a resolver-selected version. Every `uv run` invocation can silently revert your local override. Symptom: `uv pip install -e <local>` reports "Installed 1 package in 1ms" with no "Built" step, the dist-info reads the new version, BUT the actual `auth.py` (etc.) is the old version with old line counts — `pip` copied files instead of creating a `.pth`.
 - The reliable way to validate consumers against the local source tree is to bypass `uv run` entirely:
   ```bash
   PYTHONPATH=<cli-tools-root>/_repo/cli-tools-shared \
@@ -190,7 +204,7 @@ The other 15+ `_get_page_for` callers are automatically protected by (3). Do NOT
 - `discover_consumers()` in `_repo/cli-tools-shared/cli_tools_shared/discovery.py` enumerates browser-backed consumers by scanning `browser.py` files that import `cli_tools_shared`. CLIs whose `browser.py` does not import `cli_tools_shared` are outside that consumer set and should be skipped for that specific validation surface.
 
 **Gotchas:**
-- A passing test run against an unreleased shared-package change proves nothing if the env is still resolving the git-pinned version. Always verify `cli_tools_shared.auth.__file__` (or whichever module) resolves to the source tree path before trusting test output.
+- A passing test run against an unreleased shared-package change proves nothing if the env is still resolving a stale installed copy. Always verify `cli_tools_shared.auth.__file__` (or whichever module) resolves to the source tree path before trusting test output.
 - `uv pip install --reinstall-package <name>` with PEP 660 editable mode can silently degrade to a non-editable copy install when the local pyproject.toml has unusual build-backend setup. If `__editable__.<name>-*.pth` is missing from site-packages after install, the install is NOT editable. Force re-install with `uv pip uninstall <name>` followed by `uv pip install --no-cache-dir -e <path>` to see the "Built" step explicitly.
 - The H1 / persistent-profile-style refactors delete methods from `BrowserAutomation` (`has_session`, `state_load`, `state_save`, `_state_file_path`, `_save_auth_state`). Any consumer test that mocks or asserts on those methods MUST be updated or deleted as part of the same phase. Run the tests in PYTHONPATH-override mode at the end of the refactor phase, not at the start.
 
