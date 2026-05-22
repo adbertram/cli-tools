@@ -1,8 +1,9 @@
 {
-  "tool": "~/.local/bin/tiktok",
+  "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-05-20T16:39:23.477406+00:00",
-  "total_commands": 10,
+  "discovered_at": "2026-05-21T21:11:41.661802+00:00",
+  "total_commands": 11,
+  "usage_instructions": "Use `tiktok` when you need TikTok transcript downloads or when you need to inspect or manage the CLI's authentication profiles. Check the target subcommand entry before running mutating auth actions.",
   "global_options": [
     {
       "name": "--version",
@@ -15,9 +16,11 @@
   "commands": {
     "transcripts": {
       "help": "Download TikTok video transcripts",
+      "usage_instructions": "Use `tiktok transcripts` for transcript download work. The normal execution path is `transcripts download`, which accepts one or more TikTok URLs and writes subtitle files to disk.",
       "commands": {
         "download": {
           "help": "Download transcripts for one or more TikTok videos.",
+          "usage_instructions": "Use `tiktok transcripts download URL...` to fetch subtitles for one or more TikTok videos. Set `--output-dir` to control the destination folder, `--format` and `--lang` to control subtitle output, and `--table` when you want a compact result summary.",
           "arguments": [
             {
               "name": "urls",
@@ -77,9 +80,11 @@
     },
     "auth": {
       "help": "Manage tiktok authentication",
+      "usage_instructions": "Use `tiktok auth` to manage stored credentials and profile state. `auth status` is the read-only inspection path, `auth login` writes credentials, and `auth profiles` manages named profiles.",
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `tiktok auth login` to save or refresh credentials for the current or selected profile. Add `--profile NAME` to target a non-default profile and `--force` only when you intend to clear runtime auth state before logging in again.",
           "options": [
             {
               "name": "--profile",
@@ -99,6 +104,7 @@
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use `tiktok auth logout` to remove stored credentials from the current or selected profile. Add `--profile NAME` when you need to clear a non-default profile.",
           "options": [
             {
               "name": "--profile",
@@ -111,6 +117,7 @@
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `tiktok auth status` to verify whether stored credentials are actually usable. Add `--profile NAME` to inspect one profile or `--table` for a human-readable summary.",
           "options": [
             {
               "name": "--profile",
@@ -130,6 +137,7 @@
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `tiktok auth test` when you want an explicit credential verification run. Add `--profile NAME` to scope the check, `--table` for summary output, and `--verbose` for detailed per-check diagnostics.",
           "options": [
             {
               "name": "--table",
@@ -156,6 +164,7 @@
         },
         "profiles": {
           "help": "Manage authentication profiles",
+          "usage_instructions": "Use `tiktok auth profiles` to inspect, create, select, and remove named authentication profiles. The most common read paths are `profiles list` and `profiles get`, while `profiles select` switches the active profile within its auth type.",
           "commands": {
             "list": {
               "help": "List all profiles and show their auth types and active state.",

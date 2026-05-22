@@ -20,7 +20,7 @@ app = create_app(name="podio", help="CLI interface for Podio API - Manage apps, 
 try:
     from .commands import item, app as app_cmd, task, space, org, auth, comment, webhook, conversation, file, webform
     register_commands(app, get_config, item, name="item", help="Manage Podio items")
-    app.add_typer(app_cmd.app, name="app", help="Manage Podio applications")
+    register_commands(app, get_config, app_cmd, name="app", help="Manage Podio applications")
     register_commands(app, get_config, task, name="task", help="Manage Podio tasks")
     register_commands(app, get_config, space, name="space", help="Manage Podio spaces")
     register_commands(app, get_config, org, name="org", help="Manage Podio organizations")

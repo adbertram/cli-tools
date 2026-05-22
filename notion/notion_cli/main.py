@@ -35,7 +35,7 @@ except ImportError:
 
 try:
     from .commands import page
-    app.add_typer(page.app, name="pages", help="Query and manage standalone pages")
+    register_commands(app, get_config, page, name="pages", help="Query and manage standalone pages")
 except ImportError:
     pass
 

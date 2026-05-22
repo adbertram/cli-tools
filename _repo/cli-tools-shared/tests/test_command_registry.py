@@ -7,6 +7,7 @@ offline snapshot checks have been removed. CLIs that need a stricter live
 check perform it at the point of use, not in the gate.
 """
 
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -323,3 +324,49 @@ def test_registered_group_accepts_profile_option_before_leaf_command():
     assert "ok" in result.output
     assert calls == ["staging"]
     assert ran == [3]
+
+
+def test_help_bypasses_ambiguous_profile_auth_type_gate(monkeypatch):
+    class MultiProfileConfig:
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"
+        PROFILE_AUTH_TYPES = {
+            "az_cli": [],
+            "msal_device_code": [],
+        }
+
+        def _get(self, _name):
+            return None
+
+    def get_config(profile=None) -> MultiProfileConfig:
+        return MultiProfileConfig()
+
+    command_app = typer.Typer()
+
+    @command_app.command("list")
+    def list_items():
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_commands(
+        root,
+        get_config,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"list": ["custom"]},
+        ),
+        name="items",
+        help="Manage items",
+        cli_name="tool",
+    )
+
+    runner = CliRunner()
+    original_argv = sys.argv[:]
+    monkeypatch.setattr(sys, "argv", ["tool", "items", "list", "--help"])
+    try:
+        result = runner.invoke(root, ["items", "list", "--help"])
+    finally:
+        monkeypatch.setattr(sys, "argv", original_argv)
+
+    assert result.exit_code == 0, result.output
+    assert "--profile" in result.output

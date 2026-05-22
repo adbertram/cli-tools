@@ -21,6 +21,7 @@ This replaces:
 import logging
 import functools
 import inspect
+import sys
 from typing import Callable, Optional
 
 import typer
@@ -185,6 +186,11 @@ def _profile_parameter() -> inspect.Parameter:
 
 def _callback_name(callback) -> str:
     return callback.__name__.replace("_", "-")
+
+
+def _is_help_invocation() -> bool:
+    """Return True when the current CLI process is rendering help."""
+    return any(arg in {"--help", "-h"} for arg in sys.argv[1:])
 
 
 def _wrap_command_callback(
@@ -410,6 +416,9 @@ def register_commands(
         profile: Optional[str] = typer.Option(None, "--profile", help="Auth profile name"),
     ):
         """Preserve the command group's no-subcommand help behavior."""
+        if _is_help_invocation():
+            return
+
         invoked = ctx.invoked_subcommand
         if invoked is None:
             # No subcommand — show help (default Typer behavior)
@@ -418,6 +427,9 @@ def register_commands(
             else:
                 typer.echo(ctx.get_help())
                 raise typer.Exit()
+            return
+
+        if profile is None:
             return
 
         cred_types = cred_map.get(invoked)

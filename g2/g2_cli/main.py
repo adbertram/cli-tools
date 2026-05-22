@@ -5,6 +5,7 @@ from typing import Callable, List, Optional
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
+from cli_tools_shared.command_registry import register_commands
 from cli_tools_shared.filters import (
     FilterValidationError,
     apply_filters,
@@ -14,6 +15,7 @@ from cli_tools_shared.filters import (
 from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
 from . import __version__
+from .commands import products, reviews
 from .client import get_client
 from .config import get_config
 
@@ -214,8 +216,10 @@ def search_reviews(
     )
 
 
-app.add_typer(products_app, name="products")
-app.add_typer(reviews_app, name="reviews")
+products.app = products_app
+reviews.app = reviews_app
+register_commands(app, get_config, products, name="products", help="Find and inspect G2 products")
+register_commands(app, get_config, reviews, name="reviews", help="Find and inspect G2 product reviews")
 app.add_typer(create_auth_app(get_config, tool_name="g2"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 

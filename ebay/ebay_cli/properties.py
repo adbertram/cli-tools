@@ -1,10 +1,34 @@
 """Properties filtering utility with strict validation."""
-from typing import Any, List, Dict, Optional
+from pathlib import Path
+from typing import Any, Optional
+from urllib.parse import urlparse
 
 
 class PropertyValidationError(Exception):
     """Raised when a requested property does not exist in the data."""
     pass
+
+
+def add_template_property_aliases(templates: list[dict]) -> list[dict]:
+    """Expose a stable id alias for template property selection."""
+    return [{"id": template.get("name", ""), **template} for template in templates]
+
+
+def add_image_property_aliases(images: list[dict]) -> list[dict]:
+    """Expose stable id/name aliases for image property selection."""
+    aliased = []
+    for image in images:
+        original = image.get("original", "")
+        parsed = urlparse(original)
+        candidate = parsed.path if parsed.scheme else original
+        aliased.append(
+            {
+                "id": image.get("image_id", ""),
+                "name": Path(candidate).name,
+                **image,
+            }
+        )
+    return aliased
 
 
 def validate_and_filter_properties(data: Any, properties: str, item_key: Optional[str] = None) -> Any:

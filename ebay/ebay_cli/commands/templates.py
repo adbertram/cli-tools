@@ -23,9 +23,21 @@ from ..storage import TemplateStorage
 from ..template_validation import TemplateValidationError
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..parsers import format_local_time, format_date
-from ..properties import validate_and_filter_properties, PropertyValidationError
+from ..properties import (
+    add_template_property_aliases,
+    validate_and_filter_properties,
+    PropertyValidationError,
+)
 
 app = typer.Typer(help="Manage listing templates")
+
+
+def _template_record(template: dict) -> dict:
+    """Expose canonical list properties for stored template records."""
+    return {
+        **template,
+        "id": template.get("name"),
+    }
 
 
 @app.command("list")
@@ -74,10 +86,15 @@ def templates_list(
                 print_error(str(e))
                 raise typer.Exit(1)
 
+        templates = [_template_record(template) for template in templates]
+
         # Apply properties filtering
         if properties:
             try:
-                templates = validate_and_filter_properties(templates, properties)
+                templates = validate_and_filter_properties(
+                    add_template_property_aliases(templates),
+                    properties,
+                )
             except PropertyValidationError as e:
                 print_error(str(e))
                 raise typer.Exit(1)

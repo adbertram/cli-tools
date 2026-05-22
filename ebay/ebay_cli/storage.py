@@ -1,6 +1,6 @@
 """Local storage for uploaded image metadata, listing templates, and draft tracking."""
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -33,6 +33,25 @@ class ImageStorage:
         """Save images to storage file."""
         IMAGES_FILE.write_text(json.dumps(self._data, indent=2))
 
+    def _prune_expired_images(self) -> List[Dict]:
+        """Drop expired image records so list/get only expose live entries."""
+        now = datetime.now(timezone.utc)
+        active_images = []
+
+        for image in self._data.get("images", []):
+            expires_at = datetime.fromisoformat(
+                image["expirationDate"].replace("Z", "+00:00")
+            )
+            if expires_at <= now:
+                continue
+            active_images.append(image)
+
+        if len(active_images) != len(self._data.get("images", [])):
+            self._data["images"] = active_images
+            self._save()
+
+        return active_images
+
     def add_image(self, image_id: str, image_url: str, expiration_date: str,
                   source: str, original: str) -> Dict:
         """Add an uploaded image to local storage."""
@@ -50,18 +69,18 @@ class ImageStorage:
 
     def get_all_images(self) -> List[Dict]:
         """Get all stored images."""
-        return self._data.get("images", [])
+        return self._prune_expired_images()
 
     def get_image(self, image_id: str) -> Optional[Dict]:
         """Get a specific image by ID."""
-        for img in self._data.get("images", []):
+        for img in self._prune_expired_images():
             if img.get("image_id") == image_id:
                 return img
         return None
 
     def update_image(self, image_id: str, image_url: str, expiration_date: str):
         """Update image metadata from fresh API response."""
-        for img in self._data.get("images", []):
+        for img in self._prune_expired_images():
             if img.get("image_id") == image_id:
                 img["imageUrl"] = image_url
                 img["expirationDate"] = expiration_date

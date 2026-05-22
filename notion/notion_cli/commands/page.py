@@ -4,6 +4,20 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 
+COMMAND_CREDENTIALS = {
+    "search": ["custom"],
+    "list": ["custom"],
+    "get": ["custom"],
+    "create": ["custom"],
+    "import": ["custom"],
+    "export": ["custom"],
+    "duplicate": ["custom"],
+    "update": ["custom"],
+    "delete": ["custom"],
+    "content": ["custom"],
+    "blocks": ["custom"],
+}
+
 from ..client import get_client
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (

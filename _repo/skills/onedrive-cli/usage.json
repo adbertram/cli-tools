@@ -1,7 +1,7 @@
 {
   "tool": "onedrive",
   "description": "OneDrive for Business CLI via Microsoft Graph API",
-  "discovered_at": "2026-05-21T00:27:30.722607+00:00",
+  "discovered_at": "2026-05-22T00:30:13.942716+00:00",
   "total_commands": 27,
   "global_options": [
     {
@@ -170,20 +170,6 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "options": [
-                {
-                  "name": "--auth-type",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Authentication type for this profile. Valid values: az_cli, msal_device_code"
-                },
-                {
-                  "name": "--auth-param",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
-                }
-              ],
               "usage_instructions": "Run `onedrive auth profiles create --help` for exact arguments and options."
             },
             "select": {
@@ -248,6 +234,14 @@
     },
     "drives": {
       "help": "Manage OneDrive drives",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "list": {
           "help": "List all drives accessible to the authenticated user. Shows personal OneDrive and any shared drives the user can access.",
@@ -340,6 +334,14 @@
     },
     "folders": {
       "help": "Manage folders",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create": {
           "help": "Create a new folder in OneDrive. Creates a folder with the given name. By default creates at the root of the drive. Use --parent to specify a different parent folder. Conflict behavior options: - fail: Return error if folder already exists (default) - rename: Automatically rename the new folder - replace: Replace the existing folder",
@@ -611,6 +613,14 @@
     },
     "items": {
       "help": "Manage files and folders",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "list": {
           "help": "List items in a drive folder. List files and folders in the specified drive. If path is omitted, lists items at the root of the drive.",
@@ -842,6 +852,14 @@
     },
     "link": {
       "help": "Manage sharing links",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create": {
           "help": "Create a sharing link for a file or folder. Creates a new sharing link that can be shared with others. The link type determines the permissions granted: - view: Read-only access - edit: Read-write access - embed: Embeddable link (for files that support embedding) The scope determines who can use the link: - anonymous: Anyone with the link (no sign-in required) - organization: Only members of your organization - users: Only specific people (use invite instead)",

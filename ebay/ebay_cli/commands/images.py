@@ -18,9 +18,22 @@ from cli_tools_shared.output import print_json, print_table, handle_error, print
 from ..storage import ImageStorage
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..parsers import format_local_time
-from ..properties import validate_and_filter_properties, PropertyValidationError
+from ..properties import (
+    add_image_property_aliases,
+    validate_and_filter_properties,
+    PropertyValidationError,
+)
 
 app = typer.Typer(help="Manage eBay images via Media API")
+
+
+def _image_record(image: dict) -> dict:
+    """Expose canonical list properties for stored image records."""
+    return {
+        **image,
+        "id": image.get("image_id"),
+        "name": image.get("original"),
+    }
 
 
 @app.command("upload")
@@ -162,7 +175,7 @@ def images_list(
 
     Shows images stored in ~/.ebay/images.json from previous uploads.
 
-    Available fields: image_id, imageUrl, expirationDate, source, original, uploaded_at
+    Available fields: id, name, image_id, imageUrl, expirationDate, source, original, uploaded_at
 
     Examples:
         ebay images list
@@ -195,10 +208,15 @@ def images_list(
                 print_error(str(e))
                 raise typer.Exit(1)
 
+        images = [_image_record(image) for image in images]
+
         # Apply properties filter if specified
         if properties:
             try:
-                images = validate_and_filter_properties(images, properties)
+                images = validate_and_filter_properties(
+                    add_image_property_aliases(images),
+                    properties,
+                )
             except PropertyValidationError as e:
                 print_error(str(e))
                 raise typer.Exit(1)
