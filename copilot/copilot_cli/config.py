@@ -28,6 +28,7 @@ from cli_tools_shared.config import (
     resolve_tool_dir,
 )
 from cli_tools_shared import CredentialType
+from cli_tools_shared.exceptions import ConfigError
 
 
 # ============================================================================
@@ -151,7 +152,7 @@ class Config(BaseConfig):
         "DIRECTLINE_SECRET",
     ]
 
-    def __init__(self, profile=None):
+    def __init__(self, profile=None, profile_auth_type: Optional[str] = None):
         """Initialize configuration.
 
         Profile resolution order:
@@ -166,17 +167,27 @@ class Config(BaseConfig):
         super().__init__(
             tool_dir=config_root,
             profile=profile,
+            profile_auth_type=profile_auth_type,
         )
 
     # ------------------------------------------------------------------
     # Path resolution overrides — canonical cli-tools profile layout
     # ------------------------------------------------------------------
 
-    def _resolve_env_file(self, profile: str = None):
+    def _resolve_env_file(
+        self,
+        profile: str = None,
+        profile_auth_type: str = None,
+    ):
         """Resolve which .env file to load.
 
         Order: explicit profile arg → active profile → canonical default path when no profiles exist.
         """
+        if profile_auth_type not in (None, CredentialType.CUSTOM.value):
+            raise ConfigError(
+                f"Copilot config only supports profile auth type '{CredentialType.CUSTOM.value}', "
+                f"got '{profile_auth_type}'."
+            )
         if profile:
             return self._env_file_for_profile(profile)
 
@@ -184,7 +195,6 @@ class Config(BaseConfig):
         if active is not None:
             return active
 
-        from cli_tools_shared.exceptions import ConfigError
         if list_profile_files():
             raise ConfigError(
                 "No active profile found. Select one with "
@@ -314,11 +324,11 @@ class Config(BaseConfig):
 _config: Optional[Config] = None
 
 
-def get_config(profile=None) -> Config:
+def get_config(profile=None, profile_auth_type: Optional[str] = None) -> Config:
     """Get or create the config instance."""
     global _config
-    if _config is None or profile is not None:
-        _config = Config(profile=profile)
+    if _config is None or profile is not None or profile_auth_type is not None:
+        _config = Config(profile=profile, profile_auth_type=profile_auth_type)
     return _config
 
 

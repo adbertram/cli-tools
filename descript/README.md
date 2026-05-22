@@ -1,15 +1,12 @@
 # Descript CLI
 
-CLI for managing Descript video projects via reverse-engineered internal API. Authenticates by extracting JWT tokens from the running Descript Electron app via Chrome DevTools Protocol.
+CLI for managing Descript video projects via reverse-engineered internal API. Authenticates by extracting the signed-in desktop session JWT from Descript's Chromium cookie store.
 
 ## Prerequisites
 
 - Descript desktop app installed
-- Descript must be launched with remote debugging enabled:
-  ```bash
-  open -a Descript --args --remote-debugging-port=9222 '--remote-allow-origins=*'
-  ```
-- Node.js not required (uses Python websocket-client)
+- Descript running and signed in
+- macOS must allow the shell to read the `Descript Safe Storage` keychain item the first time auth runs
 
 ## Installation
 
@@ -21,7 +18,7 @@ pip install -e .
 ## Quick Start
 
 ```bash
-# Authenticate (extracts JWT from running Descript app)
+# Authenticate (extracts JWT from the signed-in desktop app)
 descript auth login
 
 # List projects
@@ -39,7 +36,7 @@ descript monitor start
 ### Authentication
 
 ```bash
-# Login - extracts JWT from running Descript app
+# Login - extracts JWT from the signed-in desktop app
 descript auth login
 descript auth login --force  # Clear cache and re-authenticate
 
@@ -137,13 +134,12 @@ All list/get commands support:
 
 ## Authentication Architecture
 
-Descript uses Stytch for authentication. The JWT token:
-- Is extracted from the running Descript app via CDP (Chrome DevTools Protocol)
+Descript uses the desktop app's Chromium session cookie for authentication. The JWT token:
+- Is read from `~/Library/Application Support/Descript/Partitions/descript2/Cookies`
+- Is decrypted with the macOS keychain item `Descript Safe Storage` / `Descript Key`
 - Expires every 5 minutes (Stytch default)
 - Is cached at `~/.descript/token.json` with a 4-minute TTL
 - Auto-refreshes from the app when the cache expires
-
-The CLI requires Descript to be running with `--remote-debugging-port=9222`.
 
 ## Exit Codes
 
@@ -168,4 +164,4 @@ The CLI requires Descript to be running with `--remote-debugging-port=9222`.
 ## Requirements
 
 - Python 3.9+
-- Dependencies: typer, requests, pydantic, websocket-client, python-dotenv
+- Dependencies: typer, requests, pydantic, websocket-client, python-dotenv, cryptography

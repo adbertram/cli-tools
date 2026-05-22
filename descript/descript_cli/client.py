@@ -1,5 +1,9 @@
-"""Descript API client with automatic JWT token refresh from running app."""
+"""Descript API client with automatic JWT refresh from the desktop app."""
 import json
+import shutil
+import sqlite3
+import subprocess
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -7,6 +11,9 @@ from typing import Dict, List, Optional
 import random
 
 import requests
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from .config import get_config
 from .models import (
@@ -30,6 +37,18 @@ DEFAULT_JITTER = 0.1
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+DESCRIPT_APP_SUPPORT_DIR = Path.home() / "Library/Application Support/Descript"
+DESCRIPT_COOKIE_DB = DESCRIPT_APP_SUPPORT_DIR / "Partitions/descript2/Cookies"
+DESCRIPT_SESSION_COOKIE_HOST = ".descript.com"
+DESCRIPT_SESSION_COOKIE_NAME = "stytch_session_jwt"
+DESCRIPT_SAFE_STORAGE_SERVICE = "Descript Safe Storage"
+DESCRIPT_SAFE_STORAGE_ACCOUNT = "Descript Key"
+CHROMIUM_V10_PREFIX = b"v10"
+CHROMIUM_KEY_SALT = b"saltysalt"
+CHROMIUM_KEY_ITERATIONS = 1003
+CHROMIUM_KEY_LENGTH = 16
+CHROMIUM_IV = b" " * 16
 
 class ClientError(Exception):
     """Custom exception for Descript API errors."""
@@ -116,77 +135,106 @@ class DescriptClient:
 
         token_cache_file.chmod(0o600)
 
-    def _extract_jwt_from_app(self) -> Optional[str]:
-        """Extract JWT from running Descript app via Chrome DevTools Protocol.
+    def _get_safe_storage_password(self) -> str:
+        """Read Descript's Chromium cookie password from macOS Keychain."""
+        command = [
+            "security",
+            "find-generic-password",
+            "-s",
+            DESCRIPT_SAFE_STORAGE_SERVICE,
+            "-a",
+            DESCRIPT_SAFE_STORAGE_ACCOUNT,
+            "-w",
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            stderr = result.stderr.strip() or "unknown keychain error"
+            raise ClientError(
+                "Failed to read Descript desktop cookie key from macOS Keychain.\n\n"
+                f"Command: {' '.join(command)}\n"
+                f"stderr: {stderr}\n\n"
+                "Run the command from an interactive macOS shell and allow access to "
+                "'Descript Safe Storage'."
+            )
 
-        Connects to the Descript Electron app's CDP endpoint on port 9222,
-        finds the main page target, and extracts the stytch_session_jwt cookie.
+        password = result.stdout.strip()
+        if not password:
+            raise ClientError(
+                "Descript Safe Storage returned an empty password from macOS Keychain."
+            )
+        return password
 
-        Requires Descript to be running with --remote-debugging-port=9222.
+    def _derive_chromium_v10_key(self, password: str) -> bytes:
+        """Derive Chromium's legacy macOS cookie key."""
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA1(),
+            length=CHROMIUM_KEY_LENGTH,
+            salt=CHROMIUM_KEY_SALT,
+            iterations=CHROMIUM_KEY_ITERATIONS,
+        )
+        return kdf.derive(password.encode("utf-8"))
 
-        Returns:
-            JWT token string, or None if extraction fails
-        """
-        import http.client
-        import json as json_module
-        import websocket
+    def _read_encrypted_session_cookie(self) -> bytes:
+        """Read the encrypted desktop session cookie from Descript's partition DB."""
+        if not DESCRIPT_COOKIE_DB.exists():
+            raise ClientError(
+                "Descript desktop cookie store not found.\n\n"
+                f"Expected: {DESCRIPT_COOKIE_DB}\n\n"
+                "Start Descript, sign in, and open the main app window before "
+                "running 'descript auth login'."
+            )
 
-        CDP_PORT = 9222
+        with tempfile.TemporaryDirectory(prefix="descript-cookie-db-") as temp_dir:
+            snapshot_path = Path(temp_dir) / "Cookies"
+            shutil.copy2(DESCRIPT_COOKIE_DB, snapshot_path)
+            conn = sqlite3.connect(snapshot_path)
+            try:
+                row = conn.execute(
+                    """
+                    SELECT encrypted_value
+                    FROM cookies
+                    WHERE host_key = ? AND name = ?
+                    """,
+                    (DESCRIPT_SESSION_COOKIE_HOST, DESCRIPT_SESSION_COOKIE_NAME),
+                ).fetchone()
+            finally:
+                conn.close()
 
-        try:
-            # Step 1: Get CDP targets
-            conn = http.client.HTTPConnection("127.0.0.1", CDP_PORT, timeout=5)
-            conn.request("GET", "/json")
-            response = conn.getresponse()
+        if row is None or not row[0]:
+            raise ClientError(
+                "Descript desktop session cookie is missing.\n\n"
+                f"Cookie DB: {DESCRIPT_COOKIE_DB}\n"
+                f"Cookie: {DESCRIPT_SESSION_COOKIE_HOST} / {DESCRIPT_SESSION_COOKIE_NAME}\n\n"
+                "Descript is not exposing the signed-in session cookie this CLI needs."
+            )
 
-            if response.status != 200:
-                return None
+        return bytes(row[0])
 
-            targets = json_module.loads(response.read().decode())
-            conn.close()
+    def _decrypt_chromium_v10_value(self, encrypted_value: bytes, password: str) -> str:
+        """Decrypt a Chromium v10 AES-CBC encrypted cookie value."""
+        if not encrypted_value.startswith(CHROMIUM_V10_PREFIX):
+            raise ClientError(
+                "Descript session cookie uses an unsupported Chromium encryption format.\n\n"
+                f"Expected prefix: {CHROMIUM_V10_PREFIX!r}\n"
+                f"Actual prefix: {encrypted_value[:3]!r}"
+            )
 
-            # Step 2: Find the main Descript page target
-            page_target = None
-            for target in targets:
-                if (target.get("type") == "page" and
-                    "Descript" in target.get("title", "") and
-                    "stripe" not in target.get("title", "")):
-                    page_target = target
-                    break
+        key = self._derive_chromium_v10_key(password)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(CHROMIUM_IV))
+        decryptor = cipher.decryptor()
+        padded_plaintext = decryptor.update(encrypted_value[len(CHROMIUM_V10_PREFIX):]) + decryptor.finalize()
 
-            if not page_target:
-                return None
+        unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+        plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+        return plaintext.decode("utf-8")
 
-            ws_url = page_target.get("webSocketDebuggerUrl")
-            if not ws_url:
-                return None
-
-            # Step 3: Connect via WebSocket and extract cookies
-            ws = websocket.create_connection(ws_url, timeout=5)
-            ws.send(json_module.dumps({
-                "id": 1,
-                "method": "Network.getCookies",
-                "params": {"urls": ["https://web.descript.com"]},
-            }))
-
-            result = json_module.loads(ws.recv())
-            ws.close()
-
-            if not result.get("result", {}).get("cookies"):
-                return None
-
-            # Step 4: Find the stytch_session_jwt cookie
-            for cookie in result["result"]["cookies"]:
-                if cookie["name"] == "stytch_session_jwt":
-                    jwt = cookie["value"]
-                    # Cache with 4-minute TTL (1-minute safety margin on 5-minute expiry)
-                    self._save_token_cache(jwt, datetime.now().timestamp() + 240)
-                    return jwt
-
-            return None
-
-        except Exception:
-            return None
+    def _extract_jwt_from_app(self) -> str:
+        """Extract the signed-in desktop session JWT from Descript's cookie DB."""
+        password = self._get_safe_storage_password()
+        encrypted_cookie = self._read_encrypted_session_cookie()
+        jwt = self._decrypt_chromium_v10_value(encrypted_cookie, password)
+        self._save_token_cache(jwt, datetime.now().timestamp() + 240)
+        return jwt
 
     def _get_jwt(self) -> str:
         """Get valid JWT token, refreshing from app if needed.
@@ -202,17 +250,7 @@ class DescriptClient:
         if cached:
             return cached["jwt"]
 
-        # Try extracting from running app
-        jwt = self._extract_jwt_from_app()
-        if jwt:
-            return jwt
-
-        # App not running or extraction failed
-        raise ClientError(
-            "Failed to get authentication token.\n\n"
-            "Descript must be running to authenticate.\n"
-            "Start Descript and try again, or run: descript auth login"
-        )
+        return self._extract_jwt_from_app()
 
     def _update_headers(self) -> Dict[str, str]:
         """Get request headers with current JWT.

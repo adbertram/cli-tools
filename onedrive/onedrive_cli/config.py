@@ -9,21 +9,20 @@ from cli_tools_shared.credentials import CredentialType
 class Config(BaseConfig):
     """Configuration manager for OneDrive CLI with profile support.
 
-    Uses CUSTOM credential type where AUTH_METHOD is the only required field.
-    AUTH_METHOD determines how tokens are obtained:
+    Uses one CUSTOM credential type where AUTH_METHOD determines how tokens are obtained:
     - 'az_cli': via Azure CLI (az account get-access-token)
     - 'msal_device_code': via MSAL device code flow
+
+    AUTH_METHOD is runtime configuration inside one auth model, not a separate
+    profile auth type. Commands should run against the active profile without
+    requiring an explicit --profile just because different profiles choose
+    different token acquisition methods.
     """
 
     DIST_NAME = "onedrive-cli"
 
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DEFAULT_BASE_URL = "https://graph.microsoft.com/v1.0"
-    PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
-    PROFILE_AUTH_TYPES = {
-        "az_cli": [],
-        "msal_device_code": [],
-    }
 
     # CUSTOM credential type: AUTH_METHOD is the only required field
     CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD"]

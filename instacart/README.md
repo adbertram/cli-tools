@@ -11,7 +11,7 @@ This CLI uses browser session cookies for authentication (not API keys). This ap
 1. Use Playwright MCP to open https://www.instacart.com
 2. Log in to your account
 3. Capture cookies using `browser_run_code` to get cookies from the page context
-4. Save the session to `instacart_cli/session.json`
+4. Save the session to `~/.local/share/cli-tools/instacart/authentication_profiles/default/session.json`
 
 The session.json file should contain:
 ```json
@@ -204,7 +204,7 @@ This CLI uses Instacart's internal GraphQL API with persisted queries. The persi
 
 ### Session Storage
 
-Session data is stored in `instacart_cli/session.json` and includes:
+Session data is stored in `~/.local/share/cli-tools/instacart/authentication_profiles/<profile>/session.json` and includes:
 - Browser cookies for authentication
 - GraphQL endpoint URL
 - Persisted query hashes and default variables

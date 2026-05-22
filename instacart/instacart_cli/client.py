@@ -36,6 +36,7 @@ class InstacartClient:
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         jitter: float = DEFAULT_JITTER,
+        config=None,
     ):
         """
         Initialize Instacart client from session configuration.
@@ -46,7 +47,7 @@ class InstacartClient:
             max_delay: Maximum delay in seconds between retries (default: 30.0)
             jitter: Random jitter factor to prevent thundering herd (default: 0.1)
         """
-        self.config = get_config()
+        self.config = config or get_config()
 
         if not self.config.has_credentials():
             missing = self.config.get_missing_credentials()

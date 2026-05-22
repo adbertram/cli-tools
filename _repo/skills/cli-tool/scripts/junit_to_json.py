@@ -92,11 +92,13 @@ def main() -> int:
             },
         })
 
+    auth_text = "\n".join([raw_output, precheck_message])
     auth_required = bool(re.search(
         r"not authenticated|not fully authenticated|authentication required|"
         r"complete live list-command testing|missing authenticated credential types|"
+        r"authenticated must be true in auth status output|"
         r"Run '.*auth login'|auth login.*first",
-        raw_output, re.IGNORECASE,
+        auth_text, re.IGNORECASE,
     ))
     auth_cmd_match = re.search(r"Run '([^']+)'", raw_output)
     auth_command = auth_cmd_match.group(1) if auth_cmd_match else (f"{cli_name} auth login" if auth_required else None)

@@ -35,6 +35,8 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
 
     if profile.get("active") is not True:
         errors.append(f"profile {name} active must be true in auth status output")
+    if isinstance(profile.get("authenticated"), bool) and profile["authenticated"] is not True:
+        errors.append(f"profile {name} authenticated must be true in auth status output")
 
     cred_types = profile.get("credential_types")
     if not isinstance(cred_types, dict):
@@ -55,6 +57,10 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
                 errors.append(f"profile {name} credential_types[{cred_key}] missing {field}")
             elif not isinstance(cred_value[field], bool):
                 errors.append(f"profile {name} credential_types[{cred_key}].{field} must be boolean")
+        if isinstance(cred_value.get("authenticated"), bool) and cred_value["authenticated"] is not True:
+            errors.append(
+                f"profile {name} credential_types[{cred_key}].authenticated must be true in auth status output"
+            )
         if "api_test" in cred_value:
             api_test = cred_value["api_test"]
             if not (isinstance(api_test, str) and (api_test == "passed" or api_test.startswith("failed:"))):

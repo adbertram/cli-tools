@@ -1,6 +1,8 @@
 """Configuration management for Instacart CLI."""
 import json
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -21,7 +23,17 @@ class Config(BaseConfig):
             profile=profile,
         )
         self.session_path = self.get_profile_data_dir() / "session.json"
+        self.legacy_session_path = self.tool_dir / "instacart_cli" / "session.json"
         self._session: Optional[Dict[str, Any]] = None
+        self._migrate_legacy_session_if_needed()
+
+    def _migrate_legacy_session_if_needed(self):
+        """Copy a legacy repo-local session capture into the profile data dir."""
+        if self.session_path.exists() or not self.legacy_session_path.exists():
+            return
+
+        self.session_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.legacy_session_path, self.session_path)
 
     @property
     def session(self) -> Optional[Dict[str, Any]]:
@@ -114,14 +126,26 @@ class Config(BaseConfig):
         self._session = None
 
     def test_connection(self) -> Optional[dict]:
-        """Verify stored Instacart browser session state."""
+        """Verify stored Instacart browser session state with a live API call."""
         if self.is_session_expired():
             return {"api_test": "failed: session expired"}
-        return {
-            "api_test": "passed",
-            "captured_at": self.captured_at,
-            "session_file": str(self.session_path),
-        }
+
+        from .client import ClientError, InstacartClient
+
+        try:
+            user = InstacartClient(config=self).get_user()
+            return {
+                "api_test": "passed",
+                "captured_at": self.captured_at,
+                "session_file": str(self.session_path),
+                "user_id": user.get("user_id"),
+            }
+        except ClientError as e:
+            return {
+                "api_test": f"failed: {e}",
+                "captured_at": self.captured_at,
+                "session_file": str(self.session_path),
+            }
 
 
 _configs: dict = {}

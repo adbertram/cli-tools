@@ -156,6 +156,35 @@ def test_explicit_profile_argument_wins(xdg_dirs, fake_secret_manager):
     assert config.dataverse_url == "https://staging.example/"
 
 
+def test_custom_profile_auth_type_uses_canonical_profile_resolution(xdg_dirs, fake_secret_manager):
+    cfg_root, _ = xdg_dirs
+    profiles = cfg_root / "authentication_profiles"
+    (profiles / "default").mkdir(parents=True, exist_ok=True)
+    (profiles / "default" / ".env").write_text(
+        "ACTIVE=true\nDATAVERSE_URL=https://default.example/\n"
+    )
+
+    from copilot_cli.config import Config
+    config = Config(profile_auth_type="custom")
+    assert config.env_file_path == profiles / "default" / ".env"
+    assert config.dataverse_url == "https://default.example/"
+
+
+def test_invalid_profile_auth_type_fails_fast(xdg_dirs, fake_secret_manager):
+    cfg_root, _ = xdg_dirs
+    profiles = cfg_root / "authentication_profiles"
+    (profiles / "default").mkdir(parents=True, exist_ok=True)
+    (profiles / "default" / ".env").write_text(
+        "ACTIVE=true\nDATAVERSE_URL=https://default.example/\n"
+    )
+
+    from cli_tools_shared.exceptions import ConfigError
+    from copilot_cli.config import Config
+
+    with pytest.raises(ConfigError, match="only supports profile auth type 'custom'"):
+        Config(profile_auth_type="oauth")
+
+
 def test_active_profile_marker_picks_winner(xdg_dirs, fake_secret_manager):
     cfg_root, _ = xdg_dirs
     profiles = cfg_root / "authentication_profiles"
