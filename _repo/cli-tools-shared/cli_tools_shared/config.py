@@ -253,17 +253,28 @@ def _run_secret_manager(
         ) from exc
 
 
-def _get_secret_value(secret_name: str, profile_path: Path) -> str:
-    result = _run_secret_manager("get", secret_name)
-    if result.returncode != 0:
-        raise ConfigError(
-            f"Missing secret '{secret_name}' referenced by {profile_path}."
-        )
-    value = result.stdout
+def _strip_secret_output(value: str) -> str:
     if value.endswith("\n"):
         value = value[:-1]
     if value.endswith("\r"):
         value = value[:-1]
+    return value
+
+
+def read_cli_tool_secret(secret_name: str) -> Optional[str]:
+    """Read a raw reusable CLI-tool secret from the central secret manager."""
+    result = _run_secret_manager("get", secret_name)
+    if result.returncode != 0:
+        return None
+    return _strip_secret_output(result.stdout)
+
+
+def _get_secret_value(secret_name: str, profile_path: Path) -> str:
+    value = read_cli_tool_secret(secret_name)
+    if value is None:
+        raise ConfigError(
+            f"Missing secret '{secret_name}' referenced by {profile_path}."
+        )
     return value
 
 

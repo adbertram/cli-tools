@@ -1,6 +1,6 @@
 """Shared utilities for CLI tools: auth, profiles, config, output, OAuth, browser."""
 
-from .config import BaseConfig, resolve_tool_dir
+from .config import BaseConfig, resolve_tool_dir, read_cli_tool_secret
 from .paths import (
     resolve_config_dir,
     resolve_cache_dir,
@@ -8,15 +8,6 @@ from .paths import (
     config_dir_env_var,
     cache_dir_env_var,
     state_dir_env_var,
-)
-from .secrets import (
-    SecretError,
-    format_username,
-    get_secret,
-    set_secret,
-    delete_secret,
-    keyring_available,
-    keyring_backend_name,
 )
 from .filters import (
     FilterValidationError,
@@ -114,13 +105,7 @@ __all__ = [
     "cache_dir_env_var",
     "state_dir_env_var",
     # Secrets
-    "SecretError",
-    "format_username",
-    "get_secret",
-    "set_secret",
-    "delete_secret",
-    "keyring_available",
-    "keyring_backend_name",
+    "read_cli_tool_secret",
     "AuthResult",
     "BrowserAutomation",
     "BrowserAutomationError",
