@@ -50,7 +50,7 @@ def build_filter_from_standard(
     # Validate filters first
     validate_filters(filter_strings)
 
-    from ..filters import parse_filter_string
+    from cli_tools_shared.filters import parse_filter_string
 
     schema = schema or {}
 
