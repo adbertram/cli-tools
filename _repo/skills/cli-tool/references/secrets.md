@@ -34,7 +34,9 @@ The Keychain service namespace is `cli-tools`.
 Supported commands:
 
 ```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] set --tool <cli-tool> --type <type> [value]
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] set <name> [value]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] rename <old-name> --tool <cli-tool> --type <type>
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] get <name>
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] has <name>
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] delete <name>
@@ -44,8 +46,8 @@ Supported commands:
 Use stdin or `SECRET_VALUE` for secret values so they do not appear in shell history:
 
 ```bash
-printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set <name>
-SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh set <name>
+printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
+SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
 ```
 
 For remote hosts, run the same command with `--remote-host <host>`. The secret-manager copies `set` payloads to a private temp file on the remote host instead of placing them in the SSH command line or streaming them over SSH stdin.
@@ -58,7 +60,7 @@ before the requested secret operation runs:
 
 ```bash
 CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
-  <cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret adam-server-sudo set <name>
+  <cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret cli-tools-adam-server-sudo set --tool <cli-tool> --type <type>
 ```
 
 Use the explicit unlock option instead of running `security unlock-keychain` in a separate SSH command. macOS Keychain access can be session-scoped, so a separate SSH unlock does not reliably apply to the later secret-manager command.
@@ -76,10 +78,10 @@ Never print secret values in logs, final answers, test output, screenshots, or c
 
 ## Naming
 
-Use lowercase hyphenated names:
+The canonical naming schema is `<cli-tool>-<type>`.
 
 ```text
-<tool>-<purpose>
+<cli-tool>-<type>
 ```
 
 Examples:
@@ -92,7 +94,16 @@ impact-username
 github-pat
 ```
 
-Reuse existing names. Check `list` before inventing a new name.
+Use the tool/type parameters when storing human-entered values:
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool venmo --type username
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool venmo --type password
+```
+
+Use `rename <old-name> --tool <cli-tool> --type <type>` to move old names into
+the canonical schema. Reuse existing names. Check `list` before inventing a new
+name.
 
 ## Boundary with CLI Runtime State
 

@@ -44,7 +44,7 @@ workflows, or service runtime state owned by a CLI's auth system.
 </scope>
 
 <quick_start>
-1. Choose a lowercase hyphenated name in the form `<tool>-<purpose>`.
+1. Choose the CLI tool name and the secret type. The canonical naming schema is `<cli-tool>-<type>`, where both parts are lowercase hyphenated strings and `<cli-tool>` is the CLI command name.
 2. Check for an existing name before asking Adam for a credential:
    ```bash
    /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh list
@@ -56,15 +56,17 @@ workflows, or service runtime state owned by a CLI's auth system.
 5. Store new values immediately through stdin or `SECRET_VALUE`, not inline in
    command examples or `.env` files:
    ```bash
-   printf '%s' "$SECRET_VALUE" | /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set <name>
-   SECRET_VALUE="$SECRET_VALUE" /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set <name>
+   printf '%s' "$SECRET_VALUE" | /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
+   SECRET_VALUE="$SECRET_VALUE" /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
    ```
 6. Verify storage with `has <name>`. Do not verify by echoing the secret value.
 </quick_start>
 
 <commands>
 ```bash
+/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type> [value]
 /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set <name> [value]
+/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh rename <old-name> --tool <cli-tool> --type <type>
 /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh get <name>
 /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh has <name>
 /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh delete <name>
@@ -98,6 +100,11 @@ logs, or general instructions.
 
 <operational_notes>
 - Reuse existing secret names. Run `list` before inventing a new name.
+- The canonical naming schema is `<cli-tool>-<type>`.
+- New human-entered secrets must be created with `set --tool <cli-tool> --type
+  <type>` so the helper constructs `<cli-tool>-<type>`.
+- Use `rename <old-name> --tool <cli-tool> --type <type>` when moving old
+  names into the canonical schema.
 - Never print secret values. If a command returns a value, pipe it directly into
   the consuming command or store it in a local shell variable that is not echoed.
 - If macOS prompts for Keychain access, ask Adam to click Allow. Do not route

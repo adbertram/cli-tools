@@ -122,6 +122,112 @@ exit 99
     assert f"add-generic-password -U -s cli-tools -a example-secret -w topsecret {keychain}" in security_log_text
 
 
+def test_set_accepts_tool_and_type_and_stores_canonical_secret_name(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    security_log = tmp_path / "security.log"
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_SECURITY_LOG:?}"
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "add-generic-password" ]]; then
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+    env["FAKE_SECURITY_LOG"] = str(security_log)
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(SECRETS_SCRIPT),
+            "set",
+            "--tool",
+            "venmo",
+            "--type",
+            "username",
+            "topsecret",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "add-generic-password -U -s cli-tools -a venmo-username" in security_log.read_text()
+
+
+def test_rename_moves_old_secret_to_tool_type_name_without_printing_value(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    security_log = tmp_path / "security.log"
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_SECURITY_LOG:?}"
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "find-generic-password" && "$*" == *" -w "* && "$*" == *" -a old-secret "* ]]; then
+    printf 'topsecret'
+    exit 0
+fi
+if [[ "${1:-}" == "find-generic-password" && "$*" == *" -a venmo-password "* ]]; then
+    echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
+    exit 44
+fi
+if [[ "${1:-}" == "add-generic-password" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "delete-generic-password" && "$*" == *" -a old-secret "* ]]; then
+    echo "password has been deleted." >&2
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+    env["FAKE_SECURITY_LOG"] = str(security_log)
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(SECRETS_SCRIPT),
+            "rename",
+            "old-secret",
+            "--tool",
+            "venmo",
+            "--type",
+            "password",
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    security_log_text = security_log.read_text()
+    assert "add-generic-password -U -s cli-tools -a venmo-password -w topsecret" in security_log_text
+    assert "delete-generic-password -s cli-tools -a old-secret" in security_log_text
+    assert "topsecret" not in result.stdout
+    assert "topsecret" not in result.stderr
+
+
 def test_remote_host_set_copies_secret_payload_file_instead_of_streaming_ssh_stdin(
     tmp_path: Path,
 ) -> None:
@@ -162,7 +268,18 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
     env["FAKE_REMOTE_LOG_DIR"] = str(remote_log_dir)
 
     result = subprocess.run(
-        ["bash", str(SECRETS_SCRIPT), "--remote-host", "example-host", "set", "example-secret", "topsecret"],
+        [
+            "bash",
+            str(SECRETS_SCRIPT),
+            "--remote-host",
+            "example-host",
+            "set",
+            "--tool",
+            "venmo",
+            "--type",
+            "username",
+            "topsecret",
+        ],
         text=True,
         capture_output=True,
         env=env,
@@ -180,7 +297,9 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
     assert "CLI_TOOLS_SECRETS_REMOTE_CONTEXT=1" in ssh_args
     assert "CLI_TOOLS_SECRETS_REMOTE_HOST=example-host" in ssh_args
     assert "set" in ssh_args
-    assert "example-secret" in ssh_args
+    assert "venmo-username" in ssh_args
+    assert "--tool" not in ssh_args
+    assert "--type" not in ssh_args
     assert "example-host:/tmp/fake-remote-dir/secrets.sh" in scp_args
     assert "example-host:/tmp/fake-remote-dir/secret.value" in scp_args
     assert ssh_stdin == ""
@@ -333,7 +452,7 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
             "--remote-host",
             "example-host",
             "--remote-unlock-secret",
-            "adam-server-sudo",
+            "cli-tools-adam-server-sudo",
             "set",
             "example-secret",
             "topsecret",

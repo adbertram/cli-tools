@@ -34,6 +34,20 @@ def test_cli_tool_skill_requires_secret_manager_for_reusable_credentials():
         "Do not tell users or agents to place those secrets in any `.env` file."
         in secrets_text
     ), "secrets.md must explicitly forbid `.env` storage for reusable secrets."
+    assert (
+        "The canonical naming schema is `<cli-tool>-<type>`." in secrets_text
+    ), "secrets.md must define the canonical CLI-tool secret naming schema."
+    assert (
+        "secrets.sh set --tool <cli-tool> --type <type>" in secrets_text
+    ), "secrets.md must document the tool/type set path."
+
+    secret_skill_text = _read_repo("_repo/skills/cli-tool-secrets/SKILL.md")
+    assert (
+        "The canonical naming schema is `<cli-tool>-<type>`." in secret_skill_text
+    ), "cli-tool-secrets skill must define the canonical naming schema."
+    assert (
+        "secrets.sh set --tool <cli-tool> --type <type>" in secret_skill_text
+    ), "cli-tool-secrets skill must document the tool/type set path."
 
 
 def test_cli_tool_workflows_include_secret_storage_review_rule():

@@ -4,11 +4,20 @@ CLI-tools-only secret store backed by a dedicated macOS Keychain file in the
 CLI-tools user profile directory.
 
 ```bash
+_repo/_secret-manager/secrets.sh [--remote-host <host>] set --tool <cli-tool> --type <type> [value]
 _repo/_secret-manager/secrets.sh [--remote-host <host>] set <name> [value]
+_repo/_secret-manager/secrets.sh [--remote-host <host>] rename <old-name> --tool <cli-tool> --type <type>
 _repo/_secret-manager/secrets.sh [--remote-host <host>] get <name>
 _repo/_secret-manager/secrets.sh [--remote-host <host>] has <name>
 _repo/_secret-manager/secrets.sh [--remote-host <host>] delete <name>
 _repo/_secret-manager/secrets.sh [--remote-host <host>] list
+```
+
+Canonical secret names use `<cli-tool>-<type>`. Store human-entered values with
+the explicit tool/type form so the helper constructs the name:
+
+```bash
+printf '%s' "$SECRET_VALUE" | _repo/_secret-manager/secrets.sh set --tool venmo --type username
 ```
 
 Service namespace: `cli-tools`
@@ -42,7 +51,7 @@ password:
 
 ```bash
 CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
-  _repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret adam-server-sudo set <name>
+  _repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret cli-tools-adam-server-sudo set --tool <cli-tool> --type <type>
 ```
 
 The unlock secret is copied to a private remote temp file and used to unlock the
@@ -75,6 +84,33 @@ _repo/_secret-manager/apply-access-policy.sh --keychain-password-secret <name>
 ```
 
 The policy applies macOS partition IDs to each target generic-password item in the `cli-tools` service. This controls which signed process classes can read the item without a GUI prompt. It does not replace runtime keychain unlocking for custom keychains; the default managed keychain is unlocked by the helper.
+
+## Import and export
+
+Use the repo-owned import/export utility when moving the CLI-tools keychain and
+authentication profiles:
+
+```bash
+_repo/_scripts/import_export.py export /path/to/cli-tools-export.tar.gz
+_repo/_scripts/import_export.py import /path/to/cli-tools-export.tar.gz
+```
+
+Exports include the managed `cli-tools.keychain-db`, tool-level `.env` files,
+and authentication profile directories. Browser profiles keep auth-bearing state
+such as cookies and local storage, while generated cache/model directories are
+left out. By default, profile `.env` files keep their `secret://...`
+placeholders.
+
+For a temporary migration archive that must not depend on the source keychain,
+explicitly inline profile secrets:
+
+```bash
+_repo/_scripts/import_export.py export /path/to/cli-tools-export.tar.gz --plain-text-secrets
+```
+
+On import, any plain-text sensitive values found in authentication profile
+`.env` files are stored through `_repo/_secret-manager/secrets.sh` and replaced
+with `secret://...` placeholders.
 
 For n8n Codex nodes on adam-server, set the node's Codex binary path to:
 

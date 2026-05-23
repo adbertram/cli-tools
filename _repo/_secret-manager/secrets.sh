@@ -68,7 +68,14 @@ Usage:
   secrets.sh [--remote-host <host>] [--remote-unlock-secret <name>] <command> [args]
 
 Commands:
-  set <name> [value]   Store secret. Value from arg, $SECRET_VALUE, or stdin.
+  set --tool <cli-tool> --type <type> [value]
+                       Store secret as <cli-tool>-<type>. Value from arg,
+                       $SECRET_VALUE, or stdin.
+  set <name> [value]   Store secret with an already-canonical full name.
+  rename <old-name> --tool <cli-tool> --type <type>
+                       Rename an existing secret to <cli-tool>-<type>.
+  rename <old-name> <new-name>
+                       Rename an existing secret to an already-canonical name.
   get <name>           Print secret value.
   delete <name>        Remove secret.
   has <name>           Exit 0 if exists, 1 if not.
@@ -91,6 +98,123 @@ EOF
 
 shell_quote() {
     printf '%q' "$1"
+}
+
+normalize_secret_part() {
+    local value="$1"
+    [[ "$value" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "invalid secret name part '$value' (use lowercase letters, numbers, and hyphens)"
+    printf '%s' "$value"
+}
+
+canonical_secret_name() {
+    local tool="$1"
+    local type="$2"
+    printf '%s-%s' "$(normalize_secret_part "$tool")" "$(normalize_secret_part "$type")"
+}
+
+parse_secret_name_args() {
+    local tool=""
+    local type=""
+    local positional=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tool)
+                [[ $# -ge 2 ]] || die "--tool requires <cli-tool>"
+                tool="$2"
+                shift 2
+                ;;
+            --type)
+                [[ $# -ge 2 ]] || die "--type requires <type>"
+                type="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    positional+=("$1")
+                    shift
+                done
+                ;;
+            -*)
+                die "unknown secret-name option: $1"
+                ;;
+            *)
+                positional+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    local name=""
+    if [[ -n "$tool" || -n "$type" ]]; then
+        [[ -n "$tool" ]] || die "--type requires --tool"
+        [[ -n "$type" ]] || die "--tool requires --type"
+        [[ "${#positional[@]}" -eq 0 ]] || die "--tool/--type cannot be combined with a full secret name"
+        name="$(canonical_secret_name "$tool" "$type")"
+    else
+        [[ "${#positional[@]}" -eq 1 ]] || die "expected <name> or --tool <cli-tool> --type <type>"
+        name="${positional[0]}"
+        normalize_secret_part "$name" >/dev/null
+    fi
+
+    printf '%s' "$name"
+}
+
+parse_set_invocation() {
+    PARSED_SET_NAME=""
+    PARSED_SET_VALUE_ARG=""
+
+    local tool=""
+    local type=""
+    local positional=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tool)
+                [[ $# -ge 2 ]] || die "--tool requires <cli-tool>"
+                tool="$2"
+                shift 2
+                ;;
+            --type)
+                [[ $# -ge 2 ]] || die "--type requires <type>"
+                type="$2"
+                shift 2
+                ;;
+            --)
+                shift
+                while [[ $# -gt 0 ]]; do
+                    positional+=("$1")
+                    shift
+                done
+                ;;
+            -*)
+                die "unknown set option: $1"
+                ;;
+            *)
+                positional+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ -n "$tool" || -n "$type" ]]; then
+        [[ -n "$tool" ]] || die "--type requires --tool"
+        [[ -n "$type" ]] || die "--tool requires --type"
+        [[ "${#positional[@]}" -le 1 ]] || die "set accepts only one secret value argument"
+        PARSED_SET_NAME="$(canonical_secret_name "$tool" "$type")"
+        if [[ "${#positional[@]}" -eq 1 ]]; then
+            PARSED_SET_VALUE_ARG="${positional[0]}"
+        fi
+        return 0
+    fi
+
+    [[ "${#positional[@]}" -ge 1 ]] || die "set requires <name> or --tool <cli-tool> --type <type>"
+    [[ "${#positional[@]}" -le 2 ]] || die "set accepts only one secret value argument"
+    PARSED_SET_NAME="${positional[0]}"
+    normalize_secret_part "$PARSED_SET_NAME" >/dev/null
+    if [[ "${#positional[@]}" -eq 2 ]]; then
+        PARSED_SET_VALUE_ARG="${positional[1]}"
+    fi
 }
 
 has_tty() {
@@ -198,16 +322,41 @@ unlock_keychain_for_remote_host() {
 }
 
 cmd_set() {
-    local name="${1:-}"
-    [[ -n "$name" ]] || die "set requires <name>"
+    parse_set_invocation "$@"
+    local name="$PARSED_SET_NAME"
+    local value_arg="$PARSED_SET_VALUE_ARG"
     ensure_managed_keychain
 
     local value
-    value="$(resolve_set_value "${2:-}")"
+    value="$(resolve_set_value "$value_arg")"
 
     log_info "security add-generic-password (service=$SERVICE account=$name)"
     run_security security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
     log_info "security add-generic-password completed (service=$SERVICE account=$name)"
+}
+
+cmd_rename() {
+    local old_name="${1:-}"
+    [[ -n "$old_name" ]] || die "rename requires <old-name>"
+    shift || true
+
+    local new_name=""
+    new_name="$(parse_secret_name_args "$@")"
+    [[ "$old_name" != "$new_name" ]] || die "old and new secret names are the same: $old_name"
+    ensure_managed_keychain
+
+    local status=0
+    if cmd_has "$new_name"; then
+        die "target secret already exists: $new_name"
+    else
+        status=$?
+        [[ "$status" -eq 1 ]] || return "$status"
+    fi
+
+    local value
+    value="$(cmd_get "$old_name")"
+    cmd_set "$new_name" "$value"
+    cmd_delete "$old_name"
 }
 
 cmd_get() {
@@ -301,11 +450,11 @@ dispatch_remote() {
     local remote_args=("$@")
 
     if [[ "$sub" == "set" ]]; then
-        local name="${2:-}"
-        [[ -n "$name" ]] || die "set requires <name>"
+        parse_set_invocation "${@:2}"
+        local name="$PARSED_SET_NAME"
         local_payload_file="$(mktemp "${TMPDIR:-/tmp}/cli-tools-secrets.payload.XXXXXX")"
         chmod 600 "$local_payload_file"
-        resolve_set_value "${3:-}" >"$local_payload_file"
+        resolve_set_value "$PARSED_SET_VALUE_ARG" >"$local_payload_file"
         remote_args=("set" "$name")
     fi
 
@@ -470,6 +619,7 @@ main() {
     shift || true
     case "$sub" in
         set) if cmd_set "$@"; then status=0; else status=$?; fi ;;
+        rename) if cmd_rename "$@"; then status=0; else status=$?; fi ;;
         get) if cmd_get "$@"; then status=0; else status=$?; fi ;;
         delete) if cmd_delete "$@"; then status=0; else status=$?; fi ;;
         has) if cmd_has "$@"; then status=0; else status=$?; fi ;;
