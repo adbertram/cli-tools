@@ -1,12 +1,11 @@
 """Main entry point for the Venmo CLI."""
 
 import os
-import subprocess
 import sys
 from typing import List, Optional
 
 import typer
-from cli_tools_shared import create_app, run_app
+from cli_tools_shared import create_app, read_cli_tool_secret, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.exceptions import ClientError
@@ -131,17 +130,7 @@ def _header(column: str) -> str:
 
 def _get_secret(name: str) -> Optional[str]:
     """Read a secret from the CLI-tools keychain. Returns None if absent."""
-    try:
-        result = subprocess.run(
-            [SECRETS_SCRIPT, "get", name],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError:
-        return None
-    value = result.stdout.rstrip("\n")
-    return value or None
+    return read_cli_tool_secret(name)
 
 
 def _require_secret(name: str) -> str:
