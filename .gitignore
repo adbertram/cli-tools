@@ -37,6 +37,7 @@ MagicMock/
 agent_workspaces/
 _personal/
 .fallow/
+bricklink/.playwright-recordings/
 
 .coverage
 facebook/data/
