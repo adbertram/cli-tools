@@ -7,6 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_CONTEXT="${CLI_TOOLS_SECRETS_REMOTE_CONTEXT:-0}"
 REMOTE_HOST_CONTEXT="${CLI_TOOLS_SECRETS_REMOTE_HOST:-}"
 
+cli_tools_data_root() {
+    local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+    printf '%s/cli-tools\n' "$data_home"
+}
+
 if [[ "$REMOTE_CONTEXT" == "1" ]]; then
     DEFAULT_LOG_FILE="${HOME}/.local/share/cli-tools/secrets.log"
 else
@@ -16,7 +21,12 @@ LOG_FILE="${LOG_FILE:-$DEFAULT_LOG_FILE}"
 mkdir -p "$(dirname "$LOG_FILE")"
 
 SERVICE="cli-tools"
-KEYCHAIN="${CLI_TOOLS_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
+DEFAULT_KEYCHAIN="$(cli_tools_data_root)/cli-tools.keychain-db"
+KEYCHAIN="${CLI_TOOLS_KEYCHAIN:-$DEFAULT_KEYCHAIN}"
+MANAGED_DEFAULT_KEYCHAIN=0
+if [[ -z "${CLI_TOOLS_KEYCHAIN:-}" ]]; then
+    MANAGED_DEFAULT_KEYCHAIN=1
+fi
 KEYCHAIN_ARGS=("$KEYCHAIN")
 
 log_ts() {
@@ -134,7 +144,7 @@ run_security() {
         fi
     fi
 
-    if [[ "$status" -eq 0 && -s "$stderr_file" ]]; then
+    if [[ "$status" -eq 0 && -s "$stderr_file" ]] && ! grep -Fxq "password has been deleted." "$stderr_file"; then
         status=1
     fi
 
@@ -149,8 +159,33 @@ run_security() {
     return "$status"
 }
 
+ensure_managed_keychain() {
+    [[ "$MANAGED_DEFAULT_KEYCHAIN" == "1" ]] || return 0
+
+    mkdir -p "$(dirname "$KEYCHAIN")"
+    if [[ ! -e "$KEYCHAIN" ]]; then
+        log_info "security create-keychain keychain=$KEYCHAIN"
+        run_security security create-keychain -p "" "$KEYCHAIN" >/dev/null || return $?
+        log_info "security create-keychain completed keychain=$KEYCHAIN"
+    fi
+    chmod 600 "$KEYCHAIN"
+
+    log_info "security unlock-keychain keychain=$KEYCHAIN"
+    run_security security unlock-keychain -p "" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
+    log_info "security unlock-keychain completed keychain=$KEYCHAIN"
+}
+
 unlock_keychain_for_remote_host() {
     local host_label="${REMOTE_HOST_CONTEXT:-remote host}"
+    if [[ "$MANAGED_DEFAULT_KEYCHAIN" == "1" ]]; then
+        log_info "unlocking managed keychain for remote host ${host_label} keychain=${KEYCHAIN}"
+        if ! security unlock-keychain -p "" "${KEYCHAIN_ARGS[@]}" >/dev/null; then
+            die "failed to unlock managed keychain ${KEYCHAIN} on remote host ${host_label}"
+        fi
+        log_info "managed keychain unlocked for remote host ${host_label} keychain=${KEYCHAIN}"
+        return 0
+    fi
+
     if ! has_tty; then
         die "remote host ${host_label} requires an interactive TTY to unlock keychain ${KEYCHAIN}; re-run from a terminal"
     fi
@@ -165,6 +200,7 @@ unlock_keychain_for_remote_host() {
 cmd_set() {
     local name="${1:-}"
     [[ -n "$name" ]] || die "set requires <name>"
+    ensure_managed_keychain
 
     local value
     value="$(resolve_set_value "${2:-}")"
@@ -177,6 +213,7 @@ cmd_set() {
 cmd_get() {
     local name="${1:-}"
     [[ -n "$name" ]] || die "get requires <name>"
+    ensure_managed_keychain
 
     log_info "security find-generic-password (service=$SERVICE account=$name)"
     run_security security find-generic-password -s "$SERVICE" -a "$name" -w "${KEYCHAIN_ARGS[@]}" || return $?
@@ -186,6 +223,7 @@ cmd_get() {
 cmd_delete() {
     local name="${1:-}"
     [[ -n "$name" ]] || die "delete requires <name>"
+    ensure_managed_keychain
 
     log_info "security delete-generic-password (service=$SERVICE account=$name)"
     run_security security delete-generic-password -s "$SERVICE" -a "$name" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
@@ -195,6 +233,7 @@ cmd_delete() {
 cmd_has() {
     local name="${1:-}"
     [[ -n "$name" ]] || die "has requires <name>"
+    ensure_managed_keychain
     local status
 
     log_info "security find-generic-password check (service=$SERVICE account=$name)"
@@ -214,6 +253,7 @@ cmd_has() {
 }
 
 cmd_list() {
+    ensure_managed_keychain
     log_info "security dump-keychain list (service=$SERVICE)"
     run_security security dump-keychain "${KEYCHAIN_ARGS[@]}" | awk -v svc="$SERVICE" '
         /^keychain:/ { svc_match=0; acct="" }
@@ -412,6 +452,9 @@ main() {
 
     if [[ -n "$remote_unlock_secret" && -z "$remote_host" ]]; then
         die "--remote-unlock-secret requires --remote-host"
+    fi
+    if [[ -n "$remote_unlock_secret" && -z "${CLI_TOOLS_KEYCHAIN:-}" ]]; then
+        die "--remote-unlock-secret requires CLI_TOOLS_KEYCHAIN; the default CLI-tools keychain unlocks itself"
     fi
 
     if [[ -n "$remote_host" && "$REMOTE_CONTEXT" != "1" && "$sub" != "" && "$sub" != "-h" && "$sub" != "--help" && "$sub" != "help" ]]; then

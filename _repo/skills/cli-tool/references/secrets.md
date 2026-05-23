@@ -22,7 +22,14 @@ The secret manager lives at:
 <cli-tools-root>/_repo/_secret-manager/secrets.sh
 ```
 
-It is backed by the macOS Keychain using the `cli-tools` service namespace.
+It is backed by a dedicated macOS Keychain file in the CLI-tools user profile
+directory:
+
+```text
+~/.local/share/cli-tools/cli-tools.keychain-db
+```
+
+The Keychain service namespace is `cli-tools`.
 
 Supported commands:
 
@@ -43,10 +50,15 @@ SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh s
 
 For remote hosts, run the same command with `--remote-host <host>`. The secret-manager copies `set` payloads to a private temp file on the remote host instead of placing them in the SSH command line or streaming them over SSH stdin.
 
-For non-interactive remote sessions where the remote login keychain can be locked, include `--remote-unlock-secret <local-secret-name>`. The value of that local secret is copied to a private remote temp file and used to unlock the remote keychain in the same SSH command before the requested secret operation runs:
+For non-interactive remote sessions where `CLI_TOOLS_KEYCHAIN` points at a
+custom locked remote keychain, include `--remote-unlock-secret
+<local-secret-name>`. The value of that local secret is copied to a private
+remote temp file and used to unlock the remote keychain in the same SSH command
+before the requested secret operation runs:
 
 ```bash
-<cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret adam-server-sudo set <name>
+CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
+  <cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret adam-server-sudo set <name>
 ```
 
 Use the explicit unlock option instead of running `security unlock-keychain` in a separate SSH command. macOS Keychain access can be session-scoped, so a separate SSH unlock does not reliably apply to the later secret-manager command.
@@ -133,7 +145,7 @@ The apply script is deployment-layout based. It does not require a Git checkout,
 Apply it with:
 
 ```bash
-<cli-tools-root>/_repo/_secret-manager/apply-access-policy.sh --prompt-keychain-password
+<cli-tools-root>/_repo/_secret-manager/apply-access-policy.sh
 ```
 
 For noninteractive apply runs, provide the keychain password through stdin or an existing CLI-tools secret:
@@ -145,6 +157,8 @@ printf '%s\n' "$KEYCHAIN_PASSWORD" | <cli-tools-root>/_repo/_secret-manager/appl
 
 The policy uses `allow-process <partition-id> <path>` records. The path makes the policy reviewable, while the partition ID is what macOS applies with `security set-generic-password-partition-list`. This avoids one-off permissions fixes for launch jobs and other noninteractive CLI-tool workflows.
 
-This policy controls item access. It does not unlock a locked login keychain for a daemon; runtime launch jobs still need to unlock the keychain in the same session before reading secrets.
+This policy controls item access. The default managed keychain is created and
+unlocked by the helper; custom keychains still need to be unlocked in the same
+session before reading secrets.
 
 For n8n Codex nodes on adam-server, configure the node's Codex binary path as `/Applications/Codex.app/Contents/Resources/codex`. That binary is signed by the Team ID in the access policy. Avoid the unsigned Homebrew `codex` shim unless the policy intentionally grants the broader `unsigned:` partition ID.

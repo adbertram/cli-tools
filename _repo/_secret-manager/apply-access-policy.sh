@@ -9,6 +9,7 @@ INSTALL_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 . "$INSTALL_ROOT/_repo/_scripts/lib/log.sh"
 
 DEFAULT_POLICY="$SCRIPT_DIR/access-policy.conf"
+DEFAULT_MANAGED_KEYCHAIN="$HOME/.local/share/cli-tools/cli-tools.keychain-db"
 
 POLICY_FILE="$DEFAULT_POLICY"
 DRY_RUN=0
@@ -70,6 +71,25 @@ expand_policy_path() {
             die "policy path must be absolute or start with ~: $path"
             ;;
     esac
+}
+
+is_default_managed_keychain() {
+    [[ "$POLICY_KEYCHAIN" == "$DEFAULT_MANAGED_KEYCHAIN" ]]
+}
+
+ensure_default_managed_keychain() {
+    is_default_managed_keychain || return 0
+
+    mkdir -p "$(dirname "$POLICY_KEYCHAIN")"
+    if [[ ! -e "$POLICY_KEYCHAIN" ]]; then
+        log_info "security create-keychain keychain=$POLICY_KEYCHAIN"
+        security create-keychain -p "" "$POLICY_KEYCHAIN" >/dev/null
+        log_info "security create-keychain completed keychain=$POLICY_KEYCHAIN"
+    fi
+    chmod 600 "$POLICY_KEYCHAIN"
+    log_info "security unlock-keychain keychain=$POLICY_KEYCHAIN"
+    security unlock-keychain -p "" "$POLICY_KEYCHAIN" >/dev/null
+    log_info "security unlock-keychain completed keychain=$POLICY_KEYCHAIN"
 }
 
 validate_partition_id() {
@@ -162,6 +182,7 @@ validate_policy() {
 
     [[ -f "$POLICY_FILE" ]] || die "policy file not found: $POLICY_FILE"
     [[ -n "$POLICY_KEYCHAIN" ]] || die "policy missing keychain"
+    ensure_default_managed_keychain
     [[ -e "$POLICY_KEYCHAIN" ]] || die "keychain not found: $POLICY_KEYCHAIN"
     [[ "$POLICY_SERVICE" == "cli-tools" ]] || die "policy service must be cli-tools"
     [[ "$TARGET_ALL" == "1" || "${#TARGETS[@]}" -gt 0 ]] || die "policy must include at least one target"
@@ -253,6 +274,12 @@ load_keychain_password() {
         IFS= read -r -s KEYCHAIN_PASSWORD </dev/tty
         printf '\n' >/dev/tty
         log_info "keychain password loaded from prompt"
+        return 0
+    fi
+
+    if is_default_managed_keychain; then
+        log_info "using managed CLI-tools keychain password"
+        KEYCHAIN_PASSWORD=""
         return 0
     fi
 

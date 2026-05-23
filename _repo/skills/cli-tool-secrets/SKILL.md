@@ -23,6 +23,9 @@ The canonical helper is:
 ```
 
 It is backed by the macOS Keychain service namespace `cli-tools`.
+The default Keychain file is
+`~/.local/share/cli-tools/cli-tools.keychain-db`, alongside the CLI-tools user
+profile directories.
 
 For full lifecycle policy, read
 `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/references/secrets.md`.

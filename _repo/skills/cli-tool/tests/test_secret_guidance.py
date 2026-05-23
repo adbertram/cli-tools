@@ -77,6 +77,16 @@ def test_readme_templates_route_reusable_credentials_to_secret_manager():
         ), f"{relative_path} must tell users to keep reusable credentials out of `.env`."
 
 
+def test_secret_manager_policy_uses_cli_tools_profile_keychain():
+    policy_text = _read_repo("_repo/_secret-manager/access-policy.conf")
+    assert (
+        "keychain ~/.local/share/cli-tools/cli-tools.keychain-db" in policy_text
+    ), "secret-manager access policy must target the CLI-tools user profile keychain."
+    assert (
+        "keychain ~/Library/Keychains/login.keychain-db" not in policy_text
+    ), "secret-manager access policy must not target the login keychain."
+
+
 def test_readme_templates_do_not_show_inline_or_env_secret_examples():
     forbidden_snippets = {
         "templates/README_TEMPLATE.md": [

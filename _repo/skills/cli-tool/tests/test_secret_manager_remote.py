@@ -19,11 +19,107 @@ def _write_executable(path: Path, contents: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _base_env(fake_bin: Path, tmp_path: Path) -> dict[str, str]:
+def _default_keychain(home: Path) -> Path:
+    return home / ".local" / "share" / "cli-tools" / "cli-tools.keychain-db"
+
+
+def _base_env(
+    fake_bin: Path, tmp_path: Path, *, create_default_keychain: bool = True
+) -> dict[str, str]:
     env = os.environ.copy()
+    env.pop("XDG_DATA_HOME", None)
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
-    env["HOME"] = str(tmp_path / "home")
+    home = tmp_path / "home"
+    env["HOME"] = str(home)
+    if create_default_keychain:
+        keychain = _default_keychain(home)
+        keychain.parent.mkdir(parents=True, exist_ok=True)
+        keychain.touch()
     return env
+
+
+def test_default_keychain_is_stored_under_cli_tools_user_profile(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    security_log = tmp_path / "security.log"
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_SECURITY_LOG:?}"
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "dump-keychain" ]]; then
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+    env["FAKE_SECURITY_LOG"] = str(security_log)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "list"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    security_log_text = security_log.read_text()
+    assert str(_default_keychain(Path(env["HOME"]))) in security_log_text
+    assert "Library/Keychains/login.keychain-db" not in security_log_text
+
+
+def test_default_keychain_is_created_when_missing(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    security_log = tmp_path / "security.log"
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${FAKE_SECURITY_LOG:?}"
+if [[ "${1:-}" == "create-keychain" ]]; then
+    keychain="${@: -1}"
+    mkdir -p "$(dirname "$keychain")"
+    : >"$keychain"
+    exit 0
+fi
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "add-generic-password" ]]; then
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path, create_default_keychain=False)
+    env["FAKE_SECURITY_LOG"] = str(security_log)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "set", "example-secret", "topsecret"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    keychain = _default_keychain(Path(env["HOME"]))
+    security_log_text = security_log.read_text()
+    assert keychain.exists()
+    assert f"create-keychain -p  {keychain}" in security_log_text
+    assert f"add-generic-password -U -s cli-tools -a example-secret -w topsecret {keychain}" in security_log_text
 
 
 def test_remote_host_set_copies_secret_payload_file_instead_of_streaming_ssh_stdin(
@@ -187,6 +283,9 @@ def test_remote_host_unlock_secret_unlocks_keychain_in_remote_command(
         """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/security_args.log"
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
 if [[ "${1:-}" == "find-generic-password" ]]; then
     printf 'unlock-password'
     exit 0
@@ -225,6 +324,7 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
 
     env = _base_env(fake_bin, tmp_path)
     env["FAKE_REMOTE_LOG_DIR"] = str(remote_log_dir)
+    env["CLI_TOOLS_KEYCHAIN"] = str(tmp_path / "custom.keychain-db")
 
     result = subprocess.run(
         [
@@ -276,7 +376,7 @@ def test_remote_locked_keychain_without_tty_fails_clearly(tmp_path: Path) -> Non
 set -euo pipefail
 printf '%s\n' "$*" >>"${FAKE_SECURITY_LOG:?}"
 if [[ "${1:-}" == "add-generic-password" ]]; then
-    echo "security: SecKeychainItemCreateFromContent (/Users/adam/Library/Keychains/login.keychain-db): User interaction is not allowed." >&2
+    echo "security: SecKeychainItemCreateFromContent (/tmp/custom.keychain-db): User interaction is not allowed." >&2
     exit 1
 fi
 if [[ "${1:-}" == "unlock-keychain" ]]; then
@@ -289,6 +389,7 @@ exit 99
 
     env = _base_env(fake_bin, tmp_path)
     env["FAKE_SECURITY_LOG"] = str(security_log)
+    env["CLI_TOOLS_KEYCHAIN"] = str(tmp_path / "custom.keychain-db")
     env["CLI_TOOLS_SECRETS_REMOTE_CONTEXT"] = "1"
     env["CLI_TOOLS_SECRETS_REMOTE_HOST"] = "adam-server"
 
@@ -318,8 +419,11 @@ def test_set_fails_when_security_writes_error_to_stderr_with_zero_exit(tmp_path:
         fake_bin / "security",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
 if [[ "${1:-}" == "add-generic-password" ]]; then
-    echo "security: SecKeychainItemCreateFromContent (/Users/adam/Library/Keychains/login.keychain-db): User interaction is not allowed." >&2
+    echo "security: SecKeychainItemCreateFromContent (/tmp/custom.keychain-db): User interaction is not allowed." >&2
     exit 0
 fi
 echo "unexpected security command: $*" >&2
@@ -349,6 +453,9 @@ def test_get_fails_when_security_reports_missing_item_on_stderr_with_zero_exit(t
         fake_bin / "security",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
 if [[ "${1:-}" == "find-generic-password" ]]; then
     echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
     exit 0
@@ -373,6 +480,39 @@ exit 99
     assert result.stdout == ""
 
 
+def test_delete_accepts_security_success_message_on_stderr(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
+if [[ "${1:-}" == "delete-generic-password" ]]; then
+    echo "password has been deleted." >&2
+    exit 0
+fi
+echo "unexpected security command: $*" >&2
+exit 99
+""",
+    )
+
+    env = _base_env(fake_bin, tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "delete", "example-secret"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_has_returns_missing_only_for_keychain_not_found_status(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -381,6 +521,9 @@ def test_has_returns_missing_only_for_keychain_not_found_status(tmp_path: Path) 
         fake_bin / "security",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "unlock-keychain" ]]; then
+    exit 0
+fi
 case "${FAKE_SECURITY_MODE:?}" in
   missing)
     echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2
