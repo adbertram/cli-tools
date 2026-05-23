@@ -1,11 +1,24 @@
-"""Confirmation-code error types and legacy pending-flag cleanup helpers."""
+"""Confirmation-code helpers and legacy pending-flag cleanup."""
 import json
+import re
 from pathlib import Path
 
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.auth import BrowserAutomationError
 
 activity = get_activity_logger("bricklink")
+
+CONFIRMATION_CODE_URL_PATTERN = re.compile(
+    r"/v3(?:/user)?/confirmation_code_required\.page",
+    re.IGNORECASE,
+)
+
+
+def is_confirmation_code_page_url(url: str) -> bool:
+    """Return True when a BrickLink URL is the email confirmation-code page."""
+    if not url:
+        return False
+    return bool(CONFIRMATION_CODE_URL_PATTERN.search(url))
 
 
 class ConfirmationRequiredError(BrowserAutomationError):
@@ -15,11 +28,14 @@ class ConfirmationRequiredError(BrowserAutomationError):
         self.operation = operation
         self.order_id = order_id
         if operation == "this operation":
-            msg = "BrickLink requires an email confirmation code. Check your email and retry."
+            msg = (
+                "The BrickLink confirmation code page has come up. "
+                "Please check your email for the confirmation code and provide it."
+            )
         else:
             msg = (
-                f"BrickLink requires an email confirmation code for {operation}. "
-                "Check your email and retry."
+                f"The BrickLink confirmation code page has come up for {operation}. "
+                "Please check your email for the confirmation code and provide it."
             )
         super().__init__(msg)
 

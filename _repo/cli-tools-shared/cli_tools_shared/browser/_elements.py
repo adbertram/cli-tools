@@ -153,6 +153,9 @@ class _ServiceLocator:
     def fill(self, text: str) -> None:
         self._eval_on_first(_fill_js(text), require=True)
 
+    def select_option(self, value: str = None, *, label: str = None) -> None:
+        _select_option(self._svc, f"({self._find_js})[0]", value=value, label=label)
+
     def press(self, key: str) -> None:
         self._eval_on_first("el.focus();")
         self._svc.keyboard_press(key)
@@ -246,6 +249,9 @@ class _ServiceElement:
     def fill(self, text: str) -> None:
         self._eval_on_el(f"if (!el) throw new Error('Element not found'); {_fill_js(text)}")
 
+    def select_option(self, value: str = None, *, label: str = None) -> None:
+        _select_option(self._svc, self._js, value=value, label=label)
+
     def press(self, key: str) -> None:
         self._eval_on_el("if (el) el.focus();")
         self._svc.keyboard_press(key)
@@ -296,3 +302,34 @@ class _ServiceElement:
             _role_js(role, name, scope_js=f"[{self._js}].filter(Boolean)"),
             _is_js=True,
         )
+
+
+def _select_option(svc: BrowserHarnessService, element_js: str, *,
+                   value: str = None, label: str = None) -> None:
+    if value is None and label is None:
+        raise BrowserHarnessError("select_option requires value or label")
+    if value is not None and label is not None:
+        raise BrowserHarnessError("select_option accepts value or label, not both")
+
+    criterion = "label" if label is not None else "value"
+    wanted = label if label is not None else value
+    svc.evaluate(
+        f"""() => {{
+            const el = {element_js};
+            if (!el) throw new Error('Element not found');
+            if (!(el instanceof HTMLSelectElement)) {{
+                throw new Error('select_option target is not a select element');
+            }}
+            const criterion = {json.dumps(criterion)};
+            const wanted = {json.dumps(str(wanted))};
+            const option = Array.from(el.options).find(o =>
+                criterion === 'label'
+                    ? (o.textContent || '').trim() === wanted
+                    : o.value === wanted
+            );
+            if (!option) throw new Error(`No select option matched ${{criterion}}: ${{wanted}}`);
+            el.value = option.value;
+            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+        }}"""
+    )

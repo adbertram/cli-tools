@@ -81,6 +81,33 @@ def test_check_auth_rejects_confirmation_code_page(monkeypatch, url):
     assert runtime._check_auth(page) is False
 
 
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://www.bricklink.com/v3/user/confirmation_code_required.page?returnTo=/x", True),
+        ("https://www.bricklink.com/v3/confirmation_code_required.page?returnTo=/x", True),
+        ("https://www.bricklink.com/myMsg.asp", False),
+        ("", False),
+    ],
+)
+def test_is_confirmation_code_page_returns_boolean(monkeypatch, url, expected):
+    runtime = _make_runtime(monkeypatch)
+
+    assert runtime._is_confirmation_code_page(url) is expected
+    assert runtime._is_confirmation_code_page(_Page(url)) is expected
+
+
+def test_check_session_expired_confirmation_page_raises_without_clearing(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _Page("https://www.bricklink.com/v3/user/confirmation_code_required.page")
+
+    with pytest.raises(Exception) as ei:
+        runtime._check_session_expired(page)
+
+    runtime.clear_session.assert_not_called()
+    assert "confirmation code page has come up" in str(ei.value)
+
+
 def test_check_auth_accepts_message_page(monkeypatch):
     runtime = _make_runtime(monkeypatch)
     page = _Page("https://www.bricklink.com/myMsg.asp")

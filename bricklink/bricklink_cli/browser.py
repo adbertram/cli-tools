@@ -4,6 +4,8 @@ import re
 
 from cli_tools_shared.auth import BrowserAutomation
 
+from .confirmation import CONFIRMATION_CODE_URL_PATTERN
+
 
 class BricklinkBrowser(BrowserAutomation):
     SESSION_NAME = "bricklink"
@@ -20,7 +22,7 @@ class BricklinkBrowser(BrowserAutomation):
         r"|/v2/login\.page"
     )
     # Shared auth probing checks this before the broad ``AUTH_SUCCESS_URL``.
-    AUTH_FAILURE_URL_PATTERN = r"/v3(?:/user)?/confirmation_code_required\.page"
+    AUTH_FAILURE_URL_PATTERN = CONFIRMATION_CODE_URL_PATTERN.pattern
     AUTH_SUCCESS_URL = r"bricklink\.com"
     AUTH_COOKIE_PATTERNS = ()
 

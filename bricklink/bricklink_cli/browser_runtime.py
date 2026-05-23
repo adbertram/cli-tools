@@ -9,6 +9,7 @@ Handles operations not available via API:
 Uses BrowserAutomation base class with playwright CLI for session management.
 """
 import re
+import sys
 from typing import Optional
 
 from cli_tools_shared.activity_log import get_activity_logger
@@ -16,7 +17,11 @@ from cli_tools_shared.data_cache import cached
 
 from .browser import BricklinkBrowser
 from .config import get_config
-from .confirmation import ConfirmationRequiredError, ConfirmationState
+from .confirmation import (
+    ConfirmationRequiredError,
+    ConfirmationState,
+    is_confirmation_code_page_url,
+)
 from .models import RefundReason
 
 activity = get_activity_logger("bricklink")
@@ -35,10 +40,61 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         url = getattr(url_or_page, "url", url_or_page) or ""
         return bool(re.search(self.AUTH_FAILURE_URL_PATTERN, url))
 
+    def _is_confirmation_code_page(self, url_or_page) -> bool:
+        """Return True when the current page is BrickLink's email-code gate."""
+        url = getattr(url_or_page, "url", url_or_page) or ""
+        return is_confirmation_code_page_url(url)
+
     def _check_auth(self, page) -> bool:
         if self._is_auth_failure_page(page):
             return False
         return super()._check_auth(page)
+
+    def _read_confirmation_code(self) -> str:
+        prompt = (
+            "The BrickLink confirmation code page has come up. "
+            "Please check your email for the confirmation code and provide it: "
+        )
+        sys.stderr.write(prompt)
+        sys.stderr.flush()
+        code = sys.stdin.readline().strip()
+        if not code:
+            raise ConfirmationRequiredError("this operation")
+        return code
+
+    def _submit_confirmation_code(self, page, requested_url: str) -> None:
+        code_input = page.query_selector("#confirmation-code")
+        if not code_input:
+            raise RuntimeError(
+                "BrickLink confirmation code input #confirmation-code was not found. "
+                f"URL: {page.url}"
+            )
+        code_input.fill(self._read_confirmation_code())
+        submitted = page.evaluate(
+            """() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const button = buttons.find((b) => (b.innerText || '').trim() === 'Submit');
+                if (!button) return false;
+                button.click();
+                return true;
+            }"""
+        )
+        if not submitted:
+            raise RuntimeError(
+                "BrickLink confirmation code Submit button was not found. "
+                f"URL: {page.url}"
+            )
+        page.wait_for_timeout(2000)
+        page.goto(requested_url, wait_until="networkidle")
+        page.wait_for_selector("body", state="visible", timeout=15000)
+        if self._is_confirmation_code_page(page):
+            raise ConfirmationRequiredError("this operation")
+
+    def _handle_confirmation_code_page(self, page, requested_url: str) -> None:
+        if not self._is_confirmation_code_page(page):
+            return
+        activity.warning("Email confirmation required at %s", page.url)
+        self._submit_confirmation_code(page, requested_url)
 
     def _check_session_expired(self, page):
         """Check if page was redirected to login / confirmation and raise if so.
@@ -51,7 +107,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         clear-failure would leave the user staring at a misleading
         exception and a still-corrupt profile.
         """
-        if self._is_auth_failure_page(page):
+        if self._is_confirmation_code_page(page):
             activity.warning("Email confirmation required at %s", page.url)
             raise ConfirmationRequiredError("this operation")
         if self._is_login_page(page):
@@ -166,6 +222,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         page = self.get_page(url)
         page.goto(url, wait_until="networkidle")
         page.wait_for_selector("body", state="visible", timeout=15000)
+        self._handle_confirmation_code_page(page, url)
         self._check_session_expired(page)
 
         # AWS WAF CAPTCHA retry loop. Each reload gives the WAF token cookie
@@ -188,6 +245,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             page.wait_for_timeout(2000 * waf_attempts)
             page.goto(url, wait_until="networkidle")
             page.wait_for_selector("body", state="visible", timeout=15000)
+            self._handle_confirmation_code_page(page, url)
             self._check_session_expired(page)
 
         # Final gate before any parser runs: if Bricklink served a

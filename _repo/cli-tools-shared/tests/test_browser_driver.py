@@ -353,6 +353,26 @@ def test_query_selector_returns_none_when_absent(monkeypatch):
     assert service.query_selector("button.missing") is None
 
 
+def test_element_select_option_supports_label(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [True, None])
+
+    elem = service.query_selector("select.reason")
+    elem.select_option(label="Item was missing or unsatisfactory")
+
+    assert "criterion = \"label\"" in _calls[1]
+    assert "Item was missing or unsatisfactory" in _calls[1]
+    assert "dispatchEvent(new Event('change'" in _calls[1]
+
+
+def test_locator_select_option_supports_value(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.locator("select.action").select_option("unread")
+
+    assert "criterion = \"value\"" in calls[0]
+    assert "unread" in calls[0]
+
+
 # ---------------------------------------------------------------------------
 # Phase B1 — Detect-and-refuse on live SingletonLock
 # ---------------------------------------------------------------------------

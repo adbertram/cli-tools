@@ -41,10 +41,10 @@ bricklink auth status
 bricklink auth logout
 ```
 
-Browser-backed commands do not prompt for BrickLink email confirmation codes.
-If BrickLink redirects a request to `confirmation_code_required`, the command
-fails immediately with a clear message telling you to check your email and
-retry.
+Browser-backed commands prompt for BrickLink email confirmation codes when
+BrickLink redirects the active browser page to `confirmation_code_required`.
+The command keeps the browser session open, asks for the emailed code on
+stderr, submits it, and retries the original request.
 
 ### Items
 

@@ -10,6 +10,7 @@ OAuth 1.0a mapping to standard credential fields:
 - ACCESS_TOKEN    -> token value (resource owner key)
 - REFRESH_TOKEN   -> token secret (resource owner secret)
 """
+import os
 from pathlib import Path
 
 from cli_tools_shared.activity_log import get_activity_logger
@@ -86,7 +87,7 @@ _configs = {}
 
 
 def get_config(profile=None):
-    key = profile or "_default"
+    key = (profile or "_default", os.environ.get("XDG_DATA_HOME"))
     if key not in _configs:
         activity.info("Loading config profile=%s", profile or "default")
         _configs[key] = Config(profile=profile)
