@@ -237,11 +237,19 @@
       "commands": {
         "list": {
           "help": "Get metrics for multiple keywords.",
+          "arguments": [
+            {
+              "name": "keywords",
+              "type": "KEYWORDS",
+              "required": false,
+              "help": "Comma-separated list of keywords"
+            }
+          ],
           "options": [
             {
               "name": "--keyword",
               "type": "TEXT",
-              "required": true,
+              "required": false,
               "help": "Comma-separated list of keywords",
               "short": "-k"
             },

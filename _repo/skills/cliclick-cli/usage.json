@@ -2,7 +2,7 @@
   "tool": "cliclick",
   "description": "CLI wrapper for cliclick mouse/keyboard automation",
   "discovered_at": "2026-05-06T15:14:00.412436+00:00",
-  "total_commands": 25,
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -13,42 +13,6 @@
     }
   ],
   "commands": {
-    "auth": {
-      "help": "Check availability and permissions",
-      "commands": {
-        "login": {
-          "help": "Verify cliclick availability and permissions. cliclick is a local tool with no authentication. This command verifies that cliclick is installed and has macOS Accessibility permissions. Example: cliclick auth login cliclick auth login --force  # Re-check permissions",
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Re-verify permissions (ignored, kept for compatibility)",
-              "short": "-F"
-            }
-          ],
-          "usage_instructions": "Verify cliclick is installed and has Accessibility permissions. Use --force/-F to re-check."
-        },
-        "logout": {
-          "help": "No-op for cliclick (local tool with no authentication). cliclick is a local tool with no session to clear.",
-          "usage_instructions": "No-op. cliclick is a local tool with no session to clear."
-        },
-        "status": {
-          "help": "Check cliclick availability and Accessibility permissions. Always returns exit code 0 with machine-readable status. A false authenticated value means cliclick is missing or Accessibility permissions are not granted. Example: cliclick auth status cliclick auth status --table",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Check if cliclick is available and has permissions. Exit code 0 = OK, exit code 2 = missing."
-        }
-      },
-      "usage_instructions": "Verify cliclick is installed and has macOS Accessibility permissions. No actual authentication needed -- this is a local tool."
-    },
     "mouse": {
       "help": "Mouse control commands",
       "commands": {

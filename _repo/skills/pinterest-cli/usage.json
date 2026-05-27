@@ -71,6 +71,14 @@
         },
         "get": {
           "help": "Get the authenticated Pinterest user account.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "ACCOUNT_ID",
+              "required": false,
+              "help": "Authenticated Pinterest account ID to validate against the current account"
+            }
+          ],
           "options": [
             {
               "name": "--table",

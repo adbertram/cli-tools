@@ -1,7 +1,7 @@
 {
   "tool": "grammarly",
-  "description": "CLI interface for Grammarly API",
-  "discovered_at": "2026-05-20T16:14:50.910586+00:00",
+  "description": "CLI interface for Grammarly plagiarism and docs",
+  "discovered_at": "2026-05-26T15:09:13.872769+00:00",
   "total_commands": 17,
   "global_options": [
     {
@@ -20,7 +20,7 @@
   ],
   "commands": {
     "auth": {
-      "help": "Manage Grammarly API authentication",
+      "help": "Manage Grammarly authentication",
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
@@ -38,12 +38,19 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom', 'browser_session')",
+              "short": "-c"
             }
           ],
           "usage_instructions": "Run `grammarly auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`."
         },
         "logout": {
-          "help": "Clear stored credentials.",
+          "help": "Clear stored credentials and browser sessions.",
           "options": [
             {
               "name": "--profile",
@@ -53,10 +60,10 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "Run `grammarly auth logout` to clear stored credentials. Common options: `--profile/-p`."
+          "usage_instructions": "Run `grammarly auth logout` to clear stored credentials and browser sessions. Common options: `--profile/-p`."
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "options": [
             {
               "name": "--profile",
@@ -73,7 +80,7 @@
               "short": "-t"
             }
           ],
-          "usage_instructions": "Run `grammarly auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+          "usage_instructions": "Run `grammarly auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session). Common options: `--table/-t`, `--profile/-p`."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
@@ -230,10 +237,18 @@
           "usage_instructions": "Use `grammarly auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `select`, `delete`."
         }
       },
-      "usage_instructions": "Use `grammarly auth` for manage grammarly api authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
+      "usage_instructions": "Use `grammarly auth` to manage Grammarly authentication for both plagiarism OAuth credentials and docs browser-session cookies. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
     },
     "plagiarism": {
       "help": "Plagiarism detection commands",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "check": {
           "help": "Check a document or text for plagiarism. Submit a file or text for plagiarism detection. By default, waits for the result (polls until COMPLETED or FAILED).",
@@ -331,6 +346,14 @@
     },
     "docs": {
       "help": "Manage Grammarly documents",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "list": {
           "help": "List Grammarly documents.",
@@ -460,5 +483,5 @@
       "usage_instructions": "Use `grammarly cache` for manage response cache. Available subcommands here are `clear`."
     }
   },
-  "usage_instructions": "Use for cli interface for grammarly api. Commands follow `grammarly <group> <action>`. Primary groups here are `grammarly auth`, `grammarly plagiarism`, `grammarly docs`, `grammarly cache`."
+  "usage_instructions": "Use for Grammarly plagiarism and docs operations. Commands follow `grammarly <group> <action>`. Primary groups here are `grammarly auth`, `grammarly plagiarism`, `grammarly docs`, `grammarly cache`."
 }

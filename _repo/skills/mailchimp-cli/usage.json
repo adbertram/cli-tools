@@ -23,7 +23,7 @@
       "help": "Manage Mailchimp API authentication",
       "commands": {
         "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "help": "Configure Mailchimp API credentials.",
           "options": [
             {
               "name": "--profile",
@@ -38,9 +38,16 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
+            },
+            {
+              "name": "--api-key",
+              "type": "TEXT",
+              "required": false,
+              "help": "Mailchimp API key to save without prompting",
+              "short": "-k"
             }
           ],
-          "usage_instructions": "Use to configure Mailchimp API credentials. Provide API key with --api-key/-k. If omitted, will prompt interactively."
+          "usage_instructions": "Use to configure Mailchimp API credentials. Provide API key with --api-key/-k, pipe it on stdin, or omit it to prompt interactively."
         },
         "logout": {
           "help": "Clear stored credentials.",

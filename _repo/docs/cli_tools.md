@@ -40,6 +40,7 @@
 | `digicert` | DigiCert API scaffold using official DigiCert API docs |
 | `digitalocean` | API CLI for DigitalOcean droplet listing, lookup, and search |
 | `doordash` | DoorDash food ordering and delivery management |
+| `dribbble` | CLI interface for Dribbble designs |
 | `dropbox` | Manage Dropbox files, folders, and account information |
 | `dropxl` | Browser automation CLI for DropXL account workflows |
 | `easyship` | Easyship Public API CLI - inspect authenticated account details and active couriers |

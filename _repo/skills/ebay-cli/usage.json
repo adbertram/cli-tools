@@ -58,13 +58,6 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth_authorization_code', 'browser_session')",
-              "short": "-c"
             }
           ],
           "usage_instructions": "Run `ebay auth login --help` for exact arguments and options."

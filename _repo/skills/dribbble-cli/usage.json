@@ -1,0 +1,401 @@
+{
+  "tool": "dribbble",
+  "description": "CLI interface for Dribbble API",
+  "discovered_at": "2026-05-24T22:44:25.699942+00:00",
+  "total_commands": 16,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "designs": {
+      "help": "Manage Dribbble designs",
+      "commands": {
+        "list": {
+          "help": "List designs owned by the authenticated Dribbble user.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum number of designs",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `designs list` when Adam asks for shots owned by the authenticated Dribbble user. Limit with `--limit/-l`, display selected fields with `--properties/-p`, filter with `--filter/-f`, and use `--table/-t` for a readable table."
+        },
+        "search": {
+          "help": "Search public Dribbble designs.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Public Dribbble search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum number of designs",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `designs search QUERY` when Adam wants public Dribbble shots for a topic such as mobile app or dashboard. Pass the query as the required positional argument; control output with `--limit/-l`, `--properties/-p`, `--filter/-f`, and `--table/-t`."
+        },
+        "get": {
+          "help": "Get a public Dribbble design by shot ID.",
+          "arguments": [
+            {
+              "name": "design_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dribbble design ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `designs get DESIGN_ID` to fetch one public Dribbble shot by numeric shot ID discovered from `designs search`. Use `--properties/-p` to keep only fields such as id,title,author,html_url,image_url, or `--table/-t` for a field/value table."
+        },
+        "download": {
+          "help": "Download public Dribbble design image files by shot ID.",
+          "arguments": [
+            {
+              "name": "design_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dribbble design ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output-dir",
+              "type": "DIRECTORY",
+              "required": false,
+              "help": "Directory to write image files",
+              "short": "-o",
+              "default": "."
+            }
+          ],
+          "usage_instructions": "Use `designs download DESIGN_ID` to download all public media image files for one Dribbble shot. The numeric DESIGN_ID is required; use `--output-dir/-o` to choose the destination directory, otherwise files are written to the current directory."
+        }
+      },
+      "usage_instructions": "Use `designs` for Dribbble shot records. `designs search`, `designs get`, and `designs download` read public Dribbble web pages; `designs list` uses the authenticated owner API and only returns the active user's shots."
+    },
+    "auth": {
+      "help": "Manage dribbble authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ],
+          "usage_instructions": "Use `auth login` to run the OAuth authorization-code flow for Dribbble. Use `--force/-F` to clear saved login state and re-enter the client ID/secret; `--profile/-p` selects the profile to update."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `auth logout` to clear saved Dribbble credentials for a profile. Pass `--profile/-p` when clearing a non-default profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `auth status` to verify saved Dribbble credentials. Read the shared profile output shape under `profiles[].credential_types.oauth_authorization_code` rather than expecting a flat authenticated field."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `dribbble auth refresh` for: Refresh OAuth access token using stored refresh token."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `auth test` for a live Dribbble credential check on the selected profile. Pass `--profile/-p` to test a specific profile."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles list` to see all Dribbble authentication profiles. Add `--table/-t` for human-readable output."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles get PROFILE_NAME` to inspect one Dribbble profile. Add `--table/-t` for a field/value view."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles create PROFILE_NAME` to create a new Dribbble authentication profile. Use `--auth-type` only when the CLI exposes multiple credential types."
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles select PROFILE_NAME` to make a Dribbble profile active. Other auth profile operations should use this nested command path."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `auth profiles delete PROFILE_NAME` to remove a Dribbble authentication profile. This is destructive for that profile's saved runtime auth state."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `dribbble auth profiles remove` for: Delete a profile and its data."
+            }
+          },
+          "usage_instructions": "Use `auth profiles` to list, inspect, create, select, and delete named Dribbble authentication profiles. Preserve the nested command path, for example `dribbble auth profiles list`."
+        }
+      },
+      "usage_instructions": "Use `auth` to manage Dribbble OAuth credentials and authentication profiles. Check `auth status` before owner-only API work; public search, public get, and public download do not require owner shots to exist."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `cache clear` to remove cached Dribbble command responses. Use this before retesting changed public search/get/download behavior when cached output would hide a parser change."
+        }
+      },
+      "usage_instructions": "Use `cache` to clear cached Dribbble read responses. Add global `--no-cache` before the command group when a fresh Dribbble request is required."
+    }
+  },
+  "usage_instructions": "Use the Dribbble CLI to authenticate with Dribbble, search public shot pages, get public shot details, download public shot images, and list the authenticated user's own shots. Commands follow `dribbble <command-group> <action>`; use `--table/-t`, `--limit/-l`, `--filter/-f`, and `--properties/-p` on list/search outputs when available."
+}
