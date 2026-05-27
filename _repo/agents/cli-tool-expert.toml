@@ -162,6 +162,20 @@ Both methods reuse the existing `evaluate()` transport — no new daemon RPCs.
 - If you remove `AUTH_COOKIE_PATTERNS` without adding an `AUTH_FAILURE_URL_PATTERN` or other logged-out marker, `BrowserAutomation` falls back to "not on login page" and can still report false positives on public pages.
 - Browser CLI compliance tests gate live list/get execution on `auth status`. A false positive hides real auth expiry; a truthful `authenticated=false` will expose the missing live session and block execution tests until the profile is re-authenticated.
 
+### Browser Auth Live Checks Must Honor `AUTOMATION_HEADED`
+
+**Context:** When a browser CLI declares `AUTOMATION_HEADED = True` because headless Chrome is blocked by Cloudflare or a similar anti-bot interstitial.
+
+**Key Facts:**
+- A valid saved browser session can still report `credential_types.browser_session.authenticated=false` if the live auth probe launches in headless mode and lands on `Just a moment...` / `Performing security verification`.
+- Diagnose this by loading the real `AUTH_CHECK_URL` with the CLI's saved profile and inspecting the actual page title/body; do not assume the session is expired just because the headless probe failed.
+- The fix belongs in shared `BrowserAutomation`, not per-CLI workarounds: when config does not explicitly override headless mode, `_headless_enabled()` must respect the browser subclass's `AUTOMATION_HEADED` hook for `get_page()` and `live_cookies()`.
+- Validate both the shared tests and the real CLI. Unit coverage should assert the browser launch passes `headed=True`, and the live `auth status` output should flip `browser_session.authenticated` to `true`.
+
+**Gotchas:**
+- Fix runtime profile-path mismatches before debugging launch mode. A stale session saved in an old daemon cache can make `credentials_saved=true` impossible until the persistent Chromium profile is restored to the active auth-profile path.
+- If headed mode succeeds and headless mode fails on the same profile, the session is not the bug. The launch mode is.
+
 ### Validating Repo-Owned `*-cli` Skill Existence Across All Tools
 
 **Context:** When the task is to create or repair repo-owned service skill directories under `<cli-tools-root>/_repo/skills/<tool>-cli/` and prove the skill contract passes for every real CLI tool.
@@ -224,4 +238,20 @@ Both methods reuse the existing `evaluate()` transport — no new daemon RPCs.
 - A FIFO with no writer attached makes the reader block at EOF immediately, so the `sleep > FIFO &` placeholder is mandatory until the real value is written.
 - When the parent shell uses `set -e`, redirecting from a not-yet-open FIFO can cause early exit. Backgrounding the writer FIRST, then starting the reader, sidesteps this.
 - Direct `typer.prompt()` and `input()` are banned by the cli-tool compliance test `test_no_direct_prompting`. For mid-flow prompts inside a CLI, use `sys.stdin.readline()` (or `open("/dev/tty", "r+").readline()`) — the AST checker does not flag those.
+
+### Converting a Wrapper CLI From Fake Auth To True No-Auth
+
+**Context:** When a local or wrapper CLI historically exposed `auth` commands or `CredentialType.CUSTOM` just to check binary availability or local permissions, but the correct contract is "no auth subcommand".
+
+**Key Facts:**
+- Removing the `auth` command surface is only the first half of the fix. If the CLI still subclasses `BaseConfig` with auth-oriented profile resolution, ordinary non-auth commands can keep crashing with `No active profile found` or `Authentication profile .env files contain non-authentication configuration fields`.
+- For no-auth CLIs, use generic root config keys such as `CLI_COMMAND` and `CLI_PATH`, not service-prefixed names like `CLICLICK_CLI_PATH`. If legacy prefixed names exist in `.env.example` or persisted user config, migrate them.
+- The cli-tool compliance harness does NOT treat "no auth subcommand" as sufficient metadata on its own. When a CLI is truly local-only, add it to `<cli-tools-root>/_repo/skills/cli-tool/tests/cli_test_config.toml` under `exclusions.no_auth_clis`; otherwise profile/auth tests such as `test_env_has_active_profile` and `test_profiles_stored_in_user_data_dir` will still run against stale profile artifacts and fail.
+- The migration must run BEFORE `BaseConfig.__init__()` validation, because `_validate_profile_env_files()` executes before `_resolve_env_file()`. A migration placed only in `_resolve_env_file()` is too late to heal existing bad profile env files.
+- The migration should move any non-auth config out of `authentication_profiles/*/.env` into `~/.local/share/cli-tools/<tool>/.env`, rename legacy service-prefixed keys to generic ones, and strip the legacy keys from the profile env file.
+- After removing the live command surface, update the repo-owned skill metadata too: regenerate or edit `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` and `<tool>-cli/SKILL.md` so deleted `auth` commands are removed from documentation and command-tree validation.
+
+**Gotchas:**
+- Compliance can still pass while the real launcher is broken if the suite skips auth paths and never exercises the now-broken non-auth bootstrap. Live launcher checks on actual `list` / `get` commands are what expose this.
+- If you leave service-prefixed root-config names in `.env.example`, `test_env_no_service_prefix` will fail even after runtime behavior is fixed.
 '''

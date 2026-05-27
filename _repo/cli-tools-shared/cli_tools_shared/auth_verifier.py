@@ -140,12 +140,29 @@ class AuthVerifier:
             browser_check = self._check_browser()
             if browser_check is None:
                 return {"credentials_saved": False, "authenticated": False}
-            return {
+            block = {
                 "credentials_saved": browser_check["has_session"],
                 "browser_session": browser_check["authenticated"],
                 "browser_available": browser_check["available"],
                 "authenticated": browser_check["authenticated"],
             }
+            if not block["authenticated"]:
+                return block
+
+            if getattr(self.config, "BROWSER_SESSION_REQUIRES_API_TEST", False) is not True:
+                return block
+
+            api_result = self._check_api()
+            if api_result is None:
+                return block
+
+            api_test_val = api_result.get("api_test", "skipped")
+            block["api_test"] = api_test_val
+            for k, v in api_result.items():
+                if k != "api_test":
+                    block[k] = v
+            block["authenticated"] = api_test_val == "passed"
+            return block
 
         # API-capable types (API_TYPES + CUSTOM)
         block = {"credentials_saved": self.config.has_credentials()}

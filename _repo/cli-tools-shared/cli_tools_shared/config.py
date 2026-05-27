@@ -508,6 +508,29 @@ def _initialize_default_profile(
     _write_env_values(target, auth_values)
 
 
+def _profile_auth_type_for_env_path(
+    env_path: Path,
+    profile_auth_settings: Optional[tuple[str, dict]],
+) -> str:
+    """Return the auth type declared by ``env_path`` for grouping/validation."""
+    if profile_auth_settings is None:
+        return implicit_profile_auth_type()
+
+    auth_type_field, auth_types = profile_auth_settings
+    auth_type = _read_env_values(env_path).get(auth_type_field, "").strip()
+    if not auth_type:
+        raise ConfigError(
+            f"Profile '{profile_name_from_path(env_path)}' is missing {auth_type_field}. "
+            "Recreate the profile with 'auth profiles create'."
+        )
+    if auth_type not in auth_types:
+        raise ConfigError(
+            f"Profile '{profile_name_from_path(env_path)}' has invalid auth type "
+            f"{auth_type!r}. Valid types: {', '.join(sorted(auth_types))}."
+        )
+    return auth_type
+
+
 def _validate_profile_env_files(
     tool_name: str,
     auth_fields: set[str],
@@ -761,11 +784,13 @@ class BaseConfig:
     OAUTH_TOKEN_URL: str = ""            # Token endpoint
     OAUTH_SCOPES: list = []              # Scope strings
     OAUTH_REDIRECT_URI: str = ""         # Default redirect URI (overridable in .env via REDIRECT_URI)
+    OAUTH_REDIRECT_URI_REQUIRED: bool = True
     OAUTH_PKCE: bool = False             # Enable PKCE (S256)
     OAUTH_TOKEN_AUTH: str = "body"       # "basic" | "body" | "none"
     OAUTH_EXTRA_AUTH_PARAMS: dict = {}   # Extra params for auth URL (e.g. audience)
     OAUTH_TOKEN_EXPIRES: bool = True   # False for OAuth 1.0a/static token credentials
     OAUTH_STATIC_REQUIRED_FIELDS: tuple = ("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN")
+    BROWSER_SESSION_REQUIRES_API_TEST: bool = False
 
     # Extra credential prompts (set by subclasses that need additional fields prompted during login)
     # List of (field_name, prompt_label, hide_input) tuples
@@ -912,7 +937,6 @@ class BaseConfig:
         )
         _validate_root_config_env_file(self._tool_name, auth_fields)
         _validate_profile_env_files(self._tool_name, auth_fields, root_config_fields)
-
         self.env_file_path = self._resolve_env_file(
             profile=profile,
             profile_auth_type=profile_auth_type,
@@ -1021,22 +1045,10 @@ class BaseConfig:
         )
 
     def _profile_auth_type_for_env(self, env_path: Path) -> str:
-        settings = get_profile_auth_settings(type(self))
-        if settings is None:
-            return implicit_profile_auth_type()
-        auth_type_field, auth_types = settings
-        auth_type = _read_env_values(env_path).get(auth_type_field, "").strip()
-        if not auth_type:
-            raise ConfigError(
-                f"Profile '{profile_name_from_path(env_path)}' is missing {auth_type_field}. "
-                "Recreate the profile with 'auth profiles create'."
-            )
-        if auth_type not in auth_types:
-            raise ConfigError(
-                f"Profile '{profile_name_from_path(env_path)}' has invalid auth type "
-                f"{auth_type!r}. Valid types: {', '.join(sorted(auth_types))}."
-            )
-        return auth_type
+        return _profile_auth_type_for_env_path(
+            env_path,
+            get_profile_auth_settings(type(self)),
+        )
 
     def _validate_profile_auth_type(self, env_path: Path, expected_auth_type: str) -> None:
         actual_auth_type = self._profile_auth_type_for_env(env_path)
@@ -1094,9 +1106,8 @@ class BaseConfig:
                 if existing_value
                 else None
             )
-            secret_name = existing_secret_name or self._secret_name_for_field(name)
-            if _secret_exists(secret_name):
-                _delete_secret_value(secret_name, env_path)
+            if existing_secret_name is not None and _secret_exists(existing_secret_name):
+                _delete_secret_value(existing_secret_name, env_path)
             _set_key_with_retry(str(env_path), name, "")
             os.environ.pop(name, None)
             return

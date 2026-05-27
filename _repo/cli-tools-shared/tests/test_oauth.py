@@ -87,6 +87,57 @@ def test_oauth_login_uses_system_browser_and_pasted_redirect_url(monkeypatch):
     assert saved_tokens["refresh_token"] == "new-refresh-token"
 
 
+def test_oauth_login_can_omit_redirect_uri_when_provider_uses_registered_callback(monkeypatch):
+    opened_urls = []
+    token_requests = []
+    saved_tokens = {}
+
+    config = SimpleNamespace(
+        access_token=None,
+        token_expires_at=None,
+        redirect_uri=None,
+        OAUTH_REDIRECT_URI="",
+        OAUTH_REDIRECT_URI_REQUIRED=False,
+        OAUTH_PKCE=False,
+        OAUTH_SCOPES=["public"],
+        OAUTH_EXTRA_AUTH_PARAMS={},
+        OAUTH_AUTH_URL="https://auth.example.com/oauth",
+        OAUTH_TOKEN_URL="https://auth.example.com/token",
+        OAUTH_TOKEN_AUTH="body",
+        client_id="client-123",
+        client_secret="secret-456",
+        save_tokens=lambda access, refresh, expires_at: saved_tokens.update(
+            {
+                "access_token": access,
+                "refresh_token": refresh,
+                "expires_at": expires_at,
+            }
+        ),
+    )
+
+    monkeypatch.setattr(
+        "cli_tools_shared.oauth.webbrowser.open",
+        lambda url: opened_urls.append(url),
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.oauth.typer.prompt",
+        lambda prompt: "https://example.com/callback?code=auth-code-789",
+    )
+
+    def fake_post(url, headers, data):
+        token_requests.append({"url": url, "headers": headers, "data": data})
+        return FakeTokenResponse()
+
+    monkeypatch.setattr("cli_tools_shared.oauth.requests.post", fake_post)
+
+    oauth_login(config, force=True)
+
+    auth_query = parse_qs(urlparse(opened_urls[0]).query)
+    assert "redirect_uri" not in auth_query
+    assert "redirect_uri" not in token_requests[0]["data"]
+    assert saved_tokens["access_token"] == "new-access-token"
+
+
 def test_oauth_login_errors_when_pasted_redirect_has_no_code(monkeypatch):
     config = SimpleNamespace(
         access_token=None,

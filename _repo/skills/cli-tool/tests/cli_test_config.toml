@@ -13,6 +13,7 @@ no_auth_clis = [
     "cliclick",
     # Local-only CLIs with no remote credentials — auth commands serve no purpose.
     "imessage",
+    "msword",
     "notifier",
     "things",
     "whisper",

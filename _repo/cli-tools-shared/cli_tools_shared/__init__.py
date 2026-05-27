@@ -61,14 +61,32 @@ from .output import (
 
 def __getattr__(name):
     """Lazy-load browser modules to avoid importing browser-harness at package import time."""
-    if name in ("BrowserAutomation", "BrowserAutomationError", "AuthResult"):
-        from .auth import BrowserAutomation, BrowserAutomationError, AuthResult
+    if name in (
+        "BrowserAutomation",
+        "BrowserAutomationError",
+        "AuthResult",
+        "WebwrightBrowserAutomation",
+    ):
+        from .auth import (
+            AuthResult,
+            BrowserAutomation,
+            BrowserAutomationError,
+            WebwrightBrowserAutomation,
+        )
         _browser_exports = {
             "BrowserAutomation": BrowserAutomation,
             "BrowserAutomationError": BrowserAutomationError,
             "AuthResult": AuthResult,
+            "WebwrightBrowserAutomation": WebwrightBrowserAutomation,
         }
         return _browser_exports[name]
+    if name in ("WebwrightBrowserService", "WebwrightServiceError"):
+        from .browser.webwright import WebwrightBrowserService, WebwrightServiceError
+        _webwright_exports = {
+            "WebwrightBrowserService": WebwrightBrowserService,
+            "WebwrightServiceError": WebwrightServiceError,
+        }
+        return _webwright_exports[name]
     if name == "create_profiles_app":
         from .profiles_commands import create_profiles_app
         return create_profiles_app
@@ -109,6 +127,9 @@ __all__ = [
     "AuthResult",
     "BrowserAutomation",
     "BrowserAutomationError",
+    "WebwrightBrowserAutomation",
+    "WebwrightBrowserService",
+    "WebwrightServiceError",
     "CredentialType",
     "mask_value",
     "combined_required_fields",

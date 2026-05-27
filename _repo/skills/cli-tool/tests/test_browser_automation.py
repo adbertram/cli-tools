@@ -10,7 +10,7 @@ Tests validate:
 4. No direct Playwright auth logic outside browser.py (must delegate to BrowserAutomation)
 5. No custom is_logged_in/is_authenticated — must use base class is_authenticated() via hooks
 6. No direct browser-binary subprocess calls (must go through cli_tools_shared BrowserHarnessService)
-7. browser-harness Python package is installed in the CLI's uv tool venv
+7. browser_harness module is importable in the CLI's uv tool venv
 """
 import re
 import subprocess
@@ -308,18 +308,18 @@ def test_browser_cli_uses_browser_harness_via_browser_automation(
     )
 
 
-# ==================== browser-harness Module Installed ====================
+# ==================== browser_harness Module Importable ====================
 
 
 def test_browser_cli_browser_harness_module_installed(cli_name, cli_dir, test_config, command_filter, is_browser_cli):
-    """Browser CLIs must have the browser-harness Python package installed.
+    """Browser CLIs must be able to import browser_harness.
 
     BrowserAutomation in cli_tools_shared.auth drives the browser through
     cli_tools_shared.browser.BrowserHarnessService, which imports
-    'browser_harness'. If the package is not installed in the CLI's uv tool
+    'browser_harness'. If the module is not available in the CLI's uv tool
     venv, browser operations will fail at runtime with ModuleNotFoundError.
-    browser-harness is a transitive dependency via cli-tools-shared and is
-    pinned to a specific commit; there is no separate dependency to add.
+    cli-tools-shared vendors browser_harness, so deployed CLI dependencies do
+    not need a separate Git-based browser-harness package.
     """
     if command_filter:
         pytest.skip("Skipping browser automation tests (command filter active)")
@@ -332,13 +332,14 @@ def test_browser_cli_browser_harness_module_installed(cli_name, cli_dir, test_co
 
     env = {**subprocess.os.environ, "VIRTUAL_ENV": str(uv_venv)}
     result = subprocess.run(
-        ["uv", "pip", "show", "browser-harness"],
+        ["uv", "run", "--no-sync", "python", "-c", "import browser_harness"],
         capture_output=True, text=True, env=env
     )
     assert result.returncode == 0, (
-        f"'{cli_name}' is a browser automation CLI but 'browser-harness' Python package "
-        f"is not installed in its uv tool venv. BrowserAutomation requires browser-harness "
-        f"(pulled in transitively through cli-tools-shared) to work.\n"
+        f"'{cli_name}' is a browser automation CLI but cannot import the "
+        f"'browser_harness' module in its uv tool venv. BrowserAutomation "
+        f"requires the browser_harness module vendored by cli-tools-shared.\n"
+        f"stderr: {result.stderr.strip()}\n"
         f"Fix: Ensure {cli_name}/pyproject.toml depends on cli-tools-shared, "
         f"then run: uv tool install -e {cli_dir} --force --refresh"
     )

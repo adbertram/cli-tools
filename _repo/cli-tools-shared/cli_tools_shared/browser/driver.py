@@ -250,6 +250,28 @@ class BrowserHarnessService:
         finally:
             self._chrome_proc = None
 
+    def _request_browser_close(self) -> None:
+        """Ask Chrome to exit cleanly before hard-stop teardown.
+
+        Some services only flush updated cookies or local/session storage to
+        the persistent profile during a graceful browser shutdown. We request
+        that first, then let ``_terminate_chrome`` handle the fallback path.
+        """
+        if not self._opened:
+            return
+        try:
+            self._bh.h.cdp("Browser.close")
+        except Exception as e:
+            logger.debug("_request_browser_close: %s", e)
+            return
+
+        if self._chrome_proc is None or not hasattr(self._chrome_proc, "wait"):
+            return
+        try:
+            self._chrome_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.debug("_request_browser_close: timed out waiting for Chrome to exit")
+
     def _list_process_commands(self) -> List[tuple[int, str, str]]:
         """Return `(pid, stat, command)` rows for the local process table."""
         try:
@@ -447,6 +469,7 @@ class BrowserHarnessService:
         """Close browser and daemon while assuming the lifecycle lock is held."""
         if not self._opened:
             return
+        self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
         for pid in self._session_process_pids():
@@ -643,6 +666,10 @@ class BrowserHarnessService:
             if "undefined" in error_msg.lower() or "null" in error_msg.lower():
                 return None
             raise BrowserHarnessError(f"Eval error: {e}")
+
+    def page_eval(self, js: str, arg: Any = None) -> Dict[str, Any]:
+        """Backward-compatible wrapper for legacy page-eval callers."""
+        return {"result": self.evaluate(js, arg)}
 
     # ---------------- Keyboard ----------------
 
@@ -855,3 +882,52 @@ class BrowserHarnessService:
         if not present:
             return None
         return _ServiceElement(self, css=selector)
+
+    def aria_snapshot(self, selector: str = "body", *, timeout: int = 5000) -> str:
+        """Capture a Playwright-style accessibility snapshot from the live page.
+
+        browser-harness owns the running Chrome instance. To preserve the
+        exact loaded page state, attach to that same browser over CDP and
+        call Playwright's ``aria_snapshot()`` against the matching live page.
+        """
+        self._require_open()
+        if self._cdp_port is None:
+            raise BrowserHarnessError(
+                f"No CDP port available for session '{self.session}'."
+            )
+
+        current_url = self.url
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.connect_over_cdp(
+                    f"http://127.0.0.1:{self._cdp_port}"
+                )
+                try:
+                    if not browser.contexts:
+                        raise BrowserHarnessError(
+                            "CDP browser connection returned no contexts."
+                        )
+                    live_pages = browser.contexts[0].pages
+                    if not live_pages:
+                        raise BrowserHarnessError(
+                            "CDP browser connection returned no pages."
+                        )
+                    raw_page = next(
+                        (
+                            candidate
+                            for candidate in live_pages
+                            if candidate.url == current_url
+                        ),
+                        live_pages[0],
+                    )
+                    return raw_page.locator(selector).aria_snapshot(timeout=timeout)
+                finally:
+                    browser.close()
+        except BrowserHarnessError:
+            raise
+        except Exception as e:
+            raise BrowserHarnessError(
+                f"Failed to capture aria snapshot: {e}"
+            ) from e

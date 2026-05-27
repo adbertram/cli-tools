@@ -182,8 +182,8 @@ class TestVerifyOutputFields:
         assert block["authenticated"] is False
         assert result["authenticated"] is False
 
-    def test_browser_session_ignores_api_test_handler_when_browser_probe_passes(self):
-        """Browser-session auth is defined by the live browser probe only."""
+    def test_browser_session_ignores_api_test_handler_by_default_when_browser_probe_passes(self):
+        """Browser-session auth is defined by the live browser probe by default."""
         browser = MagicMock()
         browser.is_authenticated.return_value = True
         browser.close.return_value = None
@@ -202,6 +202,54 @@ class TestVerifyOutputFields:
         assert block["credentials_saved"] is True
         assert block["browser_session"] is True
         assert "api_test" not in block
+        assert block["authenticated"] is True
+        assert result["authenticated"] is True
+
+    def test_browser_session_failed_api_test_overrides_passing_browser_probe_when_configured(self):
+        """Browser-session CLIs may opt into a tool-specific API probe too."""
+        browser = MagicMock()
+        browser.is_authenticated.return_value = True
+        browser.close.return_value = None
+
+        config = _make_config(
+            [CredentialType.BROWSER_SESSION],
+            has_creds=True,
+            browser=browser,
+            has_saved_session=True,
+        )
+        config.BROWSER_SESSION_REQUIRES_API_TEST = True
+
+        handler = lambda cfg: {"api_test": "failed: request context invalid"}
+        result = AuthVerifier(config, api_test_handler=handler).verify()
+        block = result["credential_types"]["browser_session"]
+
+        assert block["credentials_saved"] is True
+        assert block["browser_session"] is True
+        assert block["api_test"] == "failed: request context invalid"
+        assert block["authenticated"] is False
+        assert result["authenticated"] is False
+
+    def test_browser_session_passed_api_test_keeps_passing_browser_probe_authenticated(self):
+        browser = MagicMock()
+        browser.is_authenticated.return_value = True
+        browser.close.return_value = None
+
+        config = _make_config(
+            [CredentialType.BROWSER_SESSION],
+            has_creds=True,
+            browser=browser,
+            has_saved_session=True,
+        )
+        config.BROWSER_SESSION_REQUIRES_API_TEST = True
+
+        handler = lambda cfg: {"api_test": "passed", "account": "ok"}
+        result = AuthVerifier(config, api_test_handler=handler).verify()
+        block = result["credential_types"]["browser_session"]
+
+        assert block["credentials_saved"] is True
+        assert block["browser_session"] is True
+        assert block["api_test"] == "passed"
+        assert block["account"] == "ok"
         assert block["authenticated"] is True
         assert result["authenticated"] is True
 

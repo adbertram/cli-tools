@@ -340,6 +340,59 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     assert "API_KEY=" in content
 
 
+def test_oauth_login_skips_redirect_uri_prompt_when_not_required(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.OAUTH_AUTHORIZATION_CODE]
+        OAUTH_AUTH_URL = "https://auth.example.com/oauth"
+        OAUTH_TOKEN_URL = "https://auth.example.com/token"
+        OAUTH_REDIRECT_URI_REQUIRED = False
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "ACTIVE=true\n"
+        "CLIENT_ID=\n"
+        "CLIENT_SECRET=\n"
+        "ACCESS_TOKEN=\n"
+    )
+
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    handler_values = {}
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    def login_handler(config, force):
+        handler_values.update(
+            {
+                "client_id": config.client_id,
+                "client_secret": config.client_secret,
+                "redirect_uri": config.redirect_uri,
+            }
+        )
+
+    app = create_auth_app(get_config, tool_name="tool", login_handler=login_handler)
+    result = CliRunner().invoke(app, ["login"], input="client-id\nclient-secret\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Enter Redirect URI" not in result.output
+    assert handler_values == {
+        "client_id": "client-id",
+        "client_secret": "client-secret",
+        "redirect_uri": None,
+    }
+
+
 def test_base_config_initializes_default_profile_when_none_exist(tmp_path, monkeypatch):
     from cli_tools_shared.config import BaseConfig
 

@@ -375,3 +375,61 @@ def test_clear_sensitive_field_deletes_secret_store_entry(
     assert ("delete", "exampletool-api-key", None) in calls
     assert "API_KEY=''" in profile.read_text()
     assert config.api_key is None
+
+
+def _detached_api_key_config(tool_dir: Path, env_path: Path) -> ApiKeyConfig:
+    config = object.__new__(ApiKeyConfig)
+    config._tool_name = tool_dir.name
+    config.env_file_path = env_path
+    config.config_env_file_path = config_env_path_for_tool(tool_dir.name)
+    return config
+
+
+def test_clear_sensitive_field_with_raw_value_does_not_touch_canonical_secret(
+    tmp_path,
+    monkeypatch,
+    isolated_data_home,
+):
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=raw-api-key\n")
+    monkeypatch.setenv("API_KEY", "raw-api-key")
+    calls = []
+
+    def fake_run(command: str, secret_name: str, *, secret_value=None):
+        calls.append((command, secret_name, secret_value))
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
+
+    config = _detached_api_key_config(tool_dir, profile)
+    config._clear("API_KEY")
+
+    assert calls == []
+    assert "API_KEY=''" in profile.read_text()
+    assert config.api_key is None
+
+
+def test_clear_sensitive_field_with_empty_value_does_not_touch_canonical_secret(
+    tmp_path,
+    monkeypatch,
+    isolated_data_home,
+):
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, "ACTIVE=true\nAPI_KEY=\n")
+    monkeypatch.setenv("API_KEY", "stale-api-key")
+    calls = []
+
+    def fake_run(command: str, secret_name: str, *, secret_value=None):
+        calls.append((command, secret_name, secret_value))
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
+
+    config = _detached_api_key_config(tool_dir, profile)
+    config._clear("API_KEY")
+
+    assert calls == []
+    assert "API_KEY=''" in profile.read_text()
+    assert config.api_key is None

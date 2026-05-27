@@ -139,6 +139,8 @@ class BrowserAutomation:
     def _headless_enabled(self) -> bool:
         if hasattr(self.config, "headless"):
             return bool(self.config.headless)
+        if getattr(type(self), "AUTOMATION_HEADED", False):
+            return False
         return True
 
     def _browser_user_agent(self) -> str:
@@ -543,3 +545,24 @@ class BrowserAutomation:
     def __exit__(self, *args):
         self.close()
         return False
+
+
+class WebwrightBrowserAutomation(BrowserAutomation):
+    """BrowserAutomation variant backed by Webwright's local browser service.
+
+    Subclasses use the same declarative auth hooks as ``BrowserAutomation``
+    (``LOGIN_URL``, ``AUTH_CHECK_URL``, selectors, cookie patterns, and so on)
+    while swapping only the underlying browser service.
+    """
+
+    WEBWRIGHT_BROWSER_MODE = "local_persistent"
+
+    def _get_service(self):
+        if self._service is None:
+            from .browser.webwright import WebwrightBrowserService
+
+            self._service = WebwrightBrowserService(
+                _safe_daemon_key(self._session_name()),
+                browser_mode=self.WEBWRIGHT_BROWSER_MODE,
+            )
+        return self._service

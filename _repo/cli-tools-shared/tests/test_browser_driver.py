@@ -36,6 +36,7 @@ def test_browser_open_cleans_same_session_state_before_launch(tmp_path, monkeypa
         "_page_info",
         lambda: {"url": "", "title": "", "console_errors": 0, "console_warnings": 0},
     )
+    monkeypatch.setattr(service, "_request_browser_close", lambda: events.append("graceful-close"))
     monkeypatch.setattr(service, "_stop_daemon", lambda: events.append("stop"))
     monkeypatch.setattr(service, "_terminate_chrome", lambda: events.append("terminate"))
     monkeypatch.setattr(service, "_session_process_pids", lambda: [])
@@ -63,6 +64,7 @@ def test_browser_open_cleans_same_session_state_before_launch(tmp_path, monkeypa
         "cdp",
         "goto:https://example.com/dashboard",
         f"load:{service.default_timeout}",
+        "graceful-close",
         "stop",
         "terminate",
     ]
@@ -172,6 +174,7 @@ def _prepare_open_success(service, monkeypatch):
         lambda *args, **kwargs: _Proc(4242),
     )
     monkeypatch.setattr(service, "_start_daemon", lambda: None)
+    monkeypatch.setattr(service, "_request_browser_close", lambda: None)
     monkeypatch.setattr(service, "_stop_daemon", lambda: None)
     monkeypatch.setattr(service, "_terminate_chrome", lambda: None)
     monkeypatch.setattr(service, "_session_process_pids", lambda: [])
@@ -351,6 +354,26 @@ def test_query_selector_returns_none_when_absent(monkeypatch):
     service, _calls = _open_service_with_eval(monkeypatch, [False])
 
     assert service.query_selector("button.missing") is None
+
+
+def test_page_eval_wraps_evaluate_result(monkeypatch):
+    service = BrowserHarnessService("pluralsight-author")
+    monkeypatch.setattr(service, "_require_open", lambda: None)
+    monkeypatch.setattr(
+        service,
+        "evaluate",
+        lambda js, arg=None: {"ok": True, "arg": arg, "js": js},
+    )
+
+    result = service.page_eval("() => ({ ok: true })", {"x": 1})
+
+    assert result == {
+        "result": {
+            "ok": True,
+            "arg": {"x": 1},
+            "js": "() => ({ ok: true })",
+        }
+    }
 
 
 def test_element_select_option_supports_label(monkeypatch):

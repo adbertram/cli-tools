@@ -8,6 +8,7 @@ version = "0.2.0"
 description = "Shared authentication, profiles, and output utilities for CLI tools (browser-harness backed)"
 requires-python = ">=3.11"
 dependencies = [
+    "click>=8.0.0",
     "typer>=0.9.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",

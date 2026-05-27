@@ -39,6 +39,10 @@ class _HookBrowser(_TestBrowser):
         self.authenticated_page = page
 
 
+class _HeadedAutomationBrowser(_TestBrowser):
+    AUTOMATION_HEADED = True
+
+
 class _TestConfig:
     """Minimal config double exposing both data dir and persistent-profile dir."""
 
@@ -145,6 +149,21 @@ def test_live_cookies_opens_browser_when_not_already_open(tmp_path, monkeypatch)
     ]
 
 
+def test_live_cookies_honors_automation_headed_hook(tmp_path, monkeypatch):
+    browser = _HeadedAutomationBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service._cookies = [
+        {"name": "x", "value": "y", "domain": "example.com", "path": "/", "expires": -1},
+    ]
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    browser.live_cookies()
+
+    _args, kwargs = service.browser_open_calls[0]
+    assert kwargs.get("headed") is True
+
+
 # ---------------------------------------------------------------------------
 # get_page() no longer state_loads — the persistent profile is authoritative
 # ---------------------------------------------------------------------------
@@ -166,6 +185,18 @@ def test_get_page_opens_persistent_profile_without_storage_state_load(tmp_path, 
     _args, kwargs = service.browser_open_calls[0]
     assert kwargs.get("persistent_profile_dir") == tmp_path / "chromium-profile"
     assert service.goto_calls == []
+
+
+def test_get_page_honors_automation_headed_hook(tmp_path, monkeypatch):
+    browser = _HeadedAutomationBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    browser.get_page("https://example.com/dashboard")
+
+    _args, kwargs = service.browser_open_calls[0]
+    assert kwargs.get("headed") is True
 
 
 def test_authenticate_waits_for_enter(tmp_path, monkeypatch):

@@ -45,6 +45,8 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
         errors.append(f"profile {name} credential_types must contain at least one entry")
         return
 
+    authenticated_type_count = 0
+    credential_shape_valid = True
     for cred_key, cred_value in cred_types.items():
         if cred_key not in VALID_CREDENTIAL_TYPES:
             errors.append(f"profile {name} has invalid credential_type key: {cred_key}")
@@ -55,18 +57,27 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
         for field in ("credentials_saved", "authenticated"):
             if field not in cred_value:
                 errors.append(f"profile {name} credential_types[{cred_key}] missing {field}")
+                credential_shape_valid = False
             elif not isinstance(cred_value[field], bool):
                 errors.append(f"profile {name} credential_types[{cred_key}].{field} must be boolean")
-        if isinstance(cred_value.get("authenticated"), bool) and cred_value["authenticated"] is not True:
-            errors.append(
-                f"profile {name} credential_types[{cred_key}].authenticated must be true in auth status output"
-            )
+                credential_shape_valid = False
+        if cred_value.get("authenticated") is True:
+            authenticated_type_count += 1
         if "api_test" in cred_value:
             api_test = cred_value["api_test"]
             if not (isinstance(api_test, str) and (api_test == "passed" or api_test.startswith("failed:"))):
                 errors.append(
                     f"profile {name} credential_types[{cred_key}].api_test must be \"passed\" or start with \"failed:\""
                 )
+
+    if (
+        profile.get("authenticated") is True
+        and credential_shape_valid
+        and authenticated_type_count == 0
+    ):
+        errors.append(
+            f"profile {name} must have at least one authenticated credential type"
+        )
 
 
 def validate_payload(payload: object) -> list[str]:

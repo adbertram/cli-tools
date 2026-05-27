@@ -177,7 +177,10 @@ def combined_all_fields(cred_types: list, config=None) -> list:
 
 def combined_login_prompts(cred_types: list, config=None) -> list:
     """Deduplicated login prompts across multiple credential types (by field_name)."""
-    return _combine_fields(cred_types, "login_prompts", "CUSTOM_LOGIN_PROMPTS", config, key_fn=lambda p: p[0])
+    prompts = _combine_fields(cred_types, "login_prompts", "CUSTOM_LOGIN_PROMPTS", config, key_fn=lambda p: p[0])
+    if config is not None and getattr(config, "OAUTH_REDIRECT_URI_REQUIRED", True) is False:
+        prompts = [prompt for prompt in prompts if prompt[0] != "REDIRECT_URI"]
+    return prompts
 
 
 def combined_ephemeral_fields(cred_types: list, config=None) -> list:

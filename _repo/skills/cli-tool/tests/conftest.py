@@ -98,6 +98,10 @@ def _required_credential_types_for_list_commands(
         for module_file in _command_module_files(commands_dir)
     }
     flat_module = pkg_dir / "commands.py"
+    if not package_modules and not flat_module.is_file():
+        main_module = pkg_dir / "main.py"
+        if main_module.is_file() and _command_credentials_from_module(main_module):
+            flat_module = main_module
     flat_credentials = None
     if package_modules and flat_module.is_file():
         pytest.fail(
@@ -111,7 +115,7 @@ def _required_credential_types_for_list_commands(
             if len(parts := command.split()) >= 2
             and parts[0] not in SKIP_GROUPS
         }
-        if len(command_groups) > 1:
+        if len(command_groups) > 1 and flat_module.name != "main.py":
             pytest.fail(
                 f"{cli_name} uses flat commands.py but exposes multiple list-command groups: "
                 f"{', '.join(sorted(command_groups))}. Use commands/<group>.py modules instead."
@@ -133,7 +137,11 @@ def _required_credential_types_for_list_commands(
             command_credentials = flat_credentials
         else:
             command_credentials = _command_credentials_from_module(module_file)
-        required_types.update(command_credentials.get(parts[-1], []))
+        required_types.update(
+            command_credentials.get(cmd_path)
+            or command_credentials.get(" ".join(parts[1:]))
+            or command_credentials.get(parts[-1], [])
+        )
 
     return sorted(required_types)
 

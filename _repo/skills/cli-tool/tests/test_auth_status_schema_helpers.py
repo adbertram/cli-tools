@@ -72,7 +72,7 @@ def test_validate_payload_reports_missing_credential_authenticated_as_schema_err
     assert errors == ["profile default credential_types[api_key] missing authenticated"]
 
 
-def test_validate_payload_rejects_unauthenticated_credential_type():
+def test_validate_payload_allows_unused_unauthenticated_credential_type():
     payload, errors = parse_and_validate_stdout(
         """
         {
@@ -106,6 +106,33 @@ def test_validate_payload_rejects_unauthenticated_credential_type():
     )
 
     assert payload is not None
+    assert errors == []
+
+
+def test_validate_payload_rejects_authenticated_profile_with_no_authenticated_type():
+    payload, errors = parse_and_validate_stdout(
+        """
+        {
+          "profiles": [
+            {
+              "name": "default",
+              "auth_type": "default",
+              "active": true,
+              "authenticated": true,
+              "credential_types": {
+                "api_key": {
+                  "credentials_saved": true,
+                  "api_test": "failed: revoked",
+                  "authenticated": false
+                }
+              }
+            }
+          ]
+        }
+        """
+    )
+
+    assert payload is not None
     assert errors == [
-        "profile default credential_types[browser_session].authenticated must be true in auth status output"
+        "profile default must have at least one authenticated credential type"
     ]

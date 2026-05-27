@@ -136,7 +136,8 @@ def oauth_login(config, force: bool) -> None:
 
     # Resolve redirect URI: .env overrides class default
     redirect_uri = config.redirect_uri or config.OAUTH_REDIRECT_URI
-    if not redirect_uri:
+    redirect_uri_required = getattr(config, "OAUTH_REDIRECT_URI_REQUIRED", True)
+    if not redirect_uri and redirect_uri_required:
         print_error("No redirect URI configured. Set REDIRECT_URI in .env or OAUTH_REDIRECT_URI on Config.")
         raise typer.Exit(1)
 
@@ -149,9 +150,10 @@ def oauth_login(config, force: bool) -> None:
     # Build auth URL
     auth_params = {
         "client_id": config.client_id,
-        "redirect_uri": redirect_uri,
         "response_type": "code",
     }
+    if redirect_uri:
+        auth_params["redirect_uri"] = redirect_uri
 
     if config.OAUTH_SCOPES:
         auth_params["scope"] = " ".join(config.OAUTH_SCOPES)
@@ -186,9 +188,10 @@ def oauth_login(config, force: bool) -> None:
     token_data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": redirect_uri,
         **extra_data,
     }
+    if redirect_uri:
+        token_data["redirect_uri"] = redirect_uri
 
     if code_verifier:
         token_data["code_verifier"] = code_verifier
