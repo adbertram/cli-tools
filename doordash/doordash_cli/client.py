@@ -33,6 +33,7 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+_STORE_ID_RE = re.compile(r"/(?:convenience/)?store/(\d+)")
 _UUID_RESOLVE_LIMIT = 1000
 _QUERIES_DIR = Path(__file__).parent / "data" / "queries"
 
@@ -255,28 +256,69 @@ class DoordashClient:
 
     @cached
     def list_stores(self, limit: int = 50) -> List[Restaurant]:
-        lat = self.config.default_latitude
-        lng = self.config.default_longitude
-        if lat is None or lng is None:
-            location = self._get_user_location()
-            lat, lng = location["lat"], location["lng"]
+        page = self.browser.get_page(f"{self.BASE_URL}/home")
+        page.wait_for_selector('a[href*="/store/"], a[href*="/convenience/store/"]', timeout=15000)
+        page.wait_for_timeout(3000)
+        raw_rows = page.evaluate(
+            """() => {
+                const seen = new Set();
+                const anchors = Array.from(
+                  document.querySelectorAll('a[href*="/store/"], a[href*="/convenience/store/"]')
+                );
+                const rows = [];
+                for (const anchor of anchors) {
+                  const href = anchor.href || "";
+                  if (!href || seen.has(href)) continue;
+                  const text = (anchor.innerText || "").trim();
+                  if (!text || !text.includes("\\n")) continue;
+                  seen.add(href);
+                  rows.push({
+                    href,
+                    text,
+                    image: anchor.querySelector("img")?.src || null,
+                  });
+                }
+                return rows;
+            }"""
+        ) or []
 
         restaurants: List[Restaurant] = []
-        offset = 0
-        page_size = min(self.MAX_PAGE_SIZE, limit)
-        while len(restaurants) < limit:
-            data = self._graphql(
-                "getFeedV2",
-                {"offset": offset, "limit": page_size, "lat": lat, "lng": lng},
+        seen_ids: set[str] = set()
+        for row in raw_rows:
+            if len(restaurants) >= limit:
+                break
+            href = row.get("href") or ""
+            match = _STORE_ID_RE.search(href)
+            if not match:
+                continue
+            store_id = match.group(1)
+            if store_id in seen_ids:
+                continue
+            text_lines = [line.strip() for line in (row.get("text") or "").splitlines() if line.strip()]
+            if not text_lines:
+                continue
+
+            text_blob = " | ".join(text_lines)
+            rating_match = re.search(r"\b([0-5](?:\.\d)?)\b", text_blob)
+            minutes_match = re.search(r"\b(\d+)\s+min\b", text_blob)
+            distance_match = re.search(r"\b(\d+(?:\.\d+)?)\s+mi\b", text_blob)
+
+            restaurants.append(
+                Restaurant(
+                    id=store_id,
+                    name=text_lines[0],
+                    description=None,
+                    headerImgUrl=row.get("image"),
+                    rating=float(rating_match.group(1)) if rating_match else None,
+                    deliveryFeeCents=None,
+                    deliveryMinutes=int(minutes_match.group(1)) if minutes_match else None,
+                    distanceMiles=float(distance_match.group(1)) if distance_match else None,
+                    isOpen="closed" not in text_blob.lower(),
+                    cuisines=[],
+                )
             )
-            feed = data.get("storeFeed") or {}
-            rows = feed.get("stores") or []
-            if not rows:
-                break
-            restaurants.extend(Restaurant(**row) for row in rows[: limit - len(restaurants)])
-            if not feed.get("hasMore"):
-                break
-            offset = feed.get("nextOffset") or (offset + len(rows))
+            seen_ids.add(store_id)
+
         return restaurants
 
     def _get_user_location(self) -> Dict[str, float]:

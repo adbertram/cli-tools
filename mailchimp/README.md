@@ -21,26 +21,22 @@ mailchimp --help
 
 ### Setup
 
-1. Copy the example environment file:
-   ```bash
-   cd <cli-tools-root>/mailchimp
-   cp .env.example .env
-   ```
-
-2. Get your API key from Mailchimp:
+1. Get your API key from Mailchimp:
    - Log in to Mailchimp
    - Go to https://us1.admin.mailchimp.com/account/api/
    - Create or copy an existing API key
    - Format: `your-key-dc` (e.g., `abc123def456-us6`)
 
-3. Configure authentication:
+2. Configure authentication:
    ```bash
    mailchimp auth login --api-key YOUR_API_KEY
    # OR use interactive prompt:
    mailchimp auth login
+   # OR provide the key on stdin:
+   printf '%s\n' "$MAILCHIMP_API_KEY" | mailchimp auth login
    ```
 
-4. Verify authentication:
+3. Verify authentication:
    ```bash
    mailchimp auth status
    ```
@@ -53,8 +49,13 @@ mailchimp --help
 # Login with API key
 mailchimp auth login --api-key YOUR_API_KEY
 
+# Re-prompt and replace the stored key
+mailchimp auth login --force
+
+# Replace the stored key non-interactively
+mailchimp auth login --force --api-key YOUR_API_KEY
+
 # Check authentication status
-mailchimp auth status
 mailchimp auth status
 
 # Logout (clear credentials)

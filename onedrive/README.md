@@ -50,7 +50,7 @@ onedrive items download DRIVE_ID /Documents/file.pdf ./downloaded.pdf
 ### Authentication
 
 Authentication method depends on your profile's `AUTH_METHOD` setting:
-- `az_cli` - Uses Azure CLI credentials (must run `az login` first)
+- `az_cli` - Uses Azure CLI user credentials (must run `az login` with a user account; service principals cannot call the delegated `/me` endpoints this CLI uses)
 - `msal_device_code` - Uses MSAL device code flow (enter a code at microsoft.com/devicelogin)
 
 ```bash

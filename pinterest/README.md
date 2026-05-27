@@ -38,6 +38,9 @@ pinterest account list --table
 # Get the authenticated Pinterest account
 pinterest account get
 
+# Validate the current account against its ID
+pinterest account get ACCOUNT_ID
+
 # Show a subset of fields
 pinterest account get --properties "id,username,monthly_views"
 

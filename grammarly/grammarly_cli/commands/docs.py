@@ -1,7 +1,7 @@
 """Grammarly Docs commands.
 
 Manage Grammarly documents using cookie-based authentication.
-Requires browser session cookies from app.grammarly.com.
+Requires browser-session cookies from app.grammarly.com.
 
 To get cookies:
     1. Open https://app.grammarly.com in your browser and log in
@@ -9,7 +9,8 @@ To get cookies:
     3. Find any request to grammarly.com
     4. Copy the 'Cookie' request header value
     5. Save to file: echo 'grauth=xxx; csrf-token=xxx; ...' > ~/.grammarly_cookies
-    Or set env var: export GRAMMARLY_COOKIES='grauth=xxx; csrf-token=xxx; ...'
+       or export GRAMMARLY_COOKIES='grauth=xxx; csrf-token=xxx; ...'
+    6. Run: grammarly auth login --credential-type browser_session
 """
 import typer
 import random
@@ -163,15 +164,15 @@ def docs_new(
 
 COMMAND_CREDENTIALS = {
     "get": [
-        "custom"
+        "browser_session"
     ],
     "list": [
-        "custom"
+        "browser_session"
     ],
     "new": [
-        "custom"
+        "browser_session"
     ],
     "read": [
-        "custom"
+        "browser_session"
     ]
 }

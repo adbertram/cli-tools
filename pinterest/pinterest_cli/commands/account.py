@@ -63,6 +63,10 @@ def account_list(
 @app.command("get")
 @command
 def account_get(
+    account_id: str | None = typer.Argument(
+        None,
+        help="Authenticated Pinterest account ID to validate against the current account",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: str | None = typer.Option(
         None,
@@ -78,6 +82,10 @@ def account_get(
 ):
     """Get the authenticated Pinterest user account."""
     account = get_client().get_user_account(ad_account_id=ad_account_id)
+    if account_id is not None and str(account.id) != str(account_id):
+        raise typer.BadParameter(
+            f"Authenticated account id is {account.id}; received {account_id}."
+        )
 
     if properties:
         selected = apply_properties_to_item(account, properties)

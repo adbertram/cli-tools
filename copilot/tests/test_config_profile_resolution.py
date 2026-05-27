@@ -3,6 +3,7 @@ import types
 
 import pytest
 
+from copilot_cli import client as copilot_client
 from copilot_cli.config import Config, _reset_config
 from copilot_cli.commands.mcp import _acquire_mcp_token
 
@@ -139,3 +140,63 @@ def test_mcp_token_acquisition_uses_only_active_profile(tmp_path, monkeypatch):
             "https://login.microsoftonline.com/tenant-id",
             ["api://resource-id/mcp.tools"],
         )
+
+
+def test_general_access_token_uses_azure_cli_even_when_service_principal_fields_exist(monkeypatch):
+    """Normal CLI commands must keep using Azure CLI delegated auth.
+
+    Profiles can carry client-secret fields for specific command groups, but
+    the shared Dataverse/Graph token path must not silently switch the whole
+    CLI onto service-principal auth.
+    """
+
+    class MixedAuthConfig:
+        def has_service_principal_auth(self):
+            return True
+
+        def has_cli_auth(self):
+            return True
+
+    seen = {}
+
+    def fake_get_config():
+        return MixedAuthConfig()
+
+    def fake_azure_cli(resource):
+        seen["azure_cli"] = resource
+        return "azure-cli-token"
+
+    def fake_service_principal(resource):
+        seen["service_principal"] = resource
+        return "service-principal-token"
+
+    monkeypatch.setattr(copilot_client, "get_config", fake_get_config)
+    monkeypatch.setattr(copilot_client, "get_access_token_from_azure_cli", fake_azure_cli)
+    monkeypatch.setattr(copilot_client, "_get_access_token_from_service_principal", fake_service_principal)
+
+    token = copilot_client.get_access_token("https://graph.microsoft.com")
+
+    assert token == "azure-cli-token"
+    assert seen == {"azure_cli": "https://graph.microsoft.com"}
+
+
+def test_config_prefers_azure_cli_auth_method_for_mixed_profiles(tmp_path, monkeypatch):
+    profiles = _setup_profiles_dir(tmp_path, monkeypatch)
+
+    profile = profiles / "default" / ".env"
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    profile.write_text(
+        "\n".join(
+            [
+                "ACTIVE=true",
+                "DATAVERSE_URL=https://delegated.example.crm.dynamics.com",
+            ]
+        )
+        + "\n"
+    )
+
+    monkeypatch.setattr(Config, "has_service_principal_auth", lambda self: True)
+
+    config = Config()
+
+    assert config.get_auth_method() == "azure_cli"

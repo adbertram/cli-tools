@@ -52,35 +52,37 @@ def _get_az_cmd() -> str:
 
 # ==================== Token Cache (MSAL) ====================
 
-def _get_cache_path() -> Path:
-    """Get the token cache file path."""
-    cache_dir = Path.home() / ".onedrive-cli"
-    cache_dir.mkdir(exist_ok=True)
-    return cache_dir / "token_cache.json"
+def _get_cache_path(config=None) -> Path:
+    """Get the per-profile token cache file path."""
+    active_config = config or get_config()
+    return active_config.get_profile_data_dir() / "token_cache.json"
 
 
-def _load_cache() -> msal.SerializableTokenCache:
+def _load_cache(config=None) -> msal.SerializableTokenCache:
     """Load token cache from disk."""
     cache = msal.SerializableTokenCache()
-    cache_path = _get_cache_path()
+    cache_path = _get_cache_path(config)
     if cache_path.exists():
         cache.deserialize(cache_path.read_text())
     return cache
 
 
-def _save_cache(cache: msal.SerializableTokenCache) -> None:
+def _save_cache(cache: msal.SerializableTokenCache, config=None) -> None:
     """Save token cache to disk."""
     if cache.has_state_changed:
-        cache_path = _get_cache_path()
+        cache_path = _get_cache_path(config)
         cache_path.write_text(cache.serialize())
         # Secure the file (readable only by owner)
         cache_path.chmod(0o600)
 
 
-def _get_app(cache: Optional[msal.SerializableTokenCache] = None) -> msal.PublicClientApplication:
+def _get_app(
+    config=None,
+    cache: Optional[msal.SerializableTokenCache] = None,
+) -> msal.PublicClientApplication:
     """Get MSAL public client application."""
     if cache is None:
-        cache = _load_cache()
+        cache = _load_cache(config)
 
     return msal.PublicClientApplication(
         client_id=CLIENT_ID,
@@ -154,6 +156,18 @@ def _get_az_cli_status() -> dict:
         return {"authenticated": False, "error": "Azure CLI not logged in. Run 'az login'."}
 
     data = json.loads(result.stdout)
+    user = data.get("user", {})
+
+    if user.get("type") != "user":
+        return {
+            "authenticated": False,
+            "error": (
+                "Azure CLI is logged in as a service principal. "
+                "OneDrive commands use delegated Microsoft Graph /me endpoints. "
+                "Run 'az login' with a user account or switch to an "
+                "'msal_device_code' profile."
+            ),
+        }
 
     try:
         _verify_drive_access(_get_az_cli_token())
@@ -170,7 +184,7 @@ def _get_az_cli_status() -> dict:
 
 # ==================== MSAL Device Code Auth ====================
 
-def _get_msal_token() -> str:
+def _get_msal_token(config=None) -> str:
     """Get access token from MSAL cache.
 
     Returns:
@@ -179,14 +193,14 @@ def _get_msal_token() -> str:
     Raises:
         RuntimeError: If not authenticated
     """
-    cache = _load_cache()
-    app = _get_app(cache)
+    cache = _load_cache(config)
+    app = _get_app(config=config, cache=cache)
 
     accounts = app.get_accounts()
     if accounts:
         result = app.acquire_token_silent(SCOPES, account=accounts[0])
         if result and "access_token" in result:
-            _save_cache(cache)
+            _save_cache(cache, config)
             return result["access_token"]
 
     raise RuntimeError(
@@ -194,14 +208,14 @@ def _get_msal_token() -> str:
     )
 
 
-def _get_msal_status() -> dict:
+def _get_msal_status(config=None) -> dict:
     """Get MSAL authentication status.
 
     Returns:
         Dict with authentication status and user info
     """
-    cache = _load_cache()
-    app = _get_app(cache)
+    cache = _load_cache(config)
+    app = _get_app(config=config, cache=cache)
 
     accounts = app.get_accounts()
     if not accounts:
@@ -216,7 +230,7 @@ def _get_msal_status() -> dict:
             _verify_drive_access(result["access_token"])
         except RuntimeError as exc:
             return {"authenticated": False, "error": str(exc)}
-        _save_cache(cache)
+        _save_cache(cache, config)
         return {
             "authenticated": True,
             "user": account.get("username", "Unknown"),
@@ -248,7 +262,7 @@ def get_access_token() -> str:
     if method == "az_cli":
         return _get_az_cli_token()
     elif method == "msal_device_code":
-        return _get_msal_token()
+        return _get_msal_token(config)
     else:
         raise RuntimeError(
             f"Unknown or missing AUTH_METHOD: {method!r}. "
@@ -279,14 +293,12 @@ def login_handler(config, force: bool) -> None:
         print_info("Verifying Azure CLI authentication...")
         status = _get_az_cli_status()
         if not status.get("authenticated"):
-            raise RuntimeError(
-                "Azure CLI is not authenticated. Run 'az login' first."
-            )
+            raise RuntimeError(status.get("error") or "Azure CLI is not authenticated. Run 'az login' first.")
         print_success(f"Azure CLI authenticated as {status.get('user', 'Unknown')}")
 
     elif method == "msal_device_code":
         if force:
-            cache_path = _get_cache_path()
+            cache_path = _get_cache_path(config)
             if cache_path.exists():
                 cache_path.unlink()
             print_info("Cleared cached MSAL tokens.")
@@ -295,8 +307,8 @@ def login_handler(config, force: bool) -> None:
         print_info("Starting device code authentication...")
         print_info("You will need to open a browser and enter a code.\n")
 
-        cache = _load_cache()
-        app = _get_app(cache)
+        cache = _load_cache(config)
+        app = _get_app(config=config, cache=cache)
 
         flow = app.initiate_device_flow(scopes=SCOPES)
 
@@ -312,7 +324,7 @@ def login_handler(config, force: bool) -> None:
             error = result.get("error_description", result.get("error", "Unknown error"))
             raise RuntimeError(f"Authentication failed: {error}")
 
-        _save_cache(cache)
+        _save_cache(cache, config)
         user = result.get("id_token_claims", {}).get("preferred_username", "Unknown")
         print_success(f"Authenticated as {user}")
 
@@ -340,9 +352,12 @@ def test_handler(config) -> dict:
 
     try:
         if method == "az_cli":
+            status = _get_az_cli_status()
+            if not status.get("authenticated"):
+                return {"api_test": f"failed: {status.get('error', 'Azure CLI is not authenticated.')}"}
             token = _get_az_cli_token()
         elif method == "msal_device_code":
-            token = _get_msal_token()
+            token = _get_msal_token(config)
         else:
             return {"api_test": f"failed: unknown AUTH_METHOD {method!r}"}
         _verify_drive_access(token)
@@ -363,7 +378,7 @@ def logout() -> None:
     if method == "az_cli":
         print("Azure CLI auth — run 'az logout' to clear Azure CLI session.")
     elif method == "msal_device_code":
-        cache_path = _get_cache_path()
+        cache_path = _get_cache_path(config)
         if cache_path.exists():
             cache_path.unlink()
     else:
@@ -387,7 +402,7 @@ def get_auth_status() -> dict:
     if method == "az_cli":
         status = _get_az_cli_status()
     elif method == "msal_device_code":
-        status = _get_msal_status()
+        status = _get_msal_status(config)
     else:
         status = {"authenticated": False, "error": f"Unknown AUTH_METHOD: {method!r}"}
 

@@ -8,13 +8,13 @@ from .config import get_config
 
 app = create_app(
     name="grammarly",
-    help="CLI interface for Grammarly API",
+    help="CLI interface for Grammarly plagiarism and docs",
     version=__version__,
 )
 
 # Register command modules
 from .commands import auth, plagiarism, docs
-app.add_typer(auth.app, name="auth", help="Manage Grammarly API authentication")
+app.add_typer(auth.app, name="auth", help="Manage Grammarly authentication")
 register_commands(app, get_config, plagiarism, name="plagiarism", help="Plagiarism detection commands")
 register_commands(app, get_config, docs, name="docs", help="Manage Grammarly documents")
 app.add_typer(create_cache_app(get_config), name="cache")

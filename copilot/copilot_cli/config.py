@@ -272,10 +272,10 @@ class Config(BaseConfig):
         return bool(self.dataverse_url)
 
     def get_auth_method(self) -> str:
-        if self.has_service_principal_auth():
-            return "service_principal"
-        elif self.has_cli_auth():
+        if self.has_cli_auth():
             return "azure_cli"
+        elif self.has_service_principal_auth():
+            return "service_principal"
         else:
             return "none"
 

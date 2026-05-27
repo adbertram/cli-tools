@@ -1,13 +1,14 @@
 # Grammarly CLI
 
-Command-line interface for the Grammarly Plagiarism Detection API.
+Command-line interface for Grammarly plagiarism and docs workflows.
 
 ## Features
 
 - Check documents for plagiarism
+- List, inspect, and read Grammarly docs with browser-session cookies
 - Support for multiple file formats (.doc, .docx, .odt, .txt, .rtf)
 - Text input via stdin or command argument
-- OAuth 2.0 authentication with automatic token refresh
+- Separate auth paths for plagiarism OAuth credentials and docs cookies
 - Rich table output formatting
 
 ## Installation
@@ -27,22 +28,27 @@ pip install -e .
 
 ## Authentication
 
-1. Get your OAuth credentials from [Grammarly Developer Portal](https://developer.grammarly.com/)
+Grammarly uses two credential paths:
 
-2. Run login to save credentials:
+1. Plagiarism API commands use OAuth client credentials from the
+   [Grammarly Developer Portal](https://developer.grammarly.com/).
+2. Docs commands use cookies from a logged-in `app.grammarly.com` session.
+
+Configure plagiarism credentials:
 ```bash
 grammarly auth login
 ```
 
-Or provide credentials directly:
+Configure only the docs cookie path after seeding a cookie source:
 ```bash
-grammarly auth login --client-id YOUR_ID --client-secret YOUR_SECRET
+export GRAMMARLY_COOKIES='grauth=xxx; csrf-token=xxx; ...'
+grammarly auth login --credential-type browser_session
 ```
 
-Or edit `.env` directly:
+The docs cookie import also accepts the legacy file path:
 ```bash
-GRAMMARLY_CLIENT_ID=your_client_id
-GRAMMARLY_CLIENT_SECRET=your_client_secret
+echo 'grauth=xxx; csrf-token=xxx; ...' > ~/.grammarly_cookies
+grammarly auth login --credential-type browser_session
 ```
 
 Check authentication status:
@@ -93,17 +99,37 @@ grammarly plagiarism status abc-123-def
 ### Authentication
 
 ```bash
-# Configure credentials
+# Configure plagiarism OAuth credentials
 grammarly auth login
 
-# Re-authenticate (clear existing credentials)
-grammarly auth login --force
+# Import docs cookies into the active profile
+grammarly auth login --credential-type browser_session
+
+# Re-authenticate one credential path
+grammarly auth login --credential-type custom --force
+grammarly auth login --credential-type browser_session --force
 
 # Check status
 grammarly auth status
 
-# Clear credentials
+# Clear all saved auth state
 grammarly auth logout
+```
+
+### Docs
+
+```bash
+# List recent Grammarly docs
+grammarly docs list --limit 10
+
+# Get doc metadata
+grammarly docs get 123456
+
+# Read doc content
+grammarly docs read 123456
+
+# Generate a new doc URL
+grammarly docs new --title "Draft title"
 ```
 
 ## Examples
@@ -194,16 +220,17 @@ grammarly plagiarism status xyz-789-abc
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication is stored in the CLI-tools user data directory under:
 
 ```bash
-# OAuth Credentials (required)
-GRAMMARLY_CLIENT_ID=your_client_id
-GRAMMARLY_CLIENT_SECRET=your_client_secret
+~/.local/share/cli-tools/grammarly/
+```
 
-# OAuth tokens (managed automatically)
-GRAMMARLY_ACCESS_TOKEN=<populated_on_first_api_call>
-GRAMMARLY_TOKEN_EXPIRES_AT=<timestamp>
+Legacy docs cookies in `~/.grammarly_cookies` are still accepted and can be
+imported into the active auth profile with:
+
+```bash
+grammarly auth login --credential-type browser_session
 ```
 
 ## Constraints

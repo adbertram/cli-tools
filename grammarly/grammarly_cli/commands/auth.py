@@ -11,7 +11,7 @@ def _login_handler(config, force: bool):
     from ..client import ClientError, GrammarlyClient
 
     try:
-        GrammarlyClient(config=config).authenticate()
+        GrammarlyClient(config=config).obtain_access_token()
     except ClientError as e:
         print_error(str(e))
         raise typer.Exit(2)

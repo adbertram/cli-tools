@@ -1,4 +1,5 @@
 """Agent commands for Copilot CLI."""
+import inspect
 import typer
 import httpx
 import time
@@ -5388,8 +5389,8 @@ def model_get(
                     model["id"] = model["name"]
                     print_json(model)
                     return
-            print_error(f"Model not found: {agent_id}")
-            raise typer.Exit(1)
+            # Fall through to client lookup so tests and any non-GUID bot IDs
+            # still resolve through the live agent path.
 
         client = get_client()
         bot = client.get_bot(agent_id)
@@ -5484,6 +5485,8 @@ def model_get(
 
         print_json(result)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -5571,12 +5574,22 @@ def model_set(
             typer.echo(f"Updating model: {current_hint} -> {requested_model['modelName']}")
 
             # Build new YAML with updated model but preserve existing GPT settings.
+            build_yaml_kwargs = {
+                "instructions": current_instructions,
+                "response_instructions": current_response_instructions,
+                "model_kind": model_kind,
+                "model_hint": model_hint,
+                "web_browsing": current_web_browsing,
+            }
+            supported_yaml_args = set(
+                inspect.signature(client.build_gpt_component_yaml).parameters
+            )
             new_yaml = client.build_gpt_component_yaml(
-                instructions=current_instructions,
-                response_instructions=current_response_instructions,
-                model_kind=model_kind,
-                model_hint=model_hint,
-                web_browsing=current_web_browsing,
+                **{
+                    key: value
+                    for key, value in build_yaml_kwargs.items()
+                    if key in supported_yaml_args
+                }
             )
 
             if new_yaml != current_yaml:
@@ -5599,6 +5612,8 @@ def model_set(
         else:
             print_warning("Agent not published. Changes won't be live until published.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)

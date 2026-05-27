@@ -66,11 +66,11 @@ class GrammarlyClient:
         """Initialize Grammarly client from configuration."""
         self.config = config if config is not None else get_config()
 
-        if not self.config.has_credentials():
-            missing = self.config.get_missing_credentials()
+        if not self.config.has_api_credentials():
+            missing = self.config.CUSTOM_REQUIRED_FIELDS
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
-                "Add GRAMMARLY_CLIENT_ID and GRAMMARLY_CLIENT_SECRET to .env file."
+                "Run 'grammarly auth login --credential-type custom' to configure them."
             )
 
         self.base_url = self.config.base_url
@@ -86,7 +86,7 @@ class GrammarlyClient:
         """Get headers with current access token."""
         token = self.config.access_token
         if not token:
-            self.authenticate()
+            self.obtain_access_token()
             token = self.config.access_token
 
         return {
@@ -96,8 +96,8 @@ class GrammarlyClient:
             "User-Agent": "grammarly-cli",
         }
 
-    def authenticate(self):
-        """Authenticate using OAuth 2.0 Client Credentials flow.
+    def obtain_access_token(self):
+        """Obtain an OAuth access token with the client-credentials flow.
 
         POST to auth endpoint with Basic auth header and form data.
         Stores access_token and expires_at in .env.
@@ -207,7 +207,7 @@ class GrammarlyClient:
 
                 # Reactive token refresh on 401 (only once)
                 if response.status_code == 401 and not token_refreshed:
-                    self.authenticate()
+                    self.obtain_access_token()
                     token_refreshed = True
                     # Retry with new token
                     headers = self._get_auth_headers()
@@ -372,9 +372,11 @@ class DocsClient:
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         jitter: float = DEFAULT_JITTER,
+        config=None,
     ):
         """Initialize Docs client from configuration."""
-        self.config = get_config()
+        self.config = config if config is not None else get_config()
+        self._browser = self.config.get_browser()
 
         if not self.config.has_cookies():
             raise ClientError(

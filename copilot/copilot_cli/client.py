@@ -10793,10 +10793,14 @@ def _get_access_token_from_service_principal(resource: str) -> str:
 
 
 def get_access_token(resource: str) -> str:
-    """Get an access token, routing to service principal (MSAL) or Azure CLI as appropriate."""
-    config = get_config()
-    if config.has_service_principal_auth():
-        return _get_access_token_from_service_principal(resource)
+    """Get an access token for general CLI operations.
+
+    The public Copilot CLI contract uses Azure CLI delegated auth for its
+    normal Dataverse/Graph command surface. Service principal credentials can
+    coexist in the active profile for command groups that explicitly opt into
+    client-credential auth, but they must not silently hijack the default
+    Dataverse client path.
+    """
     return get_access_token_from_azure_cli(resource)
 
 
