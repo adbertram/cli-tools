@@ -13,6 +13,7 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.OAUTH]
     DEFAULT_BASE_URL = "https://apis.fedex.com"
     OAUTH_TOKEN_URL = "https://apis.fedex.com/oauth/token"
+    OAUTH_TOKEN_EXPIRES = False
 
     def __init__(self, profile=None):
         super().__init__(

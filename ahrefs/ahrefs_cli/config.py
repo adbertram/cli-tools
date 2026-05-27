@@ -15,6 +15,7 @@ class Config(BaseConfig):
 
     DIST_NAME = "ahrefs-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
+    BROWSER_SESSION_REQUIRES_API_TEST = True
     DEFAULT_BASE_URL = "https://app.ahrefs.com"
     ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
     ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")

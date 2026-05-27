@@ -9,6 +9,7 @@ class Config(BaseConfig):
     DEFAULT_BASE_URL = "https://www.cvs.com"
     ADDITIONAL_AUTH_FIELDS = ("API_KEY", "FINGERPRINT", "USERNAME", "PASSWORD")
     ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("API_KEY", "FINGERPRINT", "USERNAME", "PASSWORD")
+    BROWSER_SESSION_REQUIRES_API_TEST = True
 
     def __init__(self, profile=None):
         super().__init__(
@@ -25,12 +26,15 @@ class Config(BaseConfig):
         return self._get("FINGERPRINT")
 
     def test_connection(self):
-        """Test if browser session is active and JWT is valid."""
+        """Test if the browser session can authorize CVS mcapi requests."""
         try:
-            from .client import get_client
+            from .client import EXPERIENCE_IDS, get_client
             client = get_client(config=self)
-            client._ensure_valid_jwt()
-            return {"api_test": "passed", "jwt_valid": True}
+            client._make_request(
+                EXPERIENCE_IDS["PATIENTS"],
+                refresh_on_unauthorized=False,
+            )
+            return {"api_test": "passed"}
         except Exception as e:
             return {"api_test": f"failed: {str(e)}"}
 

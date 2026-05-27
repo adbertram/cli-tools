@@ -3,25 +3,18 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 
 from .config import get_config
-from .applescript import (
-    check_accessibility_permissions,
-    test_cliclick_permissions,
-    get_accessibility_instructions,
-)
 from .models import (
     Position,
     Color,
     Script,
     ExecutionResult,
-    CliclickStatus,
     create_position,
     create_color,
     create_script,
     create_execution_result,
-    create_status,
 )
 
 
@@ -47,7 +40,6 @@ class CliclickClient:
 
         Args:
             skip_availability_check: If True, don't check CLI availability on init.
-                                     Used for auth status check when CLI may not exist.
         """
         self.config = get_config()
         self._skip_check = skip_availability_check
@@ -234,90 +226,6 @@ class CliclickClient:
             if isinstance(e, ClientError):
                 raise
             raise ClientError(f"Failed to run commands: {e}")
-
-    # ==================== Auth Methods ====================
-
-    def auth_login(self, force: bool = False) -> Dict[str, Any]:
-        """Stub login - cliclick requires no authentication.
-
-        Args:
-            force: Ignored, kept for interface compatibility
-
-        Returns:
-            Dict with success status and message
-        """
-        # Check if cliclick is available and has permissions
-        status = self.auth_status()
-
-        if status["authenticated"]:
-            return {
-                "success": True,
-                "message": "cliclick is available and Accessibility permissions are granted.",
-            }
-        else:
-            return {
-                "success": False,
-                "message": status.get("message", "cliclick not ready"),
-            }
-
-    def auth_logout(self) -> Dict[str, Any]:
-        """Stub logout - cliclick requires no authentication.
-
-        Returns:
-            Dict with success status and message
-        """
-        return {
-            "success": True,
-            "message": "cliclick is a local tool with no authentication to clear.",
-        }
-
-    def auth_status(self) -> Dict[str, Any]:
-        """Check cliclick availability and Accessibility permissions.
-
-        Returns:
-            Dict with:
-            - authenticated: True if cliclick works (available + permissions)
-            - cli_available: True if cliclick binary found
-            - cli_path: Path to cliclick binary
-            - version: cliclick version string
-            - accessibility_permissions: True if permissions granted
-            - message: Human-readable status message
-        """
-        cli_available = self.config.is_cli_available()
-        cli_path = self.config.get_cli_executable() if cli_available else None
-        version = self.config.get_cli_version() if cli_available else None
-
-        if not cli_available:
-            return {
-                "authenticated": False,
-                "cli_available": False,
-                "cli_path": None,
-                "version": None,
-                "accessibility_permissions": False,
-                "message": "cliclick not found. Install with: brew install cliclick",
-            }
-
-        # Test actual cliclick execution (this checks real permissions)
-        has_permissions = test_cliclick_permissions(cli_path)
-
-        if has_permissions:
-            return {
-                "authenticated": True,
-                "cli_available": True,
-                "cli_path": cli_path,
-                "version": version,
-                "accessibility_permissions": True,
-                "message": "cliclick is ready.",
-            }
-        else:
-            return {
-                "authenticated": False,
-                "cli_available": True,
-                "cli_path": cli_path,
-                "version": version,
-                "accessibility_permissions": False,
-                "message": get_accessibility_instructions(),
-            }
 
     # ==================== Mouse Methods ====================
 

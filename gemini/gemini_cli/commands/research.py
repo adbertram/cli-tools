@@ -10,6 +10,31 @@ app = typer.Typer(help="Deep Research operations using Gemini Deep Research Agen
 DEFAULT_AGENT = "deep-research-pro-preview-12-2025"
 
 
+def _get_interaction_text(interaction) -> Optional[str]:
+    """Return research text across supported Interactions SDK shapes."""
+    output_text = getattr(interaction, "output_text", None)
+    if output_text:
+        return output_text
+
+    outputs = getattr(interaction, "outputs", None)
+    if outputs:
+        latest_output = outputs[-1]
+        text = getattr(latest_output, "text", None)
+        if text:
+            return text
+
+    steps = getattr(interaction, "steps", None) or []
+    for step in reversed(steps):
+        if getattr(step, "type", None) != "model_output":
+            continue
+        for content in reversed(getattr(step, "content", None) or []):
+            text = getattr(content, "text", None)
+            if text:
+                return text
+
+    return None
+
+
 @app.command("start")
 def research_start(
     prompt: Optional[str] = typer.Argument(None, help="Research prompt/question"),
@@ -165,9 +190,10 @@ def _run_streaming_research(client, prompt: str, agent: str, timeout: int):
         print_info("\nStream complete but no text received. Fetching final output...")
         try:
             final_interaction = client.client.interactions.get(interaction_id)
-            if final_interaction.status == "completed" and final_interaction.outputs:
+            final_text = _get_interaction_text(final_interaction)
+            if final_interaction.status == "completed" and final_text:
                 print("\n--- Research Output ---\n")
-                print(final_interaction.outputs[-1].text)
+                print(final_text)
                 got_text_output = True
         except Exception as e:
             print_error(f"Failed to fetch final output: {e}")
@@ -180,9 +206,10 @@ def _run_streaming_research(client, prompt: str, agent: str, timeout: int):
             try:
                 interaction = client.client.interactions.get(interaction_id)
                 if interaction.status == "completed":
-                    if interaction.outputs:
+                    interaction_text = _get_interaction_text(interaction)
+                    if interaction_text:
                         print("\n--- Research Output ---\n")
-                        print(interaction.outputs[-1].text)
+                        print(interaction_text)
                     print("\n")
                     print_success("Research complete!")
                     return
@@ -240,8 +267,9 @@ def _run_polling_research(client, prompt: str, agent: str, timeout: int):
         if interaction.status == "completed":
             print("\n")
             # Get the final output
-            if interaction.outputs:
-                print(interaction.outputs[-1].text)
+            interaction_text = _get_interaction_text(interaction)
+            if interaction_text:
+                print(interaction_text)
             print("\n")
             print_success("Research complete!")
             break
@@ -276,9 +304,10 @@ def research_status(
 
         print(f"\nStatus: {interaction.status}")
 
-        if interaction.status == "completed" and interaction.outputs:
+        interaction_text = _get_interaction_text(interaction)
+        if interaction.status == "completed" and interaction_text:
             print("\n--- Research Output ---\n")
-            print(interaction.outputs[-1].text)
+            print(interaction_text)
             print_success("\nResearch complete!")
         elif interaction.status == "failed":
             error_msg = getattr(interaction, 'error', 'Unknown error')

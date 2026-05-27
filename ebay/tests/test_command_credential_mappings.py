@@ -48,7 +48,7 @@ def test_seller_group_commands_are_oauth_only():
 
 
 def test_seller_listings_commands_are_oauth_only():
-    """Seller listings commands use OAuth; browser scraping lives elsewhere."""
+    """Seller listings commands use OAuth; marketplace search is public."""
     credentials = _load_command_credentials("listings")
 
     for command_name in (
@@ -63,9 +63,9 @@ def test_seller_listings_commands_are_oauth_only():
     ):
         assert credentials[command_name] == ["oauth_authorization_code"]
 
-    assert credentials["search"] == ["browser_session"]
+    assert credentials["search"] == ["no_auth"]
 
 
-def test_marketplace_listing_search_stays_browser_backed():
-    """Top-level marketplace search still requires a browser session."""
-    assert _load_command_credentials("search") == {"search": ["browser_session"]}
+def test_marketplace_listing_search_requires_no_auth():
+    """Top-level marketplace search uses a browser, but not a logged-in session."""
+    assert _load_command_credentials("search") == {"search": ["no_auth"]}

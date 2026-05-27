@@ -23,9 +23,6 @@ pip install -e .
 ## Quick Start
 
 ```bash
-# Check if cliclick is available and has permissions
-cliclick auth status
-
 # Get current mouse position
 cliclick mouse position
 
@@ -37,23 +34,6 @@ cliclick keyboard type "Hello World"
 ```
 
 ## Commands
-
-### Authentication
-
-Check CLI availability and macOS Accessibility permissions.
-
-```bash
-# Check status (exit 0 if ready, exit 2 if not)
-cliclick auth status
-cliclick auth status --table
-
-# Login (verifies permissions)
-cliclick auth login
-cliclick auth login --force
-
-# Logout (no-op for local tool)
-cliclick auth logout
-```
 
 ### Mouse Commands
 
@@ -194,7 +174,6 @@ cliclick scripts list | jq '.[].name'
 Use `--table` for human-readable output:
 
 ```bash
-cliclick auth status --table
 cliclick scripts list --table
 ```
 
@@ -245,7 +224,6 @@ This CLI uses Pydantic models for type-safe data handling:
 | `Color` | RGB color value | `r`, `g`, `b` |
 | `Script` | Automation script | `name`, `path`, `variables`, `command_count` |
 | `ExecutionResult` | Command result | `success`, `output`, `duration_ms` |
-| `CliclickStatus` | CLI status | `authenticated`, `cli_available`, `version` |
 
 ## Requirements
 

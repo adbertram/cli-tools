@@ -8,7 +8,7 @@ Commands:
 - search: Search completed/sold listings by keywords
 """
 COMMAND_CREDENTIALS = {
-    "search": ["browser_session"],
+    "search": ["no_auth"],
 }
 
 from typing import Optional

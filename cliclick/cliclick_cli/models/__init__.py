@@ -9,10 +9,9 @@ Model Architecture:
 - Color: RGB color values
 - Script: Automation script metadata
 - ExecutionResult: Command execution outcome
-- CliclickStatus: CLI availability and permissions
 
 Usage:
-    from .models import Position, Color, Script, CliclickStatus
+    from .models import Position, Color, Script, ExecutionResult
 
     # Create from parsed cliclick output
     pos = Position(x=100, y=200)
@@ -27,13 +26,11 @@ from .item import (
     Color,
     Script,
     ExecutionResult,
-    CliclickStatus,
     # Factory functions
     create_position,
     create_color,
     create_script,
     create_execution_result,
-    create_status,
 )
 
 __all__ = [
@@ -44,11 +41,9 @@ __all__ = [
     "Color",
     "Script",
     "ExecutionResult",
-    "CliclickStatus",
     # Factory functions
     "create_position",
     "create_color",
     "create_script",
     "create_execution_result",
-    "create_status",
 ]

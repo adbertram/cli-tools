@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-shopsalvationarmy = "shopsalvationarmy_cli.main:app"
+shopsalvationarmy = "shopsalvationarmy_cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

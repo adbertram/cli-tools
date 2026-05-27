@@ -11,10 +11,9 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, mouse, keyboard, scripts
+from .commands import mouse, keyboard, scripts
 from .commands import exec as exec_cmd
 
-app.add_typer(auth.app, name="auth", help="Check availability and permissions")
 app.add_typer(mouse.app, name="mouse", help="Mouse control commands")
 app.add_typer(keyboard.app, name="keyboard", help="Keyboard control commands")
 app.add_typer(scripts.app, name="scripts", help="Manage automation scripts")

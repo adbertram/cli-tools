@@ -112,6 +112,8 @@ def list_albums(
 
         if not albums:
             print_info("No albums found")
+            if not table:
+                print_json([])
             return
 
         # Convert to dictionaries
@@ -126,6 +128,8 @@ def list_albums(
 
         if not albums_data:
             print_info("No albums match the filters")
+            if not table:
+                print_json([])
             return
 
         # Apply property selection

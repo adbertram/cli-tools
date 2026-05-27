@@ -24,6 +24,7 @@ EXPERIENCE_IDS = {
 }
 
 API_ENDPOINT = "https://www.cvs.com/mcapi/client/experience/v2/load"
+REQUEST_TIMEOUT = 30
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -115,6 +116,7 @@ class CvsClient:
         self,
         experience_id: str,
         extra_data: Optional[Dict[str, Any]] = None,
+        refresh_on_unauthorized: bool = True,
     ) -> Dict[str, Any]:
         """Make a POST request to the CVS experience API.
 
@@ -152,10 +154,11 @@ class CvsClient:
             url,
             headers=headers,
             data=json.dumps({"data": body_data}),
+            timeout=REQUEST_TIMEOUT,
         )
 
         # On 401, refresh JWT and retry once
-        if response.status_code == 401:
+        if response.status_code == 401 and refresh_on_unauthorized:
             self._jwt = self._refresh_jwt()
             jwt = self._jwt
             headers["Cookie"] = f"access_token={jwt}; token_type=Bearer"
@@ -163,6 +166,7 @@ class CvsClient:
                 url,
                 headers=headers,
                 data=json.dumps({"data": body_data}),
+                timeout=REQUEST_TIMEOUT,
             )
 
         if not response.ok:

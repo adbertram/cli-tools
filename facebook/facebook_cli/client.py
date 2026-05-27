@@ -89,18 +89,42 @@ class FacebookClient:
     def _snapshot(self, page) -> str:
         """Take an accessibility tree snapshot and return the YAML content.
 
-        Uses Playwright's aria_snapshot() to get the same YAML format
-        that parsers expect. Accesses the underlying Playwright page
-        since PlaywrightService's locator wrapper doesn't expose aria_snapshot.
+        Uses the shared browser driver's Playwright-backed
+        ``aria_snapshot()`` helper so the client stays on the
+        BrowserAutomation abstraction.
         """
         t0 = time.monotonic()
         try:
-            raw_page = page._get_page()
-            result = raw_page.locator("body").aria_snapshot()
+            result = page.aria_snapshot(timeout=5000)
             logger.debug("_snapshot: captured in %.2fs (%d chars)", time.monotonic() - t0, len(result))
             return result
         except Exception as e:
             raise ClientError(f"Failed to capture page snapshot: {e}")
+
+    def _assert_authenticated_page(self, page, requested_url: str, surface: str) -> None:
+        """Fail fast when Facebook serves a login or challenge page."""
+        current_url = getattr(page, "url", "") or ""
+        if any(token in current_url for token in ("/login", "two_step_verification", "/checkpoint")):
+            raise ClientError(
+                f"Facebook redirected {surface} to {current_url} "
+                f"(requested: {requested_url}). Run 'facebook auth login --force' to authenticate."
+            )
+        blocked = page.evaluate(
+            """() => ({
+                loginForm: !!document.querySelector('input[name="email"], input[name="pass"]'),
+                recaptcha: !!document.querySelector('iframe[src*="recaptcha"], iframe#captcha-recaptcha')
+            })"""
+        )
+        if isinstance(blocked, dict) and blocked.get("recaptcha"):
+            raise ClientError(
+                f"Facebook presented a reCAPTCHA challenge for {surface}. "
+                "Complete 'facebook auth login --force' in a headed browser."
+            )
+        if isinstance(blocked, dict) and blocked.get("loginForm"):
+            raise ClientError(
+                f"Facebook served a login form for {surface} at {current_url}. "
+                f"(requested: {requested_url}). Run 'facebook auth login --force' to authenticate."
+            )
 
     def _wait_for_rendered_text(self, page, text: str, selector: str, timeout_ms: int) -> None:
         """Wait until text appears outside an editable textbox in a page region.
@@ -473,10 +497,22 @@ class FacebookClient:
         print_info(f"Loaded {len(all_items)} {label}(s) after {scroll_count} scroll(s)")
         return all_items[:limit]
 
+    def _dismiss_marketplace_login_dialog(self, page) -> None:
+        """Close Facebook's login upsell dialog on public Marketplace pages."""
+        try:
+            close_button = page.get_by_role("button", name="Close")
+            if close_button.count() == 0:
+                return
+            close_button.first.click()
+            page.wait_for_timeout(1000)
+        except Exception:
+            logger.debug("_dismiss_marketplace_login_dialog: close button not actionable")
+
     def _paginated_fetch(self, url: str, status_msg: str, limit: int) -> List[MarketplaceListing]:
         """Navigate to a Marketplace URL and scroll to collect listings."""
         print_info(status_msg)
         page = self._get_page(url)
+        self._dismiss_marketplace_login_dialog(page)
 
         def _extract(p):
             snapshot = self._snapshot(p)
@@ -541,6 +577,7 @@ class FacebookClient:
         print_info(f"Getting listing {item_id}...")
 
         page = self._get_page(url)
+        self._dismiss_marketplace_login_dialog(page)
 
         info = self._extract_detail_page_info(page)
         listing = MarketplaceListing(
@@ -572,7 +609,9 @@ class FacebookClient:
 
         t_start = time.monotonic()
         print_info("Loading Messenger conversations...")
-        page = self._get_page("https://www.facebook.com/messages/t/")
+        requested_url = "https://www.facebook.com/messages/t/"
+        page = self._get_page(requested_url)
+        self._assert_authenticated_page(page, requested_url, "Messenger conversations")
         logger.debug("list_conversations: page loaded in %.2fs", time.monotonic() - t_start)
         page.wait_for_timeout(1000)  # extra wait for messenger
 
@@ -595,7 +634,9 @@ class FacebookClient:
         from .messenger_parsers import extract_messages_from_snapshot
 
         print_info(f"Loading conversation {conversation_id}...")
-        page = self._get_page(f"{MESSENGER_BASE}/{conversation_id}/")
+        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        page = self._get_page(requested_url)
+        self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
         page.wait_for_timeout(1000)  # extra wait for messenger
 
         snapshot = self._snapshot(page)
@@ -617,7 +658,9 @@ class FacebookClient:
             Dict with send status.
         """
         print_info(f"Sending message to conversation {conversation_id}...")
-        page = self._get_page(f"{MESSENGER_BASE}/{conversation_id}/")
+        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        page = self._get_page(requested_url)
+        self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
 
         # Type the message into the composer and send
         escaped_text = json.dumps(text)
@@ -1792,7 +1835,9 @@ class FacebookClient:
         from .messenger_parsers import extract_conversations_from_snapshot
 
         print_info("Loading message requests...")
-        page = self._get_page("https://www.facebook.com/messages/filtered/")
+        requested_url = "https://www.facebook.com/messages/filtered/"
+        page = self._get_page(requested_url)
+        self._assert_authenticated_page(page, requested_url, "Messenger message requests")
         page.wait_for_timeout(1000)  # extra wait
 
         snapshot = self._snapshot(page)

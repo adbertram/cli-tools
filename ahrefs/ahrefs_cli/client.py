@@ -4,6 +4,7 @@ This client wraps AhrefsBrowser with site-specific methods for
 Ahrefs Site Audit operations. Uses the internal v4 API endpoints
 via fetch_json() for authenticated requests.
 """
+import os
 import random
 import time
 from typing import Any, Callable, Dict, List, Optional
@@ -16,6 +17,7 @@ from .browser import AhrefsBrowser, BrowserAutomationError
 from .cache import cache_exists, get_cached_report, save_cached_report
 from .models import (
     Crawl,
+    CrawlStatus,
     DuplicateContent,
     Issue,
     IssueCategory,
@@ -134,18 +136,155 @@ class AhrefsClient:
             message = result.get("message", "")
             raise ClientError(f"API returned status {status}: {message}")
 
+        if isinstance(result, list) and len(result) == 2 and result[0] == "Error":
+            raise ClientError(f"API error: {result[1]}")
+
         if (
             isinstance(result, list)
             and len(result) == 2
             and result[0] == "Ok"
-            and isinstance(result[1], dict)
         ):
             return result[1]
 
-        if isinstance(result, list) and len(result) == 2 and result[0] == "Error":
-            raise ClientError(f"API error: {result[1]}")
+        if isinstance(result, list):
+            return result
 
         raise ClientError(f"Unexpected API response: {result!r}")
+
+    @staticmethod
+    def _select_report_crawl(crawls: List[Crawl]) -> Optional[Crawl]:
+        """Pick the newest crawl that can back a report.
+
+        Ahrefs still lists failed crawls in project history, but the overview
+        and issue endpoints need the latest crawl with usable report data.
+        Prefer the newest crawl that is not marked failed; otherwise fall back
+        to the newest crawl so callers still get the best available context.
+        """
+        if not crawls:
+            return None
+        for crawl in crawls:
+            if crawl.status != CrawlStatus.FAILED:
+                return crawl
+        return crawls[0]
+
+    @staticmethod
+    def _build_timestamp_context(crawls: List[Crawl], target_crawl_id: str) -> Optional[Dict[str, Optional[str]]]:
+        """Build the timestamp payload Ahrefs overview endpoints now require."""
+        if not crawls or not target_crawl_id:
+            return None
+
+        target_index = next(
+            (index for index, crawl in enumerate(crawls) if crawl.id == target_crawl_id),
+            None,
+        )
+        if target_index is None:
+            return None
+
+        target = crawls[target_index]
+        if not target.crawl_date:
+            return None
+
+        compare_with = None
+        for crawl in crawls[target_index + 1 :]:
+            if crawl.crawl_date:
+                compare_with = crawl.crawl_date
+                break
+        if compare_with is None:
+            compare_with = target.crawl_date
+
+        return {
+            "timestamp": target.crawl_date,
+            "compare_with": compare_with,
+        }
+
+    def _build_healthscore_timestamps(
+        self,
+        crawls: List[Crawl],
+        target_crawl_id: str,
+        limit: int = 10,
+    ) -> List[List[Any]]:
+        """Build the timestamp series Ahrefs healthscore endpoint expects."""
+        context = self._build_timestamp_context(crawls, target_crawl_id)
+        if context is None:
+            return []
+
+        target_index = next(
+            (index for index, crawl in enumerate(crawls) if crawl.id == target_crawl_id),
+            0,
+        )
+        usable_crawls = [crawl for crawl in crawls[target_index:] if crawl.crawl_date][:limit]
+        if not usable_crawls:
+            return []
+
+        payload: List[List[Any]] = []
+        for index, crawl in enumerate(usable_crawls):
+            compare_with = (
+                usable_crawls[index + 1].crawl_date
+                if index + 1 < len(usable_crawls)
+                else crawl.crawl_date
+            )
+            payload.append(
+                [
+                    crawl.crawl_date,
+                    {
+                        "timestamp": crawl.crawl_date,
+                        "compare_with": compare_with,
+                    },
+                ]
+            )
+        return payload
+
+    @staticmethod
+    def _extract_markdown_text(value: Any) -> Optional[str]:
+        if isinstance(value, list) and len(value) >= 2 and value[0] == "Markdown":
+            return value[1]
+        if isinstance(value, str):
+            return value
+        return None
+
+    @staticmethod
+    def _map_issue_category(raw_type: Optional[str]) -> IssueCategory:
+        if not raw_type:
+            return IssueCategory.OTHER
+
+        normalized = raw_type.lower()
+        if "html" in normalized:
+            return IssueCategory.HTML
+        if "meta" in normalized:
+            return IssueCategory.META
+        if "redirect" in normalized:
+            return IssueCategory.REDIRECT
+        if "link" in normalized:
+            return IssueCategory.LINKS
+        if "image" in normalized:
+            return IssueCategory.IMAGES
+        if "social" in normalized:
+            return IssueCategory.SOCIAL
+        if "content" in normalized or "quality" in normalized:
+            return IssueCategory.CONTENT
+        if "performance" in normalized or "speed" in normalized:
+            return IssueCategory.PERFORMANCE
+        if "resource" in normalized or "javascript" in normalized or "css" in normalized:
+            return IssueCategory.RESOURCES
+        if "lang" in normalized or "locale" in normalized or "hreflang" in normalized:
+            return IssueCategory.LOCALIZATION
+        return IssueCategory.OTHER
+
+    @staticmethod
+    def _map_issue_severity(raw_level: Optional[str]) -> IssueSeverity:
+        if not raw_level:
+            return IssueSeverity.WARNING
+
+        normalized = raw_level.lower()
+        if normalized in {"critical", "error", "errors", "very_bad"}:
+            return IssueSeverity.ERROR
+        if normalized in {"warning", "warnings", "neutral"}:
+            return IssueSeverity.WARNING
+        if normalized in {"notice", "notices"}:
+            return IssueSeverity.NOTICE
+        if normalized in {"info", "informational"}:
+            return IssueSeverity.INFO
+        return IssueSeverity.WARNING
 
     def ensure_authenticated(self, path: str = "/"):
         """Ensure user is authenticated before accessing a page."""
@@ -282,7 +421,12 @@ class AhrefsClient:
         return self._retry_fetch(fetch, operation_name="get_crawl_details")
 
     @cached
-    def get_overview_metrics(self, project_id: int) -> OverviewMetrics:
+    def get_overview_metrics(
+        self,
+        project_id: int,
+        crawls: Optional[List[Crawl]] = None,
+        target_crawl: Optional[Crawl] = None,
+    ) -> OverviewMetrics:
         """Get overview metrics for a project.
 
         Fetches from multiple API endpoints and combines results.
@@ -293,82 +437,97 @@ class AhrefsClient:
         Returns:
             OverviewMetrics model
         """
+        if crawls is None:
+            crawls = self.list_crawls(project_id)
+        if target_crawl is None:
+            target_crawl = self._select_report_crawl(crawls)
+        if target_crawl is None:
+            return OverviewMetrics()
+
         raw_metrics = {}
+        timestamp_context = self._build_timestamp_context(crawls, target_crawl.id)
+        if timestamp_context is None:
+            return OverviewMetrics()
 
-        # Fetch health score
+        # Latest crawl details now expose the most reliable summary counts.
         try:
-
-            def fetch_health():
-                return self.fetch_api("saCrawlsHealthscore", {"project_id": str(project_id)})
-
-            health_data = self._retry_fetch(fetch_health, operation_name="health_score")
-            raw_metrics["health"] = health_data
+            raw_metrics["crawl"] = self.get_crawl_details(project_id, target_crawl.id)
         except ClientError:
-            pass  # Continue with partial data
+            raw_metrics["crawl"] = {}
 
-        # Fetch issue charts/overview
         try:
+            def fetch_health():
+                return self.fetch_api(
+                    "saCrawlsHealthscore",
+                    {
+                        "project_id": str(project_id),
+                        "global_filter_id": None,
+                        "timestamps": self._build_healthscore_timestamps(crawls, target_crawl.id),
+                    },
+                )
 
+            raw_metrics["health"] = self._retry_fetch(fetch_health, operation_name="health_score")
+        except ClientError:
+            raw_metrics["health"] = {}
+
+        try:
             def fetch_overview():
-                return self.fetch_api("saOverviewIssueCharts", {"project_id": str(project_id)})
+                return self.fetch_api(
+                    "saOverviewIssueCharts",
+                    {
+                        "project_id": str(project_id),
+                        "timestamp": timestamp_context,
+                        "global_filter_id": None,
+                    },
+                )
 
-            overview_data = self._retry_fetch(
+            raw_metrics["overview"] = self._retry_fetch(
                 fetch_overview, operation_name="overview_charts"
             )
-            raw_metrics["overview"] = overview_data
         except ClientError:
-            pass
+            raw_metrics["overview"] = []
 
-        # Fetch counts
-        try:
+        crawl_counts = raw_metrics.get("crawl", {}).get("counts", {})
+        charts = raw_metrics.get("overview") or []
 
-            def fetch_counts():
-                return self.fetch_api("saGetCountsByFilters", {"project_id": str(project_id)})
+        issues_chart = next(
+            (chart for chart in charts if chart.get("id") == "issues-types"),
+            {},
+        )
+        issue_buckets = issues_chart.get("buckets", [])
+        bucket_counts = {
+            bucket.get("key"): bucket.get("count", 0)
+            for bucket in issue_buckets
+        }
 
-            counts_data = self._retry_fetch(fetch_counts, operation_name="counts")
-            raw_metrics["counts"] = counts_data
-        except ClientError:
-            pass
-
-        # Fetch counts by issues
-        try:
-
-            def fetch_issue_counts():
-                return self.fetch_api("saGetCountsByIssues", {"project_id": str(project_id)})
-
-            issue_counts = self._retry_fetch(
-                fetch_issue_counts, operation_name="issue_counts"
-            )
-            raw_metrics["issue_counts"] = issue_counts
-        except ClientError:
-            pass
-
-        # Extract metrics from raw data
-        health = raw_metrics.get("health", {})
-        overview = raw_metrics.get("overview", {})
-        counts = raw_metrics.get("counts", {})
-        issue_counts = raw_metrics.get("issue_counts", {})
+        health_scores = raw_metrics.get("health", {}).get("healthscores", [])
+        health_score = None
+        for timestamp, score in health_scores:
+            if timestamp == target_crawl.crawl_date:
+                health_score = score
+                break
+        if health_score is None and health_scores:
+            health_score = health_scores[0][1]
 
         return OverviewMetrics(
-            health_score=health.get("score", health.get("health_score")),
-            pages_crawled=counts.get("pages_crawled", counts.get("total_pages", 0)),
-            total_issues=issue_counts.get("total", 0),
-            errors_count=issue_counts.get("errors", 0),
-            warnings_count=issue_counts.get("warnings", 0),
-            notices_count=issue_counts.get("notices", 0),
-            pages_with_issues=counts.get("pages_with_issues", 0),
-            internal_urls=counts.get("internal_urls", 0),
-            external_urls=counts.get("external_urls", 0),
-            broken_links=counts.get("broken_links", 0),
-            redirects=counts.get("redirects", 0),
-            orphan_pages=counts.get("orphan_pages", 0),
-            duplicate_content=counts.get("duplicate_content", 0),
+            health_score=health_score,
+            pages_crawled=crawl_counts.get("crawled", 0),
+            total_issues=issues_chart.get("total", 0),
+            errors_count=bucket_counts.get("critical", 0),
+            warnings_count=bucket_counts.get("warning", 0),
+            notices_count=bucket_counts.get("notice", 0),
+            internal_urls=crawl_counts.get("total_requests_internal", 0),
+            external_urls=crawl_counts.get("total_requests_external", 0),
             raw_metrics=raw_metrics,
         )
 
     @cached
     def get_project_issues(
-        self, project_id: int, severity_filter: Optional[List[str]] = None
+        self,
+        project_id: int,
+        severity_filter: Optional[List[str]] = None,
+        crawls: Optional[List[Crawl]] = None,
+        target_crawl: Optional[Crawl] = None,
     ) -> IssuesByCategory:
         """Get all issues for a project, grouped by category.
 
@@ -382,22 +541,57 @@ class AhrefsClient:
         """
         if severity_filter is None:
             severity_filter = ["error", "warning"]  # Default: exclude info/notice
+        if crawls is None:
+            crawls = self.list_crawls(project_id)
+        if target_crawl is None:
+            target_crawl = self._select_report_crawl(crawls)
+        if target_crawl is None:
+            return IssuesByCategory()
+
+        timestamp_context = self._build_timestamp_context(crawls, target_crawl.id)
+        if timestamp_context is None:
+            return IssuesByCategory()
 
         def fetch():
-            return self.fetch_api("saGetProjectIssues", {"project_id": str(project_id)})
+            return self.fetch_api(
+                "saGetProjectIssues",
+                {
+                    "project_id": str(project_id),
+                    "timestamp": timestamp_context,
+                    "global_filter_id": None,
+                },
+            )
 
         data = self._retry_fetch(fetch, operation_name="get_project_issues")
 
         # Group issues by category
         issues_by_cat = {cat.value: [] for cat in IssueCategory}
 
-        for item in data.get("issues", data.get("items", [])):
-            # Filter by severity
-            severity = item.get("severity", "warning").lower()
-            if severity not in severity_filter:
+        if isinstance(data, dict):
+            items = data.get("issues", data.get("items", []))
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+
+        for item in items:
+            issue_payload = item.get("issue", {})
+            props = issue_payload.get("props", {})
+            raw_level = ((props.get("level") or ["warning"])[0] or "warning")
+            severity = self._map_issue_severity(raw_level)
+            if severity.value not in severity_filter:
                 continue
 
-            issue = create_issue(item)
+            issue = create_issue(
+                {
+                    "id": issue_payload.get("issue_id", ""),
+                    "title": props.get("name", "Unknown issue"),
+                    "category": self._map_issue_category(((props.get("typ") or [None])[0])),
+                    "severity": severity.value,
+                    "description": self._extract_markdown_text(props.get("description")),
+                    "count": item.get("count", 0),
+                }
+            )
             cat_key = issue.category.value
             issues_by_cat[cat_key].append(issue)
 
@@ -433,44 +627,65 @@ class AhrefsClient:
         # Check cache first
         if not refresh and cache_exists(project_id):
             cached = get_cached_report(project_id)
-            if cached:
+            if cached and not cached.errors:
                 return cached
 
-        errors = []
-        crawl_date = ""
-        crawl_id = ""
-        domain = None
+        previous_cache_enabled = os.environ.get("CACHE_ENABLED")
+        if refresh:
+            os.environ["CACHE_ENABLED"] = "false"
 
-        # Get project info
         try:
-            project = self.get_project(project_id)
-            domain = project.domain
-        except ClientError as e:
-            errors.append(f"get_project: {e}")
+            errors = []
+            crawl_date = ""
+            crawl_id = ""
+            domain = None
+            crawls: List[Crawl] = []
+            report_crawl: Optional[Crawl] = None
 
-        # Get crawls and latest crawl info
-        try:
-            crawls = self.list_crawls(project_id)
-            if crawls:
-                latest = crawls[0]  # Most recent first
-                crawl_date = latest.crawl_date
-                crawl_id = latest.id
-        except ClientError as e:
-            errors.append(f"list_crawls: {e}")
+            # Get project info
+            try:
+                project = self.get_project(project_id)
+                domain = project.domain
+            except ClientError as e:
+                errors.append(f"get_project: {e}")
 
-        # Get overview metrics
-        try:
-            overview = self.get_overview_metrics(project_id)
-        except ClientError as e:
-            errors.append(f"get_overview_metrics: {e}")
-            overview = OverviewMetrics()
+            # Get crawls and latest crawl info
+            try:
+                crawls = self.list_crawls(project_id)
+                report_crawl = self._select_report_crawl(crawls)
+                if report_crawl:
+                    crawl_date = report_crawl.crawl_date
+                    crawl_id = report_crawl.id
+            except ClientError as e:
+                errors.append(f"list_crawls: {e}")
 
-        # Get issues by category
-        try:
-            issues = self.get_project_issues(project_id)
-        except ClientError as e:
-            errors.append(f"get_project_issues: {e}")
-            issues = IssuesByCategory()
+            # Get overview metrics
+            try:
+                overview = self.get_overview_metrics(
+                    project_id,
+                    crawls=crawls,
+                    target_crawl=report_crawl,
+                )
+            except ClientError as e:
+                errors.append(f"get_overview_metrics: {e}")
+                overview = OverviewMetrics()
+
+            # Get issues by category
+            try:
+                issues = self.get_project_issues(
+                    project_id,
+                    crawls=crawls,
+                    target_crawl=report_crawl,
+                )
+            except ClientError as e:
+                errors.append(f"get_project_issues: {e}")
+                issues = IssuesByCategory()
+        finally:
+            if refresh:
+                if previous_cache_enabled is None:
+                    os.environ.pop("CACHE_ENABLED", None)
+                else:
+                    os.environ["CACHE_ENABLED"] = previous_cache_enabled
 
         # Build the report
         report = SiteAuditReport(
@@ -487,7 +702,8 @@ class AhrefsClient:
         )
 
         # Cache the report
-        save_cached_report(project_id, report)
+        if not errors:
+            save_cached_report(project_id, report)
 
         return report
 

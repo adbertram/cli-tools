@@ -36,23 +36,23 @@ class Config(BaseConfig):
         return self._get("MOZ_BASE_URL") or self.DEFAULT_BASE_URL
 
     def test_connection(self) -> Optional[dict]:
-        """Verify the API key with a lightweight JSON-RPC call."""
+        """Verify the API key with a no-quota JSON-RPC call."""
         from .client import MozClient, ClientError
         try:
             client = MozClient(config=self)
-            client._make_jsonrpc_request(
-                "data.keyword.metrics.fetch",
-                {
-                    "serp_query": {
-                        "keyword": "moz",
-                        "locale": "en-US",
-                        "device": "desktop",
-                        "engine": "google",
-                    }
-                },
+            response = client._make_jsonrpc_request(
+                "quota.lookup",
+                {"path": "api.limits.data.rows"},
                 retry=False,
             )
-            return {"api_test": "passed"}
+            quota = response.get("quota", {})
+            return {
+                "api_test": "passed",
+                "quota_path": quota.get("path"),
+                "quota_allotted": quota.get("allotted"),
+                "quota_used": quota.get("used"),
+                "quota_reset": quota.get("reset"),
+            }
         except ClientError as e:
             return {"api_test": f"failed: {e}"}
 

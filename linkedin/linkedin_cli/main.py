@@ -32,6 +32,21 @@ POST_COLUMNS = [
 PERSON_URN_PREFIX = "urn:li:person:"
 ORGANIZATION_URN_PREFIXES = ("urn:li:organization:", "urn:li:organizationBrand:")
 
+COMMAND_CREDENTIALS = {
+    "user posts list": ["oauth_authorization_code"],
+    "user posts get": ["oauth_authorization_code"],
+    "user posts create": ["oauth_authorization_code"],
+    "user posts update": ["oauth_authorization_code"],
+    "user posts delete": ["oauth_authorization_code"],
+    "user posts search": ["oauth_authorization_code"],
+    "page posts list": ["oauth_authorization_code"],
+    "page posts get": ["oauth_authorization_code"],
+    "page posts create": ["oauth_authorization_code"],
+    "page posts update": ["oauth_authorization_code"],
+    "page posts delete": ["oauth_authorization_code"],
+    "page posts search": ["oauth_authorization_code"],
+}
+
 app = create_app(
     name="linkedin",
     help="Create and manage LinkedIn member and page posts",

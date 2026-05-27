@@ -21,7 +21,16 @@ app = typer.Typer(help="Keyword research and analysis", no_args_is_help=True)
 
 @app.command("list")
 def keywords_list(
-    keywords: str = typer.Option(..., "--keyword", "-k", help="Comma-separated list of keywords"),
+    keywords: Optional[str] = typer.Argument(
+        None,
+        help="Comma-separated list of keywords",
+    ),
+    keyword_option: Optional[str] = typer.Option(
+        None,
+        "--keyword",
+        "-k",
+        help="Comma-separated list of keywords",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum keywords to return"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -37,8 +46,17 @@ def keywords_list(
         moz keywords list -k "seo,python" --properties "keyword,volume,difficulty"
     """
     try:
+        if keywords and keyword_option and keywords != keyword_option:
+            print_error("Pass keywords either positionally or with --keyword, not both")
+            raise typer.Exit(1)
+
+        keywords_value = keyword_option or keywords
+        if not keywords_value:
+            print_error("At least one keyword is required")
+            raise typer.Exit(1)
+
         # Parse comma-separated keywords
-        keyword_list = [kw.strip() for kw in keywords.split(",") if kw.strip()]
+        keyword_list = [kw.strip() for kw in keywords_value.split(",") if kw.strip()]
         if not keyword_list:
             print_error("At least one keyword is required")
             raise typer.Exit(1)

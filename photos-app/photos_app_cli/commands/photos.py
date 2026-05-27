@@ -96,6 +96,8 @@ def list_photos(
 
         if not photos:
             print_info("No photos found matching criteria")
+            if not table:
+                print_json([])
             return
 
         # Convert to dictionaries
@@ -107,6 +109,8 @@ def list_photos(
 
         if not photos_data:
             print_info("No photos match the filters")
+            if not table:
+                print_json([])
             return
 
         # Apply property selection

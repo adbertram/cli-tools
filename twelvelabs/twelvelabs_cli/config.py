@@ -12,6 +12,7 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DEFAULT_BASE_URL = "https://api.twelvelabs.io/v1.3"
     CUSTOM_REQUIRED_FIELDS = ["TWELVELABS_API_KEY"]
+    CUSTOM_LOGIN_PROMPTS = [("TWELVELABS_API_KEY", "TwelveLabs API key", True)]
     CUSTOM_SENSITIVE_FIELDS = ["TWELVELABS_API_KEY"]
 
     LOGIN_INSTRUCTIONS = (

@@ -13,7 +13,7 @@ class Config(BaseConfig):
     DIST_NAME = "ebay-cli"
 
     CREDENTIAL_TYPE = CredentialType.OAUTH_AUTHORIZATION_CODE
-    CREDENTIAL_TYPES = [CredentialType.OAUTH_AUTHORIZATION_CODE, CredentialType.BROWSER_SESSION]
+    CREDENTIAL_TYPES = [CredentialType.OAUTH_AUTHORIZATION_CODE]
     DEFAULT_BASE_URL = "https://api.ebay.com"
 
     # OAuth 2.0 configuration

@@ -21,6 +21,9 @@ ebay auth login
 # List your recent orders
 ebay seller orders list
 
+# Search public sold/completed marketplace listings
+ebay listings search "LEGO 75357" --sold --limit 5
+
 # Get details for a specific order
 ebay seller orders get 12-12345-12345
 ```
@@ -105,6 +108,16 @@ ebay categories tree 183448 --flat
 ```
 
 **Available fields:** categoryId, categoryName, level, path, isLeaf
+
+### Marketplace Search
+
+Marketplace search uses browser automation to scrape eBay's public sold and
+completed listing pages. It does not require a logged-in browser session.
+
+```bash
+ebay listings search "LEGO 75357" --sold --limit 5
+ebay listings search "LEGO bulk" --table
+```
 
 ### Seller Commands
 

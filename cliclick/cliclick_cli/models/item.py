@@ -5,7 +5,6 @@ Provides typed models for:
 - Color: RGB color values
 - Script: Automation script metadata
 - ExecutionResult: Command execution outcome
-- CliclickStatus: CLI availability and permission status
 """
 from typing import List, Optional
 
@@ -53,21 +52,6 @@ class ExecutionResult(CLIModel):
     commands_executed: int = 1
 
 
-class CliclickStatus(CLIModel):
-    """Status of cliclick CLI and permissions.
-
-    Used by auth status to report CLI availability and
-    macOS Accessibility permissions.
-    """
-
-    authenticated: bool  # True if cliclick is available AND has permissions
-    cli_available: bool
-    cli_path: Optional[str] = None
-    version: Optional[str] = None
-    accessibility_permissions: bool = False
-    message: str = ""
-
-
 # ==================== Factory Functions ====================
 
 
@@ -100,17 +84,4 @@ def create_execution_result(
         error=error,
         duration_ms=duration_ms,
         commands_executed=commands_executed,
-    )
-
-
-def create_status(
-    authenticated: bool,
-    cli_available: bool,
-    **kwargs,
-) -> CliclickStatus:
-    """Create a CliclickStatus model."""
-    return CliclickStatus(
-        authenticated=authenticated,
-        cli_available=cli_available,
-        **kwargs,
     )

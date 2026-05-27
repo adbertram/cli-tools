@@ -11,6 +11,7 @@ def parse_listing_link(text: str) -> Optional[Dict]:
         "Title in City, ST $36 $45"  (discounted + original price)
         "Title in $123 Ships to you"
         "Title in City, ST Free"
+        "Title, $123, City, ST, listing 1234567890"
     """
     # Location pattern: "City, ST" (city name + comma + 2-letter state)
     loc_pattern = r'([A-Z][a-zA-Z\s.]+,\s*[A-Z]{2})'
@@ -38,6 +39,18 @@ def parse_listing_link(text: str) -> Optional[Dict]:
     if match:
         return {"title": match.group(1).strip(), "price": match.group(2).strip()}
 
+    # "Title, $123, City, ST, listing 1234567890"
+    match = re.match(
+        r'^(.+?),\s*(\$[\d,]+(?:\.\d{2})?|Free),\s*((?:[^,]+,\s*[A-Z]{2})|Ships to you),\s*listing\s+\d+$',
+        text,
+    )
+    if match:
+        return {
+            "title": match.group(1).strip(),
+            "price": match.group(2).strip(),
+            "location": match.group(3).strip(),
+        }
+
     return None
 
 
@@ -57,7 +70,7 @@ def extract_listings_from_snapshot(snapshot_text: str) -> List[Dict]:
 
         # Look for link lines with marketplace item text
         # Pattern: - link "Title in City, ST $123" [ref=...] [cursor=pointer]:
-        link_match = re.match(r'^\s*- link "(.+?)"\s+\[ref=', line)
+        link_match = re.match(r'^\s*- link "(.+?)"(?:\s+\[ref=.*?\])?:?$', line)
         if link_match:
             link_text = link_match.group(1)
 
