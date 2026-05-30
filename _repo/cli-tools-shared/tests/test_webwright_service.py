@@ -130,6 +130,40 @@ def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monk
     assert result["title"] == "Fake title"
 
 
+def test_webwright_service_passes_local_cdp_options(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    monkeypatch.setattr(
+        webwright_module,
+        "_load_local_browser_environment",
+        lambda: _FakeEnvironment,
+    )
+    profile_dir = tmp_path / "profile"
+
+    service = WebwrightBrowserService(
+        "service-default",
+        browser_mode="local_cdp",
+        local_cdp_url="http://127.0.0.1:9224",
+        local_cdp_executable="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        local_cdp_new_page=True,
+        local_cdp_close_page_on_exit=True,
+        local_cdp_close_started_browser_on_exit=False,
+    )
+    service.browser_open("https://example.com", persistent_profile_dir=profile_dir)
+
+    env = _FakeEnvironment.instances[0]
+    assert env.kwargs["browser_mode"] == "local_cdp"
+    assert env.kwargs["local_cdp_url"] == "http://127.0.0.1:9224"
+    assert (
+        env.kwargs["local_cdp_executable"]
+        == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    )
+    assert env.kwargs["local_cdp_new_page"] is True
+    assert env.kwargs["local_cdp_close_page_on_exit"] is True
+    assert env.kwargs["local_cdp_close_started_browser_on_exit"] is False
+
+
 def test_webwright_service_exposes_page_helpers_and_deletes_profile(tmp_path, monkeypatch):
     from cli_tools_shared.browser import webwright as webwright_module
     from cli_tools_shared.browser.webwright import WebwrightBrowserService
@@ -189,10 +223,28 @@ def test_webwright_browser_automation_uses_webwright_service(monkeypatch):
     class _FakeService:
         instances = []
 
-        def __init__(self, session, *, browser_mode="local_persistent", timeout=60):
+        def __init__(
+            self,
+            session,
+            *,
+            browser_mode="local_persistent",
+            timeout=60,
+            local_cdp_url=None,
+            local_cdp_executable=None,
+            local_cdp_new_page=None,
+            local_cdp_close_page_on_exit=None,
+            local_cdp_close_started_browser_on_exit=None,
+        ):
             self.session = session
             self.browser_mode = browser_mode
             self.timeout = timeout
+            self.local_cdp_url = local_cdp_url
+            self.local_cdp_executable = local_cdp_executable
+            self.local_cdp_new_page = local_cdp_new_page
+            self.local_cdp_close_page_on_exit = local_cdp_close_page_on_exit
+            self.local_cdp_close_started_browser_on_exit = (
+                local_cdp_close_started_browser_on_exit
+            )
             _FakeService.instances.append(self)
 
     monkeypatch.setattr(webwright_module, "WebwrightBrowserService", _FakeService)
@@ -202,4 +254,5 @@ def test_webwright_browser_automation_uses_webwright_service(monkeypatch):
 
     assert service.session == auth_module._safe_daemon_key("custom-work")
     assert service.browser_mode == "local_persistent"
+    assert service.local_cdp_url is None
     assert browser._get_service() is service

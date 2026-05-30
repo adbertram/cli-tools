@@ -656,6 +656,46 @@ class BrowserHarnessService:
             return f"({code})({json.dumps(arg)})"
         return f"({code})()"
 
+    @staticmethod
+    def _decode_cdp_runtime_value(payload: Dict[str, Any], expression: str) -> Any:
+        if payload.get("exceptionDetails"):
+            details = payload["exceptionDetails"]
+            text = details.get("text") or "JavaScript evaluation failed"
+            raise BrowserHarnessError(f"{text}; expression: {expression[:200]}")
+
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            return None
+        if "value" in result:
+            return result["value"]
+        if "unserializableValue" in result:
+            value = result["unserializableValue"]
+            if value == "NaN":
+                return float("nan")
+            if value == "Infinity":
+                return float("inf")
+            if value == "-Infinity":
+                return float("-inf")
+            if value == "-0":
+                return -0.0
+            return value
+        return None
+
+    @staticmethod
+    def _find_frame_id_in_tree(frame_tree: Dict[str, Any], url_substr: str) -> Optional[str]:
+        frame = frame_tree.get("frame")
+        if isinstance(frame, dict) and url_substr in str(frame.get("url", "")):
+            frame_id = frame.get("id")
+            if isinstance(frame_id, str) and frame_id:
+                return frame_id
+        for child in frame_tree.get("childFrames", []) or []:
+            if not isinstance(child, dict):
+                continue
+            frame_id = BrowserHarnessService._find_frame_id_in_tree(child, url_substr)
+            if frame_id:
+                return frame_id
+        return None
+
     def evaluate(self, js: str, arg: Any = None) -> Any:
         self._require_open()
         try:
@@ -666,6 +706,66 @@ class BrowserHarnessService:
             if "undefined" in error_msg.lower() or "null" in error_msg.lower():
                 return None
             raise BrowserHarnessError(f"Eval error: {e}")
+
+    def iframe_target(self, url_substr: str) -> Optional[str]:
+        """Return the first iframe target or frame id containing ``url_substr``."""
+        self._require_open()
+        if not url_substr:
+            raise BrowserHarnessError("iframe_target: url_substr must be non-empty")
+        try:
+            target_id = self._bh.h.iframe_target(url_substr)
+            if target_id:
+                return target_id
+            frame_tree = self._bh.h.cdp("Page.getFrameTree")
+            if not isinstance(frame_tree, dict) or "frameTree" not in frame_tree:
+                return None
+            return self._find_frame_id_in_tree(frame_tree["frameTree"], url_substr)
+        except Exception as e:
+            raise BrowserHarnessError(f"iframe_target error: {e}") from e
+
+    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None) -> Any:
+        """Run JS inside the first iframe whose URL contains ``url_substr``."""
+        self._require_open()
+        helper_target_id = None
+        try:
+            helper_target_id = self._bh.h.iframe_target(url_substr)
+        except Exception:
+            helper_target_id = None
+        wrapped = self._wrap_callable_expression(js, arg)
+        if helper_target_id:
+            try:
+                return self._bh.h.js(wrapped, target_id=helper_target_id)
+            except Exception as e:
+                error_msg = str(e)
+                if "undefined" in error_msg.lower() or "null" in error_msg.lower():
+                    return None
+                raise BrowserHarnessError(f"Eval error: {e}") from e
+
+        frame_id = self.iframe_target(url_substr)
+        if not frame_id:
+            return None
+        try:
+            world = self._bh.h.cdp(
+                "Page.createIsolatedWorld",
+                frameId=frame_id,
+                worldName="cli-tools-iframe-eval",
+            )
+            context_id = world.get("executionContextId")
+            if not context_id:
+                return None
+            payload = self._bh.h.cdp(
+                "Runtime.evaluate",
+                contextId=context_id,
+                expression=wrapped,
+                returnByValue=True,
+                awaitPromise=True,
+            )
+            return self._decode_cdp_runtime_value(payload, wrapped)
+        except Exception as e:
+            error_msg = str(e)
+            if "undefined" in error_msg.lower() or "null" in error_msg.lower():
+                return None
+            raise BrowserHarnessError(f"Eval error: {e}") from e
 
     def page_eval(self, js: str, arg: Any = None) -> Dict[str, Any]:
         """Backward-compatible wrapper for legacy page-eval callers."""

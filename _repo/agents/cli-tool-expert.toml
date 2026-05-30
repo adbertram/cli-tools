@@ -254,4 +254,18 @@ Both methods reuse the existing `evaluate()` transport — no new daemon RPCs.
 **Gotchas:**
 - Compliance can still pass while the real launcher is broken if the suite skips auth paths and never exercises the now-broken non-auth bootstrap. Live launcher checks on actual `list` / `get` commands are what expose this.
 - If you leave service-prefixed root-config names in `.env.example`, `test_env_no_service_prefix` will fail even after runtime behavior is fixed.
+
+### Shared Auth Profile Flags Can Collide With Service-Level `--profile` Options
+
+**Context:** When a CLI command group already receives the standard shared auth-profile selector `--profile` from `cli_tools_shared`, but the service API also has its own domain concept called "profile" (model profile, agent profile, browser profile, rendering profile, etc.).
+
+**Key Facts:**
+- Treat the injected command-group `--profile` as reserved for selecting the saved authentication profile. Do not reuse `--profile` for a service-level option on the same command path.
+- In Manus v2, the API field is `agent_profile`. Exposing that as task-level `--profile` conflicted with the injected auth-profile option on `manus task ...`, producing ambiguous help and broken command parsing. The correct CLI flag is `--agent-profile` (or another service-specific name), while the shared `--profile` continues to select the saved auth profile.
+- Check the actual installed command help (`<tool> <group> --help` and affected subcommand `--help`) after wiring options. Typer/click collisions show up there immediately, even if unit tests still pass.
+- Regenerate skill metadata after renaming the flag so `usage.json`, `SKILL.md`, and README examples stop teaching the conflicting form.
+
+**Gotchas:**
+- This collision is easy to miss if you only inspect the leaf function signature. The shared command registry can inject `--profile` above the leaf command, so the conflict only becomes obvious in real CLI help or live invocation.
+- Renaming only the code is incomplete. If the generated metadata still documents the old `--profile` form, operators will call the wrong flag and blame auth/profile resolution instead of the real command-surface bug.
 '''

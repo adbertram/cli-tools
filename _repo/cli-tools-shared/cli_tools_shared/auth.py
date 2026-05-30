@@ -556,6 +556,11 @@ class WebwrightBrowserAutomation(BrowserAutomation):
     """
 
     WEBWRIGHT_BROWSER_MODE = "local_persistent"
+    WEBWRIGHT_LOCAL_CDP_URL = None
+    WEBWRIGHT_LOCAL_CDP_EXECUTABLE = None
+    WEBWRIGHT_LOCAL_CDP_NEW_PAGE = None
+    WEBWRIGHT_LOCAL_CDP_CLOSE_PAGE_ON_EXIT = None
+    WEBWRIGHT_LOCAL_CDP_CLOSE_STARTED_BROWSER_ON_EXIT = None
 
     def _get_service(self):
         if self._service is None:
@@ -564,5 +569,12 @@ class WebwrightBrowserAutomation(BrowserAutomation):
             self._service = WebwrightBrowserService(
                 _safe_daemon_key(self._session_name()),
                 browser_mode=self.WEBWRIGHT_BROWSER_MODE,
+                local_cdp_url=self.WEBWRIGHT_LOCAL_CDP_URL,
+                local_cdp_executable=self.WEBWRIGHT_LOCAL_CDP_EXECUTABLE,
+                local_cdp_new_page=self.WEBWRIGHT_LOCAL_CDP_NEW_PAGE,
+                local_cdp_close_page_on_exit=self.WEBWRIGHT_LOCAL_CDP_CLOSE_PAGE_ON_EXIT,
+                local_cdp_close_started_browser_on_exit=(
+                    self.WEBWRIGHT_LOCAL_CDP_CLOSE_STARTED_BROWSER_ON_EXIT
+                ),
             )
         return self._service

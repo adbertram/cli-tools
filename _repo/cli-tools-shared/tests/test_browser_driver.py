@@ -691,6 +691,95 @@ def test_wait_for_network_idle_delegates_to_helper():
     assert calls == [(12.5, 900)]
 
 
+def test_iframe_target_delegates_to_helper():
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+    calls: list[str] = []
+
+    class _Helpers:
+        def iframe_target(self, url_substr):
+            calls.append(url_substr)
+            return "frame-123"
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    assert service.iframe_target("appleauth/auth/authorize/signin") == "frame-123"
+    assert calls == ["appleauth/auth/authorize/signin"]
+
+
+def test_evaluate_in_iframe_uses_helper_target_id(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+    helper_calls: list[tuple[str, str]] = []
+
+    class _Helpers:
+        def iframe_target(self, url_substr):
+            helper_calls.append(("iframe_target", url_substr))
+            return "frame-123"
+
+        def js(self, expression, target_id=None):
+            helper_calls.append(("js", target_id))
+            return {"ok": True, "expression": expression}
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    result = service.evaluate_in_iframe(
+        "appleauth/auth/authorize/signin",
+        "(arg) => ({ ok: true, value: arg.value })",
+        {"value": 7},
+    )
+
+    assert result["ok"] is True
+    assert helper_calls == [
+        ("iframe_target", "appleauth/auth/authorize/signin"),
+        ("js", "frame-123"),
+    ]
+
+
+def test_evaluate_in_iframe_falls_back_to_frame_tree_when_helper_has_no_target():
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+    calls: list[tuple[str, object]] = []
+
+    class _Helpers:
+        def iframe_target(self, url_substr):
+            calls.append(("iframe_target", url_substr))
+            return None
+
+        def cdp(self, method, **kwargs):
+            calls.append((method, kwargs))
+            if method == "Page.getFrameTree":
+                return {
+                    "frameTree": {
+                        "frame": {"id": "root", "url": "https://idmsa.apple.com/IDMSWebAuth/signin"},
+                        "childFrames": [
+                            {
+                                "frame": {
+                                    "id": "child-1",
+                                    "url": "https://idmsa.apple.com/appleauth/auth/authorize/signin?frame_id=abc",
+                                }
+                            }
+                        ],
+                    }
+                }
+            if method == "Page.createIsolatedWorld":
+                assert kwargs["frameId"] == "child-1"
+                return {"executionContextId": 99}
+            if method == "Runtime.evaluate":
+                assert kwargs["contextId"] == 99
+                return {"result": {"value": {"stage": "trusted_device_code"}}}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    result = service.evaluate_in_iframe(
+        "appleauth/auth/authorize/signin",
+        "() => ({ stage: 'trusted_device_code' })",
+    )
+
+    assert result == {"stage": "trusted_device_code"}
+
+
 def test_fill_js_uses_native_input_value_setter():
     js = _fill_js("secret")
 

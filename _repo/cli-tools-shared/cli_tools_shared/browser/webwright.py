@@ -68,10 +68,20 @@ class WebwrightBrowserService:
         *,
         browser_mode: str = "local_persistent",
         timeout: int = 60,
+        local_cdp_url: Optional[str] = None,
+        local_cdp_executable: Optional[str] = None,
+        local_cdp_new_page: Optional[bool] = None,
+        local_cdp_close_page_on_exit: Optional[bool] = None,
+        local_cdp_close_started_browser_on_exit: Optional[bool] = None,
     ):
         self.session = session
         self.browser_mode = browser_mode
         self.default_timeout = timeout
+        self.local_cdp_url = local_cdp_url
+        self.local_cdp_executable = local_cdp_executable
+        self.local_cdp_new_page = local_cdp_new_page
+        self.local_cdp_close_page_on_exit = local_cdp_close_page_on_exit
+        self.local_cdp_close_started_browser_on_exit = local_cdp_close_started_browser_on_exit
         self._environment = None
         self._opened = False
         self._user_data_dir: Optional[Path] = None
@@ -177,6 +187,18 @@ class WebwrightBrowserService:
             "browser_navigation_timeout_ms": self.default_timeout * 1000,
             "launch_args": launch_args,
         }
+        if self.local_cdp_url is not None:
+            kwargs["local_cdp_url"] = self.local_cdp_url
+        if self.local_cdp_executable is not None:
+            kwargs["local_cdp_executable"] = self.local_cdp_executable
+        if self.local_cdp_new_page is not None:
+            kwargs["local_cdp_new_page"] = self.local_cdp_new_page
+        if self.local_cdp_close_page_on_exit is not None:
+            kwargs["local_cdp_close_page_on_exit"] = self.local_cdp_close_page_on_exit
+        if self.local_cdp_close_started_browser_on_exit is not None:
+            kwargs["local_cdp_close_started_browser_on_exit"] = (
+                self.local_cdp_close_started_browser_on_exit
+            )
         if width_height is not None:
             kwargs["browser_width"], kwargs["browser_height"] = width_height
 
@@ -220,6 +242,26 @@ class WebwrightBrowserService:
         if arg is None:
             return self._run_on_page(lambda page: page.evaluate(js))
         return self._run_on_page(lambda page: page.evaluate(js, arg))
+
+    def iframe_target(self, url_substr: str) -> Optional[str]:
+        """Return the URL of the first iframe containing ``url_substr``."""
+        if not url_substr:
+            raise WebwrightServiceError("iframe_target: url_substr must be non-empty")
+        page = self._page()
+        for frame in page.frames:
+            if url_substr in (frame.url or ""):
+                return frame.url
+        return None
+
+    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None) -> Any:
+        """Run JS inside the first iframe whose URL contains ``url_substr``."""
+        page = self._page()
+        frame = next((candidate for candidate in page.frames if url_substr in (candidate.url or "")), None)
+        if frame is None:
+            return None
+        if arg is None:
+            return self._run(frame.evaluate(js))
+        return self._run(frame.evaluate(js, arg))
 
     def page_eval(self, js: str, arg: Any = None) -> Dict[str, Any]:
         return {"result": self.evaluate(js, arg)}
