@@ -50,6 +50,42 @@ def run_cli_command(
     )
 
 
+def _top_level_cache_command_missing(result: subprocess.CompletedProcess) -> bool:
+    """Return True when the CLI has no top-level ``cache`` command to clear."""
+    output = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
+    return (
+        "no such command 'cache'" in output
+        or 'no such command "cache"' in output
+        or "no such command: cache" in output
+        or "unexpected extra argument (cache)" in output
+    )
+
+
+def clear_cli_cache(cli_executable: str, timeout: int = 30) -> None:
+    """Clear cached CLI responses before a live command executes."""
+    result = run_cli_command(cli_executable, ["cache", "clear"], timeout=timeout)
+    if result.returncode == 0:
+        return
+    if _top_level_cache_command_missing(result):
+        return
+    detail = (result.stderr or result.stdout or "").strip()
+    raise AssertionError(
+        f"Could not clear CLI response cache before live test "
+        f"(exit code {result.returncode}). Stderr/stdout: {detail[:300]}"
+    )
+
+
+def run_live_cli_command(
+    cli_executable: str,
+    args: List[str],
+    timeout: int = 30,
+    check: bool = False
+) -> subprocess.CompletedProcess:
+    """Execute a live CLI command after clearing the response cache."""
+    clear_cli_cache(cli_executable, timeout=timeout)
+    return run_cli_command(cli_executable, args, timeout=timeout, check=check)
+
+
 def parse_help_commands(help_text: str) -> List[str]:
     """Extract command names from Rich CLI help output.
 

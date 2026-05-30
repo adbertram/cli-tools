@@ -4,7 +4,7 @@ import pytest
 import json
 import warnings
 
-from cli_test_utils import run_cli_command, validate_json_output, discover_nested_commands, get_list_commands, get_fixture_args, filter_commands_by_group, discover_list_commands, get_cli_timeout
+from cli_test_utils import run_live_cli_command, validate_json_output, discover_nested_commands, get_list_commands, get_fixture_args, filter_commands_by_group, discover_list_commands, get_cli_timeout
 
 
 class PositionalArgWarning(UserWarning):
@@ -91,7 +91,7 @@ def test_list_commands_execute_successfully(cli_executable, cli_name, test_confi
         full_cmd = f"{cli_name} {' '.join(args)}"
         executed_commands.append(full_cmd)
         print(f"  Executing: {full_cmd}")
-        result = run_cli_command(cli_executable, args, timeout=timeout)
+        result = run_live_cli_command(cli_executable, args, timeout=timeout)
 
         # Assertion 29: Exit code 0
         if result.returncode != 0:
@@ -149,7 +149,7 @@ def test_stdout_stderr_separation(cli_executable, cli_name, test_config, cli_fix
         args = cmd_path.split() + ["--limit", "1"] + profile_args + fixture_args
         full_cmd = f"{cli_name} {' '.join(args)}"
         print(f"  Executing: {full_cmd}")
-        result = run_cli_command(cli_executable, args, timeout=timeout)
+        result = run_live_cli_command(cli_executable, args, timeout=timeout)
 
         if result.returncode == 0:
             # Stdout should be ONLY JSON, no interleaved messages
@@ -199,7 +199,7 @@ def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config
 
     # First, discover actual field names by fetching one item without --properties
     discovery_args = cmd_path.split() + ["--limit", "1"] + profile_args + fixture_args
-    discovery_result = run_cli_command(cli_executable, discovery_args, timeout=timeout)
+    discovery_result = run_live_cli_command(cli_executable, discovery_args, timeout=timeout)
     if discovery_result.returncode != 0:
         if "required" in discovery_result.stderr.lower() or "missing" in discovery_result.stderr.lower():
             pytest.fail(
@@ -223,7 +223,7 @@ def test_properties_flag_with_dot_notation(cli_executable, cli_name, test_config
     args = cmd_path.split() + ["--properties", properties_value, "--limit", "1"] + profile_args + fixture_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
-    result = run_cli_command(cli_executable, args, timeout=timeout)
+    result = run_live_cli_command(cli_executable, args, timeout=timeout)
 
     if result.returncode != 0:
         if "required" in result.stderr.lower() or "missing" in result.stderr.lower():
@@ -255,7 +255,7 @@ def _run_list_command_with_limit(cli_executable, cli_name, cmd_path, limit, extr
     args = cmd_path.split() + ["--limit", str(limit)] + extra_args + profile_args + fixture_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
-    result = run_cli_command(cli_executable, args, timeout=timeout)
+    result = run_live_cli_command(cli_executable, args, timeout=timeout)
     return full_cmd, result
 
 
@@ -486,7 +486,7 @@ def test_list_commands_with_filter_flag(cli_executable, cli_name, test_config, c
         args = cmd_path.split() + ["--limit", "5", "--filter", "name:eq:__zzz_nonexistent_xyzzy__"] + profile_args + fixture_args
         full_cmd_filter = f"{cli_name} {' '.join(args)}"
         print(f"  Executing: {full_cmd_filter}")
-        result_filter = run_cli_command(cli_executable, args, timeout=timeout)
+        result_filter = run_live_cli_command(cli_executable, args, timeout=timeout)
 
         stderr_lower = (result_filter.stderr or "").lower()
 
@@ -681,7 +681,7 @@ def test_get_commands_execute_successfully(cli_executable, cli_name, test_config
         list_profile_args = _profile_args(auth_context, help_cache, list_cmd_path)
         list_args = list_cmd_path.split() + ["--limit", "1"] + list_profile_args + fixture_args
         print(f"  Fetching ID via: {cli_name} {' '.join(list_args)}")
-        list_result = run_cli_command(cli_executable, list_args, timeout=timeout)
+        list_result = run_live_cli_command(cli_executable, list_args, timeout=timeout)
 
         if list_result.returncode != 0:
             print(f"  Skipping {group} get (list failed)")
@@ -709,7 +709,7 @@ def test_get_commands_execute_successfully(cli_executable, cli_name, test_config
         get_args = get_cmd_path.split() + get_profile_args + get_fixture_args_list + [str(item_id)]
         full_cmd = f"{cli_name} {' '.join(get_args)}"
         print(f"  Executing: {full_cmd}")
-        get_result = run_cli_command(cli_executable, get_args, timeout=timeout)
+        get_result = run_live_cli_command(cli_executable, get_args, timeout=timeout)
 
         if get_result.returncode != 0:
             stderr_lower = (get_result.stderr or "").lower()

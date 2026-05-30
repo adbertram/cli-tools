@@ -15,6 +15,9 @@ if [ -z "$CLI_NAME" ]; then
 fi
 
 TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"
+if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
+    TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"
+fi
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 
 if [ ! -d "$TOOL_DIR" ]; then

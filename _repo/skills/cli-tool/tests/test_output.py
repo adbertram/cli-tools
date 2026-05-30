@@ -8,7 +8,7 @@ import pytest
 import json
 from pathlib import Path
 
-from cli_test_utils import run_cli_command, discover_list_commands, get_cli_timeout, get_fixture_args
+from cli_test_utils import run_live_cli_command, discover_list_commands, get_cli_timeout, get_fixture_args
 
 
 # Standard functions that MUST come from cli_tools_shared.output, not local definitions
@@ -142,7 +142,7 @@ def test_print_table_execution_smoke_test(cli_executable, cli_name, test_config,
     args = cmd_path.split() + profile_args + fixture_args + ["--table", "--limit", "1"]
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
-    result = run_cli_command(cli_executable, args, timeout=timeout)
+    result = run_live_cli_command(cli_executable, args, timeout=timeout)
 
     if result.returncode != 0:
         # Check if this is a missing fixture issue - this should FAIL, not skip

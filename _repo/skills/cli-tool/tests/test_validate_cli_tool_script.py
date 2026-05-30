@@ -34,3 +34,19 @@ def test_test_script_runs_auth_status_schema_preflight():
     assert "run_auth_status_schema_preflight" in script_text
     assert "parse_and_validate_stdout" in script_text
     assert 'auth status schema:' in script_text
+
+
+def test_install_script_resolves_personal_cli_dirs():
+    script_text = (SKILL_ROOT / "scripts/install-cli-tool.sh").read_text()
+
+    assert 'TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"' in script_text
+    assert '[ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]' in script_text
+    assert 'TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"' in script_text
+
+
+def test_validate_script_resolves_personal_cli_dirs():
+    script_text = (SKILL_ROOT / "scripts/validate-cli-tool.sh").read_text()
+
+    assert 'TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"' in script_text
+    assert '[ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]' in script_text
+    assert 'TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"' in script_text

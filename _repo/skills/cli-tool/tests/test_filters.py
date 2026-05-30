@@ -4,7 +4,7 @@ import pytest
 import ast
 from pathlib import Path
 
-from cli_test_utils import run_cli_command, validate_json_output, filter_commands_by_group, discover_list_commands
+from cli_test_utils import run_live_cli_command, validate_json_output, filter_commands_by_group, discover_list_commands
 
 
 def _find_operators_set_in_ast(tree):
@@ -273,7 +273,7 @@ def test_filter_help_describes_standard_syntax(cli_executable, cli_name, cli_dir
         )
 
 
-def test_filter_translation_smoke_test(cli_name, test_config, authenticated, command_filter, help_cache):
+def test_filter_translation_smoke_test(cli_executable, cli_name, test_config, authenticated, command_filter, help_cache):
     """Comprehensive: Verify filter actually translates to API params (Decision 29)."""
     # This test is skipped when command_filter is set since it uses a generic "list" command
     if command_filter:
@@ -289,11 +289,7 @@ def test_filter_translation_smoke_test(cli_name, test_config, authenticated, com
     args = ["list", "--filter", "name:eq:test", "--limit", "1"] + profile_args
     full_cmd = f"{cli_name} {' '.join(args)}"
     print(f"  Executing: {full_cmd}")
-    result = run_cli_command(
-        cli_name,
-        args,
-        timeout=timeout
-    )
+    result = run_live_cli_command(cli_executable, args, timeout=timeout)
 
     # Should either succeed or fail gracefully (not crash)
     assert result.returncode in [0, 1, 2], (

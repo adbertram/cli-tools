@@ -16,6 +16,9 @@ if [ -z "$CLI_NAME" ]; then
 fi
 
 TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"
+if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
+    TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"
+fi
 SYMLINK_PATH="$HOME/.local/bin/$CLI_NAME"
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 PKG_DIR_NAME="${CLI_NAME}-cli"
