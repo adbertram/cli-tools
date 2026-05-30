@@ -78,17 +78,28 @@ class DoordashClient:
         return self._http_client
 
     def _create_http_client(self) -> httpx.Client:
+        cookies = self._load_session_cookies()
+        csrf_token = cookies.get("XSRF-TOKEN") or cookies.get("csrf_token")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/json",
+            "Origin": self.BASE_URL,
+            "Referer": f"{self.BASE_URL}/",
+        }
+        if csrf_token:
+            headers.update(
+                {
+                    "x-csrf-token": csrf_token,
+                    "x-csrftoken": csrf_token,
+                    "x-xsrf-token": csrf_token,
+                }
+            )
         return httpx.Client(
             base_url=self.BASE_URL,
-            cookies=self._load_session_cookies(),
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "application/json",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Content-Type": "application/json",
-                "Origin": self.BASE_URL,
-                "Referer": f"{self.BASE_URL}/",
-            },
+            cookies=cookies,
+            headers=headers,
             timeout=30.0,
             follow_redirects=True,
         )
