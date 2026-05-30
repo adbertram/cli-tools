@@ -69,6 +69,7 @@ venmo auth logout
 ```bash
 # List the 50 most recent transactions (full raw Venmo API payload per record, JSON)
 venmo transactions list
+venmo transactions list --profile personal
 
 # Curated, human-readable table view
 venmo transactions list --table
@@ -87,6 +88,7 @@ venmo transactions list --before-id 4418053612741823878
 
 # Look up one transaction by payment_id
 venmo transactions get 4418053612741823878
+venmo transactions get 4418053612741823878 --profile personal
 venmo transactions get 4418053612741823878 --table
 ```
 
@@ -187,6 +189,7 @@ table. stderr is reserved for status messages.
 | `--table`       | `-t`  | list / get             | Render as a table (curated dotted-path columns by default).    |
 | `--properties`  | `-p`  | list / get             | Comma-separated whitelist of fields. Supports dotted paths (e.g. `payment_id,payment.amount,payment.actor.display_name`). |
 | `--before-id`   |       | `transactions list`    | Return transactions older than this `payment_id` (pagination)  |
+| `--profile`     |       | list / get             | Authentication profile to use for the transaction query         |
 | `--force`       | `-F`  | `auth login`           | Clear existing token + device id and re-authenticate           |
 | `--no-cache`    |       | top-level              | Bypass the response cache for this invocation                  |
 | `--version`     | `-v`  | top-level              | Print version and exit                                         |

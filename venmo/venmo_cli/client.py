@@ -20,7 +20,7 @@ exposes Venmo's private mobile API. This module wraps it for the CLI:
       (and what `--filter` users were filtering on under the old shape).
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
@@ -57,8 +57,8 @@ def transaction_to_record(txn) -> dict:
 class VenmoClient:
     """Client for interacting with the Venmo private mobile API."""
 
-    def __init__(self):
-        self.config = get_config()
+    def __init__(self, profile: Optional[str] = None):
+        self.config = get_config(profile=profile)
         if not self.config.has_credentials():
             missing = self.config.get_missing_credentials()
             raise ClientError(
@@ -70,8 +70,8 @@ class VenmoClient:
         from venmo_api import Client as VenmoApiClient
 
         self._venmo = VenmoApiClient(access_token=self.config.access_token)
-        profile = self._venmo.my_profile()
-        self._user_id = profile.id
+        venmo_profile = self._venmo.my_profile()
+        self._user_id = venmo_profile.id
 
     @cached
     def list_transactions(self, limit: int = 50, before_id: Optional[str] = None) -> List[dict]:
@@ -104,12 +104,12 @@ class VenmoClient:
         raise ClientError(f"Transaction '{transaction_id}' not found in recent history.")
 
 
-_client: Optional[VenmoClient] = None
+_clients: Dict[str, VenmoClient] = {}
 
 
-def get_client() -> VenmoClient:
-    """Get or create the Venmo client instance."""
-    global _client
-    if _client is None:
-        _client = VenmoClient()
-    return _client
+def get_client(profile: Optional[str] = None) -> VenmoClient:
+    """Get or create the Venmo client instance for an auth profile."""
+    key = profile or "_default"
+    if key not in _clients:
+        _clients[key] = VenmoClient(profile=profile)
+    return _clients[key]

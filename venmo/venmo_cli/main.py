@@ -285,10 +285,13 @@ def list_transactions(
     before_id: Optional[str] = typer.Option(
         None, "--before-id", help="Return transactions older than this story id (pagination)"
     ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", help="Authentication profile to use"
+    ),
 ):
     """List Venmo transactions visible to the authenticated account."""
     _validate(filter)
-    rows = get_client().list_transactions(limit=limit, before_id=before_id)
+    rows = get_client(profile=profile).list_transactions(limit=limit, before_id=before_id)
     if filter:
         rows = apply_filters(rows, filter)
     _render(rows, table, properties, "No transactions found.", TRANSACTION_COLUMNS)
@@ -302,6 +305,9 @@ def get_transaction(
     properties: Optional[str] = typer.Option(
         None, "--properties", "-p", help="Comma-separated fields to include"
     ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", help="Authentication profile to use"
+    ),
 ):
     """Look up a single transaction by payment id from recent history.
 
@@ -309,7 +315,7 @@ def get_transaction(
     to one entry from `transactions list`). `--table` renders the curated
     columns; `--properties` (dotted paths) overrides the column set.
     """
-    row = get_client().get_transaction(transaction_id)
+    row = get_client(profile=profile).get_transaction(transaction_id)
     fields = _property_fields(properties)
     if table:
         cols = fields or TRANSACTION_COLUMNS
