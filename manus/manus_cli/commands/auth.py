@@ -8,9 +8,9 @@ def _test_auth(config):
     """Test authentication by making a lightweight API call."""
     try:
         response = requests.get(
-            f"{config.base_url}/tasks",
+            f"{config.base_url}/v2/task.list",
             headers={
-                "API_KEY": config.api_key,
+                "x-manus-api-key": config.api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },

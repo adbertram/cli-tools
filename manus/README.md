@@ -1,179 +1,150 @@
 # Manus CLI Guide
 
-Complete reference for the `manus` command-line interface for interacting with Manus AI services.
+Reference for the `manus` command-line interface for the public Manus API v2.
 
 ## Overview
 
-The Manus CLI provides access to:
-- **Auth** - Manage API authentication
-- **Tasks** - Create, manage, and retrieve AI tasks
-- **Profiles** - Manage configuration profiles
+The Manus CLI provides:
+- `auth` for API-key authentication
+- `task` for Manus task lifecycle operations
+- `cache` for cache management
+
+The CLI now targets the current v2 API surface:
+- Base URL: `https://api.manus.ai`
+- API key header: `x-manus-api-key`
+- Task endpoints: `task.create`, `task.detail`, `task.list`, `task.sendMessage`, `task.listMessages`, `task.update`, `task.stop`, `task.delete`, `task.confirmAction`
 
 ## Authentication
 
-### Login
-
 ```bash
 manus auth login
-manus auth login --api-key <your-key>
-```
-
-### Check Status
-
-```bash
 manus auth status
-manus auth status
-```
-
-### Logout
-
-```bash
 manus auth logout
 ```
 
----
-
 ## Task Commands
 
-Manage AI tasks.
+### Create
 
-### Create Task
-
-Create a new AI task. You can wait for completion or run it asynchronously.
+Create a new task. By default the CLI waits for a terminal `task.listMessages` status update and returns the task plus recent messages.
 
 ```bash
-# Create and wait for result
 manus task create "Write a Python function for Fibonacci sequence"
-
-# Async creation (don't wait)
 manus task create "Analyze this document" --no-wait
-
-# Shareable link
-manus task create "Research AI trends" --share
-
-# Specific profile and mode
-manus task create "Complex reasoning" --profile manus-1.5 --mode agent
+manus task create "Research AI trends" --agent-profile manus-1.6-max --share-visibility team
+manus task create --prompt-file /path/to/prompt.txt --connector slack --enable-skill skill-123
+manus task create "Summarize this file" \
+  --content-part '{"type":"file","file_url":"https://example.com/report.txt"}'
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-p, --profile` | Agent profile (default: `manus-1.5`, options: `manus-1.5`, `manus-1.5-lite`) |
-| `-m, --mode` | Task mode (default: `agent`, options: `chat`, `adaptive`, `agent`) |
-| `-w, --wait/--no-wait` | Wait for task completion (default: True) |
-| `--timeout` | Max seconds to wait (default: 900.0) |
-| `-s, --share` | Create shareable link |
-| `--hide` | Hide from webapp task list |
-| `-l, --locale` | Locale setting (e.g., en-US) |
-| `-q, --quiet` | Suppress status messages |
+Key options:
+- `-a, --agent-profile` chooses `manus-1.6`, `manus-1.6-lite`, or `manus-1.6-max`
+- `--project-id` associates the task with a Manus project
+- `--interactive/--no-interactive` controls whether the agent may pause for follow-up questions
+- `--share-visibility` sets `private`, `team`, or `public`
+- `--content-part` appends raw content-part JSON objects to the message body
+- `--connector`, `--enable-skill`, and `--force-skill` map directly to v2 message fields
+- `--structured-output-schema` or `--structured-output-schema-file` passes a JSON Schema object for structured output extraction
 
-### Continue Task
+### Send
 
-Continue an existing task conversation.
+Send a follow-up message to an existing task.
 
 ```bash
-# Continue with a follow-up message
-manus task continue <task-id> "What about error handling?"
-
-# Read follow-up from file
-manus task continue <task-id> --prompt-file /path/to/followup.txt
-
-# Async continuation
-manus task continue <task-id> "Add more details" --no-wait
+manus task send <task-id> "What about error handling?"
+manus task send <task-id> --prompt-file /path/to/followup.txt
+manus task send <task-id> "Add more details" --no-wait
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-f, --prompt-file` | Read prompt from file instead of argument |
-| `-w, --wait/--no-wait` | Wait for task completion (default: True) |
-| `--timeout` | Max seconds to wait (default: 900.0) |
-| `--poll` | Seconds between status checks |
-| `-a, --attachment` | Attachment as JSON object |
-| `--connector` | Connector ID to enable |
-| `-q, --quiet` | Suppress status messages |
+The legacy `manus task continue` command remains available as a compatibility alias, but `manus task send` is the current command.
 
-### Get Task
+### Get
 
-Get task status and results.
+Get the current task metadata and status from `task.detail`.
 
 ```bash
 manus task get <task-id>
-manus task get <task-id> --download-files
+manus task get <task-id> --table
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-d, --download-files` | Download output files from the task |
-| `-o, --output-dir` | Directory for downloaded files (default: current dir) |
+### Wait
 
-### Wait for Task
-
-Wait for an existing task to complete.
+Poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`.
 
 ```bash
 manus task wait <task-id>
+manus task wait <task-id> --verbose-messages
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `--timeout` | Max seconds to wait (default: 900.0) |
-| `--poll` | Seconds between status checks |
-| `-q, --quiet` | Suppress status messages |
+### List
 
-### List Tasks
-
-List recent tasks.
+List tasks from `task.list`.
 
 ```bash
 manus task list
-manus task list
-manus task list --limit 20
+manus task list --limit 20 --table
+manus task list --scope project --project-id proj_123
+manus task list --filter status:eq:running --properties id,title,status
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-l, --limit` | Maximum number of tasks to return (default: 10) |
-| `-t, --table` | Display as formatted table |
-| `-f, --filter` | Filter results (field:op:value syntax, e.g., status:eq:completed) |
-| `-p, --properties` | Comma-separated list of properties to include |
+### Messages
 
----
+List task event messages from `task.listMessages`.
 
-## Profile Commands
+```bash
+manus task messages <task-id>
+manus task messages <task-id> --verbose --limit 100
+manus task messages <task-id> --download-files --output-dir ./downloads
+```
 
-Manage configuration profiles for multiple accounts.
+### Update
 
-### List Profiles
+Update task metadata with `task.update`.
+
+```bash
+manus task update <task-id> --title "Weekly Research"
+manus task update <task-id> --share-visibility public
+manus task update <task-id> --hidden-in-task-list
+```
+
+### Stop
+
+Stop a running task with `task.stop`.
+
+```bash
+manus task stop <task-id>
+```
+
+### Delete
+
+Delete a task with `task.delete`.
+
+```bash
+manus task delete <task-id>
+```
+
+### Confirm
+
+Confirm a waiting action with `task.confirmAction`.
+
+```bash
+manus task confirm <task-id> <event-id>
+manus task confirm <task-id> <event-id> --input '{"approved":true}'
+manus task confirm <task-id> <event-id> --input-file /path/to/input.json
+```
+
+## Profiles
+
+The shared auth app provides multi-profile support:
 
 ```bash
 manus auth profiles list
-```
-
-### Create Profile
-
-```bash
 manus auth profiles create staging
-```
-
-### Select Active Profile
-
-```bash
 manus auth profiles select staging
-```
-
-### Delete Profile
-
-```bash
 manus auth profiles delete staging
 ```
 
-## Additional Commands
-
-### Cache
+## Cache
 
 ```bash
 manus cache --help
