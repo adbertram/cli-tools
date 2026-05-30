@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
-from apple_cli.auth_capture import capture_request_context_from_page
+from apple_cli.auth_capture import (
+    APPLE_CODE_TIMEOUT_SECONDS,
+    capture_request_context_from_page,
+    _detect_apple_auth_stage,
+    _enter_apple_verification_code,
+    _prompt_for_apple_verification_code,
+    _request_text_message_code,
+    _wait_for_apple_interactive_auth,
+)
 from apple_cli.client import AppleClient
 from apple_cli.config import Config
 from cli_tools_shared.auth import BrowserAutomationError
@@ -98,6 +107,41 @@ class _FakePage:
 
     def cookie_list(self):
         return list(self._cookies)
+
+
+class _FakeAuthPage:
+    def __init__(self):
+        self.wait_for_timeout_calls: list[int] = []
+        self.frame_calls: list[dict | None] = []
+        self.frame_results: list[object] = []
+        self.typed_values: list[str] = []
+
+    def wait_for_timeout(self, ms: int) -> None:
+        self.wait_for_timeout_calls.append(ms)
+
+    def evaluate_in_iframe(self, _url_substr, _js, arg=None):
+        self.frame_calls.append(arg)
+        if self.frame_results:
+            return self.frame_results.pop(0)
+        return None
+
+    def type_text(self, text: str) -> None:
+        self.typed_values.append(text)
+
+
+class _FakeAuthBrowser:
+    LOGIN_TIMEOUT = 5
+
+    def __init__(self):
+        self.entered_codes: list[str] = []
+
+    def _check_auth(self, _page) -> bool:
+        return bool(self.entered_codes)
+
+
+class _FakePromptInput(StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 def _request_context_payload() -> dict:
@@ -283,6 +327,174 @@ def test_auth_login_capture_fails_when_purchase_request_missing(tmp_path):
 
     with pytest.raises(BrowserAutomationError, match="did not observe the initial purchase-search POST request"):
         capture_request_context_from_page(page, config)
+
+
+def test_request_text_message_code_opens_fallback_then_selects_text_option():
+    page = _FakeAuthPage()
+    page.frame_results = [
+        "Enter Verification Code. Didn't Get a Code?",
+        False,
+        True,
+        False,
+        False,
+        True,
+        True,
+    ]
+
+    assert _request_text_message_code(page) is True
+    calls = [call for call in page.frame_calls if isinstance(call, dict)]
+    assert calls[0]["include"] == [r"didn.t get a code", r"can.t get to your devices"]
+    assert calls[1]["include"] == [r"text code to"]
+    assert calls[1]["exclude"] == [
+        r"voice",
+        r"call",
+        r"recover",
+        r"recovery",
+        r"can.t use",
+        r"don.t have access",
+    ]
+
+
+def test_detect_apple_auth_stage_identifies_sms_options():
+    page = _FakeAuthPage()
+    page.frame_results = [
+        "Choose a trusted phone number. Text code to (***) ***-1234",
+        False,
+        False,
+        True,
+        False,
+    ]
+
+    assert _detect_apple_auth_stage(page)["stage"] == "sms_options"
+
+
+def test_detect_apple_auth_stage_identifies_sms_code_prompt():
+    page = _FakeAuthPage()
+    page.frame_results = [
+        "A verification code was sent as a message to your trusted phone number.",
+        False,
+        True,
+        False,
+        True,
+    ]
+
+    assert _detect_apple_auth_stage(page)["stage"] == "sms_code"
+
+
+def test_request_text_message_code_returns_false_without_fallback_button():
+    page = _FakeAuthPage()
+    page.frame_results = [
+        "Enter Verification Code.",
+        False,
+        True,
+        False,
+        False,
+        False,
+        False,
+    ]
+
+    assert _request_text_message_code(page) is False
+
+
+def test_prompt_for_apple_verification_code_requires_six_digits(monkeypatch):
+    monkeypatch.setattr("sys.stdin", _FakePromptInput("bad\n636617\n"))
+    monkeypatch.setattr("apple_cli.auth_capture.select.select", lambda r, _w, _e, _timeout: (r, [], []))
+
+    assert _prompt_for_apple_verification_code("text message", APPLE_CODE_TIMEOUT_SECONDS) == "636617"
+
+
+def test_prompt_for_apple_verification_code_times_out(monkeypatch):
+    monkeypatch.setattr("sys.stdin", _FakePromptInput(""))
+    monkeypatch.setattr("apple_cli.auth_capture.select.select", lambda _r, _w, _e, _timeout: ([], [], []))
+
+    with pytest.raises(BrowserAutomationError, match="Timed out waiting for the Apple verification code"):
+        _prompt_for_apple_verification_code("trusted Apple device", APPLE_CODE_TIMEOUT_SECONDS)
+
+
+def test_enter_apple_verification_code_requires_visible_code_input():
+    class Page:
+        def evaluate_in_iframe(self, _url_substr, _js, _arg=None):
+            return False
+
+        def type_text(self, text: str) -> None:
+            raise AssertionError("type_text should not run when no verifier input exists")
+
+    with pytest.raises(BrowserAutomationError, match="verification-code input was not found"):
+        _enter_apple_verification_code(Page(), "636617")
+
+
+def test_enter_apple_verification_code_focuses_iframe_then_types_code():
+    page = _FakeAuthPage()
+    page.frame_results = [True]
+
+    _enter_apple_verification_code(page, "636617")
+
+    assert page.typed_values == ["636617"]
+
+
+def test_wait_for_apple_auth_prefers_text_delivery_and_enters_code(monkeypatch):
+    page = _FakeAuthPage()
+    browser = _FakeAuthBrowser()
+    prompt_calls: list[tuple[str, int]] = []
+
+    stages = iter(
+        [
+            {
+                "stage": "trusted_device_code",
+                "invalid_code": False,
+                "body_text": "Enter Verification Code. Didn't Get a Code?",
+            },
+            {
+                "stage": "sms_code",
+                "invalid_code": False,
+                "body_text": "Verification code sent as a message to your trusted phone number.",
+            },
+        ]
+    )
+    monkeypatch.setattr("apple_cli.auth_capture._detect_apple_auth_stage", lambda _page: next(stages))
+    monkeypatch.setattr("apple_cli.auth_capture._request_text_message_code", lambda _page: True)
+
+    prompt_values = iter(["sms", "636617"])
+
+    def fake_prompt(code_source: str, timeout_seconds: int, **_kwargs) -> str:
+        prompt_calls.append((code_source, timeout_seconds))
+        return next(prompt_values)
+
+    def fake_enter(_page, code: str) -> None:
+        browser.entered_codes.append(code)
+
+    monkeypatch.setattr("apple_cli.auth_capture._prompt_for_apple_verification_code", fake_prompt)
+    monkeypatch.setattr("apple_cli.auth_capture._enter_apple_verification_code", fake_enter)
+
+    _wait_for_apple_interactive_auth(browser, page)
+
+    assert browser.entered_codes == ["636617"]
+    assert prompt_calls == [
+        ("trusted Apple device", APPLE_CODE_TIMEOUT_SECONDS),
+        ("text message to the trusted phone number", APPLE_CODE_TIMEOUT_SECONDS),
+    ]
+
+
+def test_wait_for_apple_auth_stops_on_locked_account(monkeypatch):
+    page = _FakeAuthPage()
+
+    class Browser:
+        LOGIN_TIMEOUT = 5
+
+        def _check_auth(self, _page) -> bool:
+            return False
+
+    monkeypatch.setattr(
+        "apple_cli.auth_capture._detect_apple_auth_stage",
+        lambda _page: {
+            "stage": "waiting",
+            "invalid_code": False,
+            "body_text": "This Apple Account has been locked for security reasons.",
+        },
+    )
+
+    with pytest.raises(BrowserAutomationError, match="locked, not active, or disabled"):
+        _wait_for_apple_interactive_auth(Browser(), page)
 
 
 def test_request_context_path_defaults_to_profile_storage():

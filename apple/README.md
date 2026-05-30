@@ -26,6 +26,16 @@ It also captures the first live
 authenticated browser session and persists the replay context needed for
 `apple purchases list/get/match`.
 
+During Apple two-factor authentication, the CLI watches the open browser for
+Apple verification screens. When Apple offers a trusted-phone option through
+`Didn't Get a Code?` or `Can't get to your devices?`, the CLI requests the
+text-message path first. It then prompts for the six-digit Apple verification
+code and waits up to five minutes before timing out. If Apple requires a
+trusted-device approval, security key, or device passcode instead, complete
+that step in the browser or provide the displayed six-digit code when prompted.
+Locked, disabled, not-active, and account-recovery states stop the login flow
+with an actionable error instead of continuing to poll.
+
 If Apple rotates the browser session or purchase-search context, rerun
 `apple auth login`. If purchase commands report missing request context, the
 last login did not reach the authenticated purchase-history page far enough to

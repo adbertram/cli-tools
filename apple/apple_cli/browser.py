@@ -11,3 +11,4 @@ class AppleBrowser(BrowserAutomation):
     AUTH_CHECK_URL = "https://reportaproblem.apple.com/?s=6"
     AUTH_URL_PATTERN = r"/signin|/sign-in|/login"
     AUTH_COOKIE_PATTERNS = [r"myacinfo", r"selfserv_toru", r"dqsid"]
+    LOGIN_TIMEOUT = 900
