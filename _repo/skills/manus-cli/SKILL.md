@@ -18,11 +18,14 @@ manus <command-group> <action> [arguments] [options]
 | Check auth status | `manus auth status` |
 | Create a task | `manus task create "Your prompt here"` |
 | Create task (no wait) | `manus task create "Prompt" --no-wait` |
-| Continue a task | `manus task continue TASK_ID "Follow-up"` |
-| Get task result | `manus task get TASK_ID` |
+| Send a follow-up | `manus task send TASK_ID "Follow-up"` |
+| Get task metadata | `manus task get TASK_ID` |
 | List recent tasks | `manus task list --table` |
+| List task messages | `manus task messages TASK_ID --limit 20` |
+| Confirm a waiting task | `manus task confirm TASK_ID EVENT_ID` |
 | List profiles | `manus auth profiles list --table` |
 | Set default profile | `manus auth profiles select PROFILE_NAME` |
+| Inspect cache commands | `manus cache --help` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 </quick_start>
@@ -35,7 +38,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Command Groups">
 - **auth** -- Manage API authentication (login, logout, status, refresh, test)
-- **task** -- Manage AI tasks (create, continue, get, wait, list)
+- **task** -- Manage Manus API v2 tasks (create, send, continue alias, get, wait, list, messages, update, stop, delete, confirm)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
 </essential_principles>

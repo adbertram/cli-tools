@@ -2,7 +2,7 @@
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
   "discovered_at": "2026-05-20T14:09:21.607747+00:00",
-  "total_commands": 54,
+  "total_commands": 46,
   "global_options": [
     {
       "name": "--version",
@@ -522,6 +522,12 @@
               "help": "Path to file containing course outline content"
             },
             {
+              "name": "--course-outline-submitted",
+              "type": "bool",
+              "required": false,
+              "help": "--no-course-outline-submitted             Mark whether the course outline has been submitted to Pluralsight"
+            },
+            {
               "name": "--short-description",
               "type": "TEXT",
               "required": false,
@@ -644,7 +650,7 @@
             "coursecraft courses update my-course --target-length 60",
             "coursecraft courses update my-course --brainstorming-outline-file outline.md"
           ],
-          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --status/-s, --active, --platform, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --notes, --skill-path, --path-placement. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Supports --course-outline or --course-outline-file for outline content."
+          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --status/-s, --active, --platform, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --notes, --skill-path, --path-placement. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Supports --course-outline or --course-outline-file for outline content. Supports --course-outline-submitted/--no-course-outline-submitted to mark whether the outline has been submitted to Pluralsight; approval is tracked separately by Course Outline Approved (Pluralsight)."
         },
         "delete": {
           "help": "Delete a course record. By default, only the course record is deleted. Use --cascade to also delete all child records (modules, clips, demos, slides).",
@@ -687,7 +693,7 @@
       },
       "usage_instructions": "CRUD operations for course records. Supports nested creation of modules and clips via --json/--file. Use --active/-a on list to get only the active course. Use --include-modules/-m and --include-clips/-c on get to embed child records. Courses are identified by record ID or Course ID slug."
     },
-    "course-outlines": {
+    "course-outline": {
       "help": "Manage course outline documents",
       "commands": {
         "read": {
@@ -715,9 +721,9 @@
             }
           ],
           "examples": [
-            "coursecraft course-outlines read -l 1UNCevDbw6QxYlvLx0_L_FQfbiAOZLY_U1sy3EhGxd-I",
-            "coursecraft course-outlines read -l \"https://docs.google.com/document/d/DOC_ID/edit\"",
-            "coursecraft course-outlines read -l DOC_ID --table"
+            "coursecraft course-outline read -l 1UNCevDbw6QxYlvLx0_L_FQfbiAOZLY_U1sy3EhGxd-I",
+            "coursecraft course-outline read -l \"https://docs.google.com/document/d/DOC_ID/edit\"",
+            "coursecraft course-outline read -l DOC_ID --table"
           ],
           "usage_instructions": "Read and parse a course outline Google Doc into structured JSON. Requires --course-outline-link/-l with a Google Doc URL or document ID. Returns the same schema as 'coursecraft courses get'. Use --table/-t for formatted output."
         },
@@ -889,12 +895,12 @@
             }
           ],
           "examples": [
-            "coursecraft course-outlines update my-course --type google_doc --name \"New Name\"",
-            "coursecraft course-outlines update my-course --type google_doc -f outline.md",
-            "coursecraft course-outlines update my-course --type database -f outline.md",
-            "coursecraft course-outlines update my-course --type database -l \"https://docs.google.com/...\"",
-            "coursecraft course-outlines update my-course --type google_doc --module 2 \\",
-            "coursecraft course-outlines update my-course --type google_doc --module 2 \\"
+            "coursecraft course-outline update my-course --type google_doc --name \"New Name\"",
+            "coursecraft course-outline update my-course --type google_doc -f outline.md",
+            "coursecraft course-outline update my-course --type database -f outline.md",
+            "coursecraft course-outline update my-course --type database -l \"https://docs.google.com/...\"",
+            "coursecraft course-outline update my-course --type google_doc --module 2 \\",
+            "coursecraft course-outline update my-course --type google_doc --module 2 \\"
           ],
           "usage_instructions": "Update a course outline in Google Doc and/or Airtable. Positional argument is course record ID or slug. Requires --type/-t: 'google_doc', 'database', or 'google_doc,database'. For google_doc: provide field values via CLI params or --course-outline-file/-f. For database: provide --course-outline-file/-f with markdown or --course-outline-link/-l with Google Doc URL. For module updates (google_doc only): use --module/-m with module number, then --module-name, --module-objectives, --module-layout, --module-duration, or --module-content/--module-content-file for full content."
         }
@@ -2529,352 +2535,6 @@
         }
       },
       "usage_instructions": "Manage PowerPoint slide template definitions stored in Airtable. Templates define the available slide layouts (e.g., Course Title, Remember This, Demo Intro). Use list with --platform/-P to filter by platform (Pluralsight, Udemy). Templates are referenced by record ID or name when creating/updating slides."
-    },
-    "demo-build-products": {
-      "help": "Manage demo build product definitions",
-      "commands": {
-        "list": {
-          "help": "List demo build product definitions.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of records to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include (supports dot notation)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Output as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft demo-build-products list",
-            "coursecraft demo-build-products list --table",
-            "coursecraft demo-build-products list --limit 10",
-            "coursecraft demo-build-products list --filter \"name:contains:Demo\""
-          ],
-          "usage_instructions": "List demo build product definitions. Use --filter/-f with field:op:value format (e.g., 'name:contains:Demo'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
-        },
-        "get": {
-          "help": "Get a single demo build product by ID or name.",
-          "arguments": [
-            {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Build product record ID or name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Output as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft demo-build-products get recXXXXXXXXXXXXXXX",
-            "coursecraft demo-build-products get \"Demo Action Summary\""
-          ],
-          "usage_instructions": "Retrieve a single demo build product by record ID or name (positional argument). Use --table/-t for formatted output."
-        },
-        "sync": {
-          "help": "Sync demo build products from XML files to Airtable. Reads XML files from the docs/demo-build-products directory and updates corresponding records in the Demo Build Products table.",
-          "options": [
-            {
-              "name": "--path",
-              "type": "PATH",
-              "required": true,
-              "help": "Path to XML files directory",
-              "short": "-p"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Show what would be updated without making changes",
-              "short": "-n"
-            },
-            {
-              "name": "--file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sync only a specific XML file",
-              "short": "-f"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft demo-build-products sync --path /path/to/demo-build-products",
-            "coursecraft demo-build-products sync --path /path/to/demo-build-products --dry-run",
-            "coursecraft demo-build-products sync --path /path/to/demo-build-products --file demo-action-summary.xml",
-            "coursecraft demo-build-products sync --path /custom/path/to/xml"
-          ],
-          "usage_instructions": "Sync demo build product definitions from local XML files to Airtable. Use required --path/-p to provide the XML directory. Use --dry-run/-n to preview changes without writing. Use --file/-f to sync only a specific XML file."
-        },
-        "update": {
-          "help": "Update a demo build product record.",
-          "arguments": [
-            {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Build product record ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Build product name",
-              "short": "-n"
-            },
-            {
-              "name": "--version",
-              "type": "TEXT",
-              "required": false,
-              "help": "Version",
-              "short": "-v"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Description",
-              "short": "-d"
-            },
-            {
-              "name": "--definition",
-              "type": "TEXT",
-              "required": false,
-              "help": "Full XML definition"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft demo-build-products update recXXX --version \"2.0\"",
-            "coursecraft demo-build-products update recXXX --description \"New description\""
-          ],
-          "usage_instructions": "Update an existing demo build product by record ID (positional argument). Fields: --name/-n, --version/-v, --description/-d, --definition (full XML definition text)."
-        }
-      },
-      "usage_instructions": "Manage demo build product type definitions stored in Airtable. These define the types of build products that can be created for demos (e.g., Demo Action Summary, Demo Script). Supports listing, getting by ID or name, syncing from XML files, and updating records."
-    },
-    "slide-build-products": {
-      "help": "Manage slide build product definitions",
-      "commands": {
-        "list": {
-          "help": "List slide build product definitions.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of records to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include (supports dot notation)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Output as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft slide-build-products list",
-            "coursecraft slide-build-products list --table",
-            "coursecraft slide-build-products list --limit 10",
-            "coursecraft slide-build-products list --filter \"name:contains:Slide\""
-          ],
-          "usage_instructions": "List slide build product definitions. Use --filter/-f with field:op:value format (e.g., 'name:contains:Slide'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
-        },
-        "get": {
-          "help": "Get a single slide build product by ID or name.",
-          "arguments": [
-            {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Build product record ID or name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Output as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft slide-build-products get recXXXXXXXXXXXXXXX",
-            "coursecraft slide-build-products get \"Demo Intro Slide\""
-          ],
-          "usage_instructions": "Retrieve a single slide build product by record ID or name (positional argument). Use --table/-t for formatted output."
-        },
-        "sync": {
-          "help": "Sync slide build products from XML files to Airtable. Reads XML files from the docs/slide-build-products directory and updates corresponding records in the Slide Build Products table.",
-          "options": [
-            {
-              "name": "--path",
-              "type": "PATH",
-              "required": true,
-              "help": "Path to XML files directory",
-              "short": "-p"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Show what would be updated without making changes",
-              "short": "-n"
-            },
-            {
-              "name": "--file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sync only a specific XML file",
-              "short": "-f"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft slide-build-products sync --path /path/to/slide-build-products",
-            "coursecraft slide-build-products sync --path /path/to/slide-build-products --dry-run",
-            "coursecraft slide-build-products sync --path /path/to/slide-build-products --file demo-intro-slide.xml",
-            "coursecraft slide-build-products sync --path /custom/path/to/xml"
-          ],
-          "usage_instructions": "Sync slide build product definitions from local XML files to Airtable. Use required --path/-p to provide the XML directory. Use --dry-run/-n to preview changes without writing. Use --file/-f to sync only a specific XML file."
-        },
-        "update": {
-          "help": "Update a slide build product record.",
-          "arguments": [
-            {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Build product record ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Build product name",
-              "short": "-n"
-            },
-            {
-              "name": "--version",
-              "type": "TEXT",
-              "required": false,
-              "help": "Version",
-              "short": "-v"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Description",
-              "short": "-d"
-            },
-            {
-              "name": "--definition",
-              "type": "TEXT",
-              "required": false,
-              "help": "Full XML definition"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "coursecraft slide-build-products update recXXX --version \"2.0\"",
-            "coursecraft slide-build-products update recXXX --description \"New description\""
-          ],
-          "usage_instructions": "Update an existing slide build product by record ID (positional argument). Fields: --name/-n, --version/-v, --description/-d, --definition (full XML definition text)."
-        }
-      },
-      "usage_instructions": "Manage slide build product type definitions stored in Airtable. These define the types of build products for slides (e.g., Demo Intro Slide, Section Title Slide). Supports listing, getting by ID or name, syncing from XML files, and updating records."
     },
     "descript": {
       "help": "Export videos from Descript",

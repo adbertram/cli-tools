@@ -21,8 +21,9 @@ coursecraft <command-group> <action> [arguments] [options]
 | `coursecraft clips show M1C2 --course <slug>` | Show clip hierarchy tree |
 | `coursecraft demos list --module <recID> --table` | List demos in a module |
 | `coursecraft slides update <recID> --script "..."` | Update slide script |
-| `coursecraft course-outlines read -l <doc-id>` | Read outline from Google Doc |
+| `coursecraft course-outline read -l <doc-id>` | Read outline from Google Doc |
 | `coursecraft courses get <slug> --include-clips` | Get course with nested clips |
+| `coursecraft courses update <slug> --course-outline-submitted` | Mark outline as submitted to Pluralsight (approval tracked separately) |
 | `coursecraft voice-recordings generate --slide <recID> --voice-id <voice> --model-id eleven_multilingual_v2 --output-format <format> --output-dir <dir>` | Generate slide narration audio |
 | `coursecraft descript export "Project" -m 2 -c 1 --clips-root <dir>` | Export Descript composition |
 </quick_start>
@@ -37,14 +38,12 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **auth** -- Authentication management via Airtable PAT delegation
 - **cache** -- Local response cache management
 - **courses** -- CRUD for course records with nested creation and --active/--include-modules/--include-clips support
-- **course-outlines** -- Read and update course outline Google Docs, sync to database
+- **course-outline** -- Read and update course outline Google Docs, sync to database
 - **modules** -- CRUD for module records with batch clip creation and ASCII tree display via show
 - **clips** -- CRUD for clip records with batch creation and M1C1/M2C3 shorthand support
 - **demos** -- CRUD for demo records with hierarchical filtering (--clip, --module, --course)
 - **slides** -- CRUD for slide records with hierarchical filtering and build-instructions/script fields
 - **slide-templates** -- Manage PowerPoint slide template definitions with --platform filtering
-- **demo-build-products** -- Manage demo build product type definitions with XML sync
-- **slide-build-products** -- Manage slide build product type definitions with XML sync
 - **voice-recordings** -- Generate slide and demo narration audio with ElevenLabs and store recording metadata
 - **descript** -- Export video clips from Descript projects to course folders
 </principle>
@@ -63,28 +62,21 @@ The CLI defaults to `eleven_multilingual_v2` because CourseCraft narration uses 
 
 ## Known Issues
 
-### 1. Demo Build Product Direct Requirements Were Not Synced
-**Symptom:** `coursecraft demo-build-products sync --file <xml>` created or updated a record with `Name` and `Description`, but omitted `Requirements` when the XML used direct `<requirements><item>...</item></requirements>` entries.
-**Cause:** The demo build-product parser only read `<requirements><section>...</section></requirements>` structures, while slide build-product sync already supported both sectioned and direct item requirements.
-**Fix:** `coursecraft_cli/commands/demo_build_products.py` now supports direct requirement items and sectioned requirement items.
-**Verification:** Run `python3 -m pytest tests/test_demo_build_products_parse.py` and resync the affected demo XML file, then verify the record includes the `Requirements` field.
-**Recurrence Prevention:** When adding new demo build-product XML shapes, add or update parser tests before syncing records to Airtable.
-
-### 2. VM Acronym Pronunciation Creates Bad TTS Output
+### 1. VM Acronym Pronunciation Creates Bad TTS Output
 **Symptom:** ElevenLabs generated an unnatural pause between the V and M when slide narration said `VMs`. The first attempted fix, `vee ems`, produced audio that sounded like `V E M`.
 **Cause:** The CourseCraft voice pronunciation data expanded `VMs` to acronym-like or phonetic spellings that the TTS engine still interpreted as separated letters.
 **Fix:** Store prose `VMs`/`VM` as alias rules in `coursecraft_cli/voice_pronunciations.json`, let `coursecraft voice-recordings generate` sync the `CourseCraft Voice Pronunciations` dictionary, and keep identifier token `VM` as `virtual machine` for code-shaped text.
 **Verification:** Run `python3 -m pytest tests/test_voice_recordings.py`, then regenerate a slide containing `VMs` with `coursecraft voice-recordings generate` and verify `elevenlabs speech create` receives the `CourseCraft Voice Pronunciations` dictionary locator.
 **Recurrence Prevention:** Prefer plain-English expansions for acronyms when TTS pacing is rejected; do not use phonetic spellings such as `vee ems` unless a generated audio sample has been accepted.
 
-### 3. Idempotent Pronunciation Requires A Tight Alias
+### 2. Idempotent Pronunciation Requires A Tight Alias
 **Symptom:** ElevenLabs paused and slowed down when slide narration said `idempotent` as `eye dem poh tent`. Passing the raw word through produced audio that sounded like `eedempotent`. The spaced alias `I dim po tent` still produced brief pauses between syllables.
 **Cause:** The CourseCraft voice workflow uses pronunciation dictionaries for recurring terms; per the ElevenLabs skill guidance, deterministic pronunciation problems should be handled with alias pronunciation dictionary rules unless phoneme support is documented for the selected model.
 **Fix:** Store `idempotent` as the single-token alias `Idimpohtent` in `coursecraft_cli/voice_pronunciations.json`.
 **Verification:** Run `python3 -m pytest tests/test_voice_recordings.py`, then regenerate a slide containing `idempotent` with `coursecraft voice-recordings generate` and verify `elevenlabs speech create` receives the synced pronunciation dictionary locator.
 **Recurrence Prevention:** For rejected pronunciations, remove spaces from alias spellings when the accepted pronunciation must read as one word, then test the normalized source text before regenerating audio.
 
-### 4. Sysadmins Pronunciation Must Stay Raw Unless Full-Slide Audio Proves Otherwise
+### 3. Sysadmins Pronunciation Must Stay Raw Unless Full-Slide Audio Proves Otherwise
 **Symptom:** ElevenLabs mispronounced `PowerShell for Sysadmins` in the full Technical Prerequisites slide when dictionary aliases forced `sisadmins`; the generated audio sounded like `CS Admins`. Earlier spaced aliases such as `sis admins` and `sys admins` also produced separated-letter or paused pronunciations.
 **Cause:** The production voice and `eleven_multilingual_v2` handled raw `Sysadmins` correctly in the accepted full-slide sample, while custom aliases changed model behavior in surrounding sentence context.
 **Fix:** Do not store `PowerShell for Sysadmins`, `sysadmins`, `Sysadmins`, or `SysAdmins` in `coursecraft_cli/voice_pronunciations.json`. Let those terms pass through raw source text; the voice-recordings command should sync the shared dictionary without any sysadmins-specific rules.

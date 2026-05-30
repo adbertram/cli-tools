@@ -1,8 +1,8 @@
 {
   "tool": "manus",
-  "description": "CLI interface for Manus AI API",
-  "discovered_at": "2026-05-20T16:15:14.664578+00:00",
-  "total_commands": 16,
+  "description": "CLI interface for Manus API v2",
+  "discovered_at": "2026-05-28T14:39:45.978007+00:00",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -234,15 +234,23 @@
     },
     "task": {
       "help": "Manage AI tasks",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create": {
-          "help": "Create a new Manus AI task.",
+          "help": "Create a new Manus AI task using the v2 API.",
           "arguments": [
             {
               "name": "prompt",
               "type": "PROMPT",
               "required": false,
-              "help": "The task instruction or query"
+              "help": "Prompt text for the initial task message"
             }
           ],
           "options": [
@@ -250,30 +258,42 @@
               "name": "--prompt-file",
               "type": "TEXT",
               "required": false,
-              "help": "Read prompt from file instead of argument",
+              "help": "Read prompt text from a file",
               "short": "-f"
             },
             {
-              "name": "--profile",
+              "name": "--content-part",
               "type": "TEXT",
               "required": false,
-              "help": "Agent profile (manus-1.5, manus-1.5-lite)",
-              "short": "-p",
-              "default": "manus-1.5"
+              "help": "Additional message content part as JSON object or array of objects",
+              "short": "-c"
             },
             {
-              "name": "--mode",
+              "name": "--agent-profile",
               "type": "TEXT",
               "required": false,
-              "help": "Task mode (chat, adaptive, agent)",
-              "short": "-m",
-              "default": "agent"
+              "help": "Manus agent profile (manus-1.6, manus-1.6-lite, manus-1.6-max)",
+              "short": "-a",
+              "default": "manus-1.6"
+            },
+            {
+              "name": "--project-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Associate the task with a project ID"
+            },
+            {
+              "name": "--interactive",
+              "type": "bool",
+              "required": false,
+              "help": "--no-interactive           Allow the agent to pause and ask follow-up questions",
+              "default": "no-interactive"
             },
             {
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait           Wait for task completion",
+              "help": "--no-wait                  Wait for a terminal status update",
               "short": "-w",
               "default": "wait"
             },
@@ -292,112 +312,60 @@
               "default": "2.0"
             },
             {
-              "name": "--share",
-              "type": "bool",
+              "name": "--share-visibility",
+              "type": "TEXT",
               "required": false,
-              "help": "Create shareable link",
-              "short": "-s"
+              "help": "Task visibility (private, team, public)",
+              "default": "private"
             },
             {
               "name": "--hide",
               "type": "bool",
               "required": false,
-              "help": "Hide from webapp task list"
+              "help": "Hide the task from the Manus webapp task list"
             },
             {
               "name": "--locale",
               "type": "TEXT",
               "required": false,
-              "help": "Locale setting (e.g., en-US)",
+              "help": "Output locale (for example: en, zh-CN, ja)",
               "short": "-l"
             },
             {
-              "name": "--attachment",
+              "name": "--title",
               "type": "TEXT",
               "required": false,
-              "help": "Attachment as JSON object",
-              "short": "-a"
+              "help": "Custom task title"
             },
             {
               "name": "--connector",
               "type": "TEXT",
               "required": false,
-              "help": "Connector ID to enable"
+              "help": "Connector ID to enable for the task"
             },
             {
-              "name": "--quiet",
-              "type": "bool",
-              "required": false,
-              "help": "Suppress status messages",
-              "short": "-q"
-            }
-          ],
-          "examples": [
-            "manus task create \"Write a Python function to calculate fibonacci\"",
-            "manus task create \"Analyze this document\" --no-wait",
-            "manus task create \"Research AI trends\" --share --profile manus-1.5",
-            "manus task create --prompt-file /path/to/prompt.txt"
-          ],
-          "usage_instructions": "Use to submit a new task to Manus AI. PROMPT is positional and optional (use --prompt-file/-f to read from file instead). Default mode is 'agent'; change with --mode/-m (chat, adaptive, agent). Profile 'manus-1.5' is commonly used; change with --profile/-p. By default waits for completion (up to 900s); use --no-wait for async. Use --share/-s to get a shareable link. Use --hide to exclude from webapp."
-        },
-        "continue": {
-          "help": "Continue an existing Manus AI task conversation.",
-          "arguments": [
-            {
-              "name": "task_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Task ID to continue"
-            },
-            {
-              "name": "prompt",
-              "type": "PROMPT",
-              "required": false,
-              "help": "The follow-up message"
-            }
-          ],
-          "options": [
-            {
-              "name": "--prompt-file",
+              "name": "--enable-skill",
               "type": "TEXT",
               "required": false,
-              "help": "Read prompt from file instead of argument",
-              "short": "-f"
+              "help": "Skill ID to enable for the task"
             },
             {
-              "name": "--wait",
-              "type": "bool",
-              "required": false,
-              "help": "--no-wait           Wait for task completion",
-              "short": "-w",
-              "default": "wait"
-            },
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Max seconds to wait for completion",
-              "default": "900.0"
-            },
-            {
-              "name": "--poll",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Seconds between status checks",
-              "default": "2.0"
-            },
-            {
-              "name": "--attachment",
+              "name": "--force-skill",
               "type": "TEXT",
               "required": false,
-              "help": "Attachment as JSON object",
-              "short": "-a"
+              "help": "Skill ID the agent must invoke"
             },
             {
-              "name": "--connector",
+              "name": "--structured-output-schema",
               "type": "TEXT",
               "required": false,
-              "help": "Connector ID to enable"
+              "help": "Structured output JSON schema"
+            },
+            {
+              "name": "--structured-output-schema-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read structured output JSON schema from a file"
             },
             {
               "name": "--quiet",
@@ -413,15 +381,222 @@
               "help": "Auth profile name"
             }
           ],
-          "examples": [
-            "manus task continue task-abc123 \"What about error handling?\"",
-            "manus task continue task-abc123 --prompt-file /path/to/followup.txt",
-            "manus task continue task-abc123 \"Add more details\" --no-wait"
+          "usage_instructions": "Create a Manus API v2 task. PROMPT is optional when using `--prompt-file` or `--content-part`. Use `--agent-profile/-a` for manus-1.6, manus-1.6-lite, or manus-1.6-max. By default waits for a terminal status update; use `--no-wait` for async creation."
+        },
+        "send": {
+          "help": "Send a follow-up message to an existing task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to send the message to"
+            },
+            {
+              "name": "prompt",
+              "type": "PROMPT",
+              "required": false,
+              "help": "Follow-up prompt text"
+            }
           ],
-          "usage_instructions": "Use to send a follow-up message to an existing task. TASK_ID is required (positional). PROMPT is optional (use --prompt-file/-f to read from file). By default waits for completion; use --no-wait for async."
+          "options": [
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read prompt text from a file",
+              "short": "-f"
+            },
+            {
+              "name": "--content-part",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional message content part as JSON object or array of objects",
+              "short": "-c"
+            },
+            {
+              "name": "--agent-profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional Manus agent profile override for this turn",
+              "short": "-a"
+            },
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait           Wait for a terminal status update",
+              "short": "-w",
+              "default": "wait"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Max seconds to wait for completion",
+              "default": "900.0"
+            },
+            {
+              "name": "--poll",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds between status checks",
+              "default": "2.0"
+            },
+            {
+              "name": "--connector",
+              "type": "TEXT",
+              "required": false,
+              "help": "Connector ID to enable for this turn"
+            },
+            {
+              "name": "--enable-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID to enable for this turn"
+            },
+            {
+              "name": "--force-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID the agent must invoke during this turn"
+            },
+            {
+              "name": "--structured-output-schema",
+              "type": "TEXT",
+              "required": false,
+              "help": "Structured output JSON schema"
+            },
+            {
+              "name": "--structured-output-schema-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read structured output JSON schema from a file"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress status messages",
+              "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Send a follow-up message to an existing task through `task.sendMessage`. Use `--agent-profile/-a` only to override the task agent profile for this turn. By default waits for a terminal status update; use `--no-wait` for async sends."
+        },
+        "continue": {
+          "help": "Hidden compatibility alias for task send.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to continue"
+            },
+            {
+              "name": "prompt",
+              "type": "PROMPT",
+              "required": false,
+              "help": "Follow-up prompt text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read prompt text from a file",
+              "short": "-f"
+            },
+            {
+              "name": "--content-part",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional message content part as JSON object or array of objects",
+              "short": "-c"
+            },
+            {
+              "name": "--agent-profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional Manus agent profile override",
+              "short": "-a"
+            },
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait           Wait for a terminal status update",
+              "short": "-w",
+              "default": "wait"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Max seconds to wait for completion",
+              "default": "900.0"
+            },
+            {
+              "name": "--poll",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds between status checks",
+              "default": "2.0"
+            },
+            {
+              "name": "--connector",
+              "type": "TEXT",
+              "required": false,
+              "help": "Connector ID to enable for this turn"
+            },
+            {
+              "name": "--enable-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID to enable for this turn"
+            },
+            {
+              "name": "--force-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID the agent must invoke"
+            },
+            {
+              "name": "--structured-output-schema",
+              "type": "TEXT",
+              "required": false,
+              "help": "Structured output JSON schema"
+            },
+            {
+              "name": "--structured-output-schema-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read structured output JSON schema from a file"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress status messages",
+              "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Compatibility alias for `manus task send`. Use the same arguments and options, including `--agent-profile/-a` for the Manus agent profile override."
         },
         "get": {
-          "help": "Get task status and result.",
+          "help": "Get task metadata and current status.",
           "arguments": [
             {
               "name": "task_id",
@@ -435,22 +610,8 @@
               "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Display as formatted table",
+              "help": "Display the task as a formatted table",
               "short": "-t"
-            },
-            {
-              "name": "--download-files",
-              "type": "bool",
-              "required": false,
-              "help": "Download output files from the task",
-              "short": "-d"
-            },
-            {
-              "name": "--output-dir",
-              "type": "TEXT",
-              "required": false,
-              "help": "Directory for downloaded files (default: current dir)",
-              "short": "-o"
             },
             {
               "name": "--profile",
@@ -459,10 +620,10 @@
               "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Use to retrieve the status and result of a task by TASK_ID. Use --download-files/-d to download output files. Use --output-dir/-o to specify download directory (defaults to current dir). Use --table/-t for formatted output."
+          "usage_instructions": "Use to retrieve the current task object from `task.detail` by TASK_ID. This returns task metadata and status, not the full event history. Use `task messages` for conversation output and status events. Use `--table/-t` for formatted output."
         },
         "wait": {
-          "help": "Wait for a task to complete and return the result.",
+          "help": "Wait for a task to stop or pause for confirmation.",
           "arguments": [
             {
               "name": "task_id",
@@ -487,6 +648,12 @@
               "default": "2.0"
             },
             {
+              "name": "--verbose-messages",
+              "type": "bool",
+              "required": false,
+              "help": "Include verbose message events while polling"
+            },
+            {
               "name": "--quiet",
               "type": "bool",
               "required": false,
@@ -500,10 +667,10 @@
               "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Use to block until a task completes. TASK_ID is required. Default timeout is 900s; change with --timeout. Polls every 2s by default; change with --poll. Use --quiet/-q to suppress progress messages."
+          "usage_instructions": "Use to poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`. Returns the task object plus recent messages. Use `--verbose-messages` to include tool, plan, and explanation events while polling."
         },
         "list": {
-          "help": "List recent tasks.",
+          "help": "List tasks from the Manus v2 API.",
           "options": [
             {
               "name": "--limit",
@@ -517,14 +684,14 @@
               "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Display as formatted table",
+              "help": "Display tasks as a formatted table",
               "short": "-t"
             },
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "help": "Filter: field:op:value",
               "short": "-f"
             },
             {
@@ -535,16 +702,257 @@
               "short": "-p"
             },
             {
+              "name": "--cursor",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor from a previous task list call"
+            },
+            {
+              "name": "--order",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction (asc or desc)",
+              "default": "desc"
+            },
+            {
+              "name": "--scope",
+              "type": "TEXT",
+              "required": false,
+              "help": "Task scope filter"
+            },
+            {
+              "name": "--agent-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by agent ID"
+            },
+            {
+              "name": "--project-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by project ID"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
               "help": "Auth profile name"
             }
           ],
-          "usage_instructions": "Use to browse recent tasks. Default returns 10; change with --limit/-l. Use --filter/-f with field:op:value syntax (e.g., status:eq:completed). Use --properties/-p to select specific fields. Use --table/-t for formatted output."
+          "usage_instructions": "Use to list tasks from `task.list`. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus cursor/order/scope filters such as `--cursor`, `--order`, `--scope`, `--agent-id`, and `--project-id`."
+        },
+        "messages": {
+          "help": "List task event messages from the Manus v2 API.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to list messages for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of messages to return",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display messages as a formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include (supports dot notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--cursor",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor from a previous messages call"
+            },
+            {
+              "name": "--order",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction (asc or desc)",
+              "default": "desc"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Include detailed tool/plan/explanation events"
+            },
+            {
+              "name": "--slides-format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Slide attachment format when applicable (html or pptx)"
+            },
+            {
+              "name": "--download-files",
+              "type": "bool",
+              "required": false,
+              "help": "Download message attachments returned by the API",
+              "short": "-d"
+            },
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Directory for downloaded files (default: current directory)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Use to list task event messages from `task.listMessages`. TASK_ID is required. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus pagination and verbosity flags such as `--cursor`, `--order`, `--verbose`, and `--slides-format`. Use `--download-files` to download message attachments."
+        },
+        "update": {
+          "help": "Update task metadata.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New title for the task"
+            },
+            {
+              "name": "--share-visibility",
+              "type": "TEXT",
+              "required": false,
+              "help": "New task visibility (private, team, public)"
+            },
+            {
+              "name": "--visible-in-task-list",
+              "type": "bool",
+              "required": false,
+              "help": "Show the task in the Manus webapp task list"
+            },
+            {
+              "name": "--hidden-in-task-list",
+              "type": "bool",
+              "required": false,
+              "help": "Hide the task from the Manus webapp task list"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Use to update task metadata through `task.update`. TASK_ID is required and you must pass at least one mutation flag: `--title`, `--share-visibility`, `--visible-in-task-list`, or `--hidden-in-task-list`."
+        },
+        "stop": {
+          "help": "Stop a running task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to stop"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Use to stop a running task through `task.stop`. TASK_ID is required. The API response is a lightweight acknowledgement; use `task wait` or `task get` afterward if you need the resulting task state."
+        },
+        "delete": {
+          "help": "Delete a task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Use to permanently delete a task through `task.delete`. TASK_ID is required. Delete is separate from stop; stop a running task first if necessary."
+        },
+        "confirm": {
+          "help": "Confirm a pending action so a waiting task can resume.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID with the pending action"
+            },
+            {
+              "name": "event_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Waiting event ID from task messages"
+            }
+          ],
+          "options": [
+            {
+              "name": "--input",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional JSON input for the confirmation"
+            },
+            {
+              "name": "--input-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read optional confirmation JSON input from a file"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Use to confirm a waiting action through `task.confirmAction`. Pass the TASK_ID and the waiting EVENT_ID from `task messages`. Use `--input` or `--input-file` when the waiting event requires structured confirmation data."
         }
       },
-      "usage_instructions": "Task management -- create, continue, get, wait for, and list Manus AI tasks. Tasks can run in agent, chat, or adaptive mode. By default tasks wait for completion; use --no-wait for async execution."
+      "usage_instructions": "Manage Manus API v2 tasks. `create` starts a task, `send`/`continue` sends follow-up messages, `get` reads metadata, `messages` reads event history, `wait` polls `task.listMessages`, and `update`/`stop`/`delete`/`confirm` mutate task state. The injected task-group `--profile` option selects a saved auth profile; task `--agent-profile` selects Manus model capability."
     },
     "cache": {
       "help": "Manage response cache",
@@ -557,5 +965,5 @@
       "usage_instructions": "Run `manus cache --help` for exact arguments and options."
     }
   },
-  "usage_instructions": "Use for creating and managing Manus AI tasks. Commands follow `manus <group> <action>` pattern. Supports multiple profiles for different environments. Tasks can run in agent, chat, or adaptive mode with wait/no-wait execution."
+  "usage_instructions": "Use `manus <command-group> <action> [arguments] [options]`. JSON is the default output. Use auth/profile `--profile` options for saved credential profiles; use task `--agent-profile` for Manus model selection. Consult command entries before executing."
 }
