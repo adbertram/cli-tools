@@ -161,6 +161,10 @@ class ThingsClient:
         except ValueError:
             return None
 
+    def _today_date_int(self) -> int:
+        """Return today's date in Things packed integer format."""
+        return self._iso_to_date_int(datetime.now().strftime('%Y-%m-%d'))
+
     # ==================== Auth Methods ====================
 
     def auth_status(self) -> AuthStatus:
@@ -335,19 +339,15 @@ class ThingsClient:
                 query += " AND t.start = 0 AND t.project IS NULL"
             elif when == 'anytime':
                 query += " AND t.start = 1 AND (t.startDate IS NULL OR t.startDate <= ?)"
-                # Today as days since 2001-01-01
-                today_int = (datetime.now() - datetime(2001, 1, 1)).days
-                params.append(today_int)
+                params.append(self._today_date_int())
             elif when == 'someday':
                 query += " AND t.start = 2"
             elif when == 'today':
-                today_int = (datetime.now() - datetime(2001, 1, 1)).days
-                query += " AND t.startDate = ?"
-                params.append(today_int)
+                query += " AND t.startDate <= ?"
+                params.append(self._today_date_int())
             elif when == 'upcoming':
-                today_int = (datetime.now() - datetime(2001, 1, 1)).days
                 query += " AND t.startDate > ?"
-                params.append(today_int)
+                params.append(self._today_date_int())
 
             if area:
                 # Match todos directly in area OR todos in projects that are in the area
@@ -467,6 +467,48 @@ class ThingsClient:
             if not row:
                 raise ClientError(f"Todo not found: {uuid}")
             return self._row_to_task(row, conn)
+
+    def _resolve_todo_completion_uuid(self, uuid: str) -> str:
+        """Resolve a recurring backing todo to its active generated instance.
+
+        Things stores repeating todos as a backing/template row plus separate
+        generated instance rows. The backing row is not what the Today view
+        completes. When callers pass a backing UUID, complete the open generated
+        instance due today or earlier.
+        """
+        with self._connect(readonly=True) as conn:
+            cursor = conn.execute(
+                "SELECT * FROM TMTask WHERE uuid = ? AND type = 0",
+                (uuid,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ClientError(f"Todo not found: {uuid}")
+
+            repeating_template = row['rt1_repeatingTemplate']
+            recurrence_rule = row['rt1_recurrenceRule']
+            if repeating_template or recurrence_rule is None:
+                return uuid
+
+            today_int = self._today_date_int()
+            cursor = conn.execute(
+                """
+                SELECT uuid FROM TMTask
+                WHERE type = 0
+                  AND trashed = 0
+                  AND status = 0
+                  AND rt1_repeatingTemplate = ?
+                  AND startDate IS NOT NULL
+                  AND startDate <= ?
+                ORDER BY startDate DESC, todayIndex, `index`
+                LIMIT 1
+                """,
+                (uuid, today_int),
+            )
+            instance = cursor.fetchone()
+            if not instance:
+                return uuid
+            return instance['uuid']
 
     def list_projects(
         self,
@@ -811,9 +853,10 @@ class ThingsClient:
         Raises:
             ClientError: If todo not found or AppleScript fails
         """
+        completion_uuid = self._resolve_todo_completion_uuid(uuid)
         script = f'''
         tell application "Things3"
-            set theToDo to (to do id "{uuid}")
+            set theToDo to (to do id "{completion_uuid}")
             set status of theToDo to completed
             return id of theToDo
         end tell
@@ -822,7 +865,7 @@ class ThingsClient:
         self._run_applescript(script)
         return self._wait_for_status(
             self.get_todo,
-            uuid,
+            completion_uuid,
             TaskStatus.COMPLETED,
             "todo",
         )
