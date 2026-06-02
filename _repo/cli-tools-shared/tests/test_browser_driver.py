@@ -17,7 +17,7 @@ class _Proc:
 
 
 def test_browser_open_cleans_same_session_state_before_launch(tmp_path, monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     events: list[str] = []
     persistent = tmp_path / "chromium-profile"
 
@@ -71,8 +71,8 @@ def test_browser_open_cleans_same_session_state_before_launch(tmp_path, monkeypa
 
 
 def test_session_process_pids_match_only_same_session_user_data_dir(tmp_path, monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
-    session_dir = tmp_path / "ud-pluralsight-author"
+    service = BrowserHarnessService("sample-browser-session")
+    session_dir = tmp_path / "ud-sample-browser-session"
     other_dir = tmp_path / "ud-other"
     extra_dir = Path(f"{session_dir}-extra")
     service._user_data_dir = session_dir
@@ -119,8 +119,8 @@ def test_macos_app_launch_uses_new_instance_command():
 
 
 def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks(tmp_path, monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
-    user_data_dir = tmp_path / "ud-pluralsight-author"
+    service = BrowserHarnessService("sample-browser-session")
+    user_data_dir = tmp_path / "ud-sample-browser-session"
     user_data_dir.mkdir(parents=True)
     lock_paths = [
         user_data_dir / "SingletonCookie",
@@ -141,14 +141,14 @@ def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks
 
     service._cleanup_stale_session()
 
-    assert restarted == ["pluralsight-author"]
+    assert restarted == ["sample-browser-session"]
     assert killed == [201, 202]
     for path in lock_paths:
         assert not path.exists()
 
 
 def test_browser_open_surfaces_stale_cleanup_failure(tmp_path, monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     monkeypatch.setattr(
         service,
         "_cleanup_stale_session",
@@ -200,7 +200,7 @@ def _prepare_open_success(service, monkeypatch):
 
 
 def test_browser_open_navigates_requested_url_via_daemon(tmp_path, monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     persistent = tmp_path / "chromium-profile"
     events: list[str] = []
     _prepare_open_success(service, monkeypatch)
@@ -274,7 +274,7 @@ def _open_service_with_eval(monkeypatch, eval_results):
     we don't need a real daemon. Returns ``(service, calls)`` where ``calls``
     is a list of every JS string the method passed to ``evaluate``.
     """
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     monkeypatch.setattr(service, "_require_open", lambda: None)
     calls: list[str] = []
     if callable(eval_results):
@@ -357,7 +357,7 @@ def test_query_selector_returns_none_when_absent(monkeypatch):
 
 
 def test_page_eval_wraps_evaluate_result(monkeypatch):
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     monkeypatch.setattr(service, "_require_open", lambda: None)
     monkeypatch.setattr(
         service,
@@ -403,7 +403,7 @@ def test_locator_select_option_supports_value(monkeypatch):
 
 def test_cleanup_session_lock_raises_when_singletonlock_points_at_live_pid(tmp_path, monkeypatch):
     """Live SingletonLock → fail fast with PID + actionable hint."""
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     ud = tmp_path / "ud"
     ud.mkdir()
     lock = ud / "SingletonLock"
@@ -420,7 +420,7 @@ def test_cleanup_session_lock_raises_when_singletonlock_points_at_live_pid(tmp_p
 
 def test_cleanup_session_lock_deletes_when_pid_is_dead(tmp_path, monkeypatch):
     """Dead PID in SingletonLock target → lock is stale, delete it."""
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     ud = tmp_path / "ud"
     ud.mkdir()
     lock = ud / "SingletonLock"
@@ -435,7 +435,7 @@ def test_cleanup_session_lock_deletes_when_pid_is_dead(tmp_path, monkeypatch):
 
 def test_cleanup_session_lock_treats_unparseable_target_as_stale(tmp_path, monkeypatch):
     """If the lock target can't be parsed as <host>-<pid>, treat as stale."""
-    service = BrowserHarnessService("pluralsight-author")
+    service = BrowserHarnessService("sample-browser-session")
     ud = tmp_path / "ud"
     ud.mkdir()
     lock = ud / "SingletonLock"

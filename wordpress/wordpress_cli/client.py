@@ -547,7 +547,7 @@ class WordPressClient:
 
     # Schedule reservation directory for preventing race conditions between
     # concurrent auto-schedule calls (e.g., parallel pipeline runs)
-    _RESERVATION_DIR = Path.home() / ".cache" / "ata-blog" / "schedule-reservations"
+    _RESERVATION_DIR = Path.home() / ".cache" / "wordpress-cli" / "schedule-reservations"
 
     def _read_schedule_reservations(self) -> List[datetime]:
         """Read pending schedule reservations, cleaning up expired ones."""
