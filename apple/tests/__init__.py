@@ -1,0 +1,1 @@
+"""Apple CLI tests."""

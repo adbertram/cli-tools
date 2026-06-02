@@ -1,0 +1,10 @@
+query getConsumerProfile {
+  consumer {
+    id
+    defaultAddress {
+      id
+      lat
+      lng
+    }
+  }
+}

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mindmeister-cli"
+version = "0.1.0"
+description = "CLI interface for Mindmeister API"
+requires-python = ">=3.11"
+dependencies = [
+    "cli-tools-shared",
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+mindmeister = "mindmeister_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mindmeister_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

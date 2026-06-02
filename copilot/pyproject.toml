@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copilot-cli"
+version = "0.1.0"
+description = "CLI interface for Microsoft Copilot Studio agents via Dataverse API"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "CLI Tools contributors"}
+]
+keywords = ["copilot", "microsoft", "dataverse", "cli", "api", "automation", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.25.0",
+    "msal>=1.28.0",
+    "PyYAML>=6.0.0",
+    "microsoft-agents-copilotstudio-client>=0.6.1",
+    "aiohttp>=3.9",
+    # Pin will be bumped once cli-tools-shared cuts a release tag that
+    # includes the paths + secrets modules and the profile-discovery
+    # hooks (currently on main as 244b661).
+    "cli-tools-shared",
+    # Cross-platform OS keychain access (macOS Keychain, Windows Credential
+    # Manager, Linux libsecret). Required for storing AZURE_CLIENT_SECRET,
+    # M365_SDK_CLIENT_SECRET, and DIRECTLINE_SECRET outside plain-text .env.
+    "keyring>=24.0",
+    # Optional fallback for headless Linux servers without libsecret. Provides
+    # a `pass`-store backend; users opt in by configuring keyring to use it.
+    "keyrings-alt>=5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+copilot = "copilot_cli.main:app"
+
+[project.urls]
+"Homepage" = "https://github.com/your-org/cli-tools"
+"Bug Tracker" = "https://github.com/your-org/cli-tools/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["copilot_cli*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=copilot_cli --cov-report=term-missing"
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

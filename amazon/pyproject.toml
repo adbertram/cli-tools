@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazon-cli"
+version = "0.1.0"
+description = "CLI interface for Amazon (browser automation)"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "cli-tools-shared",
+]
+
+[project.scripts]
+amazon = "amazon_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["amazon_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

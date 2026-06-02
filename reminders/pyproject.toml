@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reminders-cli"
+version = "0.1.0"
+description = "CLI interface for macOS Reminders"
+requires-python = ">=3.11"
+dependencies = [
+    "cli-tools-shared",
+    "typer>=0.9.0",
+    "pyobjc-framework-EventKit>=12.0",
+    "pyobjc-framework-Cocoa>=12.0",
+]
+
+[project.scripts]
+reminders = "reminders_cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["reminders_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

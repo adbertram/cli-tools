@@ -1,0 +1,594 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ebay-lego-bulk-template-schema",
+  "title": "eBay LEGO Bulk Listing Template Schema",
+  "description": "Schema for eBay CLI LEGO bulk listing templates. Templates define reusable defaults for creating LEGO bulk listings.",
+  "type": "object",
+  "required": ["name", "template"],
+  "$defs": {
+    "legoType": {
+      "description": "LEGO Type item specific values (148 options)",
+      "enum": [
+        "Aircraft Part",
+        "Angle",
+        "Animal",
+        "Animal & Creatures",
+        "Antenna",
+        "Arch",
+        "Axle",
+        "Baby Comp",
+        "Baseplate",
+        "Beam",
+        "BigFig Comp",
+        "BIONICLE Masks",
+        "BIONICLE Parts",
+        "Boat Hull",
+        "BOOST Smart Hub",
+        "Bow",
+        "Brackets",
+        "Brick",
+        "Bricks & Blocks",
+        "Brick Separator",
+        "BURP",
+        "Bush",
+        "Cable & Hose",
+        "Cam",
+        "Chain Link",
+        "CLIKITS Parts",
+        "Clutch",
+        "Coaster Part",
+        "Column",
+        "Cone",
+        "Connections",
+        "Connector",
+        "Container",
+        "Crane & Scaffold",
+        "Damper",
+        "Decoration Element",
+        "Dish",
+        "Dishes & Utensils",
+        "Dome",
+        "Door",
+        "DUPLO Figure",
+        "DUPLO Figure Accessory",
+        "Element connections",
+        "Empty Box",
+        "Fence",
+        "Figure",
+        "Flag",
+        "Food",
+        "Furniture",
+        "Gear",
+        "Gear & Gear Rack",
+        "Gearbox",
+        "Half Beam",
+        "Hinge",
+        "Hose",
+        "Hub Cap",
+        "Ladder",
+        "Large Tire & Rim",
+        "Launcher",
+        "Linkage",
+        "Lot",
+        "Machine Arm",
+        "Magnet",
+        "MINDSTORM",
+        "Minidoll Accessory",
+        "Minidoll Head",
+        "Minidoll Legs",
+        "Minidoll Torso",
+        "Minifigure Accessory",
+        "Minifigure Arms",
+        "Minifigure Comp",
+        "Minifigure Foot Accessory",
+        "Minifigure Hair",
+        "Minifigure Hand Accessory",
+        "Minifigure Handheld Accessory",
+        "Minifigure Hands",
+        "Minifigure Head",
+        "Minifigure Headgear",
+        "Minifigure Headgear Accessory",
+        "Minifigure Leg Accessory",
+        "Minifigure Legs",
+        "Minifigure Neck Accessory",
+        "Minifigure Tool & Accessory",
+        "Minifigure Torso",
+        "Minifigure Torso Accessory",
+        "Minifigure Waist Accessory",
+        "Modified Arch",
+        "Modified Bow",
+        "Modified Brick",
+        "Modified Plate",
+        "Modified TECHNIC Beam",
+        "Modified TECHNIC Half Beam",
+        "Modified Tire & Rim",
+        "Nanofigure",
+        "Non-Electric Motor",
+        "Panel",
+        "Plant",
+        "Plant & Flower",
+        "Play Table",
+        "Pneumatic",
+        "Pull Back Motor",
+        "Pulley",
+        "Rack",
+        "Road Plate",
+        "Rod",
+        "Roofing",
+        "Round & Angle",
+        "Round Brick",
+        "Rubber Band/Belt",
+        "Rubber Band & String",
+        "Seat/Chair",
+        "Shelf & Cubby",
+        "Shooter",
+        "Shovel",
+        "Sign, Flag & Pole",
+        "Slope",
+        "Small Tire & Rim",
+        "Spinner",
+        "Spring",
+        "Sprocket",
+        "Steering",
+        "Sticker",
+        "String",
+        "Support",
+        "Switch",
+        "Table",
+        "TECHNIC Beam",
+        "TECHNIC Beam with Ball & Cup",
+        "TECHNIC Beam with Shapes",
+        "TECHNIC Brick",
+        "TECHNIC Half Beam",
+        "Tile",
+        "Tire",
+        "Track",
+        "Train Motor",
+        "Train Part",
+        "Train Track",
+        "Tree & Plant",
+        "Turntable",
+        "Vehicle",
+        "Vehicle Part",
+        "Wedge",
+        "Wheel",
+        "Wheel Base",
+        "Window",
+        "Window, Wall & Door",
+        "Windscreen",
+        "Worm"
+      ]
+    },
+    "legoColor": {
+      "description": "LEGO Color item specific values (16 options)",
+      "enum": [
+        "Beige",
+        "Black",
+        "Blue",
+        "Brown",
+        "Clear",
+        "Gold",
+        "Gray",
+        "Green",
+        "Multicolor",
+        "Orange",
+        "Pink",
+        "Purple",
+        "Red",
+        "Silver",
+        "White",
+        "Yellow"
+      ]
+    },
+    "unitType": {
+      "description": "Unit Type item specific values (8 options)",
+      "enum": [
+        "Unit",
+        "oz",
+        "lb",
+        "fl oz",
+        "gal",
+        "ft",
+        "ft²",
+        "ft³"
+      ]
+    },
+    "listingFormat": {
+      "description": "eBay listing format options",
+      "enum": ["FIXED_PRICE", "AUCTION"]
+    },
+    "itemCondition": {
+      "description": "Item condition display values",
+      "enum": ["New", "Used"]
+    }
+  },
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique template identifier (e.g., 'lego-bulk', 'vintage-camera')",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the template's purpose"
+    },
+    "template": {
+      "type": "object",
+      "description": "The template configuration",
+      "properties": {
+        "title": {
+          "type": "object",
+          "description": "Title configuration",
+          "properties": {
+            "prefix": {
+              "type": "string",
+              "description": "Text to prepend to item-specific title",
+              "maxLength": 80
+            },
+            "suffix": {
+              "type": "string",
+              "description": "Text to append to item-specific title (e.g., '- Cleaned and Sanitized')",
+              "maxLength": 80
+            },
+            "template": {
+              "type": "string",
+              "description": "Full title template with placeholders (e.g., 'LEGO {weight}lb Bulk Lot - {features}')",
+              "maxLength": 80
+            }
+          }
+        },
+        "subtitle": {
+          "type": "string",
+          "description": "Listing subtitle (costs $2.00 extra)",
+          "maxLength": 55
+        },
+        "category": {
+          "type": "object",
+          "description": "eBay category configuration. IMPORTANT: Must be a leaf category (no subcategories).",
+          "properties": {
+            "categoryId": {
+              "type": "string",
+              "description": "eBay leaf category ID. Must be a leaf category (e.g., '183449' for LEGO Mixed Lots). Non-leaf categories like '183446' will fail at publish time."
+            },
+            "categoryPath": {
+              "type": "string",
+              "description": "Human-readable category path for reference",
+              "examples": ["Toys & Hobbies > Building Toys > LEGO Building Toys > LEGO Mixed Lots"]
+            },
+            "storeCategoryId": {
+              "type": "string",
+              "description": "eBay Store category ID"
+            },
+            "storeCategoryName": {
+              "type": "string",
+              "description": "eBay Store category name for reference"
+            }
+          }
+        },
+        "itemSpecifics": {
+          "type": "object",
+          "description": "Item specifics (aspects) - key-value pairs or arrays for multi-value. See $defs for valid enum values for LEGO category.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
+          "examples": [
+            {
+              "Brand": "LEGO",
+              "Type": "Lot",
+              "Color": "Multicolor",
+              "Features": ["Bulk Lot", "Sold by Weight", "Washed & Sanitized"],
+              "Unit Type": "lb"
+            }
+          ]
+        },
+        "condition": {
+          "type": "object",
+          "description": "Item condition configuration",
+          "properties": {
+            "conditionId": {
+              "type": "string",
+              "description": "eBay condition ID (for reference/display)",
+              "enum": ["1000", "1500", "1750", "2000", "2010", "2020", "2030", "2500", "2750", "2990", "3000", "3010", "4000", "5000", "6000", "7000"]
+            },
+            "conditionEnum": {
+              "type": "string",
+              "description": "eBay Inventory API condition enum value (preferred over conditionId)",
+              "enum": [
+                "NEW", "LIKE_NEW", "NEW_OTHER", "NEW_WITH_DEFECTS",
+                "MANUFACTURER_REFURBISHED", "CERTIFIED_REFURBISHED",
+                "EXCELLENT_REFURBISHED", "VERY_GOOD_REFURBISHED", "GOOD_REFURBISHED",
+                "SELLER_REFURBISHED", "PRE_OWNED_EXCELLENT", "USED_EXCELLENT",
+                "PRE_OWNED_FAIR", "USED_VERY_GOOD",
+                "USED_GOOD", "USED_ACCEPTABLE", "FOR_PARTS_OR_NOT_WORKING"
+              ]
+            },
+            "conditionDisplay": {
+              "type": "string",
+              "description": "Human-readable condition (New or Used for LEGO category)",
+              "$ref": "#/$defs/itemCondition"
+            },
+            "conditionDescription": {
+              "type": "string",
+              "description": "Detailed condition description",
+              "maxLength": 1000,
+              "examples": ["All pieces washed sanitized and in great shape"]
+            }
+          }
+        },
+        "description": {
+          "type": "object",
+          "description": "Listing description configuration",
+          "properties": {
+            "template": {
+              "type": "string",
+              "description": "HTML or plain text description template with placeholders"
+            },
+            "useAI": {
+              "type": "boolean",
+              "description": "Whether to use eBay AI description generation",
+              "default": false
+            }
+          }
+        },
+        "pricing": {
+          "type": "object",
+          "description": "Pricing configuration",
+          "properties": {
+            "format": {
+              "$ref": "#/$defs/listingFormat",
+              "description": "Listing format (FIXED_PRICE = Buy It Now, AUCTION = Auction)",
+              "default": "FIXED_PRICE"
+            },
+            "price": {
+              "type": "object",
+              "description": "Default price (can be overridden per listing)",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "Price value as string (e.g., '29.99')"
+                },
+                "currency": {
+                  "type": "string",
+                  "description": "Currency code",
+                  "default": "USD",
+                  "enum": ["USD", "GBP", "EUR", "CAD", "AUD"]
+                }
+              }
+            },
+            "quantity": {
+              "type": "integer",
+              "description": "Default quantity",
+              "minimum": 1,
+              "default": 1
+            },
+            "allowOffers": {
+              "type": "boolean",
+              "description": "Allow Best Offer on listings",
+              "default": false
+            },
+            "minimumOfferPrice": {
+              "type": "string",
+              "description": "Minimum offer to auto-accept (if allowOffers is true)"
+            },
+            "autoDeclinePrice": {
+              "type": "string",
+              "description": "Offers below this price are auto-declined"
+            },
+            "autoPriceReduction": {
+              "type": "boolean",
+              "description": "Enable automatic price reduction until sold",
+              "default": false
+            }
+          }
+        },
+        "shipping": {
+          "type": "object",
+          "description": "Shipping configuration",
+          "properties": {
+            "fulfillmentPolicyId": {
+              "type": "string",
+              "description": "eBay fulfillment policy ID"
+            },
+            "fulfillmentPolicyName": {
+              "type": "string",
+              "description": "Fulfillment policy name for reference"
+            },
+            "packageWeight": {
+              "type": "object",
+              "description": "Default package weight",
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "description": "Weight value"
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": ["POUND", "OUNCE", "KILOGRAM", "GRAM"],
+                  "default": "POUND"
+                }
+              }
+            },
+            "packageDimensions": {
+              "type": "object",
+              "description": "Default package dimensions",
+              "properties": {
+                "length": { "type": "number" },
+                "width": { "type": "number" },
+                "height": { "type": "number" },
+                "unit": {
+                  "type": "string",
+                  "enum": ["INCH", "CENTIMETER"],
+                  "default": "INCH"
+                }
+              }
+            },
+            "irregularPackage": {
+              "type": "boolean",
+              "description": "Package is non-standard shape",
+              "default": false
+            },
+            "internationalShipping": {
+              "type": "boolean",
+              "description": "Enable eBay International Shipping",
+              "default": true
+            }
+          }
+        },
+        "policies": {
+          "type": "object",
+          "description": "eBay business policies",
+          "properties": {
+            "paymentPolicyId": {
+              "type": "string",
+              "description": "Payment policy ID"
+            },
+            "paymentPolicyName": {
+              "type": "string",
+              "description": "Payment policy name for reference"
+            },
+            "returnPolicyId": {
+              "type": "string",
+              "description": "Return policy ID"
+            },
+            "returnPolicyName": {
+              "type": "string",
+              "description": "Return policy name for reference"
+            }
+          }
+        },
+        "location": {
+          "type": "object",
+          "description": "Item location configuration",
+          "properties": {
+            "merchantLocationKey": {
+              "type": "string",
+              "description": "eBay merchant location key"
+            },
+            "postalCode": {
+              "type": "string",
+              "description": "Postal/ZIP code for reference"
+            },
+            "city": {
+              "type": "string",
+              "description": "City for reference"
+            },
+            "stateOrProvince": {
+              "type": "string",
+              "description": "State/province for reference"
+            },
+            "country": {
+              "type": "string",
+              "description": "Country code (e.g., 'US')",
+              "default": "US"
+            }
+          }
+        },
+        "marketplaceId": {
+          "type": "string",
+          "description": "eBay marketplace",
+          "enum": ["EBAY_US", "EBAY_UK", "EBAY_DE", "EBAY_AU", "EBAY_CA", "EBAY_FR", "EBAY_IT", "EBAY_ES"],
+          "default": "EBAY_US"
+        },
+        "inventory": {
+          "type": "object",
+          "description": "Inventory item defaults (applied to eBay Inventory API)",
+          "properties": {
+            "packageWeightAndSize": {
+              "type": "object",
+              "description": "Package weight and dimensions for shipping calculations",
+              "properties": {
+                "weight": {
+                  "type": "object",
+                  "description": "Package weight",
+                  "properties": {
+                    "value": {
+                      "type": "number",
+                      "description": "Weight value",
+                      "minimum": 0
+                    },
+                    "unit": {
+                      "type": "string",
+                      "description": "Weight unit",
+                      "enum": ["POUND", "OUNCE", "KILOGRAM", "GRAM"],
+                      "default": "POUND"
+                    }
+                  },
+                  "required": ["value", "unit"]
+                },
+                "dimensions": {
+                  "type": "object",
+                  "description": "Package dimensions",
+                  "properties": {
+                    "length": { "type": "number", "minimum": 0 },
+                    "width": { "type": "number", "minimum": 0 },
+                    "height": { "type": "number", "minimum": 0 },
+                    "unit": {
+                      "type": "string",
+                      "enum": ["INCH", "CENTIMETER"],
+                      "default": "INCH"
+                    }
+                  }
+                },
+                "packageType": {
+                  "type": "string",
+                  "description": "Package type for shipping",
+                  "enum": [
+                    "LETTER", "LARGE_ENVELOPE", "PACKAGE_THICK_ENVELOPE",
+                    "EXTRA_LARGE_PACKAGE", "LARGE_PACKAGE", "VERY_LARGE_PACKAGE",
+                    "MAILING_BOX", "USPS_FLAT_RATE_ENVELOPE", "USPS_SMALL_FLAT_RATE_BOX",
+                    "USPS_MEDIUM_FLAT_RATE_BOX", "USPS_LARGE_FLAT_RATE_BOX"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "format": {
+          "type": "string",
+          "description": "Listing format (top-level shorthand, same as pricing.format)",
+          "$ref": "#/$defs/listingFormat"
+        }
+      },
+      "required": ["inventory"],
+      "allOf": [
+        {
+          "properties": {
+            "inventory": {
+              "required": ["packageWeightAndSize"],
+              "properties": {
+                "packageWeightAndSize": {
+                  "required": ["weight"],
+                  "properties": {
+                    "weight": {
+                      "required": ["value", "unit"],
+                      "properties": {
+                        "value": {
+                          "type": "number",
+                          "minimum": 0.1,
+                          "description": "Weight value must be greater than 0"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when template was created"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when template was last updated"
+    }
+  }
+}

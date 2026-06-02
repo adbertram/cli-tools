@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "n8n-cli"
+version = "0.1.0"
+description = "Convert standardized CLI tools into n8n community node packages"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "pydantic>=2.0.0",
+    "cli-tools-shared",
+]
+
+[project.scripts]
+n8n = "n8n_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["n8n_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

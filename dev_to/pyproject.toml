@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dev_to-cli"
+version = "0.1.0"
+description = "CLI interface for the DEV Community API"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "cli-tools-shared",
+]
+
+[project.scripts]
+dev_to = "dev_to_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dev_to_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "api-spec-converter": "^2.12.0"
+  }
+}

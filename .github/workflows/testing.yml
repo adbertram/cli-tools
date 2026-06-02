@@ -1,0 +1,101 @@
+name: testing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    name: Discover CLI tools
+    runs-on: ubuntu-latest
+    outputs:
+      tools: ${{ steps.tools.outputs.tools }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build tool matrix
+        id: tools
+        shell: bash
+        run: |
+          tools="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          tools = sorted(
+              path.parent.name
+              for path in Path(".").glob("*/pyproject.toml")
+          )
+          if not tools:
+              raise SystemExit("No CLI tools found")
+          print(json.dumps(tools))
+          PY
+          )"
+
+          {
+            echo "tools<<JSON"
+            echo "$tools"
+            echo "JSON"
+          } >> "$GITHUB_OUTPUT"
+
+          python3 - <<'PY' "$tools" >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import sys
+
+          tools = json.loads(sys.argv[1])
+          print(f"Discovered {len(tools)} CLI tools.")
+          PY
+
+  test:
+    name: Test ${{ matrix.cli }}
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        cli: ${{ fromJson(needs.discover.outputs.tools) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+
+      - name: Install CLI
+        shell: bash
+        run: ./_repo/_scripts/install-cli-tool.sh "${{ matrix.cli }}"
+
+      - name: Smoke installed CLI
+        shell: bash
+        run: |
+          command_name="$(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path("${{ matrix.cli }}/pyproject.toml").read_text())
+          scripts = data["project"]["scripts"]
+          if len(scripts) != 1:
+              raise SystemExit("expected exactly one project script")
+          print(next(iter(scripts)))
+          PY
+          )"
+          "$HOME/.local/bin/$command_name" --help >/dev/null
+
+      - name: Run tool tests
+        shell: bash
+        run: |
+          if [[ -d "${{ matrix.cli }}/tests" ]]; then
+            cd "${{ matrix.cli }}"
+            uv run pytest -q
+          else
+            echo "No tests directory for ${{ matrix.cli }}; skipping."
+          fi

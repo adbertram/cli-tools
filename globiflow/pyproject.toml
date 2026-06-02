@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "globiflow-cli"
+version = "0.1.0"
+description = "CLI interface for Globiflow (browser automation)"
+requires-python = ">=3.11"
+dependencies = [
+    "cli-tools-shared",
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "playwright>=1.40.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+globiflow = "globiflow_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["globiflow_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

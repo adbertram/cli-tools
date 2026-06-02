@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-cli"
+version = "0.1.0"
+description = "CLI interface for Youtube API"
+requires-python = ">=3.11"
+dependencies = [
+    "cli-tools-shared",
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "Pillow>=12.2.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth-oauthlib>=1.0.0",
+    "google-auth-httplib2>=0.1.0",
+]
+
+[project.scripts]
+youtube = "youtube_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["youtube_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

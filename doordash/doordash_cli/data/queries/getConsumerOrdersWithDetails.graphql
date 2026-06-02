@@ -1,0 +1,72 @@
+query getConsumerOrdersWithDetails($offset: Int!, $limit: Int!, $includeCancelled: Boolean) {
+  getConsumerOrdersWithDetails(offset: $offset, limit: $limit, includeCancelled: $includeCancelled) {
+    id
+    orderUuid
+    deliveryUuid
+    createdAt
+    submittedAt
+    fulfilledAt
+    cancelledAt
+    specialInstructions
+    isReorderable
+    isGift
+    isPickup
+    isRetail
+    isMerchantShipping
+    isGroup
+    containsAlcohol
+    fulfillmentType
+    shoppingProtocol
+    creator {
+      id
+      firstName
+      lastName
+    }
+    deliveryAddress {
+      id
+      formattedAddress
+    }
+    orders {
+      id
+      items {
+        id
+        name
+        quantity
+        specialInstructions
+        substitutionPreferences
+        originalItemPrice
+        orderItemExtras {
+          menuItemExtraId
+          name
+          orderItemExtraOptions {
+            menuExtraOptionId
+            name
+            description
+            price
+            quantity
+          }
+        }
+      }
+    }
+    paymentCard {
+      id
+      last4
+      type
+    }
+    grandTotal {
+      unitAmount
+      currency
+      decimalPlaces
+      displayString
+    }
+    store {
+      id
+      name
+      phoneNumber
+      business {
+        id
+        name
+      }
+    }
+  }
+}
