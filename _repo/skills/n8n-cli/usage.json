@@ -1,0 +1,1830 @@
+{
+  "tool": "n8n",
+  "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
+  "discovered_at": "2026-05-20T16:16:00.019397+00:00",
+  "total_commands": 60,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage n8n authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'api_key')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Configure and store n8n credentials interactively. Prompts for API key (or other credential type). Use --profile/-p to store under a named profile; --force/-F overwrites existing credentials without confirmation."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored credentials and any browser session for the current or named profile. Use --force/-F to skip confirmation."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check whether credentials are configured AND valid by making a real API call. Returns JSON with `authenticated: true/false`. Use --table/-t for a human view."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Verify credentials work end-to-end by calling the n8n API. Use when debugging auth issues -- distinguishes 'not configured' from 'configured but invalid'."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all authentication profiles and show which one is the default. Use --table/-t for a human-readable view."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show details for a specific profile by name, including which env vars are set (values masked)."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new profile from .env.example template. Prompts for each required field. Follow up with `auth login --profile <name>` to populate credentials."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Mark a profile as the default so commands without --profile use it. Sets IS_DEFAULT_PROFILE=1 in the profile."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and all its stored data. Use --force/-F to skip confirmation."
+            }
+          },
+          "usage_instructions": "Manage multiple named authentication profiles. Useful for working against multiple n8n instances (dev/staging/prod). The default profile is used when --profile is omitted."
+        }
+      },
+      "usage_instructions": "Authentication lifecycle: login to store credentials, check status, test that they work, refresh OAuth tokens, or logout. Runs per-profile when --profile is used."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses from the local cache directory. Use when you want a guaranteed-fresh fetch from the n8n API."
+        }
+      },
+      "usage_instructions": "Manage the local response cache that speeds up repeat API queries. Use `cache clear` to force a fresh fetch."
+    },
+    "workflows": {
+      "help": "Manage n8n workflows",
+      "commands": {
+        "list": {
+          "help": "List all workflows on the n8n server.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--active",
+              "type": "bool",
+              "required": false,
+              "help": "Filter by active status (true/false)"
+            }
+          ],
+          "examples": [
+            "n8n workflows list",
+            "n8n workflows list --table",
+            "n8n workflows list --active",
+            "n8n workflows list --filter \"name:contains:backup\"",
+            "n8n workflows list --properties \"id,name,active\""
+          ],
+          "usage_instructions": "List all workflows on the server. Supports --filter/-f for client-side filtering (e.g., `active:eq:true`, `name:contains:sync`), --limit/-l, --table/-t, --properties/-p to select fields."
+        },
+        "get": {
+          "help": "Get full details for a specific workflow by ID. Example: n8n workflows get abc123 n8n workflows get abc123 --table",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get full details for one workflow by ID, including all nodes and connections. Example: `n8n workflows get abc123`."
+        },
+        "create": {
+          "help": "Create a workflow from a JSON file. The JSON file should contain the workflow definition with nodes and connections. Example: n8n workflows create workflow.json n8n workflows create workflow.json --name \"My Workflow\" n8n workflows create workflow.json --activate n8n workflows create workflow.json --error-workflow none",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to workflow JSON file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override workflow name",
+              "short": "-n"
+            },
+            {
+              "name": "--activate",
+              "type": "bool",
+              "required": false,
+              "help": "Activate the workflow after creation"
+            },
+            {
+              "name": "--error-workflow",
+              "type": "TEXT",
+              "required": false,
+              "help": "Error handler workflow ID (default: global handler, use 'none' to skip)",
+              "default": "F79g2nlj6f1glf8u"
+            }
+          ],
+          "usage_instructions": "Create a workflow from a JSON file containing the full workflow definition. Pass the file path as the argument."
+        },
+        "update": {
+          "help": "Update an existing workflow. Provide a JSON file to replace the workflow definition, and/or use flags to update name and active status. Example: n8n workflows update abc123 --file updated.json n8n workflows update abc123 --name \"New Name\" n8n workflows update abc123 --activate n8n workflows update abc123 --deactivate",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to workflow JSON file",
+              "short": "-f"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update workflow name",
+              "short": "-n"
+            },
+            {
+              "name": "--activate",
+              "type": "bool",
+              "required": false,
+              "help": "--deactivate          Activate or deactivate the workflow"
+            }
+          ],
+          "usage_instructions": "Update an existing workflow by ID, replacing its definition with the JSON file contents. Use `workflows get` first to fetch the current state."
+        },
+        "delete": {
+          "help": "Delete a workflow from the n8n server. Example: n8n workflows delete abc123 n8n workflows delete abc123 --yes",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            }
+          ],
+          "usage_instructions": "Delete a workflow permanently by ID. Example: `n8n workflows delete abc123`."
+        },
+        "activate": {
+          "help": "Activate a workflow. Example: n8n workflows activate abc123",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to activate"
+            }
+          ],
+          "usage_instructions": "Activate a workflow so it runs on its triggers. Example: `n8n workflows activate abc123`."
+        },
+        "deactivate": {
+          "help": "Deactivate a workflow. Example: n8n workflows deactivate abc123",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to deactivate"
+            }
+          ],
+          "usage_instructions": "Deactivate a workflow so triggers are paused. Example: `n8n workflows deactivate abc123`."
+        },
+        "export": {
+          "help": "Export a workflow as JSON. Exports the full workflow definition including nodes, connections, and settings. Example: n8n workflows export abc123 n8n workflows export abc123 -o workflow-backup.json",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to export"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: stdout)",
+              "short": "-o"
+            }
+          ],
+          "usage_instructions": "Export a workflow as JSON to stdout or a file. Useful for backups or version control of workflow definitions."
+        },
+        "execute": {
+          "help": "Execute a workflow on the n8n server. Triggers a manual execution via the internal REST API. Works with any workflow regardless of trigger type. Prefers Manual Trigger nodes when available, otherwise uses the first trigger node found.",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workflow ID to execute"
+            }
+          ],
+          "examples": [
+            "n8n workflows execute abc123",
+            "n8n workflows execute U7cK5XlQqmgG9CWlrB6wM"
+          ],
+          "usage_instructions": "Trigger a manual execution of a workflow. Returns the execution ID which can be passed to `executions get` for results."
+        },
+        "assign-error-handler": {
+          "help": "Assign an error handler workflow to one or all workflows. Sets settings.errorWorkflow so failures trigger the error handler.",
+          "options": [
+            {
+              "name": "--workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Assign to a single workflow",
+              "short": "-w"
+            },
+            {
+              "name": "--all",
+              "type": "bool",
+              "required": false,
+              "help": "Assign to all workflows"
+            },
+            {
+              "name": "--error-workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Error handler workflow ID to assign",
+              "default": "F79g2nlj6f1glf8u"
+            }
+          ],
+          "examples": [
+            "n8n workflows assign-error-handler --all",
+            "n8n workflows assign-error-handler --workflow-id abc123",
+            "n8n workflows assign-error-handler --all --error-workflow-id xyz789"
+          ],
+          "usage_instructions": "Assign an error-handler workflow to one specific workflow or all workflows. The error workflow is invoked when another workflow fails."
+        },
+        "node": {
+          "help": "Add and connect nodes in workflows",
+          "commands": {
+            "add": {
+              "help": "Add a node to an existing workflow. Resolves the node type from the server, auto-positions it, and optionally connects it to existing nodes.",
+              "arguments": [
+                {
+                  "name": "workflow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Workflow ID"
+                },
+                {
+                  "name": "node_type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Node type name (e.g., 'slack', 'n8n-nodes-base.slack')"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--resource",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Pre-set the resource parameter",
+                  "short": "-r"
+                },
+                {
+                  "name": "--operation",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Pre-set the operation parameter",
+                  "short": "-o"
+                },
+                {
+                  "name": "--after",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Connect after this node (by display name)"
+                },
+                {
+                  "name": "--between",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Insert between two nodes: 'NodeA,NodeB'"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Custom display name for the node",
+                  "short": "-n"
+                },
+                {
+                  "name": "--params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Additional parameters as JSON string"
+                },
+                {
+                  "name": "--position",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Manual position as 'x,y'"
+                },
+                {
+                  "name": "--credential",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Credential name or ID to attach to the node",
+                  "short": "-c"
+                }
+              ],
+              "examples": [
+                "n8n workflows node add WF_ID slack -r message -o post --after \"Manual Trigger\"",
+                "n8n workflows node add WF_ID slack --between \"HTTP Request,Set Fields\"",
+                "n8n workflows node add WF_ID airtable --name \"Read Records\" --params '{\"baseId\":\"app123\"}'",
+                "n8n workflows node add WF_ID emailReadImap --credential \"Susan IMAP - DreamHost\""
+              ],
+              "usage_instructions": "Add a node to an existing workflow. Resolves the node type from the server, auto-positions it, and optionally connects it to existing nodes. Required arguments: workflow_id, node_type. Notable options: --resource/-r, --operation/-o, --after, --between, --name/-n, --params, --position, --credential/-c. Example: `n8n workflows node add WF_ID slack -r message -o post --after \"Manual Trigger\"`."
+            },
+            "update": {
+              "help": "Update an existing node's parameters, name, or credentials. Merges provided parameters into the node's existing parameters (deep merge).",
+              "arguments": [
+                {
+                  "name": "workflow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Workflow ID"
+                },
+                {
+                  "name": "node_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Node display name or node ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Parameters to merge as JSON string",
+                  "short": "-p"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New display name for the node",
+                  "short": "-n"
+                },
+                {
+                  "name": "--credential",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Credential name or ID to attach",
+                  "short": "-c"
+                }
+              ],
+              "examples": [
+                "n8n workflows node update WF_ID \"Susan\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'",
+                "n8n workflows node update WF_ID \"My Node\" --name \"Renamed Node\"",
+                "n8n workflows node update WF_ID \"My Node\" --credential \"New API Key\""
+              ],
+              "usage_instructions": "Update an existing node's parameters, name, or credentials. Merges provided parameters into the node's existing parameters (deep merge). Required arguments: workflow_id, node_name. Notable options: --params/-p, --name/-n, --credential/-c. Example: `n8n workflows node update WF_ID \"Susan\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'`."
+            },
+            "connect": {
+              "help": "Connect two existing nodes in a workflow. Creates a connection from the source node's output to the target node's input.",
+              "arguments": [
+                {
+                  "name": "workflow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Workflow ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--from",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Source node name"
+                },
+                {
+                  "name": "--to",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Target node name"
+                },
+                {
+                  "name": "--output-index",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Source output index",
+                  "default": "0"
+                },
+                {
+                  "name": "--input-index",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Target input index",
+                  "default": "0"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Connection type: main, ai_tool, ai_languageModel, ai_memory",
+                  "short": "-t",
+                  "default": "main"
+                }
+              ],
+              "examples": [
+                "n8n workflows node connect WF_ID --from \"Slack\" --to \"Set Fields\"",
+                "n8n workflows node connect WF_ID --from \"Router\" --to \"Branch 2\" --output-index 1",
+                "n8n workflows node connect WF_ID --from \"My Tool\" --to \"AI Agent\" --type ai_tool"
+              ],
+              "usage_instructions": "Connect two existing nodes in a workflow. Creates a connection from the source node's output to the target node's input. Required arguments: workflow_id. Notable options: --from, --to, --output-index, --input-index, --type/-t. Example: `n8n workflows node connect WF_ID --from \"Slack\" --to \"Set Fields\"`."
+            }
+          },
+          "usage_instructions": "Subgroup for adding and connecting nodes inside an existing workflow. Use `workflows node --help` to see available actions."
+        }
+      },
+      "usage_instructions": "Manage n8n workflows on the server -- list, get, create, update, delete, activate/deactivate, export, execute, and assign error handlers. Also contains the `node` subgroup for adding/connecting nodes inside a workflow."
+    },
+    "nodes": {
+      "help": "Manage n8n node packages",
+      "commands": {
+        "test": {
+          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow \u2014 config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials in _repo/skills/n8n/.env - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test example-node -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
+          "arguments": [
+            {
+              "name": "node_name",
+              "type": "NODE_NAME",
+              "required": false,
+              "help": "Name of the n8n node to test (e.g., example-node). Optional when --workflow is used"
+            }
+          ],
+          "options": [
+            {
+              "name": "--resource",
+              "type": "TEXT",
+              "required": false,
+              "help": "Resource to test (e.g., order)",
+              "short": "-r"
+            },
+            {
+              "name": "--operation",
+              "type": "TEXT",
+              "required": false,
+              "help": "Operation to test (e.g., list)",
+              "short": "-o"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Execution timeout in seconds",
+              "short": "-t",
+              "default": "60"
+            },
+            {
+              "name": "--no-cleanup",
+              "type": "bool",
+              "required": false,
+              "help": "Keep workflow after test (don't delete)"
+            },
+            {
+              "name": "--params",
+              "type": "TEXT",
+              "required": false,
+              "help": "Extra node parameters as JSON string",
+              "short": "-p"
+            },
+            {
+              "name": "--credentials",
+              "type": "TEXT",
+              "required": false,
+              "help": "Node credentials as JSON string, e.g. '{\"exampleNodeApi\":{\"id\":\"abc\",\"name\":\"My Cred\"}}'",
+              "short": "-c"
+            },
+            {
+              "name": "--node-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override full node type (e.g., n8n-nodes-example-node.exampleNode)"
+            },
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Username for browser automation nodes (required when node uses browser_session credential)",
+              "short": "-u"
+            },
+            {
+              "name": "--password",
+              "type": "TEXT",
+              "required": false,
+              "help": "Password for browser automation nodes (required when node uses browser_session credential)"
+            },
+            {
+              "name": "--workflow",
+              "type": "TEXT",
+              "required": false,
+              "help": "Run static health checks on an existing workflow by ID. Skips temp workflow creation/execution"
+            },
+            {
+              "name": "--node",
+              "type": "TEXT",
+              "required": false,
+              "help": "In --workflow mode, restrict checks to the node with this exact name"
+            },
+            {
+              "name": "--strict",
+              "type": "bool",
+              "required": false,
+              "help": "In --workflow mode, promote warn-level findings to fail and exit non-zero on any warning"
+            },
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "Emit health findings as JSON (instead of a table)"
+            }
+          ],
+          "usage_instructions": "Test n8n nodes in two modes. PACKAGE MODE (default): pass NODE_NAME to spin up a temporary Webhook -> node workflow that exercises a freshly installed node package end-to-end (activate, trigger via webhook, poll for completion, verify success); before activation, the static health-check engine runs on the temp workflow so config bugs surface immediately. Use during node development to validate behavior. WORKFLOW MODE: pass --workflow <id> to run static health checks against an EXISTING workflow without executing it \u2014 validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Combine with --node \"<name>\" to scope checks to a single node, --strict to promote warnings to failures (non-zero exit on any warning), and --json to emit findings as JSON instead of a table."
+        },
+        "create": {
+          "help": "Convert a CLI tool into an n8n community node package. Parses the CLI tool's commands, parameters, and credentials, then generates a complete n8n node package with TypeScript source, credentials, README, and a bundled copy of the CLI tool source (under cli/). The CLI venv is created on the server during deploy. Example: n8n nodes create brickowl n8n nodes create shippo --output-dir ./output n8n nodes create brickowl --force n8n nodes create slack --name slack-custom --display-name \"Slack (Custom)\"",
+          "arguments": [
+            {
+              "name": "cli_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "CLI tool name to convert"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override output directory",
+              "short": "-o"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Overwrite existing package",
+              "short": "-F"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override package/node name (avoids name conflicts)",
+              "short": "-n"
+            },
+            {
+              "name": "--display-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override display name in n8n UI",
+              "short": "-d"
+            }
+          ],
+          "usage_instructions": "Convert a standardized CLI tool into an n8n community node package. Parses the CLI's commands/options and generates the node source in the cli-tools repo."
+        },
+        "deploy": {
+          "help": "Deploy an n8n node package to the n8n server (deployment host). Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n nodes deploy shippo n8n nodes deploy <source-root>/n8n-nodes/brickowl n8n nodes deploy <source-root>/n8n-nodes-example-node n8n nodes deploy <source-root>/n8n-nodes/brickowl --skip-build",
+          "arguments": [
+            {
+              "name": "package_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the n8n node package directory"
+            }
+          ],
+          "options": [
+            {
+              "name": "--skip-build",
+              "type": "bool",
+              "required": false,
+              "help": "Skip npm install and build"
+            },
+            {
+              "name": "--skip-restart",
+              "type": "bool",
+              "required": false,
+              "help": "Skip n8n server restart"
+            },
+            {
+              "name": "--skip-verify",
+              "type": "bool",
+              "required": false,
+              "help": "Skip node verification"
+            },
+            {
+              "name": "--skip-auth-check",
+              "type": "bool",
+              "required": false,
+              "help": "Skip browser session auth check"
+            }
+          ],
+          "usage_instructions": "Deploy a generated/modified n8n node package to the n8n server (deployment host). Builds, uploads, and restarts n8n to pick it up."
+        },
+        "remove": {
+          "help": "Remove a community node from the n8n server. Uninstalls the npm package from the community nodes directory, deletes associated credentials, and restarts n8n. Example: n8n nodes remove brickowl n8n nodes remove @scope/n8n-nodes-example n8n nodes remove airtable --keep-credentials n8n nodes remove ebay --skip-restart",
+          "arguments": [
+            {
+              "name": "node_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Node name to remove (e.g., brickowl)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--skip-restart",
+              "type": "bool",
+              "required": false,
+              "help": "Skip n8n server restart"
+            },
+            {
+              "name": "--keep-credentials",
+              "type": "bool",
+              "required": false,
+              "help": "Keep associated credentials"
+            }
+          ],
+          "usage_instructions": "Uninstall a community node from the n8n server by package name."
+        },
+        "install": {
+          "help": "Install a third-party community node package from npm. Installs the package through the running n8n instance so npm runs in the same server/runtime environment that loads community packages. Example: n8n nodes install n8n-nodes-duckduckgo-search n8n nodes install @scope/n8n-nodes-example n8n nodes install n8n-nodes-example --version 1.2.3 n8n nodes install n8n-nodes-mcp --skip-verify",
+          "arguments": [
+            {
+              "name": "package_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "npm package name (e.g., n8n-nodes-duckduckgo-search)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--version",
+              "type": "TEXT",
+              "required": false,
+              "help": "Install a specific npm package version"
+            },
+            {
+              "name": "--verify-vetted",
+              "type": "bool",
+              "required": false,
+              "help": "Require n8n vetted-package verification"
+            },
+            {
+              "name": "--skip-restart",
+              "type": "bool",
+              "required": false,
+              "help": "Deprecated; n8n REST installs load packages without restart"
+            },
+            {
+              "name": "--skip-verify",
+              "type": "bool",
+              "required": false,
+              "help": "Skip node verification after install"
+            }
+          ],
+          "usage_instructions": "Install a third-party community node package from npm through the running n8n server. Pass scoped packages exactly, for example @example/n8n-nodes-example; use --version for a pinned npm version and --skip-verify only when you will verify separately."
+        },
+        "list": {
+          "help": "List n8n node packages. Without --type, lists locally generated packages (from nodes create). With --type, queries the n8n server for installed nodes. Example: n8n nodes list                    # locally generated packages n8n nodes list --type default     # built-in nodes on server n8n nodes list --type community   # third-party community nodes on server n8n nodes list --type custom      # generated/custom packages on server n8n nodes list --type community --include-tools --table",
+          "options": [
+            {
+              "name": "--type",
+              "type": "bool",
+              "required": false,
+              "help": "[default|community|custom]  Node source: 'default', 'community' (third-party), or 'custom' (generated)"
+            },
+            {
+              "name": "--include-tools",
+              "type": "bool",
+              "required": false,
+              "help": "Include auto-generated AI tool variants"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List n8n node packages. Without --type, lists locally generated node packages. Use --type community for third-party packages and --type custom for locally generated packages installed on the server. Supports --filter/-f, --limit/-l, --table/-t."
+        },
+        "get": {
+          "help": "Get details for a node package or built-in node. Without --type, looks up locally generated packages. With --type, fetches the full node definition from the n8n server. Example: n8n nodes get brickowl n8n nodes get slack --type default n8n nodes get slack --type default --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name, CLI tool name, or built-in node name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--type",
+              "type": "bool",
+              "required": false,
+              "help": "[default|community|custom]  Node source: 'default' (built-in) or 'community'"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for a node package or built-in node. Without --type, inspects a local package; with --type, inspects a node on the server."
+        },
+        "cli-tools": {
+          "help": "List and inspect available CLI tools for node conversion",
+          "commands": {
+            "list": {
+              "help": "List available CLI tools that can be converted to n8n nodes. Example: n8n nodes cli-tools list n8n nodes cli-tools list --table n8n nodes cli-tools list --limit 10",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of results",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List available CLI tools that can be converted to n8n nodes. Example: n8n nodes cli-tools list n8n nodes cli-tools list --table n8n nodes cli-tools list --limit 10. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+            },
+            "get": {
+              "help": "Inspect a CLI tool's metadata (command groups, commands, parameters, credentials). Example: n8n nodes cli-tools get brickowl n8n nodes cli-tools get shippo --table",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "CLI tool name to inspect"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Inspect a CLI tool's metadata (command groups, commands, parameters, credentials). Example: n8n nodes cli-tools get brickowl n8n nodes cli-tools get shippo --table. Required arguments: name. Notable options: --table/-t."
+            }
+          },
+          "usage_instructions": "List and inspect CLI tools available for conversion into n8n nodes. Helper subgroup used before `nodes create`."
+        }
+      },
+      "usage_instructions": "Manage n8n community node packages. Covers converting CLI tools into nodes (`create`), deploying them to the server (`deploy`), installing third-party community packages (`install`), listing/inspecting nodes (`list`, `get`), testing nodes (`test`), and removing them (`remove`). `cli-tools` lists CLI tools available for conversion."
+    },
+    "credentials": {
+      "help": "Manage n8n credentials on the server",
+      "commands": {
+        "list": {
+          "help": "List all credentials on the n8n server. Example: n8n credentials list n8n credentials list --table n8n credentials list --filter \"type:eq:brickowlApi\" n8n credentials list --properties \"id,name\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all credentials on the n8n server. Supports --filter/-f, --limit/-l, --table/-t, --properties/-p. Credentials values are NOT returned -- only metadata."
+        },
+        "get": {
+          "help": "Get details for a specific credential by ID. Example: n8n credentials get qe03iDk3T8FNbNTg n8n credentials get qe03iDk3T8FNbNTg --table",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get metadata for a specific credential by ID. Example: `n8n credentials get cred123`."
+        },
+        "create": {
+          "help": "Create a credential on the n8n server. The credential type must match a type defined by an installed node. Use 'n8n credentials schema <type>' to see required fields. Example: n8n credentials create brickowlApi '{\"apiKey\": \"abc123\"}' n8n credentials create brickowlApi '{\"apiKey\": \"abc\"}' --name \"Brickowl Prod\"",
+          "arguments": [
+            {
+              "name": "cred_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential type name (e.g., brickowlApi)"
+            },
+            {
+              "name": "data",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential data as JSON string"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Display name (defaults to credential type)",
+              "short": "-n"
+            }
+          ],
+          "usage_instructions": "Create a credential on the server. The credential type must match one of the schemas returned by `credentials schema`. Pass the credential data as JSON."
+        },
+        "delete": {
+          "help": "Delete a credential from the n8n server. Example: n8n credentials delete qe03iDk3T8FNbNTg",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID to delete"
+            }
+          ],
+          "usage_instructions": "Delete a credential by ID. Workflows using it will fail until the credential is replaced."
+        },
+        "rename": {
+          "help": "Rename a credential on the n8n server. Example: n8n credentials rename tTBhVO3JjWS6PhOH \"Susan Slack Bot\"",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID to rename"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "New display name"
+            }
+          ],
+          "usage_instructions": "Rename a credential without changing its data or ID."
+        },
+        "schema": {
+          "help": "Show the JSON schema for a credential type (required fields and properties). Example: n8n credentials schema brickowlApi n8n credentials schema brickfreedomApi",
+          "arguments": [
+            {
+              "name": "cred_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential type name (e.g., brickowlApi)"
+            }
+          ],
+          "usage_instructions": "Show the JSON schema for a credential type (required/optional fields). Use before `credentials create` to see what fields a type expects."
+        }
+      },
+      "usage_instructions": "Manage credentials stored on the n8n server -- list, get, create (from JSON), rename, delete, and show the JSON schema for a credential type."
+    },
+    "data-tables": {
+      "help": "Manage n8n Data Tables",
+      "commands": {
+        "list": {
+          "help": "List all data tables. Example: n8n data-tables list n8n data-tables list --table n8n data-tables list --filter \"name:contains:orders\" n8n data-tables list --properties \"id,name\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all data tables with --filter/-f, --limit/-l, --table/-t, --properties/-p. Example: `n8n data-tables list`."
+        },
+        "get": {
+          "help": "Get details for a data table by ID, including its columns. Example: n8n data-tables get L13pmzZlnNh5hPw7 n8n data-tables get L13pmzZlnNh5hPw7 --table",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for one data table by ID, including its column definitions. Example: `n8n data-tables get L13pmzZ`."
+        },
+        "create": {
+          "help": "Create a new data table. Column types: string, number, boolean, date Example: n8n data-tables create \"Orders\" --column \"name:string\" --column \"total:number\" n8n data-tables create \"Flags\" --column \"key:string\" --column \"enabled:boolean\"",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Table name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--column",
+              "type": "TEXT",
+              "required": false,
+              "help": "Column definition as name:type (repeatable)",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Create a new data table. Column types supported: string, number, boolean, date. Pass a name and column spec."
+        },
+        "delete": {
+          "help": "Delete a data table. Example: n8n data-tables delete L13pmzZlnNh5hPw7",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID to delete"
+            }
+          ],
+          "usage_instructions": "Delete a data table and all its rows. Example: `n8n data-tables delete L13pmzZ`."
+        },
+        "columns": {
+          "help": "Show columns for a data table. Example: n8n data-tables columns L13pmzZlnNh5hPw7 n8n data-tables columns L13pmzZlnNh5hPw7 --table",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show column definitions for a data table. Use before `insert` or `update-rows` to verify the schema."
+        },
+        "rows": {
+          "help": "List rows in a data table. Example: n8n data-tables rows L13pmzZlnNh5hPw7 n8n data-tables rows L13pmzZlnNh5hPw7 --table --limit 10 n8n data-tables rows L13pmzZlnNh5hPw7 --filter \"status:eq:active\"",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of rows",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List rows in a data table. Supports --filter/-f for client-side filtering (e.g., `category:eq:memory`), --limit/-l, --table/-t."
+        },
+        "insert": {
+          "help": "Insert rows into a data table. Accepts a JSON array of objects as an argument or via stdin. Example: n8n data-tables insert L13pmzZlnNh5hPw7 '[{\"name\":\"test\",\"value\":42}]' echo '[{\"name\":\"test\"}]' | n8n data-tables insert L13pmzZlnNh5hPw7",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            },
+            {
+              "name": "data",
+              "type": "DATA",
+              "required": false,
+              "help": "JSON array of row objects (or pipe via stdin)"
+            }
+          ],
+          "usage_instructions": "Insert one or more rows. Accepts a JSON array of objects keyed by column name."
+        },
+        "update-rows": {
+          "help": "Update a row in a data table by row ID. Accepts a JSON object with the columns to update. Example: n8n data-tables update-rows TABLE_ID 1 '{\"last_status\":\"ok\",\"last_checked\":\"2026-02-20T14:00:00Z\"}'",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            },
+            {
+              "name": "row_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Row ID (integer)"
+            },
+            {
+              "name": "data",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON object of column:value pairs to update"
+            }
+          ],
+          "usage_instructions": "Update a specific row by row ID. Accepts a JSON object with the columns to update."
+        },
+        "delete-rows": {
+          "help": "Delete specific rows from a data table. Example: n8n data-tables delete-rows L13pmzZlnNh5hPw7 --row-id row123 n8n data-tables delete-rows L13pmzZlnNh5hPw7 --row-id row1 --row-id row2",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--row-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Row ID to delete (repeatable)",
+              "short": "-r"
+            }
+          ],
+          "usage_instructions": "Delete specific rows from a data table by row ID. Example: `n8n data-tables delete-rows <table_id> <row_id>`."
+        }
+      },
+      "usage_instructions": "Manage n8n Data Tables (database-like storage). Create/delete tables, inspect columns, and CRUD on rows (`rows`, `insert`, `update-rows`, `delete-rows`)."
+    },
+    "executions": {
+      "help": "Query workflow executions and events",
+      "commands": {
+        "list": {
+          "help": "Query execution history by timeframe via the n8n API. Paginates through all executions and filters by date client-side (the API has no date filter parameter).",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End datetime. Default: now"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (error, success, running, canceled, waiting)",
+              "short": "-s"
+            },
+            {
+              "name": "--workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by workflow ID",
+              "short": "-w"
+            },
+            {
+              "name": "--include-data",
+              "type": "bool",
+              "required": false,
+              "help": "Include full execution data (large output)",
+              "short": "-d"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "n8n executions list --from 2026-02-12 --status error",
+            "n8n executions list --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\" --table",
+            "n8n executions list --workflow-id 17VB4GJjjp0ijgjJ"
+          ],
+          "usage_instructions": "Query execution history via the n8n API. Paginated and filtered by timeframe. Use --filter/-f, --limit/-l, --table/-t to narrow results. Good for 'what ran today' questions."
+        },
+        "get": {
+          "help": "Get details for a specific execution by ID. Example: n8n executions get 12345 n8n executions get 12345 --table n8n executions get 12345 --include-data",
+          "arguments": [
+            {
+              "name": "execution_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Execution ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--include-data",
+              "type": "bool",
+              "required": false,
+              "help": "Include full execution data",
+              "short": "-d"
+            }
+          ],
+          "usage_instructions": "Get full details for one execution by ID, including per-node input/output. Example: `n8n executions get 1618`."
+        },
+        "events": {
+          "help": "Query event log files (EventBus) by timeframe via SSH. Parses n8nEventLog*.log JSON files for audit events, workflow events, and node events.",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End datetime. Default: now"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by type: audit, workflow, node"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by event name (substring match, e.g. 'login', 'failed')",
+              "short": "-n"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            },
+            {
+              "name": "--data-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "n8n data directory on server",
+              "default": "/var/root/.n8n"
+            }
+          ],
+          "examples": [
+            "n8n executions events --from 2026-02-12 --type audit --table",
+            "n8n executions events --from \"2026-02-12T08:00\" --name failed",
+            "n8n executions events --type workflow --table"
+          ],
+          "usage_instructions": "Query raw event log files (EventBus) via SSH. More detailed than the API -- shows node-level events, error text, and timestamps. Use when `executions get` doesn't have enough detail."
+        }
+      },
+      "usage_instructions": "Query workflow execution history. `list` uses the API (paginated by timeframe), `get` returns full detail for one execution, `events` queries raw event log files via SSH for deeper inspection."
+    },
+    "server": {
+      "help": "Manage the n8n server",
+      "commands": {
+        "upgrade": {
+          "help": "Upgrade n8n to the latest version (or a specific version). Installs the new version globally via npm, restarts the n8n LaunchDaemon, and verifies the server is healthy.",
+          "arguments": [
+            {
+              "name": "version",
+              "type": "VERSION",
+              "required": false,
+              "help": "Target version (default: latest)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--skip-restart",
+              "type": "bool",
+              "required": false,
+              "help": "Skip n8n server restart"
+            }
+          ],
+          "examples": [
+            "n8n server upgrade",
+            "n8n server upgrade 2.10.0",
+            "n8n server upgrade --skip-restart"
+          ],
+          "usage_instructions": "Upgrade n8n to the latest version or a specific version. Accepts a version argument. Use --skip-restart to defer the restart."
+        },
+        "version": {
+          "help": "Show the n8n server version. Example: n8n server version",
+          "usage_instructions": "Show the n8n server version. Example: `n8n server version`."
+        },
+        "restart": {
+          "help": "Restart the n8n server. Example: n8n server restart",
+          "usage_instructions": "Restart the n8n server process. Required after upgrading or installing community nodes."
+        },
+        "logs": {
+          "help": "Query n8n server logs and configuration",
+          "commands": {
+            "app": {
+              "help": "View application logs from the n8n server via SSH.",
+              "options": [
+                {
+                  "name": "--lines",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Number of lines to show",
+                  "short": "-n",
+                  "default": "50"
+                },
+                {
+                  "name": "--log-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Log file path on server",
+                  "default": "/var/log/n8n.log"
+                }
+              ],
+              "examples": [
+                "n8n server logs app",
+                "n8n server logs app --lines 200"
+              ],
+              "usage_instructions": "View application logs from the n8n server via SSH. Notable options: --lines/-n, --log-file. Example: `n8n server logs app`."
+            },
+            "errors": {
+              "help": "View error logs from the n8n server via SSH.",
+              "options": [
+                {
+                  "name": "--lines",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Number of lines to show",
+                  "short": "-n",
+                  "default": "50"
+                },
+                {
+                  "name": "--log-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Error log file path on server",
+                  "default": "/var/log/n8n.error.log"
+                }
+              ],
+              "examples": [
+                "n8n server logs errors",
+                "n8n server logs errors --lines 100"
+              ],
+              "usage_instructions": "View error logs from the n8n server via SSH. Notable options: --lines/-n, --log-file. Example: `n8n server logs errors`."
+            },
+            "all": {
+              "help": "Combined troubleshooting dump: executions + events + app logs + error logs. Collects from all 4 data sources for the given timeframe and outputs a structured JSON report.",
+              "options": [
+                {
+                  "name": "--from",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Start datetime. Default: start of today",
+                  "short": "-f"
+                },
+                {
+                  "name": "--to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "End datetime. Default: now",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Max results per source",
+                  "short": "-l",
+                  "default": "50"
+                },
+                {
+                  "name": "--data-dir",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "n8n data directory on server",
+                  "default": "/var/root/.n8n"
+                }
+              ],
+              "examples": [
+                "n8n server logs all --from 2026-02-12",
+                "n8n server logs all --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\""
+              ],
+              "usage_instructions": "Combined troubleshooting dump: executions + events + app logs + error logs. Collects from all 4 data sources for the given timeframe and outputs a structured JSON report. Notable options: --from/-f, --to/-t, --limit/-l, --data-dir. Example: `n8n server logs all --from 2026-02-12`."
+            },
+            "config": {
+              "help": "Show current logging configuration from the n8n LaunchDaemon plist. Example: n8n server logs config",
+              "options": [
+                {
+                  "name": "--plist",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LaunchDaemon plist path on server",
+                  "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                }
+              ],
+              "usage_instructions": "Show current logging configuration from the n8n LaunchDaemon plist. Example: n8n server logs config. Notable options: --plist."
+            },
+            "set-level": {
+              "help": "Set n8n log level and optionally other logging settings. Modifies the LaunchDaemon plist on the server and restarts n8n.",
+              "arguments": [
+                {
+                  "name": "level",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Log level: silent, error, warn, info, debug"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--format",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Log format: text, json"
+                },
+                {
+                  "name": "--output",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Log output: console, file, console,file"
+                },
+                {
+                  "name": "--db-logging",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable/disable database query logging"
+                },
+                {
+                  "name": "--restart",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-restart          Restart n8n after changing config",
+                  "default": "restart"
+                },
+                {
+                  "name": "--plist",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LaunchDaemon plist path on server",
+                  "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                }
+              ],
+              "examples": [
+                "n8n server logs set-level debug",
+                "n8n server logs set-level debug --format json --output console,file",
+                "n8n server logs set-level info --no-restart",
+                "n8n server logs set-level error --db-logging"
+              ],
+              "usage_instructions": "Set n8n log level and optionally other logging settings. Modifies the LaunchDaemon plist on the server and restarts n8n. Required arguments: level. Notable options: --format, --output, --db-logging, --restart, --plist. Example: `n8n server logs set-level debug`."
+            }
+          },
+          "usage_instructions": "Subgroup for querying n8n server logs (packages, entries, etc). Run `n8n server logs --help` to see available commands."
+        },
+        "config": {
+          "help": "Manage n8n server configuration",
+          "commands": {
+            "show": {
+              "help": "Show current n8n server pruning configuration. Example: n8n server config show",
+              "options": [
+                {
+                  "name": "--plist",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LaunchDaemon plist path on server",
+                  "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                }
+              ],
+              "usage_instructions": "Show current n8n server pruning configuration. Example: n8n server config show. Notable options: --plist."
+            },
+            "set": {
+              "help": "Set an n8n server configuration variable in the LaunchDaemon plist.",
+              "arguments": [
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Config key: EXECUTIONS_DATA_PRUNE, EXECUTIONS_DATA_MAX_AGE, EXECUTIONS_DATA_PRUNE_MAX_COUNT, N8N_WORKFLOW_HISTORY_PRUNE_TIME"
+                },
+                {
+                  "name": "value",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Value to set"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--restart",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-restart          Restart n8n after changing config",
+                  "default": "restart"
+                },
+                {
+                  "name": "--plist",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "LaunchDaemon plist path on server",
+                  "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+                }
+              ],
+              "examples": [
+                "n8n server config set EXECUTIONS_DATA_MAX_AGE 168",
+                "n8n server config set N8N_WORKFLOW_HISTORY_PRUNE_TIME 720 --no-restart"
+              ],
+              "usage_instructions": "Set an n8n server configuration variable in the LaunchDaemon plist. Required arguments: key, value. Notable options: --restart, --plist. Example: `n8n server config set EXECUTIONS_DATA_MAX_AGE 168`."
+            }
+          },
+          "usage_instructions": "Subgroup for managing n8n server configuration. Run `n8n server config --help` to see available commands."
+        }
+      },
+      "usage_instructions": "Manage the n8n server process itself -- upgrade to a new version, check version, restart, and inspect logs/config via the `logs` and `config` subgroups."
+    }
+  },
+  "usage_instructions": "Use for managing an n8n automation server -- workflows, nodes, credentials, executions, data tables, server config/logs, and community node packages. Commands follow `n8n <group> <action>` pattern. All list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. --filter uses field:op:value syntax (e.g., name:eq:MyWorkflow, active:eq:true). Authentication is managed via `n8n auth login` and stored per-profile."
+}

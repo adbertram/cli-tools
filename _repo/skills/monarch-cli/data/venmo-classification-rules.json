@@ -1,0 +1,4 @@
+{
+  "description": "Deterministic Venmo classification rules. Add rules only from explicit durable user feedback.",
+  "rules": []
+}

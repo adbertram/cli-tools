@@ -1,0 +1,980 @@
+{
+  "tool": "globiflow",
+  "description": "CLI interface for Globiflow (browser automation)",
+  "discovered_at": "2026-05-06T15:17:38.108909+00:00",
+  "total_commands": 25,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage globiflow authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Open browser for Globiflow login. Idempotent -- skips if already logged in. Use --force/-F to force re-login. Use --profile/-p to specify a named profile."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation. Use --profile/-p to clear a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Verify saved session against Globiflow. Returns exit code 0 if authenticated, 2 if not. Use --table/-t for formatted output. Use --profile/-p to check a specific profile."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `globiflow auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Deep validation of saved session by launching a browser and checking auth state. Use --verbose/-v for detailed check output. Returns exit code 0 if authenticated, 2 if not."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `globiflow auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `globiflow auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Browser-based authentication for Globiflow. Login opens a browser for manual sign-in. Use `auth status` to verify session, `auth test` for deeper browser-based validation."
+    },
+    "search": {
+      "help": "Search globiflow",
+      "commands": {
+        "query": {
+          "help": "Search for items on Globiflow. Example: globiflow search query \"my search term\" --limit 20 --table globiflow search query \"keyword\" --filter \"price:lt:100\" globiflow search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Search by keyword. QUERY is required (positional). Use --filter/-f with field:op:value syntax for filtering. Use --limit/-l to control result count (default: 100). Use --properties/-p to select specific fields. Use --table/-t for formatted output."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: globiflow search item abc123 --table globiflow search item \"https://example.com/item/abc123\" globiflow search item abc123 --output \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-o"
+            }
+          ],
+          "usage_instructions": "Retrieve details for a single item by ID or URL. ITEM_ID is required (positional). Use --output/-o to select specific fields (supports dot-notation). Use --table/-t for formatted output."
+        },
+        "list": {
+          "help": "List items from Globiflow. Example: globiflow search list --limit 100 --table globiflow search list --filter \"status:active\" globiflow search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Browse all items. Use --filter/-f for filtering, --limit/-l for result count (default: 100), --properties/-p to select fields. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Search and browse Globiflow items. Use `query` for keyword search, `item` for specific item details, `list` for browsing all items."
+    },
+    "flows": {
+      "help": "Manage Globiflow flows",
+      "commands": {
+        "list": {
+          "help": "List all flows across all apps. Traverses the entire tree structure and extracts all flows. Supports client-side filtering and limiting (browser-based CLI). Example: globiflow flows list --table globiflow flows list --filter \"org_name:contains:My Org\" --table globiflow flows list --filter \"enabled:eq:true\" --limit 10 globiflow flows list --properties \"id,name,enabled\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results (client-side)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all flows by traversing the entire app tree. Use --filter/-f for client-side filtering (e.g., 'enabled:eq:true', 'org_name:contains:My Org'). Use --limit/-l (default: 100), --properties/-p, --table/-t."
+        },
+        "create": {
+          "help": "Create a new flow in a Globiflow app. Requires app ID (from Podio) and trigger code (use 'triggers list' to see options). Optionally provide steps as JSON directly or via @filepath. Example: globiflow flows create --app-id 30560419 --trigger C --name \"My Flow\" globiflow flows create --app-id 30560419 --trigger U --name \"Update Handler\" --disabled globiflow flows create --app-id 30560419 --trigger C --name \"With Steps\" --steps '[{\"action_type\": \"Custom Variable\", \"variable_name\": \"test\", \"code\": \"1+1\"}]' globiflow flows create --app-id 30560419 --trigger M --name \"Manual Flow\" --steps @steps.json",
+          "options": [
+            {
+              "name": "--app-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Podio app ID for the flow",
+              "short": "-a"
+            },
+            {
+              "name": "--trigger",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trigger code (C, U, M, etc. - use 'triggers list')",
+              "short": "-T"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow name",
+              "short": "-n"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Flow description",
+              "short": "-d"
+            },
+            {
+              "name": "--steps",
+              "type": "TEXT",
+              "required": false,
+              "help": "Steps JSON array or @filepath",
+              "short": "-s"
+            },
+            {
+              "name": "--enabled",
+              "type": "bool",
+              "required": false,
+              "help": "--disabled          Enable or disable the flow",
+              "default": "enabled"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Create a flow. Requires --app-id/-a (Podio app ID), --trigger/-T (trigger code from `triggers list`), and --name/-n. Optionally pass --steps/-s as JSON array or @filepath. Use --disabled to create in disabled state (default: enabled)."
+        },
+        "get": {
+          "help": "Get detailed information about a specific flow. Retrieves flow notes, time savings, and log status. Use --include-steps to also retrieve the configured steps. Example: globiflow flows get 4299675 --table globiflow flows get 4299675 --include-steps",
+          "arguments": [
+            {
+              "name": "flow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--include-steps",
+              "type": "bool",
+              "required": false,
+              "help": "Include step details",
+              "short": "-s"
+            }
+          ],
+          "usage_instructions": "Retrieve flow details including notes, time savings, and log status. FLOW_ID is required (positional). Use --include-steps/-s to also retrieve configured steps. Use --table/-t for formatted output."
+        },
+        "logs": {
+          "help": "List execution logs for a flow. Shows all execution history including timestamps, items triggered, status, duration, and any messages. Example: globiflow flows logs 4299675 --table globiflow flows logs 4299675",
+          "arguments": [
+            {
+              "name": "flow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow ID to get logs for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "View execution history for a flow including timestamps, triggered items, status, duration, and messages. FLOW_ID is required (positional). Use --table/-t for formatted output."
+        },
+        "delete": {
+          "help": "Delete a flow by its ID. This action cannot be undone. Use --force to skip confirmation. Example: globiflow flows delete 4299675 globiflow flows delete 4299675 --force",
+          "arguments": [
+            {
+              "name": "flow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            }
+          ],
+          "usage_instructions": "Permanently delete a flow. FLOW_ID is required (positional). Use --force/-F to skip confirmation. This action cannot be undone."
+        },
+        "steps": {
+          "help": "Manage flow steps",
+          "commands": {
+            "list": {
+              "help": "List steps in a flow or across all flows. Shows step number, action type, and key parameter values for each step. JSON output includes all extracted parameters. Example: globiflow flows steps list --flow-id 4299675 --table globiflow flows steps list --table",
+              "options": [
+                {
+                  "name": "--flow-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Flow ID to list steps for (optional, lists steps from all flows if omitted)"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of results",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Show steps with number, action type, and key parameters. Use --flow-id to scope to a single flow (omit to list steps from all flows). Supports --filter/-f, --limit/-l, --properties/-p, --table/-t."
+            },
+            "get": {
+              "help": "Get detailed information about a specific step in a flow. Shows the action type and all configured parameter values. Example: globiflow flows steps get 4299675 1 --table globiflow flows steps get 4299675 2",
+              "arguments": [
+                {
+                  "name": "flow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Flow ID"
+                },
+                {
+                  "name": "step_number",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Step number (1-based)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Retrieve a single step's action type and all configured parameters. FLOW_ID and STEP_NUMBER (1-based) are both required (positional). Use --table/-t for formatted output."
+            },
+            "add": {
+              "help": "Add a new step to an existing flow. Adds a step of the specified action type with the given parameters. Example: globiflow flows steps add 4314927 --action \"Add Comment\" --comment \"Hello world\" globiflow flows steps add 4314927 --action \"Custom Variable\" --variable-name \"myvar\" --code \"'value'\" globiflow flows steps add 4314927 --action \"Remote HTTP Call\" --url \"https://api.example.com\" --method POST",
+              "arguments": [
+                {
+                  "name": "flow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Flow ID to add step to"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--action",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Action type (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call')",
+                  "short": "-a"
+                },
+                {
+                  "name": "--variable-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Variable name for calc/HTTP steps",
+                  "short": "-v"
+                },
+                {
+                  "name": "--code",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "PHP expression for calc/filter steps",
+                  "short": "-c"
+                },
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "URL for HTTP call steps"
+                },
+                {
+                  "name": "--method",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "HTTP method (GET, POST, PUT, PATCH, DELETE)",
+                  "short": "-m"
+                },
+                {
+                  "name": "--headers",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Custom headers for HTTP calls"
+                },
+                {
+                  "name": "--get-params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "GET parameters for HTTP calls"
+                },
+                {
+                  "name": "--post-params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "POST/body parameters for HTTP calls"
+                },
+                {
+                  "name": "--follow-redirect",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-follow-redirect          Follow HTTP redirects"
+                },
+                {
+                  "name": "--to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Recipient email address(es)"
+                },
+                {
+                  "name": "--subject",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Email subject"
+                },
+                {
+                  "name": "--body",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Email body content"
+                },
+                {
+                  "name": "--from-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender name"
+                },
+                {
+                  "name": "--reply-to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Reply-to email address"
+                },
+                {
+                  "name": "--cc",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CC email address(es)"
+                },
+                {
+                  "name": "--bcc",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "BCC email address(es)"
+                },
+                {
+                  "name": "--comment",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comment body text"
+                },
+                {
+                  "name": "--silent",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-silent                   Silent mode (no notifications)"
+                },
+                {
+                  "name": "--message",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Message text for SMS/chat"
+                },
+                {
+                  "name": "--assignee",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task assignee"
+                },
+                {
+                  "name": "--task-text",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task description"
+                },
+                {
+                  "name": "--due-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task due date"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Add a step to a flow. FLOW_ID is required (positional). --action/-a is required (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call'). Other options depend on the action type: use --variable-name/-v and --code/-c for Custom Variable steps, --url/--method/-m for HTTP calls, --to/--subject/--body for email steps, --comment for Add Comment steps."
+            },
+            "update": {
+              "help": "Update fields of a specific step in a flow. Auto-detects the step type and validates that only appropriate fields are updated. Supports all step types. Example: globiflow flows steps update 4314927 1 --variable-name \"new_name\" --code \"'expr'\" globiflow flows steps update 4314927 3 --url \"https://api.example.com\" --method POST globiflow flows steps update 4314927 5 --to \"email@example.com\" --subject \"Subject\"",
+              "arguments": [
+                {
+                  "name": "flow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Flow ID"
+                },
+                {
+                  "name": "step_number",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Step number (1-based)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--variable-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Variable name for calc/HTTP steps",
+                  "short": "-v"
+                },
+                {
+                  "name": "--code",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "PHP expression for calc/filter steps",
+                  "short": "-c"
+                },
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "URL for HTTP call steps"
+                },
+                {
+                  "name": "--method",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "HTTP method (GET, POST, PUT, PATCH, DELETE)",
+                  "short": "-m"
+                },
+                {
+                  "name": "--headers",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Custom headers for HTTP calls"
+                },
+                {
+                  "name": "--get-params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "GET parameters for HTTP calls"
+                },
+                {
+                  "name": "--post-params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "POST/body parameters for HTTP calls"
+                },
+                {
+                  "name": "--follow-redirect",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-follow-redirect          Follow HTTP redirects"
+                },
+                {
+                  "name": "--to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Recipient email address(es)"
+                },
+                {
+                  "name": "--subject",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Email subject"
+                },
+                {
+                  "name": "--body",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Email body content"
+                },
+                {
+                  "name": "--from-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender name"
+                },
+                {
+                  "name": "--reply-to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Reply-to email address"
+                },
+                {
+                  "name": "--cc",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CC email address(es)"
+                },
+                {
+                  "name": "--bcc",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "BCC email address(es)"
+                },
+                {
+                  "name": "--comment",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comment body text"
+                },
+                {
+                  "name": "--silent",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--no-silent                   Silent mode (no notifications)"
+                },
+                {
+                  "name": "--message",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Message text for SMS/chat"
+                },
+                {
+                  "name": "--assignee",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task assignee"
+                },
+                {
+                  "name": "--task-text",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task description"
+                },
+                {
+                  "name": "--due-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Task due date"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Modify an existing step's parameters. FLOW_ID and STEP_NUMBER (1-based) are required (positional). Auto-detects step type and validates fields. Same options as `steps add` for the specific action type."
+            }
+          },
+          "usage_instructions": "CRUD operations for individual steps within flows. List steps across flows, get step details, add new steps, or update existing step parameters."
+        }
+      },
+      "usage_instructions": "Full CRUD for Globiflow automation flows. List, create, get details, view logs, delete flows, and manage individual flow steps. Flows are identified by numeric IDs."
+    },
+    "triggers": {
+      "help": "Manage Globiflow triggers",
+      "commands": {
+        "list": {
+          "help": "List all available trigger types for flows. Shows all trigger types that can be used when creating a new flow. Each trigger has a code (used with --trigger flag) and description. Supports client-side filtering and limiting (static data). Example: globiflow triggers list --table globiflow triggers list --filter \"code:eq:C\" globiflow triggers list --properties \"code,name\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results (client-side)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Show all trigger types with code and description. Use trigger codes with `flows create --trigger`. Supports --filter/-f, --limit/-l, --properties/-p, --table/-t."
+        },
+        "get": {
+          "help": "Get details for a specific trigger type by code. Example: globiflow triggers get C --table globiflow triggers get M",
+          "arguments": [
+            {
+              "name": "code",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trigger code (e.g., C, U, M)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Look up a single trigger type. CODE is required (positional, e.g., C, U, M). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "View available trigger types for use when creating flows. Triggers define what event starts a flow (e.g., Create, Update, Manual)."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `globiflow cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `globiflow cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for managing Globiflow automation flows via browser automation. Commands follow `globiflow <group> <action>` pattern. Use --no-cache global option to bypass response cache. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+}

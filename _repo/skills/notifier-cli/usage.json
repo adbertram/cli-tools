@@ -1,0 +1,62 @@
+{
+  "tool": "notifier",
+  "description": "CLI wrapper for terminal-notifier - macOS desktop notifications",
+  "discovered_at": "2026-05-06T15:19:38.895462+00:00",
+  "total_commands": 1,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "send": {
+      "help": "Send a desktop notification. The message can be provided via --message or piped from stdin.",
+      "options": [
+        {
+          "name": "--message",
+          "type": "TEXT",
+          "required": false,
+          "help": "Notification message (or pipe via stdin)",
+          "short": "-m"
+        },
+        {
+          "name": "--title",
+          "type": "TEXT",
+          "required": false,
+          "help": "Notification title",
+          "short": "-T"
+        },
+        {
+          "name": "--subtitle",
+          "type": "TEXT",
+          "required": false,
+          "help": "Notification subtitle",
+          "short": "-s"
+        },
+        {
+          "name": "--sound",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sound to play (e.g., 'default', 'Basso', 'Blow', 'Bottle')"
+        },
+        {
+          "name": "--ignore-dnd",
+          "type": "bool",
+          "required": false,
+          "help": "Send even if Do Not Disturb is enabled"
+        }
+      ],
+      "examples": [
+        "notifier send --message \"Hello World\"",
+        "notifier send -m \"Build complete\" -T \"CI/CD\" --sound default",
+        "notifier send -m \"Urgent\" --ignore-dnd"
+      ],
+      "usage_instructions": "Send a macOS desktop notification. Provide the message with --message/-m or pipe from stdin. Use --title/-T for a custom title, --subtitle/-s for a subtitle, --sound for an alert sound (e.g., 'default', 'Basso', 'Blow', 'Bottle'), and --ignore-dnd to bypass Do Not Disturb mode."
+    }
+  },
+  "usage_instructions": "Use for sending macOS desktop notifications. The primary command is `notifier send`. Messages can be passed via --message/-m or piped from stdin. Supports custom titles, subtitles, sounds, and Do Not Disturb override."
+}

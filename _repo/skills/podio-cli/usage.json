@@ -1,0 +1,3385 @@
+{
+  "tool": "podio",
+  "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
+  "discovered_at": "2026-05-06T15:20:42.326436+00:00",
+  "total_commands": 91,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "item": {
+      "help": "Manage Podio items",
+      "commands": {
+        "get": {
+          "help": "Get a Podio item by ID or external ID.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "ITEM_ID",
+              "required": false,
+              "help": "Item ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--external-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "External ID to look up (requires --app-id)",
+              "short": "-e"
+            },
+            {
+              "name": "--app-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "App ID (required with --external-id)",
+              "short": "-a"
+            },
+            {
+              "name": "--basic",
+              "type": "bool",
+              "required": false,
+              "help": "Get basic item info only"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item get 12345",
+            "podio item get 12345 --basic",
+            "podio item get --external-id my-custom-id --app-id 30543397",
+            "podio item get 12345 --table"
+          ],
+          "usage_instructions": "Use to retrieve a single item by ID. Optional --external-id/-e with --app-id/-a for external ID lookup. Use --basic for minimal info. Use --table/-t for formatted output."
+        },
+        "list": {
+          "help": "List items in a Podio application with optional filtering.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to list items from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., 'status:eq:active', 'title:contains:report'). Ops: eq,ne,gt,gte,lt,lte,in,nin,like,ilike,null,notnull,contains,startswith,endswith. Also supports JSON filter for Podio API fields",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--sort-by",
+              "type": "TEXT",
+              "required": false,
+              "help": "Field to sort by"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Sort in descending order"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item list 12345",
+            "podio item list 12345 --filter '{\"status\": \"active\"}'",
+            "podio item list 12345 --limit 50 --offset 0",
+            "podio item list 12345 --sort-by \"created_on\" --desc",
+            "podio item list 12345 --properties \"item_id,title,status\"",
+            "podio item list 12345 --table"
+          ],
+          "usage_instructions": "Use to list items in an app. APP_ID is required. Use --filter/-f for field-based filtering (supports eq, ne, gt, contains, etc. and JSON filter syntax). Use --sort-by and --desc for ordering. Default limit is 100."
+        },
+        "create": {
+          "help": "Create a new item in a Podio application. Reads item data from a JSON file or stdin. Podio notifications are suppressed by default. Item data format: { \"fields\": [ {\"external_id\": \"title\", \"values\": [{\"value\": \"Item Title\"}]}, {\"external_id\": \"status\", \"values\": [{\"value\": \"active\"}]} ] }",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to create item in"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with item data"
+            },
+            {
+              "name": "--silent",
+              "type": "bool",
+              "required": false,
+              "help": "--notify          Suppress Podio notifications (default: silent)",
+              "default": "silent"
+            },
+            {
+              "name": "--no-hook",
+              "type": "bool",
+              "required": false,
+              "help": "Skip webhook execution"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item create 12345 --json-file item.json",
+            "podio item create 12345 --json-file item.json --table"
+          ],
+          "usage_instructions": "Use to create a new item. APP_ID is required. Provide field data via --json-file (JSON with fields array). Notifications are suppressed by default (--silent). Use --no-hook to skip webhooks."
+        },
+        "update": {
+          "help": "Update an existing Podio item. Reads update data from a JSON file or stdin. Update data format (same as create): { \"fields\": [ {\"external_id\": \"status\", \"values\": [{\"value\": \"completed\"}]} ] }",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with update data"
+            },
+            {
+              "name": "--silent",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress Podio notifications"
+            },
+            {
+              "name": "--no-hook",
+              "type": "bool",
+              "required": false,
+              "help": "Skip webhook execution"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item update 12345 --json-file update.json",
+            "podio item update 12345 --json-file update.json --table"
+          ],
+          "usage_instructions": "Use to update an existing item. ITEM_ID is required. Provide update data via --json-file. Use --silent to suppress notifications. Use --no-hook to skip webhooks."
+        },
+        "delete": {
+          "help": "Delete a Podio item.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--silent",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress Podio notifications"
+            },
+            {
+              "name": "--no-hook",
+              "type": "bool",
+              "required": false,
+              "help": "Skip webhook execution"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item delete 12345",
+            "podio item delete 12345 --silent",
+            "podio item delete 12345 --table"
+          ],
+          "usage_instructions": "Use to delete an item. ITEM_ID is required. Use --silent to suppress notifications. Use --no-hook to skip webhooks."
+        },
+        "values": {
+          "help": "Get field values for a specific item. Returns all field values in a clean format using the v2 API endpoint.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to get values from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item values 12345",
+            "podio item values 12345 --table"
+          ],
+          "usage_instructions": "Use to get all field values for an item in clean format (v2 API). ITEM_ID is required."
+        },
+        "field-value": {
+          "help": "Get a specific field's values for an item (v2 endpoint). The field can be specified either as: - field_id (e.g., 274720804) - external_id (e.g., \"potential-writer\")",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to get field value from"
+            },
+            {
+              "name": "field",
+              "type": "TEXT",
+              "required": true,
+              "help": "Field ID or external_id to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio item field-value 12345 274720804",
+            "podio item field-value 12345 potential-writer",
+            "podio item field-value 12345 potential-writer --table"
+          ],
+          "usage_instructions": "Use to get a specific field's values. ITEM_ID and FIELD (field_id or external_id) are required positional args."
+        }
+      },
+      "usage_instructions": "Item CRUD operations -- get, list, create, update, delete items in Podio apps. Use `item list APP_ID` with --filter for querying. Use `item values ITEM_ID` to see field values and `item field-value ITEM_ID FIELD` for a specific field."
+    },
+    "app": {
+      "help": "Manage Podio applications",
+      "commands": {
+        "get": {
+          "help": "Get a Podio application by ID. By default, deleted fields are excluded from the response. Use --include-deleted to show all fields including deleted ones. Use --fields to return only the field schema.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--fields",
+              "type": "bool",
+              "required": false,
+              "help": "Return only the field schema",
+              "short": "-f"
+            },
+            {
+              "name": "--include-deleted",
+              "type": "bool",
+              "required": false,
+              "help": "Include deleted fields in the response"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app get 12345",
+            "podio app get 12345 --fields",
+            "podio app get 12345 --fields --table",
+            "podio app get 12345 --include-deleted",
+            "podio app get 12345 --table"
+          ],
+          "usage_instructions": "Use to get app details. APP_ID is required. Use --fields/-f to return only field schema. Use --include-deleted to show deleted fields."
+        },
+        "list": {
+          "help": "List all applications in a space. If space_id is not provided, uses PODIO_WORKSPACE_ID from environment. Filter examples: --filter \"status:active\" --filter \"name:contains:Sales\"",
+          "options": [
+            {
+              "name": "--space-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Space ID to list apps from (defaults to PODIO_WORKSPACE_ID)",
+              "short": "-s"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum apps to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app list --space-id 87654321",
+            "podio app list  # Uses PODIO_WORKSPACE_ID",
+            "podio app list --limit 10",
+            "podio app list --filter \"status:active\"",
+            "podio app list --properties \"app_id,name,link\"",
+            "podio app list --table"
+          ],
+          "usage_instructions": "Use to list apps in a space. Uses PODIO_WORKSPACE_ID env var if --space-id/-s not provided. Supports --filter/-f for status/name filtering."
+        },
+        "items": {
+          "help": "Get all items from an application.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to get items from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "default": "30"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app items 12345",
+            "podio app items 12345 --limit 100",
+            "podio app items 12345 --table"
+          ],
+          "usage_instructions": "Use to get all items from an app. APP_ID is required. Default limit is 30. Supports pagination with --offset."
+        },
+        "activate": {
+          "help": "Activate a Podio application.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to activate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app activate 12345",
+            "podio app activate 12345 --table"
+          ],
+          "usage_instructions": "Use to activate a deactivated app. APP_ID is required."
+        },
+        "deactivate": {
+          "help": "Deactivate a Podio application.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to deactivate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app deactivate 12345",
+            "podio app deactivate 12345 --table"
+          ],
+          "usage_instructions": "Use to deactivate an app. APP_ID is required."
+        },
+        "create": {
+          "help": "Create a new Podio application. The app configuration must include space_id, config, and fields. You can either provide a JSON file with --json-file or pipe JSON via stdin.",
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "JSON file with app configuration",
+              "short": "-f"
+            },
+            {
+              "name": "--space-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Space ID to create app in (defaults to PODIO_WORKSPACE_ID)",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app create --json-file app.json",
+            "podio app create --space-id 10479826 --json-file app.json",
+            "podio app create --json-file app.json --table"
+          ],
+          "usage_instructions": "Use to create a new app. Provide config via --json-file (must include space_id, config, fields)."
+        },
+        "update": {
+          "help": "Update a Podio application's configuration. You can update the app configuration using a JSON file or by specifying individual options. When using options, only the specified values are updated. Config properties that can be updated: - name: App name - item_name: Item name (singular) - description: App description (supports markdown) - icon_id: Icon ID (1-650) - allow_edit, allow_attachments, allow_comments - disable_notifications, silent_creates, silent_edits - And more (use --json-file for full control)",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "JSON file with app configuration to update",
+              "short": "-f"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "App name",
+              "short": "-n"
+            },
+            {
+              "name": "--item-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Item name (singular, e.g., 'Topic')"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "App description (supports markdown, shows in sidebar)",
+              "short": "-d"
+            },
+            {
+              "name": "--icon-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Icon ID (1-650)"
+            },
+            {
+              "name": "--allow-edit",
+              "type": "bool",
+              "required": false,
+              "help": "--no-allow-edit                    Allow editing items"
+            },
+            {
+              "name": "--allow-attachments",
+              "type": "bool",
+              "required": false,
+              "help": "--no-allow-attachments             Allow file attachments"
+            },
+            {
+              "name": "--allow-comments",
+              "type": "bool",
+              "required": false,
+              "help": "--no-allow-comments                Allow comments on items"
+            },
+            {
+              "name": "--disable-notifications",
+              "type": "bool",
+              "required": false,
+              "help": "--enable-notifications             Disable notifications for this app"
+            },
+            {
+              "name": "--silent-creates",
+              "type": "bool",
+              "required": false,
+              "help": "--no-silent-creates                Silent mode for item creation"
+            },
+            {
+              "name": "--silent-edits",
+              "type": "bool",
+              "required": false,
+              "help": "--no-silent-edits                  Silent mode for item edits"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app update 12345 --description \"New description\"",
+            "podio app update 12345 --name \"My App\" --item-name \"Task\"",
+            "podio app update 12345 --icon-id 42",
+            "podio app update 12345 --json-file config.json",
+            "podio app update 12345 --silent-edits",
+            "podio app update 12345 --no-allow-comments",
+            "podio app update 12345 --table"
+          ],
+          "usage_instructions": "Use to update app configuration. APP_ID is required. Provide updates via --json-file."
+        },
+        "export": {
+          "help": "Export a Podio application to Excel. This command exports all items from an app to an Excel file. The export is processed asynchronously by Podio, so this command will poll for completion and download the file when ready.",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to export"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (defaults to app_name.xlsx)",
+              "short": "-o"
+            },
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Export format (xlsx or xls)",
+              "short": "-f",
+              "default": "xlsx"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to export"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio app export 12345",
+            "podio app export 12345 --output my_export.xlsx",
+            "podio app export 12345 --format xls --limit 1000",
+            "podio app export 12345 --table"
+          ],
+          "usage_instructions": "Use to export app items as XLS or CSV. APP_ID is required. Use --format for output format."
+        },
+        "field": {
+          "help": "Manage application fields",
+          "commands": {
+            "add": {
+              "help": "Add a new field to an application. Supported field types: text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel You can either provide --type and --label options, or use --json-file for full field configuration. When using --json-file, --type and --label are not required.",
+              "arguments": [
+                {
+                  "name": "app_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Application ID to add field to"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"
+                },
+                {
+                  "name": "--label",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Field label",
+                  "short": "-l"
+                },
+                {
+                  "name": "--required",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Whether field is required",
+                  "short": "-r"
+                },
+                {
+                  "name": "--json-file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "JSON file with full field configuration (overrides other options)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--mimetypes",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Allowed mimetypes for file fields (comma-separated, e.g., 'application/*,image/*')",
+                  "short": "-m"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio app field add 12345 --type text --label \"Title\"",
+                "podio app field add 12345 --type file --label \"Attachments\" --mimetypes \"application/*,image/*\"",
+                "podio app field add 12345 --json-file field.json",
+                "podio app field add 12345 --type text --label \"Title\" --table"
+              ],
+              "usage_instructions": "Add a new field to an application. Supported field types: text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel You can either provide --type and --label options, or use --json-file for full field configuration. When using --json-file, --type and --label are not required. Required arguments: app_id. Notable options: --type, --label/-l, --required/-r, --json-file/-f, --mimetypes/-m, --table/-t. Example: `podio app field add 12345 --type text --label \"Title\"`."
+            },
+            "get": {
+              "help": "Get a field from an application.",
+              "arguments": [
+                {
+                  "name": "app_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Application ID"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio app field get 12345 67890",
+                "podio app field get 12345 67890 --table"
+              ],
+              "usage_instructions": "Get a field from an application. Required arguments: app_id, field_id. Notable options: --table/-t. Example: `podio app field get 12345 67890`."
+            },
+            "update": {
+              "help": "Update a field in an application. Only attributes explicitly provided in the JSON file are modified. All other field properties (delta, required, hidden, settings, etc.) are automatically preserved from the current field configuration.",
+              "arguments": [
+                {
+                  "name": "app_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Application ID"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to update"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--json-file",
+                  "type": "PATH",
+                  "required": true,
+                  "help": "JSON file with field configuration",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio app field update 12345 67890 --json-file field.json",
+                "podio app field update 12345 67890 --json-file field.json --table"
+              ],
+              "usage_instructions": "Update a field in an application. Only attributes explicitly provided in the JSON file are modified. All other field properties (delta, required, hidden, settings, etc.) are automatically preserved from the current field configuration. Required arguments: app_id, field_id. Notable options: --json-file/-f, --table/-t. Example: `podio app field update 12345 67890 --json-file field.json`."
+            },
+            "delete": {
+              "help": "Delete a field from an application. WARNING: This will delete all data stored in this field for all items. When --delete-values is specified, field values are cleared from all existing items before the field is deleted. This works around a Podio API limitation where delete_values=true does not actually remove data from items.",
+              "arguments": [
+                {
+                  "name": "app_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Application ID"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                },
+                {
+                  "name": "--delete-values",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Also delete field values from existing items",
+                  "short": "-d"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio app field delete 12345 67890",
+                "podio app field delete 12345 67890 --force",
+                "podio app field delete 12345 67890 --delete-values",
+                "podio app field delete 12345 67890 --table"
+              ],
+              "usage_instructions": "Delete a field from an application. WARNING: This will delete all data stored in this field for all items. When --delete-values is specified, field values are cleared from all existing items before the field is deleted. This works around a Podio API limitation where delete_values=true does not actually remove data from items. Required arguments: app_id, field_id. Notable options: --force/-f, --delete-values/-d, --table/-t. Example: `podio app field delete 12345 67890`."
+            },
+            "list": {
+              "help": "List all fields in an application. By default, only active fields are shown. Use --include-deleted to show all fields.",
+              "arguments": [
+                {
+                  "name": "app_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Application ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--include-deleted",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Include deleted fields",
+                  "short": "-d"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum fields to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio app field list 12345",
+                "podio app field list 12345 --include-deleted",
+                "podio app field list 12345 --table",
+                "podio app field list 12345 --limit 10",
+                "podio app field list 12345 --filter \"type:eq:text\""
+              ],
+              "usage_instructions": "List all fields in an application. By default, only active fields are shown. Use --include-deleted to show all fields. Required arguments: app_id. Notable options: --include-deleted/-d, --limit/-l, --filter/-f, --properties/-p, --table/-t. Example: `podio app field list 12345`."
+            }
+          },
+          "usage_instructions": "Use to get details of a specific field in an app. APP_ID and FIELD_ID are required."
+        }
+      },
+      "usage_instructions": "Application management -- get app details and field schemas, list apps in a space, create/update apps, get app items, activate/deactivate, and export app data. Use `app get APP_ID --fields` to see field schema."
+    },
+    "task": {
+      "help": "Manage Podio tasks",
+      "commands": {
+        "list": {
+          "help": "List tasks for the authenticated user. Supports filtering, grouping, and sorting via API parameters. Filter examples: --filter \"status:active\" --filter \"text:contains:urgent\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum tasks to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--completed",
+              "type": "bool",
+              "required": false,
+              "help": "Filter by completion status"
+            },
+            {
+              "name": "--grouping",
+              "type": "TEXT",
+              "required": false,
+              "help": "Group by: due_date, created_by, responsible, app, space, org",
+              "short": "-g"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort by: created_on, completed_on, rank",
+              "short": "-s"
+            },
+            {
+              "name": "--responsible",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by responsible user ID"
+            },
+            {
+              "name": "--space",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by space ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task list",
+            "podio task list --limit 50",
+            "podio task list --completed false",
+            "podio task list --grouping due_date",
+            "podio task list --space 12345 --sort created_on",
+            "podio task list --filter \"status:active\" --properties \"task_id,text,due_date\"",
+            "podio task list --table"
+          ],
+          "usage_instructions": "Use to list tasks. Supports --responsible/-r, --status/-s (active/completed), --label/-l, --reference for filtering."
+        },
+        "get": {
+          "help": "Get a Podio task by ID.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Task ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task get 12345",
+            "podio task get 12345 --table"
+          ],
+          "usage_instructions": "Use to get task details. TASK_ID is required."
+        },
+        "create": {
+          "help": "Create a new Podio task. Task data can be provided via JSON file/stdin or command-line options. Task data format: { \"text\": \"Task description\", \"description\": \"Detailed description\", \"due_date\": \"2025-01-15\", \"private\": false, \"ref_type\": \"item\", \"ref_id\": 12345 }",
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with task data"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Task text/description"
+            },
+            {
+              "name": "--ref-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reference type (e.g., 'item', 'app')"
+            },
+            {
+              "name": "--ref-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Reference ID"
+            },
+            {
+              "name": "--due-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Due date (YYYY-MM-DD format)"
+            },
+            {
+              "name": "--private",
+              "type": "bool",
+              "required": false,
+              "help": "Make task private"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task create --json-file task.json",
+            "podio task create --text \"Follow up\" --ref-type item --ref-id 12345",
+            "podio task create --text \"Follow up\" --table"
+          ],
+          "usage_instructions": "Use to create a task. TEXT is required. Use --responsible/-r for assignee, --due-date/-d for deadline, --description for details."
+        },
+        "complete": {
+          "help": "Mark a Podio task as complete.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Task ID to complete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task complete 12345",
+            "podio task complete 12345 --table"
+          ],
+          "usage_instructions": "Use to mark a task as completed. TASK_ID is required."
+        },
+        "delete": {
+          "help": "Delete a Podio task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Task ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task delete 12345",
+            "podio task delete 12345 --table"
+          ],
+          "usage_instructions": "Use to delete a task. TASK_ID is required."
+        },
+        "update": {
+          "help": "Update an existing Podio task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Task ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with update data"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update task text"
+            },
+            {
+              "name": "--due-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update due date (YYYY-MM-DD format)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio task update 12345 --json-file update.json",
+            "podio task update 12345 --text \"Updated description\"",
+            "podio task update 12345 --text \"Updated\" --table"
+          ],
+          "usage_instructions": "Use to update a task. TASK_ID is required. Update fields with options like --text, --due-date, --responsible, --description."
+        },
+        "label": {
+          "help": "Manage task labels",
+          "commands": {
+            "list": {
+              "help": "List all task labels for the authenticated user.",
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum labels to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio task label list",
+                "podio task label list --table",
+                "podio task label list --limit 10",
+                "podio task label list --filter \"text:contains:urgent\""
+              ],
+              "usage_instructions": "List all task labels for the authenticated user. Notable options: --limit/-l, --filter/-f, --properties/-p, --table/-t. Example: `podio task label list`."
+            },
+            "get": {
+              "help": "Get a specific task label by ID.",
+              "arguments": [
+                {
+                  "name": "label_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Label ID to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio task label get 12345",
+                "podio task label get 12345 --table"
+              ],
+              "usage_instructions": "Get a specific task label by ID. Required arguments: label_id. Notable options: --table/-t. Example: `podio task label get 12345`."
+            },
+            "create": {
+              "help": "Create a new task label.",
+              "arguments": [
+                {
+                  "name": "text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Label text/name"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--color",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Label color (hex code or color name)",
+                  "short": "-c"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio task label create \"High Priority\"",
+                "podio task label create \"Urgent\" --color red",
+                "podio task label create \"Review\" --color \"#FF5733\""
+              ],
+              "usage_instructions": "Create a new task label. Required arguments: text. Notable options: --color/-c, --table/-t. Example: `podio task label create \"High Priority\"`."
+            },
+            "update": {
+              "help": "Update labels on a task. This replaces all existing labels.",
+              "arguments": [
+                {
+                  "name": "task_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Task ID to update labels on"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--labels",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comma-separated label IDs or names",
+                  "short": "-l"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio task label update 12345 --labels \"123,456\"",
+                "podio task label update 12345 --labels \"High Priority,Urgent\""
+              ],
+              "usage_instructions": "Update labels on a task. This replaces all existing labels. Required arguments: task_id. Notable options: --labels/-l, --table/-t. Example: `podio task label update 12345 --labels \"123,456\"`."
+            },
+            "delete": {
+              "help": "Delete a task label.",
+              "arguments": [
+                {
+                  "name": "label_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Label ID to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio task label delete 12345"
+              ],
+              "usage_instructions": "Delete a task label. Required arguments: label_id. Notable options: --table/-t. Example: `podio task label delete 12345`."
+            }
+          },
+          "usage_instructions": "Use to manage task labels. Subcommands for listing, creating, updating, deleting labels."
+        }
+      },
+      "usage_instructions": "Task management -- list, create, complete, update, delete, and label tasks. Use `task list` for all tasks, `task complete TASK_ID` to mark done."
+    },
+    "space": {
+      "help": "Manage Podio spaces",
+      "commands": {
+        "get": {
+          "help": "Get a Podio space by ID or URL. If neither space_id nor url is provided, uses PODIO_WORKSPACE_ID from environment.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "SPACE_ID",
+              "required": false,
+              "help": "Space ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "Find space by Podio URL",
+              "short": "-u"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio space get 12345",
+            "podio space get --url https://podio.com/org/workspace",
+            "podio space get  # Uses PODIO_WORKSPACE_ID",
+            "podio space get --table"
+          ],
+          "usage_instructions": "Use to get space details. SPACE_ID is required."
+        },
+        "list": {
+          "help": "List all spaces in an organization. If org_id is not provided, uses PODIO_ORGANIZATION_ID from environment.",
+          "options": [
+            {
+              "name": "--org-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Organization ID to list spaces from (defaults to PODIO_ORGANIZATION_ID)",
+              "short": "-o"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum spaces to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio space list --org-id 3747840",
+            "podio space list  # Uses PODIO_ORGANIZATION_ID",
+            "podio space list --limit 10",
+            "podio space list --filter \"name:Progress\"",
+            "podio space list --properties \"space_id,name\"",
+            "podio space list --table"
+          ],
+          "usage_instructions": "Use to list spaces in an org. ORG_ID is required."
+        }
+      },
+      "usage_instructions": "Space (workspace) management -- get space details and list spaces in an organization."
+    },
+    "org": {
+      "help": "Manage Podio organizations",
+      "commands": {
+        "list": {
+          "help": "List all organizations the user is a member of. Returns organizations with their org_id and associated spaces.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum organizations to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio org list",
+            "podio org list --limit 10",
+            "podio org list --filter \"name:ATA\"",
+            "podio org list --properties \"org_id,name\"",
+            "podio org list --table"
+          ],
+          "usage_instructions": "Use to list all organizations the user belongs to."
+        },
+        "get": {
+          "help": "Get a Podio organization by ID. Returns organization details including name, spaces, and member info.",
+          "arguments": [
+            {
+              "name": "org_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Organization ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio org get 12345",
+            "podio org get 12345 --table"
+          ],
+          "usage_instructions": "Use to get organization details. ORG_ID is required."
+        }
+      },
+      "usage_instructions": "Organization management -- list organizations and get org details."
+    },
+    "auth": {
+      "help": "OAuth authentication utilities",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use to authenticate with Podio via OAuth. Opens browser for consent. Use --profile/-p for a named profile."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to check current authentication status."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to refresh an expired OAuth token."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to verify credentials are valid and working."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use to list all profiles and see which is the default."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use to get details of a specific profile. NAME is required."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use to create a new profile. NAME is required."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use to switch the active profile. NAME is required."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use to delete a profile. NAME is required. Use --force/-F to skip confirmation."
+            }
+          },
+          "usage_instructions": "Profile management -- list, get, create, set default, and delete authentication profiles."
+        }
+      },
+      "usage_instructions": "Authentication management -- login via OAuth, logout, check status, refresh tokens, test credentials."
+    },
+    "comment": {
+      "help": "Manage Podio comments",
+      "commands": {
+        "create": {
+          "help": "Add a comment to a Podio object (item, status, etc.). You can provide comment text directly with --text, or use a JSON file for more complex comments with attachments or embeds. Comment data format: { \"value\": \"Comment text\", \"external_id\": \"Optional external ID\", \"file_ids\": [123, 456], \"embed_id\": 789, \"embed_url\": \"https://example.com\" }",
+          "arguments": [
+            {
+              "name": "ref_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Object type (e.g., 'item', 'status')"
+            },
+            {
+              "name": "ref_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Object ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comment text"
+            },
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with comment data"
+            },
+            {
+              "name": "--silent",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress notifications"
+            },
+            {
+              "name": "--no-hook",
+              "type": "bool",
+              "required": false,
+              "help": "Skip webhook execution"
+            },
+            {
+              "name": "--alert-invite",
+              "type": "bool",
+              "required": false,
+              "help": "Auto-invite mentioned users"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio comment create item 12345 --text \"This is a comment\"",
+            "podio comment create item 12345 --json-file comment.json",
+            "podio comment create item 12345 --text \"Great work!\" --silent",
+            "podio comment create item 12345 --text \"Comment\" --table"
+          ],
+          "usage_instructions": "Use to add a comment to a Podio object. Requires object type, ID, and comment text."
+        },
+        "list": {
+          "help": "Get all comments on a Podio object.",
+          "arguments": [
+            {
+              "name": "ref_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Object type (e.g., 'item', 'status')"
+            },
+            {
+              "name": "ref_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Object ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum comments to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio comment list item 12345",
+            "podio comment list item 12345 --limit 50",
+            "podio comment list item 12345 --filter \"created_by.name:Example User\"",
+            "podio comment list item 12345 --properties \"comment_id,value\"",
+            "podio comment list item 12345 --table"
+          ],
+          "usage_instructions": "Use to list comments on an object."
+        },
+        "get": {
+          "help": "Get a specific comment by ID.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Comment ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio comment get 98765",
+            "podio comment get 98765 --table"
+          ],
+          "usage_instructions": "Use to get a specific comment by ID."
+        },
+        "update": {
+          "help": "Update an existing comment. This should only be used to correct spelling and grammatical mistakes. Update data format: { \"value\": \"Updated comment text\", \"external_id\": \"Optional external ID\", \"file_ids\": [123, 456], \"embed_id\": 789, \"embed_url\": \"https://example.com\" }",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Comment ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Updated comment text"
+            },
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with updated comment data"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio comment update 98765 --text \"Corrected comment text\"",
+            "podio comment update 98765 --json-file updated-comment.json",
+            "podio comment update 98765 --text \"Corrected\" --table"
+          ],
+          "usage_instructions": "Use to update a comment. COMMENT_ID is required."
+        },
+        "delete": {
+          "help": "Delete a comment.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Comment ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--no-hook",
+              "type": "bool",
+              "required": false,
+              "help": "Skip webhook execution"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio comment delete 98765",
+            "podio comment delete 98765 --no-hook",
+            "podio comment delete 98765 --table"
+          ],
+          "usage_instructions": "Use to delete a comment. COMMENT_ID is required."
+        }
+      },
+      "usage_instructions": "Comment operations -- create, list, get, update, and delete comments on Podio objects."
+    },
+    "webhook": {
+      "help": "Manage Podio webhooks",
+      "commands": {
+        "get": {
+          "help": "Get a Podio webhook by ID. Returns webhook details including URL, status, and event type. Note: The Podio API does not have a direct endpoint to get a single webhook. This command uses the hook info endpoint which returns basic hook information.",
+          "arguments": [
+            {
+              "name": "hook_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webhook ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook get 12345",
+            "podio webhook get 12345 --table"
+          ],
+          "usage_instructions": "Use to get webhook details. WEBHOOK_ID is required."
+        },
+        "create": {
+          "help": "Create a new webhook for a Podio object. Common hookable types: app, space Common event types: item.create, item.update, item.delete IMPORTANT - AUTOMATIC VERIFICATION: Immediately after creation, Podio sends a hook.verify event to your URL with a verification code. Your endpoint must handle this event and call 'podio webhook validate' with the code to activate the webhook. Until validated, the webhook remains 'inactive' and will not receive events. See 'podio webhook verify --help' for detailed verification information.",
+          "arguments": [
+            {
+              "name": "hookable_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Type of object to hook (e.g., 'app', 'space')"
+            },
+            {
+              "name": "hookable_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "ID of the object to hook"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Webhook URL to receive POST requests",
+              "short": "-u"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Event type to trigger on (e.g., 'item.create', 'item.update', 'item.delete')",
+              "default": "item.update"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook create app 12345 --url https://example.com/webhook --type item.update",
+            "podio webhook create app 12345 -u https://webhook.site/abc123 --type item.create",
+            "podio webhook create app 12345 -u https://example.com/hook --table"
+          ],
+          "usage_instructions": "Use to create a webhook for an object. Requires ref_type, ref_id, url, and event type."
+        },
+        "list": {
+          "help": "List all webhooks for a Podio object. When listing for an app, this includes both app-level webhooks and field-level webhooks for all fields in the app.",
+          "arguments": [
+            {
+              "name": "hookable_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Type of object (e.g., 'app', 'space')"
+            },
+            {
+              "name": "hookable_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "ID of the object"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum webhooks to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook list app 12345",
+            "podio webhook list space 67890",
+            "podio webhook list app 12345 --limit 10",
+            "podio webhook list app 12345 --filter \"status:active\"",
+            "podio webhook list app 12345 --properties \"hook_id,url,status\"",
+            "podio webhook list app 12345 --table"
+          ],
+          "usage_instructions": "Use to list webhooks on an object."
+        },
+        "verify": {
+          "help": "Request verification for a webhook. WEBHOOK VERIFICATION EXPLAINED: Webhook verification is a security handshake that proves you control the URL you're registering. When you create a webhook, Podio automatically sends a hook.verify event to your endpoint. Your endpoint must respond by calling the validate command with the code Podio provides. HOW VERIFICATION WORKS: 1. Create webhook - Podio creates webhook with 'inactive' status 2. Podio sends hook.verify event to your URL with a verification code 3. Your endpoint receives: {\"type\": \"hook.verify\", \"hook_id\": 123, \"code\": \"abc123\"} 4. You call: podio webhook validate 123 abc123 5. Webhook status changes from 'inactive' to 'active' This command manually requests verification if you need to re-verify a webhook. Normally, verification happens automatically when you create a webhook.",
+          "arguments": [
+            {
+              "name": "hook_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webhook ID to verify"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook verify 123456",
+            "podio webhook verify 123456 --table"
+          ],
+          "usage_instructions": "Use to verify a webhook."
+        },
+        "validate": {
+          "help": "Validate a webhook with the verification code. WEBHOOK VERIFICATION PROCESS: After creating a webhook, Podio sends a hook.verify event to your endpoint URL. This event contains a verification code that you must submit back to Podio to activate the webhook. Until validation completes, the webhook remains 'inactive' and will not receive events. VERIFICATION WORKFLOW: 1. Podio sends to your endpoint: {\"type\": \"hook.verify\", \"hook_id\": 123, \"code\": \"abc123\"} 2. Your endpoint must extract the hook_id and code 3. You run this command: podio webhook validate 123 abc123 4. Webhook activates and starts receiving real events WHY VERIFICATION IS REQUIRED: Verification proves you control the webhook URL. Without it, anyone could register webhooks pointing to URLs they don't own, which could spam third-party services or leak data to malicious endpoints. YOUR ENDPOINT REQUIREMENTS: - Must be publicly accessible (Podio needs to reach it) - Must handle hook.verify event type - Must respond within Podio's timeout period - Should implement logging to capture the verification code",
+          "arguments": [
+            {
+              "name": "hook_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webhook ID to validate"
+            },
+            {
+              "name": "code",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verification code from webhook endpoint"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook validate 123456 abc123def456",
+            "podio webhook validate 123456 abc123 --table"
+          ],
+          "usage_instructions": "Use to validate a webhook's URL."
+        },
+        "update": {
+          "help": "Update a webhook URL. Note: This is implemented as delete + recreate since the Podio API does not support direct webhook updates. The webhook will get a new hook_id but maintain the same hookable_type, hookable_id, and event type.",
+          "arguments": [
+            {
+              "name": "hook_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webhook ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "New webhook URL",
+              "short": "-u"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook update 123456 --url https://new-endpoint.com/webhook",
+            "podio webhook update 123456 -u https://example.com/hook",
+            "podio webhook update 123456 -u https://example.com/hook --table"
+          ],
+          "usage_instructions": "Use to update a webhook. WEBHOOK_ID is required."
+        },
+        "delete": {
+          "help": "Delete a webhook.",
+          "arguments": [
+            {
+              "name": "hook_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webhook ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webhook delete 123456",
+            "podio webhook delete 123456 --table"
+          ],
+          "usage_instructions": "Use to delete a webhook. WEBHOOK_ID is required."
+        },
+        "field": {
+          "help": "Manage field-level webhooks",
+          "commands": {
+            "get": {
+              "help": "Get a specific field-level webhook by ID.",
+              "arguments": [
+                {
+                  "name": "hook_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Webhook ID to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webhook field get 12345",
+                "podio webhook field get 12345 --table"
+              ],
+              "usage_instructions": "Get a specific field-level webhook by ID. Required arguments: hook_id. Notable options: --table/-t. Example: `podio webhook field get 12345`."
+            },
+            "create": {
+              "help": "Create a field-level webhook that only fires when a specific field is updated.",
+              "arguments": [
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to create webhook for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webhook URL to receive POST requests",
+                  "short": "-u"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Event type to trigger on",
+                  "default": "item.update"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webhook field create 12345 --url https://example.com/webhook",
+                "podio webhook field create 12345 -u https://webhook.site/abc123 --type item.update"
+              ],
+              "usage_instructions": "Create a field-level webhook that only fires when a specific field is updated. Required arguments: field_id. Notable options: --url/-u, --type, --table/-t. Example: `podio webhook field create 12345 --url https://example.com/webhook`."
+            },
+            "list": {
+              "help": "List all webhooks for a specific field.",
+              "arguments": [
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to list webhooks for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum webhooks to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webhook field list 12345",
+                "podio webhook field list 12345 --table",
+                "podio webhook field list 12345 --limit 10",
+                "podio webhook field list 12345 --filter \"status:eq:active\""
+              ],
+              "usage_instructions": "List all webhooks for a specific field. Required arguments: field_id. Notable options: --limit/-l, --filter/-f, --properties/-p, --table/-t. Example: `podio webhook field list 12345`."
+            },
+            "update": {
+              "help": "Update a field-level webhook URL.",
+              "arguments": [
+                {
+                  "name": "hook_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Webhook ID to update"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New webhook URL",
+                  "short": "-u"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webhook field update 98765 --url https://newurl.com/webhook"
+              ],
+              "usage_instructions": "Update a field-level webhook URL. Required arguments: hook_id. Notable options: --url/-u, --table/-t. Example: `podio webhook field update 98765 --url https://newurl.com/webhook`."
+            }
+          },
+          "usage_instructions": "Use to get webhook field details."
+        }
+      },
+      "usage_instructions": "Webhook management -- create, list, get, verify, validate, update, delete webhooks, and inspect webhook fields."
+    },
+    "conversation": {
+      "help": "Manage Podio conversations",
+      "commands": {
+        "list": {
+          "help": "Get all conversations for the authenticated user. Returns conversations ordered by time of the last event.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum conversations to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation list",
+            "podio conversation list --limit 20",
+            "podio conversation list --filter \"unread:true\"",
+            "podio conversation list --properties \"conversation_id,subject\"",
+            "podio conversation list --table"
+          ],
+          "usage_instructions": "Use to list conversations. Supports pagination with --limit and --offset."
+        },
+        "get": {
+          "help": "Get a specific conversation including participants and messages. Only participants in the conversation are allowed to view it.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation get 12345",
+            "podio conversation get 12345 --table"
+          ],
+          "usage_instructions": "Use to get a conversation by ID."
+        },
+        "create": {
+          "help": "Create a new conversation with a list of users or on an object. Once started, participants cannot be changed (yet). Use --ref-type and --ref-id to create a conversation on a specific object. Conversation data format: { \"subject\": \"Conversation subject\", \"text\": \"Message body\", \"participants\": [123456, 789012], \"file_ids\": [111, 222] }",
+          "options": [
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": false,
+              "help": "Conversation subject"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message text"
+            },
+            {
+              "name": "--participants",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of user IDs"
+            },
+            {
+              "name": "--ref-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Object type for object-based conversation (e.g., 'item', 'status')"
+            },
+            {
+              "name": "--ref-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Object ID for object-based conversation"
+            },
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with conversation data"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation create --subject \"Hello\" --text \"Hi there\" --participants \"123456,789012\"",
+            "podio conversation create --ref-type item --ref-id 12345 --subject \"Question\" --text \"Need help\"",
+            "podio conversation create --json-file conversation.json"
+          ],
+          "usage_instructions": "Use to create a new conversation. Requires subject, text, and participants."
+        },
+        "reply": {
+          "help": "Reply to an existing conversation. Reply data format: { \"text\": \"Reply message\", \"file_ids\": [111, 222], \"embed_id\": 333, \"embed_url\": \"https://example.com\" }",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reply text"
+            },
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with reply data"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation reply 12345 --text \"Thanks for the message\"",
+            "podio conversation reply 12345 --json-file reply.json",
+            "podio conversation reply 12345 --text \"Thanks\" --table"
+          ],
+          "usage_instructions": "Use to reply to a conversation. CONVERSATION_ID and TEXT are required."
+        },
+        "mark-read": {
+          "help": "Mark a conversation as read.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to mark as read"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation mark-read 12345",
+            "podio conversation mark-read 12345 --table"
+          ],
+          "usage_instructions": "Use to mark a conversation as read."
+        },
+        "mark-unread": {
+          "help": "Mark a conversation as unread.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to mark as unread"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation mark-unread 12345",
+            "podio conversation mark-unread 12345 --table"
+          ],
+          "usage_instructions": "Use to mark a conversation as unread."
+        },
+        "star": {
+          "help": "Star a conversation.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to star"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation star 12345",
+            "podio conversation star 12345 --table"
+          ],
+          "usage_instructions": "Use to star/favorite a conversation."
+        },
+        "unstar": {
+          "help": "Unstar a conversation.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to unstar"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation unstar 12345",
+            "podio conversation unstar 12345 --table"
+          ],
+          "usage_instructions": "Use to unstar a conversation."
+        },
+        "leave": {
+          "help": "Leave a conversation.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID to leave"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation leave 12345",
+            "podio conversation leave 12345 --table"
+          ],
+          "usage_instructions": "Use to leave a conversation."
+        },
+        "search": {
+          "help": "Search conversations.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results to return",
+              "default": "10"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation search \"project update\"",
+            "podio conversation search \"budget\" --limit 20",
+            "podio conversation search \"project\" --table"
+          ],
+          "usage_instructions": "Use to search conversations by text."
+        },
+        "events": {
+          "help": "Get events (messages) from a conversation.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Conversation ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum events to return",
+              "default": "10"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "default": "0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation events 12345",
+            "podio conversation events 12345 --limit 50",
+            "podio conversation events 12345 --table"
+          ],
+          "usage_instructions": "Use to get conversation events/activity."
+        },
+        "on-object": {
+          "help": "Get all conversations on a specific object.",
+          "arguments": [
+            {
+              "name": "ref_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Object type (e.g., 'item', 'status')"
+            },
+            {
+              "name": "ref_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Object ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio conversation on-object item 12345",
+            "podio conversation on-object status 67890",
+            "podio conversation on-object item 12345 --table"
+          ],
+          "usage_instructions": "Use to get conversations on a Podio object."
+        },
+        "participant": {
+          "help": "Manage conversation participants",
+          "commands": {
+            "add": {
+              "help": "Add participants to an existing conversation.",
+              "arguments": [
+                {
+                  "name": "conversation_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Conversation ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--users",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comma-separated list of user IDs to add",
+                  "short": "-u"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio conversation participant add 12345 --users \"123456,789012\"",
+                "podio conversation participant add 12345 -u \"123456\""
+              ],
+              "usage_instructions": "Add participants to an existing conversation. Required arguments: conversation_id. Notable options: --users/-u, --table/-t. Example: `podio conversation participant add 12345 --users \"123456,789012\"`."
+            }
+          },
+          "usage_instructions": "Use to manage conversation participants."
+        }
+      },
+      "usage_instructions": "Conversation/messaging -- list, get, create conversations, reply, mark read/unread, star/unstar, leave, search, view events, get conversations on objects, and manage participants."
+    },
+    "file": {
+      "help": "Manage Podio files",
+      "commands": {
+        "upload": {
+          "help": "Upload a file to Podio. Returns the file_id which can be used to attach the file to items, tasks, comments, etc.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to file to upload"
+            }
+          ],
+          "options": [
+            {
+              "name": "--filename",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override filename (defaults to original filename)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file upload document.docx",
+            "podio file upload document.docx --filename \"My Document.docx\"",
+            "podio file upload document.docx --table"
+          ],
+          "usage_instructions": "Use to upload a file. FILE_PATH is required."
+        },
+        "attach": {
+          "help": "Attach an uploaded file to an object. Valid reference types are: item, task, comment, status, space",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID to attach"
+            },
+            {
+              "name": "ref_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reference type: item, task, comment, status, or space"
+            },
+            {
+              "name": "ref_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Reference ID (item_id, task_id, etc.)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file attach 12345 item 67890",
+            "podio file attach 12345 task 11111",
+            "podio file attach 12345 comment 22222",
+            "podio file attach 12345 item 67890 --table"
+          ],
+          "usage_instructions": "Use to attach an uploaded file to a Podio object. FILE_ID, REF_TYPE, and REF_ID are required."
+        },
+        "list": {
+          "help": "List files attached to an object. Valid reference types are: item, task, comment, status, space",
+          "arguments": [
+            {
+              "name": "ref_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reference type: item, task, comment, status, or space"
+            },
+            {
+              "name": "ref_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Reference ID to list files from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum files to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file list item 12345",
+            "podio file list task 67890",
+            "podio file list item 12345 --limit 10",
+            "podio file list item 12345 --filter \"name:contains:report\"",
+            "podio file list item 12345 --properties \"file_id,name,mimetype\"",
+            "podio file list item 12345 --table"
+          ],
+          "usage_instructions": "Use to list files. Supports filtering and pagination."
+        },
+        "get": {
+          "help": "Get file metadata by ID.",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file get 12345",
+            "podio file get 12345 --table"
+          ],
+          "usage_instructions": "Use to get file details. FILE_ID is required."
+        },
+        "download": {
+          "help": "Download a file from Podio.",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID to download"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": false,
+              "help": "Output file path (defaults to original filename)",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file download 12345",
+            "podio file download 12345 --output ./my-document.docx",
+            "podio file download 12345 --table"
+          ],
+          "usage_instructions": "Use to download a file. FILE_ID is required."
+        },
+        "copy": {
+          "help": "Copy a file to create a new file with a new file_id. Useful when you need to attach the same file to multiple objects.",
+          "arguments": [
+            {
+              "name": "file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID to copy"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio file copy 12345",
+            "podio file copy 12345 --table"
+          ],
+          "usage_instructions": "Use to copy a file. FILE_ID is required."
+        }
+      },
+      "usage_instructions": "File operations -- upload, attach to objects, list, get details, download, and copy files."
+    },
+    "webform": {
+      "help": "Manage Podio webforms",
+      "commands": {
+        "list": {
+          "help": "List all webforms for an application. Returns all webforms (active and disabled) configured on the given app. Filter examples: --filter \"status:active\" --filter \"name:contains:Contact\"",
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to list webforms from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum webforms to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webform list 12345",
+            "podio webform list 12345 --limit 10",
+            "podio webform list 12345 --filter \"status:active\"",
+            "podio webform list 12345 --properties \"form_id,name,status\"",
+            "podio webform list 12345 --table"
+          ],
+          "usage_instructions": "Use to list webforms for an app. APP_ID is required."
+        },
+        "get": {
+          "help": "Get a specific webform by ID. Returns full details including settings, fields, domains, and attachments configuration.",
+          "arguments": [
+            {
+              "name": "form_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Webform ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webform get 12345",
+            "podio webform get 12345 --table"
+          ],
+          "usage_instructions": "Use to get webform details. FORM_ID is required."
+        },
+        "submit": {
+          "help": "Submit data to a Podio webform via HTTP POST. This submits directly to the public webform URL, exactly like a browser would. No authentication required - uses the public webform endpoint. Field data format (using field external_id as keys): { \"title\": \"My Title\", \"description\": \"Some text\", \"category\": \"Option 1\" } File attachments require the webform to have attachments enabled. Use 'podio webform attachments status <form>' to check.",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Webform URL (e.g., https://podio.com/webforms/12345/67890)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with field data",
+              "short": "-f"
+            },
+            {
+              "name": "--attach",
+              "type": "PATH",
+              "required": false,
+              "help": "File(s) to attach to the submission (can be used multiple times)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json",
+            "podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json --attach document.docx",
+            "podio webform submit https://podio.com/webforms/30560419/2584779 -f data.json -a file1.pdf -a file2.docx"
+          ],
+          "usage_instructions": "Use to submit data to a webform. FORM_ID is required with data via --json-file."
+        },
+        "field": {
+          "help": "Manage webform fields",
+          "commands": {
+            "get": {
+              "help": "Get details about a specific field on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to retrieve details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform field get 2584779 275324144",
+                "podio webform field get https://podio.com/webforms/12345/2584779 275324144",
+                "podio webform field get 2584779 275324144 --table"
+              ],
+              "usage_instructions": "Get details about a specific field on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field get 2584779 275324144`."
+            },
+            "add": {
+              "help": "Add a field to a webform. Adds an app field to the webform so it appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to add to the webform"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform field add 2584779 275324144",
+                "podio webform field add https://podio.com/webforms/12345/2584779 275324144",
+                "podio webform field add 2584779 275324144 --table"
+              ],
+              "usage_instructions": "Add a field to a webform. Adds an app field to the webform so it appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field add 2584779 275324144`."
+            },
+            "remove": {
+              "help": "Remove a field from a webform. Removes an app field from the webform so it no longer appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                },
+                {
+                  "name": "field_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Field ID to remove from the webform"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform field remove 2584779 275324144",
+                "podio webform field remove https://podio.com/webforms/12345/2584779 275324144",
+                "podio webform field remove 2584779 275324144 --table"
+              ],
+              "usage_instructions": "Remove a field from a webform. Removes an app field from the webform so it no longer appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field remove 2584779 275324144`."
+            },
+            "list": {
+              "help": "List all fields on a webform. Shows the field IDs currently configured on the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number.",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum fields to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform field list 2584779",
+                "podio webform field list https://podio.com/webforms/12345/2584779",
+                "podio webform field list 2584779 --table",
+                "podio webform field list 2584779 --limit 10"
+              ],
+              "usage_instructions": "List all fields on a webform. Shows the field IDs currently configured on the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url. Notable options: --limit/-l, --filter/-f, --properties/-p, --table/-t. Example: `podio webform field list 2584779`."
+            }
+          },
+          "usage_instructions": "Use to get field details for a webform."
+        },
+        "attachments": {
+          "help": "Manage webform file attachments",
+          "commands": {
+            "enable": {
+              "help": "Enable file attachments on a webform. When enabled, users can attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform attachments enable 2584779",
+                "podio webform attachments enable https://podio.com/webforms/12345/2584779"
+              ],
+              "usage_instructions": "Enable file attachments on a webform. When enabled, users can attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments enable 2584779`."
+            },
+            "disable": {
+              "help": "Disable file attachments on a webform. When disabled, users cannot attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform attachments disable 2584779",
+                "podio webform attachments disable https://podio.com/webforms/12345/2584779"
+              ],
+              "usage_instructions": "Disable file attachments on a webform. When disabled, users cannot attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments disable 2584779`."
+            },
+            "status": {
+              "help": "Check if file attachments are enabled on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779)",
+              "arguments": [
+                {
+                  "name": "form_id_or_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "podio webform attachments status 2584779",
+                "podio webform attachments status https://podio.com/webforms/12345/2584779"
+              ],
+              "usage_instructions": "Check if file attachments are enabled on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments status 2584779`."
+            }
+          },
+          "usage_instructions": "Use to list attachments for a webform."
+        }
+      },
+      "usage_instructions": "Webform management -- list forms for an app, get form details, submit form data, inspect form fields, and list form attachments."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `podio cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `podio cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for managing Podio workspaces -- items, apps, tasks, comments, files, webhooks, conversations, and webforms. Commands follow `podio <group> <action>` pattern. Most commands support --table/-t for table output. Item operations are the most common -- use `item list APP_ID` to query app items and `item get ITEM_ID` for details. Requires OAuth authentication via `podio auth login`."
+}

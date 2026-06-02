@@ -1,0 +1,858 @@
+{
+  "tool": "asana",
+  "description": "CLI interface for Asana API",
+  "discovered_at": "2026-05-06T15:12:56.836932+00:00",
+  "total_commands": 28,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage Asana API authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Configure Asana auth with a PAT. Use --pat/-p to provide token directly (otherwise prompts). Use --workspace/-w to set a default workspace ID. Get PAT from https://app.asana.com/0/my-apps."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear all stored Asana credentials."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check current auth status. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `asana auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `asana auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `asana auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `asana auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `asana auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `asana auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `asana auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `asana auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication management for Asana using Personal Access Tokens (PAT). Use `auth login` to configure credentials, `auth status` to check, and `auth logout` to clear."
+    },
+    "cache": {
+      "help": "Manage CLI cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `asana cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `asana cache --help` for exact arguments and options."
+    },
+    "projects": {
+      "help": "Manage Asana projects",
+      "commands": {
+        "list": {
+          "help": "List projects in workspace.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace ID",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name')",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List projects in the workspace. Use --workspace/-w to override default. Use --table/-t for formatted output. Use --filter/-f to filter (e.g., name:like:Marketing). Default limit is 100."
+        },
+        "get": {
+          "help": "Get project details.",
+          "arguments": [
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for a project by PROJECT_ID (required positional). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Project management -- list and view Asana projects. Use --workspace/-w to specify workspace (defaults to configured default)."
+    },
+    "tasks": {
+      "help": "Manage Asana tasks",
+      "commands": {
+        "list": {
+          "help": "List tasks. Requires either project, assignee, or workspace.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project ID",
+              "short": "-p"
+            },
+            {
+              "name": "--assignee",
+              "type": "TEXT",
+              "required": false,
+              "help": "Assignee ID or 'me'",
+              "short": "-a"
+            },
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace ID",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name', 'assignee.name')",
+              "short": "-o"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            }
+          ],
+          "usage_instructions": "List tasks. Must provide at least one of --project/-p, --assignee/-a, or --workspace/-w. Use --assignee me for your tasks. Use --filter/-f for field filtering (e.g., name:like:%MOVEit%). Use --output/-o to extract a single field. Default limit is 100."
+        },
+        "search": {
+          "help": "Search tasks with wildcard query. Searches name, notes, and assignee.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports wildcards: * for any chars, ? for single char)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project ID",
+              "short": "-p"
+            },
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace ID",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name')",
+              "short": "-o"
+            }
+          ],
+          "usage_instructions": "Search tasks by QUERY (required positional). Supports wildcards: * for any chars, ? for single char. Searches name, notes, and assignee. Use --project/-p or --workspace/-w to scope the search."
+        },
+        "get": {
+          "help": "Get task details.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name', 'assignee.name', 'custom_fields.0.display_value')",
+              "short": "-o"
+            }
+          ],
+          "usage_instructions": "Get details for a task by TASK_ID (required positional). Use --output/-o to extract a single field (supports dot notation like 'assignee.name' or 'custom_fields.0.display_value')."
+        },
+        "create": {
+          "help": "Create a new task.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project ID (can repeat)",
+              "short": "-p"
+            },
+            {
+              "name": "--assignee",
+              "type": "TEXT",
+              "required": false,
+              "help": "Assignee ID",
+              "short": "-a"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Task notes",
+              "short": "-n"
+            },
+            {
+              "name": "--due",
+              "type": "TEXT",
+              "required": false,
+              "help": "Due date (YYYY-MM-DD)",
+              "short": "-d"
+            },
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace ID",
+              "short": "-w"
+            }
+          ],
+          "usage_instructions": "Create a new task with NAME (required positional). Use --project/-p to add to a project (can repeat for multiple). Use --assignee/-a, --notes/-n, --due/-d (YYYY-MM-DD), --workspace/-w."
+        },
+        "update": {
+          "help": "Update a task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Task name"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Task notes",
+              "short": "-n"
+            },
+            {
+              "name": "--assignee",
+              "type": "TEXT",
+              "required": false,
+              "help": "Assignee ID",
+              "short": "-a"
+            },
+            {
+              "name": "--due",
+              "type": "TEXT",
+              "required": false,
+              "help": "Due date (YYYY-MM-DD)",
+              "short": "-d"
+            },
+            {
+              "name": "--completed",
+              "type": "bool",
+              "required": false,
+              "help": "Mark as completed"
+            }
+          ],
+          "usage_instructions": "Update a task by TASK_ID (required positional). Use --name, --notes/-n, --assignee/-a, --due/-d, --completed to update specific fields."
+        },
+        "complete": {
+          "help": "Mark task as complete.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID"
+            }
+          ],
+          "usage_instructions": "Mark a task as complete by TASK_ID (required positional). Shortcut for `tasks update <id> --completed`."
+        },
+        "delete": {
+          "help": "Delete a task.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-f"
+            }
+          ],
+          "usage_instructions": "Delete a task by TASK_ID (required positional). Prompts for confirmation unless --force/-f is used."
+        }
+      },
+      "usage_instructions": "Task management -- list, search, create, update, complete, and delete tasks. List requires either --project/-p, --assignee/-a, or --workspace/-w. Use 'me' for --assignee to get your tasks."
+    },
+    "custom-fields": {
+      "help": "Manage Asana custom fields",
+      "commands": {
+        "list": {
+          "help": "List custom fields for a project with enum options.",
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'custom_field.gid', 'custom_field.name')"
+            }
+          ],
+          "usage_instructions": "List custom fields for a project. --project/-p is required. Shows field types and enum options. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get custom field details including enum options.",
+          "arguments": [
+            {
+              "name": "field_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Custom field ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for a custom field by FIELD_ID (required positional). Shows enum options and metadata. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Custom field management -- list and view custom fields including enum options. Always requires a --project/-p to scope the query."
+    },
+    "users": {
+      "help": "Manage Asana users",
+      "commands": {
+        "list": {
+          "help": "List users in workspace.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace ID",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name', 'email')",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List users in the workspace. Use --workspace/-w to override default. Use --table/-t for formatted output. Use --properties/-p to extract specific fields like 'email'."
+        },
+        "get": {
+          "help": "Get user details. Defaults to current user.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "USER_ID",
+              "required": false,
+              "help": "User ID (default: 'me' for current user)",
+              "default": "me"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get user details by USER_ID (optional positional, defaults to 'me'). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "User management -- list workspace users and get user details. Use `users get` without arguments for current user info."
+    },
+    "workspaces": {
+      "help": "Manage Asana workspaces",
+      "commands": {
+        "list": {
+          "help": "List all workspaces the user has access to.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name')",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all accessible workspaces. Use --table/-t for formatted output. Use --filter/-f and --properties/-p to narrow results."
+        },
+        "get": {
+          "help": "Get workspace details.",
+          "arguments": [
+            {
+              "name": "workspace_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workspace ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for a workspace by WORKSPACE_ID (required positional). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Workspace management -- list available workspaces and get workspace details."
+    },
+    "sections": {
+      "help": "Manage Asana sections",
+      "commands": {
+        "list": {
+          "help": "List sections in a project.",
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Limit number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output single field (e.g., 'gid', 'name')"
+            }
+          ],
+          "usage_instructions": "List sections in a project. --project/-p is required. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get section details.",
+          "arguments": [
+            {
+              "name": "section_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Section ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get details for a section by SECTION_ID (required positional). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Section management -- list and view sections within projects. Always requires --project/-p to scope the query."
+    }
+  },
+  "usage_instructions": "Use for all Asana project management operations -- tasks, projects, sections, custom fields, users, and workspaces. Commands follow `asana <group> <action>` pattern. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Workspace defaults to the configured default but can be overridden with --workspace/-w."
+}

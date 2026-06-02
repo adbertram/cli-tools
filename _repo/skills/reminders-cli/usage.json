@@ -1,0 +1,196 @@
+{
+  "tool": "reminders",
+  "description": "CLI for managing macOS Reminders",
+  "discovered_at": "2026-03-07T17:29:17.584986+00:00",
+  "total_commands": 8,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "list": {
+      "help": "List reminders with optional filtering.",
+      "options": [
+        {
+          "name": "--list",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by list ID",
+          "short": "-l"
+        },
+        {
+          "name": "--completed",
+          "type": "bool",
+          "required": false,
+          "help": "Show only completed",
+          "short": "-c"
+        },
+        {
+          "name": "--incomplete",
+          "type": "bool",
+          "required": false,
+          "help": "Show only incomplete",
+          "short": "-i"
+        },
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of reminders"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        }
+      ],
+      "usage_instructions": "Use to list reminders with optional filtering. Supports --list-name to filter by reminder list, --completed to include completed items."
+    },
+    "show": {
+      "help": "Show details of a specific reminder.",
+      "arguments": [
+        {
+          "name": "reminder_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Reminder ID to show"
+        }
+      ],
+      "usage_instructions": "Use to get details of a specific reminder by ID."
+    },
+    "create": {
+      "help": "Create a new reminder.",
+      "arguments": [
+        {
+          "name": "title",
+          "type": "TEXT",
+          "required": true,
+          "help": "Reminder title"
+        }
+      ],
+      "options": [
+        {
+          "name": "--list",
+          "type": "TEXT",
+          "required": false,
+          "help": "List ID (uses default if not specified)",
+          "short": "-l"
+        },
+        {
+          "name": "--notes",
+          "type": "TEXT",
+          "required": false,
+          "help": "Reminder notes",
+          "short": "-n"
+        },
+        {
+          "name": "--due",
+          "type": "TEXT",
+          "required": false,
+          "help": "Due date (YYYY-MM-DD or YYYY-MM-DD HH:MM)",
+          "short": "-d"
+        },
+        {
+          "name": "--priority",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Priority (0=none, 1=high, 5=medium, 9=low)",
+          "short": "-p",
+          "default": "0"
+        },
+        {
+          "name": "--tags",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated tags (e.g., 'WF,urgent')",
+          "short": "-t"
+        }
+      ],
+      "usage_instructions": "Use to create a new reminder. Specify title and optionally --list-name, --due-date, --notes, --priority."
+    },
+    "complete": {
+      "help": "Mark a reminder as completed.",
+      "arguments": [
+        {
+          "name": "reminder_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Reminder ID to complete"
+        }
+      ],
+      "usage_instructions": "Use to mark a reminder as completed by ID."
+    },
+    "uncomplete": {
+      "help": "Mark a reminder as incomplete.",
+      "arguments": [
+        {
+          "name": "reminder_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Reminder ID to mark incomplete"
+        }
+      ],
+      "usage_instructions": "Use to mark a completed reminder as incomplete by ID."
+    },
+    "delete": {
+      "help": "Delete a reminder.",
+      "arguments": [
+        {
+          "name": "reminder_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Reminder ID to delete"
+        }
+      ],
+      "options": [
+        {
+          "name": "--yes",
+          "type": "bool",
+          "required": false,
+          "help": "Skip confirmation",
+          "short": "-y"
+        }
+      ],
+      "usage_instructions": "Use to delete a reminder by ID."
+    },
+    "lists": {
+      "help": "Manage reminder lists",
+      "commands": {
+        "list": {
+          "help": "List all reminder lists.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to list all reminder lists."
+        },
+        "show": {
+          "help": "Show details of a specific reminder list.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "List ID to show"
+            }
+          ],
+          "usage_instructions": "Use to show details of a specific reminder list by name."
+        }
+      },
+      "usage_instructions": "Reminder list management -- list all reminder lists and show details of a specific list."
+    }
+  },
+  "usage_instructions": "Use for managing macOS Reminders. Top-level commands for individual reminders (list, show, create, complete, uncomplete, delete) plus a `lists` group for managing reminder lists. No authentication needed -- accesses macOS Reminders directly."
+}

@@ -1,0 +1,374 @@
+{
+  "tool": "x",
+  "description": "CLI interface for X API",
+  "discovered_at": "2026-05-06T15:22:30.463316+00:00",
+  "total_commands": 15,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage X API authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Set up X API OAuth credentials. Pass all four tokens directly with --consumer-key/-k, --consumer-secret/-s, --access-token/-t, --access-token-secret/-a, or run without flags to be prompted. Use --force/-F to clear existing credentials and re-authenticate. Get credentials from https://developer.x.com/en/portal/dashboard."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Remove stored X API OAuth credentials from the local machine."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Verify that X API credentials are configured and valid. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `x auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `x auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `x auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `x auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `x auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `x auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `x auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `x auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "OAuth 1.0a authentication for the X API. Requires consumer key/secret and access token/secret from the X Developer Portal. Use login to configure, status to verify, and logout to clear."
+    },
+    "tweet": {
+      "help": "Manage tweets",
+      "commands": {
+        "list": {
+          "help": "List tweets from the authenticated user's timeline. The X API does not support server-side filtering, so --filter applies client-side filtering after fetching tweets from the API.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of tweets to return (5-100)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "x tweet list",
+            "x tweet list --table",
+            "x tweet list --limit 10",
+            "x tweet list --filter \"text:contains:hello\"",
+            "x tweet list --properties \"id,text,created_at\" --table"
+          ],
+          "usage_instructions": "List tweets from your timeline. Use --limit/-l to control count (5-100, default 100). Use --filter/-f for client-side filtering (e.g., \"text:contains:hello\"). Use --properties/-p to select specific fields (supports dot-notation). Use --table/-t for formatted output. Note: filtering is applied client-side after fetching from the API."
+        },
+        "post": {
+          "help": "Post a new tweet to X.",
+          "arguments": [
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "The text content of the tweet (max 280 chars)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reply-to",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tweet ID to reply to",
+              "short": "-r"
+            },
+            {
+              "name": "--quote",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tweet ID to quote",
+              "short": "-q"
+            }
+          ],
+          "examples": [
+            "x tweet post \"Hello World!\"",
+            "x tweet post \"This is a reply\" --reply-to 1234567890",
+            "x tweet post \"Check this out\" --quote 1234567890"
+          ],
+          "usage_instructions": "Post a tweet. TEXT is a required positional argument (max 280 chars). Use --reply-to/-r to reply to a tweet by ID. Use --quote/-q to quote-tweet by ID."
+        },
+        "delete": {
+          "help": "Delete a tweet.",
+          "arguments": [
+            {
+              "name": "tweet_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The ID of the tweet to delete"
+            }
+          ],
+          "examples": [
+            "x tweet delete 1234567890"
+          ],
+          "usage_instructions": "Delete a tweet by its ID. TWEET_ID is a required positional argument."
+        },
+        "get": {
+          "help": "Get a tweet by ID.",
+          "arguments": [
+            {
+              "name": "tweet_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The ID of the tweet to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "x tweet get 1234567890",
+            "x tweet get 1234567890 --table"
+          ],
+          "usage_instructions": "Retrieve a specific tweet by its ID. TWEET_ID is a required positional argument. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "CRUD operations on tweets. Use post to create a tweet, list to see your timeline, get to retrieve a specific tweet by ID, and delete to remove one. The X API limits list to 5-100 tweets; filtering is client-side."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `x cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `x cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for posting and managing tweets on X (formerly Twitter) via the X API v2. Commands follow `x <group> <action>` pattern. Uses OAuth 1.0a authentication. The tweet group handles posting, listing, getting, and deleting tweets."
+}

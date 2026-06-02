@@ -1,0 +1,983 @@
+{
+  "tool": "cloudflare",
+  "description": "CLI interface for Cloudflare API",
+  "discovered_at": "2026-05-20T16:14:17.699973+00:00",
+  "total_commands": 25,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'api_key')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Run `cloudflare auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `cloudflare auth logout` to clear stored credentials. Common options: `--profile/-p`."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `cloudflare auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `cloudflare auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l",
+                  "default": "50"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `cloudflare auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `cloudflare auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `cloudflare auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `cloudflare auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `cloudflare auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
+            }
+          },
+          "usage_instructions": "Use `cloudflare auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+        }
+      },
+      "usage_instructions": "Use `cloudflare auth` for manage authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
+    },
+    "zones": {
+      "help": "Manage Cloudflare zones",
+      "commands": {
+        "list": {
+          "help": "List Cloudflare zones.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of zones to return (max 50)",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "cloudflare zones list",
+            "cloudflare zones list --table",
+            "cloudflare zones list --limit 10",
+            "cloudflare zones list --filter \"status:active\"",
+            "cloudflare zones list --properties \"id,name,status\""
+          ],
+          "usage_instructions": "Run `cloudflare zones list` to list Cloudflare zones. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+        },
+        "get": {
+          "help": "Get details for a specific zone.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "cloudflare zones get ZONE_ID",
+            "cloudflare zones get ZONE_ID --table",
+            "cloudflare zones get ZONE_ID --properties \"id,name,status\""
+          ],
+          "usage_instructions": "Run `cloudflare zones get` to get details for a specific zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`, `--properties/-p`."
+        },
+        "update": {
+          "help": "Update zone settings.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--security-level",
+              "type": "bool",
+              "required": false,
+              "help": "[off|essentially_off|low|medium|high|under_attack]  Set security level (off, essentially_off, low, medium, high, under_attack)",
+              "short": "-s"
+            }
+          ],
+          "examples": [
+            "cloudflare zones update ZONE_ID --security-level high",
+            "cloudflare zones update ZONE_ID --security-level under_attack",
+            "cloudflare zones update ZONE_ID -s medium"
+          ],
+          "usage_instructions": "Run `cloudflare zones update` to update zone settings. Required arguments: `ZONE_ID`. Options: `--security-level/-s`."
+        }
+      },
+      "usage_instructions": "Use `cloudflare zones` for manage cloudflare zones. Available subcommands here are `list`, `get`, `update`."
+    },
+    "cache": {
+      "help": "Manage Cloudflare cache",
+      "commands": {
+        "purge": {
+          "help": "Purge all cache for a zone. WARNING: This will purge ALL cached content for the zone.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID to purge cache for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "cloudflare cache purge ZONE_ID",
+            "cloudflare cache purge ZONE_ID --force",
+            "cloudflare cache purge ZONE_ID --table"
+          ],
+          "usage_instructions": "Run `cloudflare cache purge` to purge all cache for a zone. WARNING: This will purge ALL cached content for the zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`, `--force/-F`."
+        }
+      },
+      "usage_instructions": "Use `cloudflare cache` for manage cloudflare cache. Available subcommands here are `purge`."
+    },
+    "access-rules": {
+      "help": "Manage IP Access rules (whitelist, block, challenge)",
+      "commands": {
+        "list": {
+          "help": "List IP Access rules for a zone.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of rules to return (max 50)",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--mode",
+              "type": "bool",
+              "required": false,
+              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  Filter by mode",
+              "short": "-m"
+            },
+            {
+              "name": "--target",
+              "type": "bool",
+              "required": false,
+              "help": "[ip|ip_range|asn|country|ipv6]                              Filter by target type"
+            },
+            {
+              "name": "--value",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by configuration value"
+            }
+          ],
+          "examples": [
+            "cloudflare access-rules list ZONE_ID",
+            "cloudflare access-rules list ZONE_ID --table",
+            "cloudflare access-rules list ZONE_ID --mode whitelist",
+            "cloudflare access-rules list ZONE_ID --filter \"mode:eq:block\"",
+            "cloudflare access-rules list ZONE_ID --properties \"id,mode,notes\""
+          ],
+          "usage_instructions": "Run `cloudflare access-rules list` to list IP Access rules for a zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+        },
+        "get": {
+          "help": "Get details for a specific IP Access rule.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            },
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The rule ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as key-value table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "cloudflare access-rules get ZONE_ID RULE_ID",
+            "cloudflare access-rules get ZONE_ID RULE_ID --table"
+          ],
+          "usage_instructions": "Run `cloudflare access-rules get` to get details for a specific IP Access rule. Required arguments: `ZONE_ID`, `RULE_ID`. Common options: `--table/-t`."
+        },
+        "create": {
+          "help": "Create a new IP Access rule.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--target",
+              "type": "bool",
+              "required": true,
+              "help": "[ip|ip_range|asn|country|ipv6]                              Target type (ip, ip_range, asn, country, ipv6)",
+              "short": "-t"
+            },
+            {
+              "name": "--value",
+              "type": "TEXT",
+              "required": true,
+              "help": "Target value (IP, CIDR, ASN, country code)",
+              "short": "-v"
+            },
+            {
+              "name": "--mode",
+              "type": "bool",
+              "required": true,
+              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  Action mode (whitelist, block, challenge, js_challenge, managed_challenge)",
+              "short": "-m"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional notes/description",
+              "short": "-n"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table"
+            }
+          ],
+          "examples": [
+            "cloudflare access-rules create ZONE_ID --target ip --value 1.2.3.4 --mode whitelist",
+            "cloudflare access-rules create ZONE_ID --target ip_range --value 10.0.0.0/8 --mode whitelist --notes \"Internal network\"",
+            "cloudflare access-rules create ZONE_ID --target asn --value AS12345 --mode block",
+            "cloudflare access-rules create ZONE_ID --target country --value CN --mode challenge"
+          ],
+          "usage_instructions": "Run `cloudflare access-rules create` to create a new IP Access rule. Required arguments: `ZONE_ID`. Common options: `--table`."
+        },
+        "update": {
+          "help": "Update an IP Access rule.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            },
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The rule ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--mode",
+              "type": "bool",
+              "required": false,
+              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  New action mode",
+              "short": "-m"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "New notes/description",
+              "short": "-n"
+            }
+          ],
+          "examples": [
+            "cloudflare access-rules update ZONE_ID RULE_ID --mode challenge",
+            "cloudflare access-rules update ZONE_ID RULE_ID --notes \"Updated description\"",
+            "cloudflare access-rules update ZONE_ID RULE_ID --mode block --notes \"Banned\""
+          ],
+          "usage_instructions": "Run `cloudflare access-rules update` to update an IP Access rule. Required arguments: `ZONE_ID`, `RULE_ID`. Options: `--mode/-m`, `--notes/-n`."
+        },
+        "delete": {
+          "help": "Delete an IP Access rule.",
+          "arguments": [
+            {
+              "name": "zone_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The zone ID"
+            },
+            {
+              "name": "rule_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The rule ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-f"
+            }
+          ],
+          "examples": [
+            "cloudflare access-rules delete ZONE_ID RULE_ID",
+            "cloudflare access-rules delete ZONE_ID RULE_ID --force"
+          ],
+          "usage_instructions": "Run `cloudflare access-rules delete` to delete an IP Access rule. Required arguments: `ZONE_ID`, `RULE_ID`. Common options: `--force/-f`."
+        }
+      },
+      "usage_instructions": "Use `cloudflare access-rules` for manage ip access rules (whitelist, block, challenge). Available subcommands here are `list`, `get`, `create`, `update`, `delete`."
+    },
+    "dns": {
+      "help": "Manage DNS records",
+      "commands": {
+        "zones": {
+          "help": "List and inspect DNS zones",
+          "commands": {
+            "list": {
+              "help": "List DNS zones.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of zones to return (max 50)",
+                  "short": "-l",
+                  "default": "50"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by zone name",
+                  "short": "-n"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status (active, pending, etc.)",
+                  "short": "-s"
+                }
+              ],
+              "examples": [
+                "cloudflare dns zones list",
+                "cloudflare dns zones list --table",
+                "cloudflare dns zones list --name example.com",
+                "cloudflare dns zones list --filter \"status:eq:active\"",
+                "cloudflare dns zones list --properties \"id,name\""
+              ],
+              "usage_instructions": "Run `cloudflare dns zones list` to list DNS zones. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+            },
+            "get": {
+              "help": "Get details for a specific DNS zone.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as key-value table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "cloudflare dns zones get ZONE_ID",
+                "cloudflare dns zones get ZONE_ID --table"
+              ],
+              "usage_instructions": "Run `cloudflare dns zones get` to get details for a specific DNS zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`."
+            }
+          },
+          "usage_instructions": "Use `cloudflare dns zones` for list and inspect dns zones. Available subcommands here are `list`, `get`."
+        },
+        "records": {
+          "help": "Manage DNS records",
+          "commands": {
+            "list": {
+              "help": "List DNS records for a zone.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of records to return (max 5000)",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display"
+                },
+                {
+                  "name": "--type",
+                  "type": "bool",
+                  "required": false,
+                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  Filter by record type"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by exact name match",
+                  "short": "-n"
+                },
+                {
+                  "name": "--content",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by content match",
+                  "short": "-c"
+                },
+                {
+                  "name": "--proxied",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Filter by proxied status",
+                  "short": "-p"
+                }
+              ],
+              "examples": [
+                "cloudflare dns records list ZONE_ID",
+                "cloudflare dns records list ZONE_ID --table",
+                "cloudflare dns records list ZONE_ID --type TXT",
+                "cloudflare dns records list ZONE_ID --filter \"type:eq:A\"",
+                "cloudflare dns records list ZONE_ID --properties \"id,name,content\""
+              ],
+              "usage_instructions": "Run `cloudflare dns records list` to list DNS records for a zone. Required arguments: `ZONE_ID`. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties`."
+            },
+            "get": {
+              "help": "Get details for a specific DNS record.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                },
+                {
+                  "name": "record_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The record ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as key-value table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "cloudflare dns records get ZONE_ID RECORD_ID",
+                "cloudflare dns records get ZONE_ID RECORD_ID --table"
+              ],
+              "usage_instructions": "Run `cloudflare dns records get` to get details for a specific DNS record. Required arguments: `ZONE_ID`, `RECORD_ID`. Common options: `--table/-t`."
+            },
+            "create": {
+              "help": "Create a new DNS record.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--type",
+                  "type": "bool",
+                  "required": true,
+                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  Record type (A, AAAA, CNAME, TXT, MX, etc.)",
+                  "short": "-T"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Record name (e.g., example.com, subdomain.example.com)",
+                  "short": "-n"
+                },
+                {
+                  "name": "--content",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Record content (IP, hostname, text, etc.)",
+                  "short": "-c"
+                },
+                {
+                  "name": "--ttl",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "TTL in seconds (1 = auto, 60-86400 for custom)",
+                  "default": "1"
+                },
+                {
+                  "name": "--proxied",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Proxy through Cloudflare (A/AAAA/CNAME only)",
+                  "short": "-p"
+                },
+                {
+                  "name": "--priority",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Priority (for MX/SRV records)"
+                },
+                {
+                  "name": "--comment",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Optional comment"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t"
+                }
+              ],
+              "examples": [
+                "cloudflare dns records create ZONE_ID --type A --name example.com --content 1.2.3.4",
+                "cloudflare dns records create ZONE_ID --type A --name example.com --content 1.2.3.4 --proxied",
+                "cloudflare dns records create ZONE_ID --type CNAME --name www.example.com --content example.com",
+                "cloudflare dns records create ZONE_ID --type TXT --name example.com --content \"v=spf1 include:_spf.google.com ~all\"",
+                "cloudflare dns records create ZONE_ID --type MX --name example.com --content mail.example.com --priority 10"
+              ],
+              "usage_instructions": "Run `cloudflare dns records create` to create a new DNS record. Required arguments: `ZONE_ID`. Common options: `--table/-t`."
+            },
+            "update": {
+              "help": "Update a DNS record.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                },
+                {
+                  "name": "record_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The record ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--type",
+                  "type": "bool",
+                  "required": false,
+                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  New record type",
+                  "short": "-T"
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New record name",
+                  "short": "-n"
+                },
+                {
+                  "name": "--content",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New content",
+                  "short": "-c"
+                },
+                {
+                  "name": "--ttl",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "New TTL"
+                },
+                {
+                  "name": "--proxied",
+                  "type": "bool",
+                  "required": false,
+                  "help": "New proxied status",
+                  "short": "-p"
+                },
+                {
+                  "name": "--priority",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "New priority"
+                },
+                {
+                  "name": "--comment",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New comment"
+                }
+              ],
+              "examples": [
+                "cloudflare dns records update ZONE_ID RECORD_ID --content 5.6.7.8",
+                "cloudflare dns records update ZONE_ID RECORD_ID --proxied true",
+                "cloudflare dns records update ZONE_ID RECORD_ID --ttl 3600 --comment \"Updated\""
+              ],
+              "usage_instructions": "Run `cloudflare dns records update` to update a DNS record. Required arguments: `ZONE_ID`, `RECORD_ID`. Options: `--type/-T`, `--name/-n`, `--content/-c`, `--ttl`, `--proxied/-p`, `--priority`."
+            },
+            "delete": {
+              "help": "Delete a DNS record.",
+              "arguments": [
+                {
+                  "name": "zone_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The zone ID"
+                },
+                {
+                  "name": "record_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The record ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                }
+              ],
+              "examples": [
+                "cloudflare dns records delete ZONE_ID RECORD_ID",
+                "cloudflare dns records delete ZONE_ID RECORD_ID --force"
+              ],
+              "usage_instructions": "Run `cloudflare dns records delete` to delete a DNS record. Required arguments: `ZONE_ID`, `RECORD_ID`. Common options: `--force/-f`."
+            }
+          },
+          "usage_instructions": "Use `cloudflare dns records` for manage dns records. Available subcommands here are `list`, `get`, `create`, `update`, `delete`."
+        }
+      },
+      "usage_instructions": "Use `cloudflare dns` for manage dns records. Available subcommands here are `zones`, `records`."
+    }
+  },
+  "usage_instructions": "Use for cli interface for cloudflare api. Commands follow `cloudflare <group> <action>`. Primary groups here are `cloudflare auth`, `cloudflare zones`, `cloudflare cache`, `cloudflare access-rules`, `cloudflare dns`."
+}

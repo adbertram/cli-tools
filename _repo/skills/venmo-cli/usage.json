@@ -1,0 +1,340 @@
+{
+  "tool": "venmo",
+  "description": "CLI interface for Venmo (transaction history)",
+  "discovered_at": "2026-05-16T13:59:44.661138+00:00",
+  "total_commands": 13,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "transactions": {
+      "help": "Manage Venmo transactions",
+      "commands": {
+        "list": {
+          "help": "List Venmo transactions visible to the authenticated account.",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of transactions",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value, repeatable)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--before-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Return transactions older than this story id (pagination)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authentication profile to use"
+            }
+          ],
+          "usage_instructions": "List recent Venmo transactions. Default limit 50, JSON output. By design, each record is the FULL raw Venmo API payload (top-level keys include `id`, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment` (nested object with `id`/`status`/`action`/`amount`/`audience`/`note`/`actor`/`target`/`date_completed`/`date_authorized`/`date_reminded`/`external_wallet_payment_info`/`participants`/`merchant_split_purchase`), `app`, `likes`, `reactions`, `comments`, `mentions`, `transfer`, `authorization`) plus a CLI-injected `payment_id` top-level convenience field. `--filter` and `--properties` BOTH support dotted paths into the nested record (e.g. `--filter payment.amount:gt:100`, `--filter payment.status:eq:settled`, `--filter payment.action:eq:pay`, `--filter note:contains:lego`, `--properties payment_id,payment.amount,payment.actor.display_name,payment.target.user.display_name,note`). `--before-id <payment_id>` paginates to older transactions. `--profile <name>` queries a specific Venmo auth profile without changing the active profile. `--table` renders a curated subset of columns; pass `--properties` to override the column set. The output envelope is `{\"cache_hit\": bool, \"results\": [...]}` — iterate via `jq '.results[]'`."
+        },
+        "get": {
+          "help": "Look up a single transaction by id from recent history.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Transaction (story) id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authentication profile to use"
+            }
+          ],
+          "usage_instructions": "Look up a single transaction by `payment_id` (the CLI-injected top-level field; also at `payment.id`). NOTE: top-level `id` in the raw payload is Venmo's `story_id` which is null for items returned by /stories/target-or-actor — always use `payment_id` here. Searches the most recent 500 transactions. Returns the same full raw record shape as one entry from `transactions list`. `--profile <name>` queries a specific Venmo auth profile without changing the active profile. `--table` and `--properties` (dotted paths) behave the same as on `list`. Example: `venmo transactions get 4418053612741823878 --profile personal --table`."
+        }
+      },
+      "usage_instructions": "Read-only transaction history. Each record is the FULL raw Venmo API payload (the unmodified `Transaction._json` from venmo-api) plus a CLI-injected top-level `payment_id` for convenience. The shape is nested — scalar fields live both at the top level (`id`/story_id, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment_id`) and inside the nested `payment` object (`payment.id`, `payment.status`, `payment.action`, `payment.amount`, `payment.actor.*` user object, `payment.target.user.*` user object, `payment.target.merchant`, `payment.date_completed`). Related collections include `likes`, `reactions`, `comments`, `mentions`, `app`, `transfer`, `authorization`. Both `--filter` and `--properties` accept dotted paths (`payment.amount:gt:100`, `payment.actor.username:eq:example-user`)."
+    },
+    "auth": {
+      "help": "Manage venmo authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Authenticate with Venmo. Reads `venmo-username` and `venmo-password` from the CLI-tools keychain (`<repo-root>/secret-manager/secrets.sh`). Triggers an SMS OTP from Venmo; prompt for the 6-digit code interactively, or set `VENMO_OTP=<code>` env var. Use `--force` to clear saved tokens and re-authenticate. Example: `VENMO_OTP=123456 venmo auth login --force`."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored access token and device id for the active profile. Does not remove the keychain-stored username/password."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show authentication status across all profiles. Performs a LIVE round-trip via the saved access token; reports `authenticated: true` only if the token still works."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Not applicable for Venmo \u2014 Venmo access tokens are long-lived and do not expire unless explicitly revoked. This command exists only because it is part of the shared auth scaffold."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run a live API round-trip (fetch the authenticated user's profile) and report whether the stored access token still works. Use this after a long gap to confirm the session is alive."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all configured profiles. Shows which one is the default and whether each is authenticated."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show the credentials and metadata for a named profile."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new profile. After creation, run `venmo auth login --profile <name>` to authenticate it."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Switch the default profile that commands use when no `--profile` flag is passed."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile and all its stored credentials."
+            }
+          },
+          "usage_instructions": "Manage named authentication profiles. Each profile has its own access token, device id, and cache directory. Useful for switching between multiple Venmo accounts."
+        }
+      },
+      "usage_instructions": "Manage Venmo authentication. The CLI does NOT prompt for username/password \u2014 both are read from the CLI-tools keychain (`venmo-username`, `venmo-password`). On first login, Venmo sends an SMS OTP; pass it via the `VENMO_OTP` env var for non-interactive use, or type it at the interactive prompt. After login, an access token and device id are saved to the per-profile .env; future logins skip OTP because the device is trusted."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Delete all cached venmo responses for the active profile. Run this when you want to force a fresh API call."
+        }
+      },
+      "usage_instructions": "Inspect and clear the response cache used by the shared `@cached` decorator. Cache files live under `~/.local/share/cli-tools/venmo/.profiles/<profile>/cache/`."
+    }
+  },
+  "usage_instructions": "Use the `venmo` CLI to retrieve Venmo transaction history. Venmo has no public API; this tool wraps the reverse-engineered `venmo-api` Python library (private mobile API at api.venmo.com). Commands follow `venmo <group> <action>` pattern. The CLI is read-only by design \u2014 only `transactions list` and `transactions get` are exposed. Authentication is username+password+SMS-OTP; credentials are pulled from the CLI-tools keychain (`venmo-username`, `venmo-password`). After `venmo auth login`, a long-lived access token is saved and re-used. RECORD SHAPE: transaction records are the FULL raw Venmo API payload (unmodified `Transaction._json`) plus a CLI-injected top-level `payment_id` convenience field. Top-level keys are nested objects; use dotted paths for both `--filter` and `--properties` (e.g. `--filter payment.amount:gt:100`, `--properties payment_id,payment.amount,payment.actor.display_name,note`). Default output is JSON wrapped in {\"cache_hit\": bool, \"results\": [...]} for list commands. Use `--table` for human-readable output (curated columns: payment_id, date_created, type, payment.action, payment.amount, payment.status, payment.actor.display_name, payment.target.user.display_name, note). Pagination via `--before-id`."
+}

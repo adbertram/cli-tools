@@ -1,0 +1,695 @@
+{
+  "tool": "youtube",
+  "description": "YouTube transcript and video downloader (yt-dlp) plus channel management (Data API v3)",
+  "discovered_at": "2026-05-09T16:39:21.824706+00:00",
+  "total_commands": 19,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Configure OAuth credentials and run the consent flow. Prompts for CLIENT_ID and CLIENT_SECRET, then opens a browser to grant the youtube + youtube.upload + youtube.force-ssl scopes. Use --profile/-p for a named profile. Use --force/-F to delete the existing token and re-run consent."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored OAuth token and credentials for the active or named profile. Use --profile/-p to target a specific profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show OAuth credential and token status across profiles. Use --profile/-p to check one profile and --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Refresh the OAuth access token using the stored refresh token. Use --profile/-p to target a profile."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Verify the stored OAuth token works by calling channels.list(mine=True). Returns the authenticated channel ID/title on success. Use --table/-t for formatted output, --verbose/-v for detailed checks, and --profile/-p to target one profile."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List all configured auth profiles. Use --table/-t for formatted output. Supports --filter/-f, --limit/-l, and --properties/-p."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Get details for a named profile. NAME is required (positional). Use --table/-t for formatted output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new profile. NAME is required (positional, e.g., 'staging' or 'production')."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Set a profile as the default. NAME is required (positional). Only one profile can be default at a time."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a profile. NAME is required (positional). Use --force/-F to skip confirmation."
+            }
+          },
+          "usage_instructions": "Manage profile files under `youtube auth profiles`. Use list to inspect profiles, create to add one, set-default to switch active profile, and delete to remove one."
+        }
+      },
+      "usage_instructions": "Manage YouTube OAuth authentication for channel-management commands. Use `auth login` to enter Client ID/Secret and complete the browser consent flow, `auth status` to inspect, `auth test` to verify the token can read your channel, and `auth profiles` to manage multiple accounts."
+    },
+    "channel": {
+      "help": "Manage your authenticated YouTube channel",
+      "commands": {
+        "videos": {
+          "help": "Manage videos on the authenticated user's channel",
+          "commands": {
+            "list": {
+              "help": "List videos on the authenticated user's channel (uploads playlist).",
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of videos to list",
+                  "short": "-l",
+                  "default": "50"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., title:contains:foo)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Properties to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "List videos on the authenticated user's channel by paging through the uploads playlist. Use --limit/-l to cap results (default 50). Use --filter/-f for field:op:value filters (e.g., privacy_status:eq:public, title:contains:vlog). Use --properties/-p to narrow output fields and --table/-t for a formatted table. Use --profile to target a non-default profile."
+            },
+            "get": {
+              "help": "Get full metadata for a single video by ID.",
+              "arguments": [
+                {
+                  "name": "video_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "YouTube video ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Fetch full metadata for one video by ID, including snippet, status, statistics (viewCount/likeCount/commentCount), and contentDetails (duration). VIDEO_ID is required (positional). Use --table/-t for formatted output."
+            },
+            "upload": {
+              "help": "Upload a video file to the authenticated user's channel.",
+              "arguments": [
+                {
+                  "name": "file",
+                  "type": "FILE",
+                  "required": true,
+                  "help": "Path to video file to upload"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Video title"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video description"
+                },
+                {
+                  "name": "--tag",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video tag (repeatable). Pass --tag multiple times"
+                },
+                {
+                  "name": "--category-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "YouTube category ID (default 22 = People & Blogs)",
+                  "default": "22"
+                },
+                {
+                  "name": "--privacy",
+                  "type": "bool",
+                  "required": false,
+                  "help": "[private|unlisted|public]  Privacy status: private, unlisted, or public",
+                  "default": "private"
+                },
+                {
+                  "name": "--publish-at",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Scheduled publish time in RFC 3339 (e.g., 2026-06-01T15:00:00Z). Requires --privacy private"
+                },
+                {
+                  "name": "--made-for-kids",
+                  "type": "bool",
+                  "required": false,
+                  "help": "--not-made-for-kids                               Mark video as made for kids",
+                  "default": "not-made-for-kids"
+                },
+                {
+                  "name": "--thumbnail",
+                  "type": "FILE",
+                  "required": false,
+                  "help": "Path to thumbnail image (jpg/png) to set after upload"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Upload a local video file to the authenticated user's channel. FILE is required (positional path). --title is required. Use --description, --tag (repeatable), --category-id (default 22 = People & Blogs), --privacy (private|unlisted|public, default private), --publish-at (RFC 3339 timestamp; requires --privacy private to schedule), --made-for-kids/--not-made-for-kids, and --thumbnail (jpg/png path) to set a custom thumbnail after upload. Use --profile to target a non-default profile."
+            },
+            "update": {
+              "help": "Update title, description, tags, privacy, or thumbnail of an existing video.",
+              "arguments": [
+                {
+                  "name": "video_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "YouTube video ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New video title"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New description"
+                },
+                {
+                  "name": "--tag",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Replace tags with these values (repeatable)"
+                },
+                {
+                  "name": "--category-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New category ID"
+                },
+                {
+                  "name": "--privacy",
+                  "type": "bool",
+                  "required": false,
+                  "help": "[private|unlisted|public]  New privacy status"
+                },
+                {
+                  "name": "--thumbnail",
+                  "type": "FILE",
+                  "required": false,
+                  "help": "Path to new thumbnail image"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Update an existing video. VIDEO_ID is required (positional). Provide one or more of --title, --description, --tag (repeatable; replaces existing tags), --category-id, --privacy (private|unlisted|public), or --thumbnail (jpg/png path). At least one field must be supplied. Use --profile to target a non-default profile."
+            },
+            "delete": {
+              "help": "Delete a video by ID. Requires confirmation unless --yes is passed.",
+              "arguments": [
+                {
+                  "name": "video_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "YouTube video ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-y"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ],
+              "usage_instructions": "Permanently delete a video. VIDEO_ID is required (positional). Prompts for confirmation unless --yes/-y is passed. Use --profile to target a non-default profile."
+            }
+          },
+          "usage_instructions": "Manage videos owned by the authenticated user. Use `list` to enumerate uploads, `get` for full metadata, `upload` to push a local file, `update` to change title/description/tags/privacy/thumbnail, and `delete` to remove a video."
+        }
+      },
+      "usage_instructions": "Manage the authenticated user's own YouTube channel via the YouTube Data API v3. All subcommands require `youtube auth login` first."
+    },
+    "transcripts": {
+      "help": "Download YouTube video transcripts",
+      "commands": {
+        "download": {
+          "help": "Download transcripts for one or more YouTube videos.",
+          "arguments": [
+            {
+              "name": "urls",
+              "type": "TEXT",
+              "required": true,
+              "help": "URLS...  YouTube video URL(s)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output directory for transcripts",
+              "short": "-o",
+              "default": "."
+            },
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Subtitle format (srt, vtt, txt)",
+              "short": "-f",
+              "default": "srt"
+            },
+            {
+              "name": "--lang",
+              "type": "TEXT",
+              "required": false,
+              "help": "Subtitle language code",
+              "short": "-l",
+              "default": "en"
+            },
+            {
+              "name": "--auto-sub",
+              "type": "bool",
+              "required": false,
+              "help": "--no-auto-sub          Download auto-generated subtitles",
+              "default": "auto-sub"
+            },
+            {
+              "name": "--manual-sub",
+              "type": "bool",
+              "required": false,
+              "help": "Prefer manual subtitles over auto-generated"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Download transcripts for YouTube videos. URLS is required (one or more YouTube video URLs, positional). Use --output-dir/-o to set output directory (default: current dir). Use --format/-f for subtitle format (srt, vtt, txt; default: srt). Use --lang/-l for language (default: en). Auto-generated subtitles are included by default; use --no-auto-sub to exclude them, or --manual-sub to prefer manual subtitles. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Download transcripts/subtitles from YouTube videos. Use `transcripts download` with one or more video URLs."
+    },
+    "videos": {
+      "help": "Download / list public YouTube videos (yt-dlp)",
+      "commands": {
+        "list": {
+          "help": "List all videos from a YouTube channel.",
+          "arguments": [
+            {
+              "name": "channel",
+              "type": "TEXT",
+              "required": true,
+              "help": "Channel handle or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max videos to list (0 = all)",
+              "short": "-l",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., title:contains:vlog)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--exclude-shorts",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude YouTube Shorts from results"
+            }
+          ],
+          "usage_instructions": "List videos from a channel without downloading them. CHANNEL is required and can be a handle or URL. Use --limit/-l to cap results, --filter/-f and --properties/-p to narrow output, --table/-t for formatted output, and --exclude-shorts to omit Shorts."
+        },
+        "get": {
+          "help": "Get metadata for a single YouTube video.",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "TEXT",
+              "required": true,
+              "help": "YouTube video URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get metadata for one YouTube video URL. Use --table/-t for formatted output when you need a compact human-readable view."
+        },
+        "download": {
+          "help": "Download one or more YouTube videos, or all videos from a channel.",
+          "arguments": [
+            {
+              "name": "urls",
+              "type": "TEXT",
+              "required": false,
+              "help": "[URLS]...  YouTube video URL(s)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--channel",
+              "type": "TEXT",
+              "required": false,
+              "help": "Download all videos from a channel (handle or URL)",
+              "short": "-c"
+            },
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output directory for videos",
+              "short": "-o",
+              "default": "."
+            },
+            {
+              "name": "--folder-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Folder to compare and sync into when using --sync"
+            },
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Video container format (mp4, mkv, webm)",
+              "short": "-f",
+              "default": "mp4"
+            },
+            {
+              "name": "--quality",
+              "type": "TEXT",
+              "required": false,
+              "help": "Quality selection (best, worst, or yt-dlp format code)",
+              "short": "-q",
+              "default": "best"
+            },
+            {
+              "name": "--max-resolution",
+              "type": "TEXT",
+              "required": false,
+              "help": "Maximum video resolution preset: 480p, 360p, 240p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--exclude-shorts",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude YouTube Shorts from download"
+            },
+            {
+              "name": "--sync",
+              "type": "bool",
+              "required": false,
+              "help": "With --channel, download only recent videos missing from --folder-path"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max videos to download (0 = all, applies to --channel)",
+              "short": "-l",
+              "default": "0"
+            }
+          ],
+          "usage_instructions": "Download YouTube videos. Provide one or more video URLs as positional args, OR use --channel/-c with a channel handle (e.g., 'myclassroom') or full URL to download all videos from that channel. Use --output-dir/-o to set output directory (default: current dir). Use --format/-f for container format (mp4, mkv, webm; default: mp4). Use --quality/-q for quality selection (best, worst, or yt-dlp format code; default: best). Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Download actual video files from YouTube. Use `videos download` with URLs or --channel/-c to download all videos from a channel."
+    }
+  },
+  "usage_instructions": "Use for downloading YouTube videos and transcripts (yt-dlp public commands) AND managing the authenticated user's own channel via the YouTube Data API v3 (channel videos list/get/upload/update/delete). Public download commands need no auth; channel management requires `youtube auth login` with OAuth client credentials."
+}

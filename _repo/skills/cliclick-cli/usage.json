@@ -1,0 +1,926 @@
+{
+  "tool": "cliclick",
+  "description": "CLI wrapper for cliclick mouse/keyboard automation",
+  "discovered_at": "2026-05-06T15:14:00.412436+00:00",
+  "total_commands": 25,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Check availability and permissions",
+      "commands": {
+        "login": {
+          "help": "Verify cliclick availability and permissions. cliclick is a local tool with no authentication. This command verifies that cliclick is installed and has macOS Accessibility permissions. Example: cliclick auth login cliclick auth login --force  # Re-check permissions",
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Re-verify permissions (ignored, kept for compatibility)",
+              "short": "-F"
+            }
+          ],
+          "usage_instructions": "Verify cliclick is installed and has Accessibility permissions. Use --force/-F to re-check."
+        },
+        "logout": {
+          "help": "No-op for cliclick (local tool with no authentication). cliclick is a local tool with no session to clear.",
+          "usage_instructions": "No-op. cliclick is a local tool with no session to clear."
+        },
+        "status": {
+          "help": "Check cliclick availability and Accessibility permissions. Always returns exit code 0 with machine-readable status. A false authenticated value means cliclick is missing or Accessibility permissions are not granted. Example: cliclick auth status cliclick auth status --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check if cliclick is available and has permissions. Exit code 0 = OK, exit code 2 = missing."
+        }
+      },
+      "usage_instructions": "Verify cliclick is installed and has macOS Accessibility permissions. No actual authentication needed -- this is a local tool."
+    },
+    "mouse": {
+      "help": "Mouse control commands",
+      "commands": {
+        "click": {
+          "help": "Click at screen coordinates. Example: cliclick mouse click 100 200 cliclick mouse click 500 300 --test",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output from cliclick",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode (no actual click)",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position after"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Left-click at X Y coordinates. Use --test/-T for dry run. Mouse position is restored after by default."
+        },
+        "double-click": {
+          "help": "Double-click at screen coordinates. Example: cliclick mouse double-click 100 200",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Double-click at X Y coordinates. Use --test/-T for dry run."
+        },
+        "right-click": {
+          "help": "Right-click at screen coordinates. Example: cliclick mouse right-click 100 200",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Right-click (context menu) at X Y coordinates."
+        },
+        "triple-click": {
+          "help": "Triple-click at screen coordinates. Example: cliclick mouse triple-click 100 200",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Triple-click at X Y coordinates. Useful for selecting entire lines/paragraphs."
+        },
+        "move": {
+          "help": "Move mouse to screen coordinates. Example: cliclick mouse move 500 300",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Move the mouse cursor to X Y without clicking."
+        },
+        "drag-start": {
+          "help": "Start a drag operation (mouse down) at coordinates. Example: cliclick mouse drag-start 100 100",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Begin a drag by pressing mouse button down at X Y. Follow with drag-move and drag-end to complete the drag."
+        },
+        "drag-move": {
+          "help": "Continue a drag operation to new coordinates. Example: cliclick mouse drag-move 200 200",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Move to X Y while holding the mouse button during a drag. Use between drag-start and drag-end."
+        },
+        "drag-end": {
+          "help": "End a drag operation (mouse up) at coordinates. Example: cliclick mouse drag-end 300 300",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Release the mouse button at X Y to complete a drag operation started with drag-start."
+        },
+        "position": {
+          "help": "Get current mouse position. Example: cliclick mouse position cliclick mouse position --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Return the current mouse cursor X Y screen coordinates."
+        },
+        "color-at": {
+          "help": "Get screen color at coordinates. Returns RGB values (0-255) for the pixel at the given coordinates. Example: cliclick mouse color-at 100 200",
+          "arguments": [
+            {
+              "name": "x",
+              "type": "INTEGER",
+              "required": true,
+              "help": "X coordinate"
+            },
+            {
+              "name": "y",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Y coordinate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Return the RGB color values (0-255) of the pixel at X Y coordinates."
+        }
+      },
+      "usage_instructions": "Mouse actions at screen coordinates. All commands take X Y positional arguments. Use --test/-T for dry run, --no-restore to keep mouse at new position. Includes click, double-click, right-click, triple-click, move, drag operations, position, and color-at."
+    },
+    "keyboard": {
+      "help": "Keyboard control commands",
+      "commands": {
+        "type": {
+          "help": "Type text into the active application. Example: cliclick keyboard type \"Hello World\" cliclick keyboard type \"Test message\" --test",
+          "arguments": [
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Text to type"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output from cliclick",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode (no actual typing)",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Type the given text string into the currently focused application. TEXT is a positional argument (quote it)."
+        },
+        "press": {
+          "help": "Press a key. Available keys: return, enter, tab, space, esc, delete, fwd-delete, home, end, arrow-up, arrow-down, arrow-left, arrow-right, page-up, page-down, f1-f16, and more. Example: cliclick keyboard press return cliclick keyboard press tab cliclick keyboard press f1",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Key to press (e.g., return, tab, esc, f1, space)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Press a single key. Available keys: return, enter, tab, space, esc, delete, fwd-delete, home, end, arrow-up, arrow-down, arrow-left, arrow-right, page-up, page-down, f1-f16."
+        },
+        "key-down": {
+          "help": "Press and hold modifier keys. Modifiers: cmd, shift, alt (option), ctrl, fn Use with key-up to create key combinations for other automation. Example: cliclick keyboard key-down cmd,shift cliclick keyboard key-down alt",
+          "arguments": [
+            {
+              "name": "keys",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated modifier keys (cmd, shift, alt, ctrl, fn)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Hold modifier keys down. KEYS is comma-separated: cmd, shift, alt (option), ctrl, fn. Use with key-up to create key combinations."
+        },
+        "key-up": {
+          "help": "Release modifier keys. Modifiers: cmd, shift, alt (option), ctrl, fn Example: cliclick keyboard key-up cmd,shift cliclick keyboard key-up alt",
+          "arguments": [
+            {
+              "name": "keys",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated modifier keys to release"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Release held modifier keys. KEYS is comma-separated: cmd, shift, alt (option), ctrl, fn."
+        }
+      },
+      "usage_instructions": "Keyboard input automation. Type text, press special keys, and hold/release modifier keys. Use --test/-T for dry runs."
+    },
+    "scripts": {
+      "help": "Manage automation scripts",
+      "commands": {
+        "list": {
+          "help": "List all automation scripts. Scripts are stored as .cliclick files in the package's scripts directory. Example: cliclick scripts list cliclick scripts list --table cliclick scripts list --filter \"name:test\"",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of scripts to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List saved automation scripts. Supports --filter/-f, --properties/-p, --limit/-l, and --table/-t."
+        },
+        "get": {
+          "help": "Get script details. Example: cliclick scripts get my-script cliclick scripts get my-script --content",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Script name (without .cliclick extension)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--content",
+              "type": "bool",
+              "required": false,
+              "help": "Show script content",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Get metadata for a script by name. Use --content/-c to include the script commands."
+        },
+        "create": {
+          "help": "Create a new automation script. Provide content via --content or pipe from stdin. Example: cliclick scripts create my-script --content \"c:100,200 w:500 t:hello\" echo \"c:100,200\" | cliclick scripts create my-script --description \"Click test\"",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Script name (without .cliclick extension)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Script description",
+              "short": "-d"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "Script content (commands, one per line)",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Create a script with --content/-c for the cliclick commands or pipe from stdin. NAME is the script name (no extension)."
+        },
+        "run": {
+          "help": "Run an automation script. Template variables in the script ({{var}}) are replaced with values provided via --var flags. Example: cliclick scripts run my-script cliclick scripts run my-script --test cliclick scripts run click-template --var x=100 --var y=200",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Script name (without .cliclick extension)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--var",
+              "type": "TEXT",
+              "required": false,
+              "help": "Template variable (e.g., --var x=100)"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output from cliclick",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode (no actual execution)",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Execute a saved script by name. Use --var key=value to substitute template variables ({{key}}). Use --test/-T for dry run."
+        },
+        "run-stdin": {
+          "help": "Run cliclick commands from stdin. Example: echo \"c:100,200 w:500\" | cliclick scripts run-stdin cat commands.cliclick | cliclick scripts run-stdin --test",
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output from cliclick",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode (no actual execution)",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Pipe cliclick commands via stdin for one-off execution without creating a saved script."
+        },
+        "delete": {
+          "help": "Delete an automation script. Example: cliclick scripts delete my-script cliclick scripts delete my-script --yes",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Script name (without .cliclick extension)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            }
+          ],
+          "usage_instructions": "Delete a script by name. Use --yes/-y to skip confirmation."
+        }
+      },
+      "usage_instructions": "Create, list, run, and manage reusable .cliclick automation scripts. Scripts support template variables ({{var}}) replaceable at runtime with --var flags."
+    },
+    "exec": {
+      "help": "Execute raw cliclick commands",
+      "commands": {
+        "run": {
+          "help": "Execute raw cliclick command string. Accepts cliclick native syntax for complex command sequences. Command syntax: c:x,y      - Click at coordinates dc:x,y     - Double-click rc:x,y     - Right-click tc:x,y     - Triple-click m:x,y      - Move mouse dd:x,y     - Drag start (mouse down) dm:x,y     - Drag move du:x,y     - Drag end (mouse up) kp:key     - Press key kd:keys    - Key down (modifiers) ku:keys    - Key up (modifiers) t:text     - Type text w:ms       - Wait milliseconds p          - Print position cp:x,y     - Color at position Example: cliclick exec run \"c:100,200 w:500 t:hello\" cliclick exec run \"m:500,300 c:. w:1000 t:test\" --test",
+          "arguments": [
+            {
+              "name": "commands",
+              "type": "TEXT",
+              "required": true,
+              "help": "Space-separated cliclick commands (e.g., 'c:100,200 w:500 t:hello')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output from cliclick",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode (no actual execution)",
+              "short": "-T"
+            },
+            {
+              "name": "--no-restore",
+              "type": "bool",
+              "required": false,
+              "help": "Don't restore mouse position"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Execute a raw cliclick command string with native syntax. COMMANDS is a space-separated string (e.g. \"c:100,200 w:500 t:hello\"). Use --test/-T for dry run. Native commands: c:x,y (click), dc:x,y (double-click), rc:x,y (right-click), tc:x,y (triple-click), m:x,y (move), dd:x,y (drag down), dm:x,y (drag move), du:x,y (drag up), kp:key (press), kd:keys (key down), ku:keys (key up), t:text (type), w:ms (wait), p (print position), cp:x,y (color at)."
+        },
+        "wait": {
+          "help": "Wait for specified milliseconds. Example: cliclick exec wait 1000 cliclick exec wait 500 --verbose",
+          "arguments": [
+            {
+              "name": "milliseconds",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Milliseconds to wait"
+            }
+          ],
+          "options": [
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Verbose output",
+              "short": "-V"
+            },
+            {
+              "name": "--test",
+              "type": "bool",
+              "required": false,
+              "help": "Test mode",
+              "short": "-T"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Pause execution for MILLISECONDS. Use between other commands to add delays."
+        }
+      },
+      "usage_instructions": "Execute raw cliclick native command strings directly. Use for complex multi-step sequences in a single call. Syntax: c:x,y (click), dc:x,y (double-click), m:x,y (move), t:text (type), kp:key (press), w:ms (wait), etc."
+    }
+  },
+  "usage_instructions": "Use for macOS mouse and keyboard automation via cliclick. Commands follow `cliclick <group> <action>` pattern. Requires macOS Accessibility permissions. All mouse/keyboard commands support --test/-T for dry runs and --verbose/-V for detailed output. Use --no-restore to keep the mouse at the new position after an action."
+}

@@ -1,0 +1,412 @@
+{
+  "tool": "grammarly",
+  "description": "CLI interface for Grammarly API",
+  "discovered_at": "2026-05-20T16:14:50.910586+00:00",
+  "total_commands": 16,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage Grammarly API authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Run `grammarly auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `grammarly auth logout` to clear stored credentials. Common options: `--profile/-p`."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `grammarly auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `grammarly auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `grammarly auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `grammarly auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `grammarly auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `grammarly auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `grammarly auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
+            }
+          },
+          "usage_instructions": "Use `grammarly auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+        }
+      },
+      "usage_instructions": "Use `grammarly auth` for manage grammarly api authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
+    },
+    "plagiarism": {
+      "help": "Plagiarism detection commands",
+      "commands": {
+        "check": {
+          "help": "Check a document or text for plagiarism. Submit a file or text for plagiarism detection. By default, waits for the result (polls until COMPLETED or FAILED).",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "FILE_PATH",
+              "required": false,
+              "help": "Path to file to check (.doc, .docx, .odt, .txt, .rtf)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Text to check (use - for stdin)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait             Wait for result (default: wait)",
+              "default": "wait"
+            },
+            {
+              "name": "--poll-interval",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Seconds between status checks",
+              "default": "5"
+            },
+            {
+              "name": "--max-wait",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum seconds to wait for result",
+              "default": "120"
+            }
+          ],
+          "examples": [
+            "grammarly plagiarism check document.docx",
+            "grammarly plagiarism check document.txt --table",
+            "grammarly plagiarism check --text \"Your text here\"",
+            "grammarly plagiarism check document.docx --no-wait"
+          ],
+          "usage_instructions": "Run `grammarly plagiarism check` to check a document or text for plagiarism. Submit a file or text for plagiarism detection. By default, waits for the result (polls until COMPLETED or FAILED). Required arguments: `FILE_PATH`. Common options: `--table/-t`."
+        },
+        "status": {
+          "help": "Get the status of a plagiarism check. Check the status and result of a previously submitted plagiarism detection request.",
+          "arguments": [
+            {
+              "name": "score_request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Score request ID from a previous check"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "grammarly plagiarism status abc-123-def",
+            "grammarly plagiarism status abc-123-def --table"
+          ],
+          "usage_instructions": "Run `grammarly plagiarism status` to get the status of a plagiarism check. Check the status and result of a previously submitted plagiarism detection request. Required arguments: `SCORE_REQUEST_ID`. Common options: `--table/-t`."
+        }
+      },
+      "usage_instructions": "Use `grammarly plagiarism` for plagiarism detection commands. Available subcommands here are `check`, `status`."
+    },
+    "docs": {
+      "help": "Manage Grammarly documents",
+      "commands": {
+        "list": {
+          "help": "List Grammarly documents.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of documents",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--search",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search query",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `grammarly docs list` to list Grammarly documents. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+        },
+        "get": {
+          "help": "Get a document by ID.",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `grammarly docs get` to get a document by ID. Required arguments: `DOCUMENT_ID`. Common options: `--table/-t`."
+        },
+        "read": {
+          "help": "Read document content (text only). Returns the document with its full text content.",
+          "arguments": [
+            {
+              "name": "document_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Document ID"
+            }
+          ],
+          "usage_instructions": "Run `grammarly docs read` to read document content (text only). Returns the document with its full text content. Required arguments: `DOCUMENT_ID`."
+        },
+        "new": {
+          "help": "Create a new document. Opens a URL to create a new Grammarly document. Note: Grammarly creates documents client-side via URL navigation. This command outputs the URL to open.",
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Document title",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `grammarly docs new` to create a new document. Opens a URL to create a new Grammarly document. Note: Grammarly creates documents client-side via URL navigation. This command outputs the URL to open. Options: `--title/-t`."
+        }
+      },
+      "usage_instructions": "Use `grammarly docs` for manage grammarly documents. Available subcommands here are `list`, `get`, `read`, `new`."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `grammarly cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
+        }
+      },
+      "usage_instructions": "Use `grammarly cache` for manage response cache. Available subcommands here are `clear`."
+    }
+  },
+  "usage_instructions": "Use for cli interface for grammarly api. Commands follow `grammarly <group> <action>`. Primary groups here are `grammarly auth`, `grammarly plagiarism`, `grammarly docs`, `grammarly cache`."
+}

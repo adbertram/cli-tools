@@ -1,0 +1,131 @@
+{
+  "tool": "keywords",
+  "description": "Query autocomplete suggestions from search engines for keyword research",
+  "discovered_at": "2026-05-20T16:12:22.896873+00:00",
+  "total_commands": 3,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "suggest": {
+      "help": "Query autocomplete suggestions",
+      "commands": {
+        "query": {
+          "help": "Get autocomplete suggestions for a query.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query to get suggestions for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--source",
+              "type": "bool",
+              "required": false,
+              "help": "[google|youtube|bing|amazon|ddg]  Sources to query (google, youtube, bing, amazon, ddg). Can be repeated",
+              "short": "-s",
+              "default": "google"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum suggestions per source",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--recurse",
+              "type": "bool",
+              "required": false,
+              "help": "Recursively query suggestions of suggestions",
+              "short": "-r"
+            },
+            {
+              "name": "--depth",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Recursion depth (how many levels deep to query)",
+              "short": "-d",
+              "default": "1"
+            },
+            {
+              "name": "--recurse-limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max suggestions to recurse into per level (default: 5)",
+              "default": "5"
+            }
+          ],
+          "examples": [
+            "keywords suggest query \"python\"",
+            "keywords suggest query \"best laptop\" --source google --source youtube",
+            "keywords suggest query \"seo tools\" -s google -s amazon -t",
+            "keywords suggest query \"python\" --filter \"beginner\"",
+            "keywords suggest query \"python\" --recurse --depth 2",
+            "keywords suggest query \"seo\" -r -d 1 --recurse-limit 3 -t"
+          ],
+          "usage_instructions": "Get keyword suggestions from search engine autocomplete. QUERY is required (positional). Use --source/-s to select engines (google, youtube, bing, amazon, ddg -- can repeat for multiple). Use --filter/-f to only show suggestions containing specific text. Use --recurse/-r with --depth/-d to recursively expand suggestions (default depth: 1, limit: 5 per level). Use --limit/-l (default: 100), --table/-t."
+        },
+        "sources": {
+          "help": "List available autocomplete sources.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "keywords suggest sources",
+            "keywords suggest sources --table"
+          ],
+          "usage_instructions": "Show which search engines are available as autocomplete sources. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Keyword suggestion tools -- query autocomplete APIs and list available sources."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `keywords cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `keywords cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for keyword research by querying autocomplete suggestions from multiple search engines (Google, YouTube, Bing, Amazon, DuckDuckGo). Supports recursive expansion of suggestions. Commands follow `keywords suggest <action>` pattern."
+}

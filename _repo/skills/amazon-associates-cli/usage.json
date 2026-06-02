@@ -1,0 +1,256 @@
+{
+  "tool": "amazon-associates",
+  "description": "CLI interface for the AmazonAssociates affiliate program",
+  "discovered_at": "2026-05-12T16:09:45.450586+00:00",
+  "total_commands": 11,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "program": {
+      "help": "Show program metadata",
+      "commands": {
+        "info": {
+          "help": "Show verified metadata for this CLI.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "amazon-associates program info",
+            "amazon-associates program info --table"
+          ],
+          "usage_instructions": "Show the verified metadata for this CLI, including the official URL, Airtable record id, CLI type, and auth type. Add `--table`/`-t` for a key-value table instead of JSON."
+        }
+      },
+      "usage_instructions": "Use this group to inspect the verified metadata for the affiliate program or developer platform behind the CLI. `program info` is the canonical read-only summary command."
+    },
+    "auth": {
+      "help": "Manage amazon-associates authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Configure credentials or browser session state for a profile. Use `--profile`/`-p` to target a named profile, `--force`/`-F` to clear ephemeral auth state first, and `--credential-type`/`-c` to scope the login flow when a CLI supports more than one credential type."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored credentials and session state for the selected profile. Use `--profile`/`-p` when you need to log out a non-default profile without touching the default one."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show authentication state across profiles in JSON or table form. Use `--profile`/`-p` to inspect one profile and `--table`/`-t` for a compact summary."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run the CLI authentication checks without performing normal business actions. Use `--profile`/`-p` for one profile, `--verbose`/`-v` for detailed checks, and `--table`/`-t` for tabular output."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List every saved auth profile and show which one is the default. Use `--table`/`-t` for compact output, `--limit`/`-l` to cap results, `--filter`/`-f` for field filtering, and `--properties`/`-p` to restrict returned fields."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show the stored metadata for one named auth profile. Pass the profile name as the required argument and add `--table`/`-t` for table output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new named auth profile from the CLI `.env.example` template. Pass the new profile name as the required argument."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Mark one named auth profile as the default profile the CLI should use. Pass the profile name as the required argument."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named auth profile and its saved data. Pass the profile name as the required argument and use `--force`/`-F` to skip confirmation."
+            }
+          },
+          "usage_instructions": "Use these nested auth profile commands to manage named credential sets for different accounts or environments."
+        }
+      },
+      "usage_instructions": "Use this group to configure credentials, inspect auth state, run auth checks, and manage profiles. Start with `auth status` for a read-only check and `auth login` when credentials or sessions need to be created or refreshed."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses for this CLI so the next read uses fresh data. Use this after changing configuration or when cached output is stale."
+        }
+      },
+      "usage_instructions": "Use this group when you need to clear cached CLI responses and force the next read to use fresh data."
+    }
+  },
+  "usage_instructions": "Use the `amazon-associates` CLI for CLI interface for the AmazonAssociates affiliate program. Commands follow the `amazon-associates <group> <action>` pattern; start with `program info` for the verified metadata summary and `auth status` for a read-only credential check."
+}

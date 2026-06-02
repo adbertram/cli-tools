@@ -1,0 +1,563 @@
+{
+  "tool": "paypal",
+  "description": "CLI interface for PayPal API",
+  "discovered_at": "2026-06-01T17:05:35.126306+00:00",
+  "total_commands": 17,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "payouts": {
+      "help": "Manage batch payouts",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a batch payout to one or more recipients. For a single recipient, use --receiver and --amount. For multiple recipients, use --items-json with a JSON array.",
+          "options": [
+            {
+              "name": "--receiver",
+              "type": "TEXT",
+              "required": false,
+              "help": "Recipient email address",
+              "short": "-r"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Payment amount (e.g., '10.00')",
+              "short": "-a"
+            },
+            {
+              "name": "--currency",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO currency code",
+              "short": "-c",
+              "default": "USD"
+            },
+            {
+              "name": "--note",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message to recipient",
+              "short": "-n"
+            },
+            {
+              "name": "--email-subject",
+              "type": "TEXT",
+              "required": false,
+              "help": "Subject line for PayPal notification email"
+            },
+            {
+              "name": "--email-message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Body of PayPal notification email"
+            },
+            {
+              "name": "--items-json",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON array for multi-recipient batch payouts"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "examples": [
+            "paypal payouts create --receiver user@example.com --amount 10.00",
+            "paypal payouts create --receiver user@example.com --amount 25.50 --note \"Payment for services\"",
+            "paypal payouts create --items-json '[{\"receiver\":\"a@example.com\",\"amount\":\"10.00\"},{\"receiver\":\"b@example.com\",\"amount\":\"20.00\"}]'"
+          ],
+          "usage_instructions": "Create a PayPal batch payout. For one recipient pass --receiver and --amount; for multiple recipients pass --items-json."
+        },
+        "get": {
+          "help": "Get batch payout status and details.",
+          "arguments": [
+            {
+              "name": "batch_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Payout batch ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "examples": [
+            "paypal payouts get BATCH_ID_HERE",
+            "paypal payouts get BATCH_ID_HERE -t"
+          ],
+          "usage_instructions": "Fetch a PayPal payout batch by batch ID. Add --table for a concise status table."
+        },
+        "get-item": {
+          "help": "Get individual payout item details.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Payout item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "examples": [
+            "paypal payouts get-item ITEM_ID_HERE",
+            "paypal payouts get-item ITEM_ID_HERE -t"
+          ],
+          "usage_instructions": "Fetch an individual PayPal payout item by item ID. Add --table for a concise item status table."
+        },
+        "cancel-item": {
+          "help": "Cancel an unclaimed payout item. Only items with UNCLAIMED status can be cancelled.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Payout item ID to cancel"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "examples": [
+            "paypal payouts cancel-item ITEM_ID_HERE"
+          ],
+          "usage_instructions": "Cancel an unclaimed PayPal payout item by item ID. Only unclaimed items can be cancelled."
+        }
+      },
+      "usage_instructions": "Use paypal payouts for PayPal batch payout creation, status lookup, payout-item lookup, and unclaimed item cancellation."
+    },
+    "transactions": {
+      "help": "Manage transaction reporting",
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "list": {
+          "help": "List transactions from the PayPal Transaction Search API.",
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Start of the transaction range. YYYY-MM-DD becomes 00:00:00Z. Naive datetimes are interpreted as UTC"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "End of the transaction range. YYYY-MM-DD becomes 23:59:59Z. Naive datetimes are interpreted as UTC"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]       Maximum number of transactions to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value. Supports nested fields such as transaction_info.transaction_status:eq:S",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "default": "100"
+            },
+            {
+              "name": "--all-records",
+              "type": "bool",
+              "required": false,
+              "help": "Include non-balance-affecting records by sending balance_affecting_records_only=N"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "List business-account transactions by --start-date and --end-date. Date-only values are normalized to full UTC days, ranges longer than 31 days are chunked automatically, JSON output is an array, and --table, --limit, --filter, --properties, --page-size, and --all-records are supported."
+        },
+        "get": {
+          "help": "Get transaction-search matches for a PayPal transaction ID.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "PayPal transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Start of the search range. YYYY-MM-DD becomes 00:00:00Z. Naive datetimes are interpreted as UTC"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "End of the search range. YYYY-MM-DD becomes 23:59:59Z. Naive datetimes are interpreted as UTC"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of transaction detail fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "default": "100"
+            },
+            {
+              "name": "--all-records",
+              "type": "bool",
+              "required": false,
+              "help": "Include non-balance-affecting records by sending balance_affecting_records_only=N"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "usage_instructions": "Search for PayPal transaction ID matches within --start-date and --end-date. PayPal transaction IDs can have multiple matching records, so JSON output is an object with transaction_details and matching_transaction_count. Add --table or --properties for narrower output."
+        }
+      },
+      "usage_instructions": "Use paypal transactions for PayPal Transaction Search API reads against a business account."
+    },
+    "auth": {
+      "help": "Manage paypal authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ],
+          "usage_instructions": "Store PayPal OAuth client credentials for a profile. Use --force to replace existing credentials."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear stored PayPal credentials for the selected profile."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check PayPal authentication status using the shared profiles JSON shape. Read profiles[].authenticated and credential_types.oauth for details."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run live credential checks for PayPal auth profiles. Use --verbose for detailed checks."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List PayPal auth profiles, including auth type and active state. Supports --table, --limit, --filter, and --properties."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show details for a named PayPal auth profile. Add --table for table output."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a new PayPal auth profile from the profile template."
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "usage_instructions": "Use auth profiles select NAME to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named PayPal auth profile and its data. Use --force to skip confirmation."
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named PayPal auth profile and its data. Use --force to skip confirmation."
+            }
+          },
+          "usage_instructions": "Use paypal auth profiles to list, inspect, create, select, or remove PayPal auth profiles."
+        }
+      },
+      "usage_instructions": "Use paypal auth to configure OAuth client credentials, verify profiles, and manage authentication profiles."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Clear the PayPal CLI response cache."
+        }
+      },
+      "usage_instructions": "Use paypal cache for local response-cache maintenance."
+    }
+  },
+  "usage_instructions": "Use the paypal CLI for PayPal business-account API operations. Run auth status/login before live API calls, use payouts for batch payout operations, and use transactions list/get for Transaction Search API reads."
+}
