@@ -1,0 +1,582 @@
+#!/usr/bin/env python3
+"""
+CLI tool generator script.
+
+Creates a new CLI tool from templates with all scaffolding in place.
+
+Usage:
+    new-cli-tool --name myservice --type api --base-url https://api.myservice.com
+    new-cli-tool --name shopsite --type browser --base-url https://shopsite.com
+"""
+
+import argparse
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+# Constants
+CLI_TOOLS_DIR = Path(__file__).resolve().parents[4]
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+LOCAL_BIN_DIR = Path.home() / ".local" / "bin"  # Symlinks go here (works in all shells)
+CLI_TOOLS_DOC = CLI_TOOLS_DIR / "_repo" / "docs" / "cli_tools.md"
+
+# Common CLI command to brew package name mappings
+# Add entries here when the brew package name differs from the CLI command
+BREW_PACKAGE_MAP = {
+    "lpass": "lastpass-cli",
+    "gh": "gh",
+    "aws": "awscli",
+    "gcloud": "google-cloud-sdk",
+    "az": "azure-cli",
+    "kubectl": "kubernetes-cli",
+    "terraform": "terraform",
+    "docker": "docker",
+    "node": "node",
+    "python3": "python",
+    "rg": "ripgrep",
+    "fd": "fd",
+    "bat": "bat",
+    "exa": "exa",
+    "jq": "jq",
+    "yq": "yq",
+    "fzf": "fzf",
+}
+
+# IMPORTANT: Auth-capable templates must resolve tool_dir via
+# cli_tools_shared.config.resolve_tool_dir(DIST_NAME), not from __file__.
+# Wrapper templates still use shared config paths for CLI_COMMAND / CLI_PATH.
+
+
+def print_step(msg: str):
+    """Print a step message."""
+    print(f"\n\033[1;34m→\033[0m {msg}")
+
+
+def print_success(msg: str):
+    """Print a success message."""
+    print(f"\033[1;32m✓\033[0m {msg}")
+
+
+def print_error(msg: str):
+    """Print an error message."""
+    print(f"\033[1;31m✗\033[0m {msg}", file=sys.stderr)
+
+
+def print_warning(msg: str):
+    """Print a warning message."""
+    print(f"\033[1;33m⚠\033[0m {msg}", file=sys.stderr)
+
+
+def to_pascal_case(name: str) -> str:
+    """Convert name to PascalCase (e.g., 'my-tool' -> 'MyTool')."""
+    return "".join(word.capitalize() for word in re.split(r"[-_]", name))
+
+
+def is_cli_available(cli_command: str) -> bool:
+    """Check if a CLI command is available in PATH."""
+    return shutil.which(cli_command) is not None
+
+
+def get_brew_package_name(cli_command: str) -> str:
+    """Get the Homebrew package name for a CLI command."""
+    return BREW_PACKAGE_MAP.get(cli_command, cli_command)
+
+
+def install_cli_with_brew(cli_command: str) -> bool:
+    """
+    Install a CLI tool using Homebrew.
+
+    Returns True if installation succeeded, False otherwise.
+    """
+    # Check if brew is available
+    if not shutil.which("brew"):
+        print_warning("Homebrew not found. Cannot auto-install CLI.")
+        print_warning(f"Please install '{cli_command}' manually.")
+        return False
+
+    brew_package = get_brew_package_name(cli_command)
+    print_step(f"Installing {cli_command} via Homebrew (brew install {brew_package})...")
+
+    result = subprocess.run(
+        ["brew", "install", brew_package],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        print_error(f"Failed to install {brew_package}: {result.stderr}")
+        return False
+
+    # Verify installation
+    if is_cli_available(cli_command):
+        print_success(f"Successfully installed {cli_command}")
+        return True
+    else:
+        print_warning(f"Installed {brew_package} but '{cli_command}' not found in PATH")
+        print_warning("You may need to restart your shell or add it to PATH manually")
+        return False
+
+
+def replace_placeholders(content: str, replacements: dict) -> str:
+    """Replace all placeholders in content."""
+    for placeholder, value in replacements.items():
+        content = content.replace(placeholder, value)
+    return content
+
+
+def copy_and_process_template(
+    template_dir: Path,
+    output_dir: Path,
+    replacements: dict,
+):
+    """Copy template directory and process all placeholders."""
+    
+    for src_path in template_dir.rglob("*"):
+        # Get relative path from template
+        rel_path = src_path.relative_to(template_dir)
+        
+        # Replace placeholders in path
+        new_rel_path = str(rel_path)
+        for placeholder, value in replacements.items():
+            new_rel_path = new_rel_path.replace(placeholder, value)
+        
+        dest_path = output_dir / new_rel_path
+        
+        if src_path.is_dir():
+            dest_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Create parent directories
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Read, process, and write file
+            try:
+                content = src_path.read_text()
+                processed_content = replace_placeholders(content, replacements)
+                dest_path.write_text(processed_content)
+            except UnicodeDecodeError:
+                # Binary file, just copy
+                shutil.copy2(src_path, dest_path)
+
+
+def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
+    """Install the package using uv tool install."""
+    print_step("Installing via uv tool install...")
+
+    result = subprocess.run(
+        ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh", "--python", "python3"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print_error(f"Failed to install via uv: {result.stderr}")
+        return False
+
+    print_success("Package installed via uv")
+
+    # Browser CLIs use browser-harness (a transitive dependency of
+    # cli-tools-shared). The harness drives Chrome via CDP and manages its
+    # own browser binary, so there is no separate install step here.
+
+    return True
+
+
+
+def update_cli_tools_doc(tool_name: str, description: str):
+    """Add a row to the repo-owned CLI tools inventory."""
+    print_step("Updating _repo/docs/cli_tools.md...")
+
+    if not CLI_TOOLS_DOC.exists():
+        print_warning(f"CLI tools inventory not found at {CLI_TOOLS_DOC}")
+        return False
+
+    try:
+        content = CLI_TOOLS_DOC.read_text()
+
+        # Check if tool already exists in table
+        if f"| `{tool_name}` |" in content:
+            print_warning(f"Tool '{tool_name}' already exists in _repo/docs/cli_tools.md")
+            return True
+
+        new_row = f"| `{tool_name}` | {description} |"
+        lines = content.split("\n")
+        table_rows = [
+            (index, line.split("|")[1].strip().strip("`"))
+            for index, line in enumerate(lines)
+            if line.startswith("| `") and "` |" in line
+        ]
+        if not table_rows:
+            print_warning("Could not find CLI tools table in _repo/docs/cli_tools.md")
+            return False
+
+        insert_index = table_rows[-1][0] + 1
+        for index, existing_name in table_rows:
+            if tool_name < existing_name:
+                insert_index = index
+                break
+
+        lines.insert(insert_index, new_row)
+
+        # Write back
+        CLI_TOOLS_DOC.write_text("\n".join(lines))
+        print_success(f"Added '{tool_name}' to docs/cli_tools.md")
+        return True
+
+    except Exception as e:
+        print_warning(f"Failed to update docs/cli_tools.md: {e}")
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Create a new CLI tool from templates",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --name stripe --type api --base-url https://api.stripe.com/v1
+  %(prog)s --name github --type api --base-url https://api.github.com --auth-type personal_access_token
+  %(prog)s --name shopsite --type browser --base-url https://shopsite.com
+  %(prog)s --name lastpass --type wrapper --cli-command lpass --docs-url https://github.com/lastpass/lastpass-cli
+  %(prog)s --name myapi --type api --base-url https://api.example.com --description "My API client"
+  %(prog)s --name mytool --type wrapper --cli-command mytool --auth-type none --description "Wrapper with no auth"
+        """,
+    )
+    
+    parser.add_argument(
+        "--name", "-n",
+        required=True,
+        help="CLI tool name (lowercase, e.g., 'myservice')",
+    )
+    parser.add_argument(
+        "--type", "-t",
+        required=True,
+        choices=["api", "browser", "wrapper"],
+        help="Template type: 'api' for REST API client, 'browser' for browser automation, 'wrapper' for CLI wrapper",
+    )
+    parser.add_argument(
+        "--base-url", "-u",
+        default="",
+        help="Base URL for the API or website (required for api/browser, optional for wrapper)",
+    )
+    parser.add_argument(
+        "--cli-command", "-c",
+        default="",
+        help="Underlying CLI command name (required for wrapper type, e.g., 'lpass' for LastPass)",
+    )
+    parser.add_argument(
+        "--description", "-d",
+        default="",
+        help="Short description of what the CLI does",
+    )
+    parser.add_argument(
+        "--auth-type", "-a",
+        action="append",
+        default=None,
+        choices=["none", "api_key", "personal_access_token", "oauth", "oauth_authorization_code", "username_password", "browser_session"],
+        help="Authentication type (repeatable for multiple types). Sets CREDENTIAL_TYPES in config.py. Use 'none' to skip auth scaffolding. Default: api_key.",
+    )
+    parser.add_argument(
+        "--docs-url",
+        default="",
+        help="URL to API documentation (for README)",
+    )
+    parser.add_argument(
+        "--no-install",
+        action="store_true",
+        help="Skip uv tool install",
+    )
+    args = parser.parse_args()
+
+    # Default auth type if none specified
+    if args.auth_type is None:
+        if args.type == "wrapper":
+            args.auth_type = ["none"]
+        elif args.type == "browser":
+            args.auth_type = ["browser_session"]
+        else:
+            args.auth_type = ["api_key"]
+
+    # Handle --auth-type none: cannot combine with other auth types
+    if "none" in args.auth_type:
+        if len(args.auth_type) > 1:
+            print_error("--auth-type none cannot be combined with other auth types")
+            sys.exit(1)
+
+    # Validate type-specific requirements
+    if args.type == "wrapper":
+        if args.auth_type != ["none"]:
+            print_error("Wrapper scaffolds support only --auth-type none. Extend the wrapper intentionally if it needs shared auth.")
+            sys.exit(1)
+        if not args.cli_command:
+            print_error("--cli-command is required for wrapper type")
+            sys.exit(1)
+
+        # Check if underlying CLI is available, install if needed
+        if not args.no_install:
+            if not is_cli_available(args.cli_command):
+                print_warning(f"CLI '{args.cli_command}' not found in PATH")
+                if not install_cli_with_brew(args.cli_command):
+                    print_warning("Continuing without underlying CLI installed...")
+                    print_warning(f"You'll need to install '{args.cli_command}' manually before using the wrapper")
+            else:
+                print_success(f"Found '{args.cli_command}' in PATH")
+    else:  # api or browser
+        if not args.base_url:
+            print_error("--base-url is required for api and browser types")
+            sys.exit(1)
+
+    # Validate name
+    name = args.name.lower().replace("-", "").replace("_", "")
+    if not name.isalnum():
+        print_error("Name must be alphanumeric (hyphens and underscores allowed)")
+        sys.exit(1)
+    
+    # Normalize name (remove hyphens/underscores for consistency)
+    name = args.name.lower()
+    name_underscore = name.replace("-", "_")
+    name_pascal = to_pascal_case(name)
+    name_upper = name_underscore.upper()
+    
+    # Set paths
+    template_dir = TEMPLATES_DIR / args.type
+    output_dir = CLI_TOOLS_DIR / name
+    
+    # Check template exists
+    if not template_dir.exists():
+        print_error(f"Template not found: {template_dir}")
+        sys.exit(1)
+    
+    # Check output doesn't exist
+    if output_dir.exists():
+        print_error(f"Directory already exists: {output_dir}")
+        sys.exit(1)
+    
+    # Map auth type string to CredentialType enum name
+    AUTH_TYPE_MAP = {
+        "api_key": "API_KEY",
+        "personal_access_token": "PERSONAL_ACCESS_TOKEN",
+        "oauth": "OAUTH",
+        "oauth_authorization_code": "OAUTH_AUTHORIZATION_CODE",
+        "username_password": "USERNAME_PASSWORD",
+        "browser_session": "BROWSER_SESSION",
+    }
+
+    no_auth = "none" in args.auth_type
+    if no_auth:
+        credential_type_names = []
+        credential_types_str = ""
+    else:
+        credential_type_names = [AUTH_TYPE_MAP[at] for at in args.auth_type]
+        credential_types_str = ", ".join(f"CredentialType.{name_}" for name_ in credential_type_names)
+
+    auth_import = ""
+    auth_mount = ""
+    auth_quick_start = ""
+    auth_commands_section = ""
+    auth_profiles_section = ""
+    auth_config_section = ""
+    if not no_auth:
+        auth_import = "from cli_tools_shared.auth_commands import create_auth_app"
+        auth_mount = f'app.add_typer(create_auth_app(get_config, tool_name="{name}"), name="auth")'
+        auth_quick_start = (
+            f"# Authenticate with {name_pascal}\n"
+            f"{name} auth login\n\n"
+        )
+        auth_commands_section = f"""### Authentication (`{name} auth`)
+
+```bash
+# Interactive login
+{name} auth login
+
+# Force re-authentication
+{name} auth login --force
+
+# Check authentication status
+{name} auth status
+
+# Run the configured live auth test
+{name} auth test
+
+# Clear saved credentials/session
+{name} auth logout
+```
+
+"""
+        auth_profiles_section = f"""### Profiles (`{name} auth profiles`)
+
+```bash
+# List all profiles
+{name} auth profiles list
+
+# Show a profile
+{name} auth profiles get default
+
+# Select the active profile for its auth type
+{name} auth profiles select PROFILE_NAME
+
+# Create a profile
+{name} auth profiles create PROFILE_NAME
+
+# Delete a profile
+{name} auth profiles delete PROFILE_NAME
+```
+
+"""
+        auth_config_section = f"""Authentication profile variables (CLI-managed runtime auth state):
+
+```bash
+ACTIVE=true
+ACCESS_TOKEN=<access_token_written_by_cli>
+REFRESH_TOKEN=<refresh_token_written_by_cli>
+TOKEN_EXPIRES_AT=2026-01-01T00:00:00Z
+```
+
+Reusable raw credentials belong in the CLI-tools secret manager, not in `.env` files. If this CLI persists secret-manager references into the active profile, they look like:
+
+```bash
+API_KEY=secret://{name}-api-key
+PERSONAL_ACCESS_TOKEN=secret://{name}-personal-access-token
+CLIENT_ID=secret://{name}-client-id
+CLIENT_SECRET=secret://{name}-client-secret
+USERNAME=secret://{name}-username
+PASSWORD=secret://{name}-password
+```
+
+"""
+
+    cache_section = ""
+    if args.type == "api":
+        cache_section = f"""## Cache
+
+```bash
+# Clear cached read responses
+{name} cache clear
+
+# Bypass the cache for one execution
+{name} --no-cache items list --limit 10
+```
+
+"""
+    elif args.type == "browser":
+        cache_section = f"""## Cache
+
+```bash
+# Clear cached read responses
+{name} cache clear
+
+# Bypass the cache for one execution
+{name} --no-cache search list --limit 10
+```
+
+"""
+
+    # Build replacements dict
+    cli_command = args.cli_command or name
+    replacements = {
+        "{{name}}": name,
+        "{{name_underscore}}": name_underscore,
+        "{{Name}}": name_pascal,
+        "{{NAME}}": name_upper,
+        "{{base_url}}": args.base_url or "",
+        "{{cli_command}}": cli_command,
+        "{{description}}": args.description or (f"Wrapper for {cli_command}" if args.type == "wrapper" else f"Interact with {name_pascal}"),
+        "{{docs_url}}": args.docs_url or args.base_url or "",
+        "{{credential_types}}": credential_types_str,
+        "{{AUTH_IMPORT}}": auth_import,
+        "{{AUTH_MOUNT}}": auth_mount,
+        "{{AUTH_QUICK_START}}": auth_quick_start,
+        "{{AUTH_COMMANDS_SECTION}}": auth_commands_section,
+        "{{AUTH_PROFILES_SECTION}}": auth_profiles_section,
+        "{{AUTH_CONFIG_SECTION}}": auth_config_section,
+        "{{CACHE_SECTION}}": cache_section,
+    }
+    
+    print(f"\n\033[1m Creating CLI tool: {name}\033[0m")
+    print(f"   Type: {args.type}")
+    if args.type == "wrapper":
+        print(f"   CLI Command: {cli_command}")
+    else:
+        print(f"   Base URL: {args.base_url}")
+    if no_auth:
+        print(f"   Auth Type: none (no auth commands)")
+    else:
+        print(f"   Auth Type: {', '.join(credential_type_names)}")
+    print(f"   Output: {output_dir}")
+    
+    # Copy and process template
+    print_step("Copying template files...")
+    try:
+        copy_and_process_template(template_dir, output_dir, replacements)
+
+        # Rename the {{name}}_cli directory
+        old_cli_dir = output_dir / "{{name}}_cli"
+        new_cli_dir = output_dir / f"{name_underscore}_cli"
+        if old_cli_dir.exists():
+            old_cli_dir.rename(new_cli_dir)
+
+        # Remove auth.py if --auth-type none
+        if no_auth:
+            auth_file = new_cli_dir / "commands" / "auth.py"
+            if auth_file.exists():
+                auth_file.unlink()
+                print_success("Removed auth.py (--auth-type none)")
+
+        # Create .env with ACTIVE=true (not in template since .gitignore excludes it)
+        env_file = output_dir / ".env"
+        env_file.write_text("ACTIVE=true\n")
+        print_success("Created .env with ACTIVE=true")
+
+        print_success("Template files copied and processed")
+    except Exception as e:
+        print_error(f"Failed to copy template: {e}")
+        sys.exit(1)
+    
+    # Install via uv
+    if not args.no_install:
+        if not install_with_uv(output_dir, name, args.type):
+            print_warning("Continuing without uv install...")
+    
+    # Update the repo-owned CLI inventory with the new tool entry
+    service_name = name_pascal if not args.cli_command else to_pascal_case(args.cli_command)
+    api_desc = args.description or f"{service_name} API"
+    update_cli_tools_doc(name, api_desc)
+
+    # Print summary
+    print(f"\n\033[1;32m✓ CLI tool '{name}' created successfully!\033[0m\n")
+    print("Next steps:")
+    print(f"  1. cd {output_dir}")
+    print(f"  2. Follow the cli-tool skill's references/secrets.md for reusable CLI credentials")
+    print(f"  3. Define the command output fields in README.md")
+    print(f"  4. Update client.py normalizers to return those dict records")
+    print(f"  5. Test: {name} --help")
+    if args.no_install:
+        print(f"\nuv install skipped (--no-install).")
+        print(f"  Run 'uv tool install -e {output_dir} --force --refresh' when you want the launcher installed.")
+    else:
+        print(f"\nInstalled via uv: ~/.local/bin/{name}")
+        print("  (Works immediately - no need to source anything)")
+    print(f"\nOutput-contract-first architecture:")
+    print(f"  - main.py: Typer command contract, shared filtering, properties, and rendering")
+    print(f"  - client.py: data retrieval plus normalizers that return public dict records")
+    print(f"  - models.py/models/: add only when validation or polymorphism earns the code")
+    print(f"  - filters/output helpers: import directly from cli_tools_shared")
+    
+    if args.type == "browser":
+        print(f"\nNote: Browser automation is driven by browser-harness (CDP), a transitive")
+        print(f"  dependency of cli-tools-shared. Run '{name} auth login' to launch the")
+        print(f"  browser for the initial login.")
+
+    if args.type == "wrapper":
+        if is_cli_available(cli_command):
+            print(f"\nNote: '{cli_command}' CLI is installed and ready.")
+        else:
+            brew_pkg = get_brew_package_name(cli_command)
+            print(f"\nNote: '{cli_command}' CLI is NOT installed. Install with:")
+            print(f"  brew install {brew_pkg}")
+        print(f"  Customize client.py command methods and parsers.py for your CLI's output format.")
+
+
+if __name__ == "__main__":
+    main()

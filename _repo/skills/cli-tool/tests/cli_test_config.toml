@@ -1,0 +1,276 @@
+[general]
+command_timeout = 30  # seconds
+max_nested_depth = 3  # global default, can be overridden per CLI
+
+[command_discovery]
+skip_list = ["list", "get", "create", "update", "delete", "login", "status", "logout"]
+
+[exclusions]
+excluded_from_get_required = ["search", "profiles", "cart", "rules", "ideas", "responses", "capture", "credentials", "models", "lists"]
+excluded_from_list_required = ["statistics", "metrics", "health", "summary", "status", "content", "profiles", "search", "folders", "agent-traffic", "payouts"]
+no_auth_clis = [
+    "reminders",
+    "cliclick",
+    # Local-only CLIs with no remote credentials — auth commands serve no purpose.
+    "imessage",
+    "msword",
+    "notifier",
+    "things",
+    "whisper",
+    "snagit",
+    "claude-code-sessions",
+    "powerpoint-slide-recorder",
+]
+
+# Orchestration/framework CLIs that don't follow standard resource patterns
+# These are phase-based orchestrators, not service wrappers with list/get/filter patterns
+orchestration_clis = []
+
+# CLIs that don't need filters.py (orchestration CLIs, simple wrappers)
+no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder"]
+
+# Browser automation CLIs (use BrowserAutomation backed by browser-harness)
+browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook_marketplace", "facebook"]
+
+# Wrapper CLIs that don't use profiles (wrap system commands, not services)
+wrapper_clis = ["lastpass", "imessage", "whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
+
+[output]
+# Rich table requirements
+box_style = "HEAVY_HEAD"
+max_columns = 6
+no_wrap = false
+header_style = "bold cyan"
+
+[required_operators]
+# Must be present in filters.py
+operators = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "in", "nin", "startswith", "endswith"]
+
+[cli_specific]
+# Per-CLI overrides (example)
+# [cli_specific.notion]
+# max_nested_depth = 2
+# command_timeout = 60
+
+[cli_specific.copilot]
+# Copilot has deep command trees: tool mcp tools <list|get|invoke> and
+# agent knowledge azure-ai-search add are at depth 4.
+max_nested_depth = 4
+
+[cli_specific.ebay]
+# eBay seller store categories commands live at seller store categories <action>.
+max_nested_depth = 4
+
+[cli_specific.wordpress]
+# Profiles is a utility command from cli_tools_shared, not a resource list command
+# Exclude it from list command tests that require --limit/--filter/--properties
+list_commands = [
+    "posts list",
+    "media list",
+    "categories list",
+    "tags list",
+]
+
+[cli_specific.buttondown]
+# Automations and feeds are feature-gated by the live Buttondown account.
+list_commands = [
+    "emails list",
+    "subscribers list",
+    "tags list",
+]
+
+[cli_specific.bricklink]
+list_commands = [
+    "order list",
+    "inventory list",
+]
+
+[cli_specific.ata-blog]
+list_commands = [
+    "notion-page list",
+    "wordpress-post list",
+    "wordpress-page list",
+    "media list",
+    "categories list",
+    "tags list",
+    "schema list",
+]
+
+[cli_specific.gemini]
+list_commands = [
+    "files list",
+]
+
+[cli_specific.google]
+# These commands need account-specific targets or Google Cloud project setup
+# beyond the repo's generic auth profile, so keep generic live execution on the
+# fixture-free list surfaces.
+list_commands = [
+    "auth profiles list",
+    "calendar list",
+    "cloud projects list",
+    "cloud credentials list",
+    "cloud services list",
+    "docs list",
+    "drive list",
+    "gmail list",
+    "gmail labels list",
+    "lookerstudio reports list",
+    "searchconsole sites list",
+    "sheets list",
+]
+
+[cli_specific.instacart]
+list_commands = [
+    "orders list",
+]
+
+[cli_specific.kick]
+list_commands = [
+    "workspaces list",
+    "integrations list",
+    "entities list",
+    "clients list",
+    "transactions list",
+    "categories list",
+    "rule-groups list",
+]
+
+[cli_specific.leanpub]
+# Leanpub author stats commands require explicit book slugs or BOOK_SLUGS in the
+# active auth profile. That dependency is outside source-controlled test fixtures,
+# so only the fixture-free shared profile list command is exercised by generic
+# list-command compliance checks.
+list_commands = [
+    "auth profiles list",
+]
+
+[cli_specific.mindmeister]
+list_commands = [
+    "maps list",
+]
+
+[cli_specific.onedrive]
+list_commands = [
+    "drives list",
+]
+
+[cli_specific.reminders]
+list_commands = []
+
+[cli_specific.snagit]
+list_commands = []
+
+[cli_specific.youtube]
+list_commands = [
+    "channel videos list",
+]
+
+[cli_specific.raptive]
+# Raptive uses non-standard command names for list-style operations
+# These commands return lists and should be tested for --filter, --limit, etc.
+list_commands = [
+    "traffic sources",
+    "traffic by-device",
+    "earnings overview",
+    "earnings by-device",
+    "earnings by-page",
+    "earnings by-traffic-source",
+    "earnings by-country",
+    "earnings by-category",
+    "earnings brand-safety",
+    "earnings sources",
+]
+
+[cli_specific.brickowl]
+# Messages, coupons, quotes use browser_session - exclude from API execution tests
+list_commands = [
+    "order list",
+    "inventory list",
+    "auth profiles list",
+]
+
+[cli_specific.partnerstack]
+# /form-templates is feature-gated by the live partner account (returns 401
+# Missing Authentication on the same token that successfully reads /rewards,
+# /marketplace/programs, and /partnerships). The endpoint exists and the
+# bcharleson/partnerstack-cli reference implementation confirms Bearer auth
+# is correct — the 401 is an account-side permission issue. Exclude
+# form-templates list from execution-time list-command tests so structural
+# checks still cover the command, but live API calls are not required.
+list_commands = [
+    "rewards list",
+    "marketplace list",
+    "partnerships list",
+    "auth profiles list",
+]
+
+[cli_specific.linkedin]
+# LinkedIn member post reads require the restricted `r_member_social` scope.
+# The repo's verified active LinkedIn profile supports member writes plus page
+# reads/writes, but not member-read list/get/search. Exclude `user posts list`
+# from generic live list-command tests and keep coverage on commands that are
+# supported by the verified active profile.
+list_commands = [
+    "page posts list",
+    "auth profiles list",
+]
+
+# Notion fixtures: maps command paths to required parameter flags and fixture keys
+[cli_specific.notion]
+max_nested_depth = 4
+
+[cli_specific.notion.param_fixtures]
+"database page list" = { "--database-id" = "database_id" }
+"database template list" = { "--database-id" = "database_id" }
+"field list" = { "--database-id" = "database_id" }
+"pages blocks list" = { "--page-id" = "page_id" }
+"comments list" = { "--page-id" = "page_id" }
+
+# Airtable fixtures: records/fields commands require table args
+[cli_specific.airtable.param_fixtures]
+"records list" = { "_pos1" = "table_name" }
+"fields list" = { "_pos1" = "table_id" }
+"fields get" = { "_pos1" = "table_id" }
+
+# Podio fixtures: uses _pos prefix for positional arguments
+[cli_specific.podio.param_fixtures]
+"item list" = { "_pos1" = "app_id" }
+
+# Descript fixtures: compositions commands need project_id positional arg
+[cli_specific.descript.param_fixtures]
+"compositions list" = { "_pos1" = "project_id" }
+"compositions get" = { "_pos1" = "project_id" }
+"compositions export" = { "_pos1" = "project_id", "_pos2" = "asset_id" }
+"compositions assets" = { "_pos1" = "project_id" }
+
+# Ahrefs fixtures: site-audit commands require project_id positional arg
+[cli_specific.ahrefs.param_fixtures]
+"site-audit list" = { "_pos1" = "project_id" }
+
+# Moz fixtures: uses _pos prefix for positional arguments
+[cli_specific.moz.param_fixtures]
+"keywords list" = { "_pos1" = "keyword" }
+
+# Slack fixtures: bookmarks and pins require channel_id positional arg
+[cli_specific.slack.param_fixtures]
+"messages list" = { "_pos1" = "channel_id" }
+"messages threads" = { "_pos1" = "channel_id" }
+
+# AtaBlog fixtures: shoutouts commands require post_id positional arg
+[cli_specific.ata-blog.param_fixtures]
+"shoutouts list" = { "_pos1" = "post_id" }
+"shoutouts get" = { "_pos1" = "post_id", "--position" = "shoutout_position" }
+
+# Facebook: browser automation needs longer timeout; posts commands need group_id
+[cli_specific.facebook]
+command_timeout = 120
+
+[cli_specific.facebook.param_fixtures]
+"groups posts list" = { "_pos1" = "group_id" }
+"groups posts get" = { "_pos1" = "post_url" }
+
+# Msword fixtures: comments commands require a repo-owned docx positional arg
+[cli_specific.msword.param_fixtures]
+"docs comments list" = { "_pos1" = "docx_file" }
+"docs comments get" = { "_pos1" = "docx_file" }

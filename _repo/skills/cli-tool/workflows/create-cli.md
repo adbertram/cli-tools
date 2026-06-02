@@ -1,0 +1,571 @@
+<required_reading>
+Before starting, read these references as needed:
+- `references/templates.md` - Template structures and customization points
+- `references/output-standards.md` - Output streams, format rules, list command requirements
+- `references/secrets.md` - CLI-tools secret manager rules
+- `references/auth-standards.md` - Authentication standards by credential type
+- `references/config-standards.md` - Configuration and .env standards
+- `references/command-standards.md` - Command naming, options, exit codes
+- `references/model-standards.md` - Pydantic model standards
+- `references/infra-standards.md` - Repository, documentation, symlinks
+- `references/filtering.md` - Filtering architecture (for API CLIs)
+</required_reading>
+
+<process>
+## Step 1: Gather Requirements
+
+Ask the user (if not already provided):
+
+1. **Service/API**: What service or API will this CLI interact with?
+2. **CLI Type**:
+   - `api` - REST API client
+   - `browser` - Web automation (only if no API exists)
+   - `wrapper` - Wrapping an existing CLI tool
+3. **Base URL** (for api/browser): What is the API base URL or website URL?
+4. **CLI Command** (for wrapper): What is the underlying CLI command name?
+5. **Authentication**: How does authentication work? (API key, OAuth, etc.)
+6. **Key Resources**: What are the main resources/commands needed?
+
+## Step 2: Investigate Communication Methods (MANDATORY)
+
+**BEFORE asking the user about CLI type, you MUST investigate in this order:**
+
+### 2.1 Search for Public API
+
+First, search for official API documentation:
+
+```
+1. Web search: "<service-name> API documentation"
+2. Web search: "<service-name> developer API"
+3. Web search: "<service-name> REST API"
+4. Check for developer portal (e.g., developers.<service>.com)
+```
+
+If a public API exists with documentation and the API/auth path is currently
+usable by Adam, use **`api` type**.
+
+**API availability gate:** Documentation alone is not enough. If the official
+API, SDK, developer program, or required credential is deprecated, unsupported,
+invite-only, closed to new integrations, unavailable to new users, or usable
+only by accounts that already possess a legacy token/key, stop before
+scaffolding. Report the limitation to the user and ask whether they already have
+the required usable credential. If they do, continue with the API path and note
+that live validation depends on that credential. If they do not, ask whether to
+proceed with a browser-automation CLI instead.
+
+**AUTO-PROCEED:** If Step 2.1 determines no consumer-accessible API exists, proceed directly to Step 2.2 without waiting for user confirmation. The decision tree in Step 2.4 is deterministic -- do not present intermediate findings or options between Steps 2.1 and 2.2. Report consolidated findings only after completing all applicable discovery steps (2.1 through 2.3).
+
+### 2.2 Discover Internal/Hidden APIs
+
+If no public API exists, spawn the `ui-web-test-engineer` agent to explore the authenticated web interface and capture internal API calls.
+
+**Include the base URL and all URL patterns discovered in Step 2.1 directly in the agent prompt. Never re-ask the user for information gathered during earlier steps.**
+
+**Invoke the agent with this prompt:**
+
+```
+Explore <service-url> to discover internal/hidden REST APIs.
+
+1. Follow `references/secrets.md` before asking Adam for CLI credentials.
+2. Ask Adam only for credentials that are not already stored. Store newly provided reusable CLI credentials using `references/secrets.md`.
+3. Navigate to <service-url> and authenticate using those credentials
+4. Systematically explore the authenticated interface:
+   - Visit every major section/page
+   - Interact with data-heavy views (lists, dashboards, detail pages)
+   - Perform CRUD-like actions (create, edit, delete) where safe to do so
+   - Use search, filtering, sorting, and pagination features
+5. Monitor ALL network requests (XHR/Fetch) for JSON API endpoints. For each discovered endpoint, document:
+   - URL pattern (e.g., /api/v1/items?page=1&limit=50)
+   - HTTP method (GET, POST, PUT, DELETE, PATCH)
+   - Request headers (especially Authorization, X-API-Key, cookies, CSRF tokens)
+   - Request body (for POST/PUT/PATCH)
+   - Response body structure (field names, types, nesting)
+   - Authentication mechanism (Bearer token, session cookie, API key header, etc.)
+6. Identify patterns across endpoints:
+   - Base URL prefix (e.g., /api/v2/)
+   - Pagination style (offset, cursor, page number)
+   - Error response format
+   - Rate limiting headers
+7. Produce your findings as a structured JSON report with an "endpoints" array, each entry containing: url, method, headers, requestBody, responseBody, authMechanism, notes
+```
+
+**Using the agent results:**
+
+- If the agent discovers usable JSON API endpoints → use **`api` type** with those endpoints
+- Feed the discovered endpoint catalog into Step 2.5 (Implementation Planning) as the API Discovery Results
+- Use the documented auth mechanism to select the correct `--auth-type` in Step 3
+- If the agent finds no XHR/JSON endpoints (all server-rendered), proceed to Step 2.3
+
+### 2.3 Browser Automation (Last Resort)
+
+Only if Steps 2.1 and 2.2 yield no usable APIs:
+
+```
+Browser automation is appropriate when:
+- Service has NO public or internal REST/JSON APIs
+- All data is rendered server-side (no XHR calls)
+- Authentication requires complex browser interactions (CAPTCHAs, MFA)
+```
+
+Use **`browser` type** only as the last resort.
+
+### 2.4 Decision Tree
+
+```
+Is there an existing CLI tool for this service?
+├── YES → Use "wrapper" type
+└── NO → Did you find a public REST/JSON API that is currently usable by Adam? (Step 2.1)
+    ├── YES → Use "api" type
+    ├── LEGACY/CLOSED AUTH ONLY → Ask whether Adam has the required credential; otherwise ask whether to use "browser" type
+    └── NO → Did you discover internal APIs? (Step 2.2)
+        ├── YES → Use "api" type (with discovered endpoints)
+        └── NO → Use "browser" type (last resort)
+```
+
+**Report your findings to the user** before proceeding:
+- What investigation you performed
+- What APIs (if any) you discovered
+- Your recommended CLI type with justification
+
+## Step 2.5: Implementation Planning
+
+**For CLIs with 4+ resource groups, complex auth (OAuth + browser), or significant API investigation:**
+Run `/create-plan` before proceeding.
+
+**For simpler CLIs (≤3 commands, single auth type):**
+Present the command tree inline and get user approval before proceeding.
+
+```
+/create-plan <cli-name> CLI implementation
+```
+
+The plan MUST document:
+
+### API Discovery Results
+- Available endpoints and their purposes
+- Authentication method (API key, OAuth, session)
+- Rate limits and pagination patterns
+- Response formats and error structures
+
+### Command Structure Design (REQUIRES USER APPROVAL)
+
+**You MUST present a complete command tree and get explicit user approval before proceeding.**
+
+Present the proposed CLI structure in this format:
+
+```
+<cli-name>
+├── auth
+│   ├── login       - Authenticate with the service
+│   └── status      - Check authentication status
+├── <resource1>
+│   ├── list        - List all <resource1> (with --filter, --limit, --table)
+│   ├── get <id>    - Get a specific <resource1>
+│   ├── create      - Create a new <resource1>
+│   ├── update <id> - Update a <resource1>
+│   └── delete <id> - Delete a <resource1>
+├── <resource2>
+│   └── ...
+└── <special-commands>
+```
+
+For each command group, document:
+- Resource groups (e.g., items, users, orders)
+- CRUD operations per resource
+- Filtering capabilities per endpoint
+- Special operations beyond CRUD (export, import, share, etc.)
+
+**After presenting the command tree, ASK THE USER:**
+- "Does this command structure cover your needs?"
+- "Are there any commands you want added or removed?"
+- "Any naming preferences for commands or groups?"
+
+**DO NOT proceed until the user confirms the command structure.**
+
+### Output Data Design
+- Exact fields each command returns
+- Any derived fields the parser/client must create
+- Whether local models earn their cost through validation, polymorphism, or serialization
+- Relationships that must be visible in command output
+
+### Implementation Risks
+- Complex authentication flows (OAuth refresh, MFA)
+- Non-standard API patterns
+- Missing or incomplete documentation
+- Pagination edge cases
+
+**Why this is mandatory:** Discovering API limitations after creating the CLI structure wastes significant time. Planning prevents backtracking and ensures you understand the full scope before writing code.
+
+**DO NOT proceed to Step 3 until the plan is approved.**
+
+## Step 3: Run new-cli-tool Script
+
+Execute the appropriate command:
+
+```bash
+# For API CLI (default: API key auth):
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool \
+  --name <name> \
+  --type api \
+  --base-url <url> \
+  --description "<description>" \
+  --docs-url <docs-url>
+
+# For API CLI with Personal Access Token auth:
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool \
+  --name <name> \
+  --type api \
+  --base-url <url> \
+  --auth-type personal_access_token \
+  --description "<description>" \
+  --docs-url <docs-url>
+
+# For Browser CLI:
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool \
+  --name <name> \
+  --type browser \
+  --base-url <url> \
+  --description "<description>"
+
+# For Wrapper CLI:
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool \
+  --name <name> \
+  --type wrapper \
+  --cli-command <cmd> \
+  --description "<description>" \
+  --docs-url <docs-url>
+```
+
+**Script options:**
+- `--auth-type` - Authentication type (repeatable for multiple types, AND semantics): `none`, `api_key` (default), `personal_access_token`, `oauth`, `oauth_authorization_code`, `username_password`, `browser_session`. Use `none` to skip auth scaffolding entirely. Example: `--auth-type api_key --auth-type browser_session`
+- `--no-venv` - Skip virtual environment creation
+- `--no-aliases` - Skip symlink/PowerShell setup
+- `--no-install` - Skip underlying CLI installation (wrapper only)
+
+## Step 3.5: Post-Creation Validation
+
+Run the validation script to confirm scaffolding succeeded:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/validate-cli-tool.sh <name>
+```
+
+Verify all checks pass in the JSON output. If any check fails, investigate and fix before proceeding.
+
+## Step 4: Define Output Shape First
+
+Navigate to `<cli-tools-root>/<name>/` and define the data shape
+each external command must print. Start from the documented command/output
+contract, not from a template directory.
+
+- Use plain dict records when parsed/API data can flow directly to output.
+- Use parser/client code to add required derived fields such as stable IDs.
+- Use local Pydantic models only when validation, polymorphism, or serialization
+  removes real complexity.
+- Delete empty or one-resource `models/` directories after simplification.
+
+```python
+def normalize_item(raw: dict) -> dict:
+    return {
+        "id": raw["id"],
+        "name": raw["name"],
+        "status": raw["status"],
+    }
+```
+
+## Step 4.5: Full API Response Output (MANDATORY)
+
+**For API-based CLIs, return ALL data the API provides.** Do not filter, omit, or selectively display API response fields.
+
+- Include every field from API responses in CLI output
+- Never hardcode a subset of "useful" fields - let the user filter with jq if needed
+- If an API returns 20 fields, the CLI should output all 20 fields
+- This ensures the CLI remains useful as APIs evolve and prevents data loss
+
+## Step 5: Customize Client and Commands
+
+**For API type:**
+1. `<name>_cli/client.py`:
+   - Implement API methods that return records matching the command contract
+   - Add authentication logic
+   - Implement server-side filtering where API supports it
+
+```python
+def list_items(self, limit: int = 100) -> list[dict]:
+    response = self._make_request("GET", "/items", params={"limit": limit})
+    return [normalize_item(item) for item in response]
+```
+
+2. `<name>_cli/config.py`:
+   - Verify environment variable names
+   - Add any additional config options
+
+3. `<name>_cli/commands/`:
+   - Add command modules for each resource
+   - Implement `--table`/`-t` option on all list commands
+   - Implement `--filter`/`-f` option on all list commands
+   - Implement `--limit`/`-l` option on list commands
+
+**For Wrapper type:**
+1. `<name>_cli/client.py`:
+   - Map wrapper methods to underlying CLI commands
+   - Parse output and return records matching the command contract
+   - Implement auth_login() and auth_status() methods
+
+2. `<name>_cli/parsers.py`:
+   - Add custom parsers for each output format
+   - Handle different output patterns from underlying CLI
+
+**For Browser type:**
+1. **Capture real DOM data FIRST** (MANDATORY before writing any parsers):
+   ```bash
+   # Ensure browser is open and authenticated
+   <name> auth login
+   # In a debug script or REPL, drive the page via BrowserAutomation and
+   # call page.evaluate("document.documentElement.outerHTML") (or a more
+   # targeted DOM query) to capture the real HTML / structured data.
+   # Examine the actual structure, THEN write parsers/extractors.
+   ```
+
+2. `<name>_cli/parsers.py`:
+   - Normalize structured data returned from in-page JS extractors
+     (`page.evaluate(...)`) against the REAL captured DOM (never guess).
+   - Validate each parser against actual captured data.
+
+3. `<name>_cli/client.py`:
+   - Use the BrowserAutomation subclass for navigation + extraction (no
+     direct browser binary subprocess calls, no direct BrowserHarnessService
+     imports — only `self.config.get_browser()`).
+   - **Return models** from all methods
+
+## Step 6: Update .env.example
+
+Add all required environment variable names. `.env.example` documents shape only; it must not contain real values. Reusable CLI credentials are governed by `references/secrets.md` and must not be written into `.env.example` or any other `.env` file by an agent or human.
+
+```bash
+# API type example (shape only)
+API_KEY=
+<NAME>_BASE_URL=https://api.example.com
+
+# OAuth example (shape only; secret values come from the secret manager)
+CLIENT_ID=
+CLIENT_SECRET=
+<NAME>_ACCESS_TOKEN=
+<NAME>_REFRESH_TOKEN=
+<NAME>_TOKEN_EXPIRES_AT=
+```
+
+Document the boundary anywhere credentials are mentioned: reusable human-supplied secrets come from `<cli-tools-root>/_repo/_secret-manager/secrets.sh`; only CLI-managed runtime auth state belongs in profile `.env` files.
+
+## Step 6.5: Code Simplification Pass (Post-Implementation)
+
+After initial implementation is complete, run `/debloat` to review all new code for reuse, quality, and efficiency issues.
+
+Invoke the `debloat` skill on the CLI directory.
+
+**If `/debloat` identifies issues, fix them before proceeding.** Re-run `validate-cli-tool.sh` after any fixes to confirm scaffolding is still valid.
+
+## Step 7: Test the CLI
+
+Run basic tests manually:
+
+```bash
+cd <cli-tools-root>/<name>
+
+# Verify installation
+<name> --version
+<name> --help
+
+# Test auth commands
+<name> auth status
+<name> auth login
+
+# Test a list command
+<name> <resource> list --table
+<name> <resource> list | jq '.'
+```
+
+## Step 8: Run test-cli-tool (MANDATORY - ZERO FAILURES ALLOWED)
+
+Execute the test script to get structured JSON results:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
+```
+
+The script returns JSON with `success`, `summary`, `auth_required`, `failures[]` (with pre-formatted todos), and `raw_output`.
+
+**⛔ ABSOLUTE REQUIREMENT: ALL test failures MUST be fixed before proceeding.**
+
+- **Zero tolerance for test failures** - Do not skip, ignore, or rationalize any failure
+- **Fix every single issue** - Each failure in the JSON output must be addressed
+- **Re-run until all pass** - Execute the script repeatedly until `"success": true`
+- **Warnings are acceptable** - Only failures must be fixed; warnings may be addressed later
+- **No exceptions for "wrapper CLIs" or "passthrough patterns"** - If the test expects an option, implement it
+
+**Common failures and fixes:**
+| Failure | Fix |
+|---------|-----|
+| Missing `--table/-t` | Add: `table: bool = typer.Option(False, "--table", "-t", help="Display as table")` |
+| Missing `--limit/-l` | Add: `limit: int = typer.Option(100, "--limit", "-l", help="Maximum results")` |
+| Missing `--filter/-f` | Add: `filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter")` |
+| Missing `--properties/-p` | Add: `properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Fields")` |
+| Missing `--force/-F` on auth login | Add force flag to re-authenticate |
+| auth status format | Output must use the shared profile shape with `profiles[].authenticated` and `profiles[].credential_types` |
+| Command not in README | Add command documentation with examples |
+
+**DO NOT proceed to Step 9 until test-cli-tool.sh shows zero failures.**
+
+## Step 9: AI Review (MANDATORY for API CLIs)
+
+**After test-cli-tool passes, you MUST perform the AI review.** Read `<name>_cli/client.py` and `<name>_cli/commands/*.py`, then verify:
+
+### 9.1 --limit Implementation
+
+**CORRECT**: Limit passed to API request
+```python
+params = {"limit": limit}
+response = self._make_request("GET", "/items", params=params)
+```
+
+**WRONG**: Client-side slicing
+```python
+response = self._make_request("GET", "/items")
+return response["items"][:limit]  # BAD!
+```
+
+### 9.2 --filter Implementation
+
+**CORRECT**: Filters translated to API parameters
+```python
+api_params = filter_map.to_api_params(filters)
+params.update(api_params)
+response = self._make_request("GET", "/items", params=params)
+```
+
+**WRONG**: Client-side filtering after fetch
+```python
+response = self._make_request("GET", "/items")
+items = apply_filters(response["items"], filters)  # Only acceptable as fallback!
+```
+
+### 9.3 No Dedicated Filter Commands
+
+**FORBIDDEN**: Any of these patterns
+```python
+@app.command("filter")  # NO!
+def filter_items(...):
+    ...
+```
+
+**REQUIRED**: Filtering via --filter on list commands only
+```python
+@app.command("list")
+def list_items(
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f"),
+):
+    ...
+```
+
+### 9.4 Exponential Retry Implementation
+
+**Required characteristics:**
+- Formula: `base_delay * 2^attempt` with optional jitter
+- Only retries: 429, 500, 502, 503, 504, connection errors, timeouts
+- Honors `Retry-After` header
+- Configurable: max_retries, base_delay, max_delay, jitter
+
+### 9.5 Lean Contract Verification
+
+Verify that:
+- Command names, options, and stdout shape match the README and tests
+- Internal data representation is the smallest clear shape that preserves output
+- Direct dependencies are used by runtime package code
+- Metadata-only command modules contain only `COMMAND_CREDENTIALS`
+- Browser subclasses contain declarative hook constants only
+- README, `.env.example`, and auth guidance route reusable human-supplied secrets to the CLI-tools secret manager instead of any `.env` file
+
+### 9.6 Report AI Review Findings
+
+Present findings in this format:
+```
+### AI Review Results
+- --limit: [Correctly implemented at API level / INCORRECTLY client-side]
+- --filter: [Correctly implemented at API level / INCORRECTLY client-side / Not yet implemented]
+- Dedicated filter commands: [None found / VIOLATION: found filter command]
+- Exponential retry: [Correctly implemented / Missing or incorrect]
+- Lean architecture: [Smallest clear implementation / VIOLATION: unused helpers, models, or dependencies]
+- Secret storage guidance: [Reusable credentials routed to secret manager / VIOLATION: guidance stores secrets in `.env`]
+```
+
+**Fix any issues found before proceeding.** Re-run test-cli-tool.sh after fixes.
+
+## Step 9.5: Final Code Simplification
+
+Run `/debloat` one final time on all changes before committing.
+
+Invoke the `debloat` skill on the CLI directory.
+
+**If issues are found:**
+1. Fix them
+2. Re-run `test-cli-tool.sh` to confirm zero failures
+3. Only proceed when both `/debloat` is clean and tests pass
+
+## Step 10: Update cli_tools.md
+
+Add the new CLI to `<cli-tools-root>/_repo/docs/cli_tools.md`:
+
+1. Find the CLI tools table
+2. Add a new row in alphabetical order:
+
+```markdown
+| `<name>` | <Description> |
+```
+
+Example:
+```markdown
+| `stripe` | Stripe payments API - manage customers, charges, subscriptions |
+```
+
+## Step 11: Create CLI Tool Skill (Auto)
+
+After the CLI tool is fully created and tested, automatically create its associated CLI tool skill by invoking:
+
+```
+/create-cli-tool-skill <name>
+```
+
+This generates a repo-owned skill at `<cli-tools-root>/_repo/skills/<name>-cli/` with `SKILL.md` and `usage.json`, enabling natural language command discovery for the new CLI.
+
+**Do not ask the user** — this step runs automatically as part of CLI creation.
+</process>
+
+<success_criteria>
+CLI creation is complete when:
+- [ ] `/create-plan` executed and plan approved by user
+- [ ] new-cli-tool script executed successfully
+- [ ] CLI installs and runs (`<name> --version` works)
+- [ ] `<name> --help` shows all commands
+- [ ] `<name> auth status` works (outputs shared profile JSON) -- when auth commands are present
+- [ ] List commands have `--table`, `--filter`, `--limit`, `--properties` options
+- [ ] Get commands have `--table` option
+- [ ] auth login has `--force/-F` flag -- when auth commands are present
+- [ ] README documents ALL commands with examples
+- [ ] Output shape defined and covered by command contract tests
+- [ ] Internal representation is minimal: no unused helpers, models, or dependencies
+- [ ] Browser parsers validated against real DOM captures via BrowserAutomation (browser CLIs only)
+- [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (warnings acceptable)
+- [ ] `/debloat` post-implementation pass completed (Step 6.5)
+- [ ] AI Review completed (for API CLIs):
+  - [ ] --limit implemented at API level (not client-side slicing)
+  - [ ] --filter translates to API parameters (client-side only as fallback)
+  - [ ] No dedicated filter commands
+  - [ ] Exponential retry correctly implemented
+  - [ ] Internal representation is minimal and tied to the command contract
+- [ ] `/debloat` final pass completed (Step 9.5) — tests still pass after fixes
+- [ ] cli_tools.md has been updated with the new CLI
+- [ ] `/create-cli-tool-skill` invoked to generate the CLI's repo-owned skill
+- [ ] Git repo initialized and committed
+
+**⛔ BLOCKING REQUIREMENT: Do NOT mark CLI as complete if test-cli-tool.sh shows ANY failures.**
+</success_criteria>

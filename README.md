@@ -1,24 +1,41 @@
 # CLI Tools
 
-One repo for service-specific command-line tools. Each tool is a small Python CLI with a consistent command shape, predictable JSON-first output, shared browser/auth helpers where needed, and repo-local installation through `uv`.
+Service-specific command-line tools designed for AI agents and still practical
+for humans at a terminal.
 
-## At a Glance
+This repo contains small Python CLIs for APIs, browser-backed services, local
+apps, and automation targets. The tools are built around predictable command
+shapes, JSON-first output, clean stderr/stdout separation, shared auth helpers,
+and repo-local agent skill files so an agent can inspect command usage before it
+runs anything.
+
+## Why This Exists
+
+AI agents are much more reliable when service operations are exposed as narrow,
+documented commands instead of ad-hoc browser clicks or one-off scripts. These
+CLIs give agents a stable interface for common service tasks while keeping the
+same commands available for direct interactive use.
+
+This is not a collection of unrelated scripts. The repo defines a repeatable
+way to build Python CLI tools for agent use. Each tool adapts one service,
+application, API, browser workflow, or existing command-line program into a
+single predictable command surface that agents can inspect, call, cache, and
+verify consistently.
+
+## What's Included
 
 - 83 active CLI packages.
-- One install command for any tool: `_repo/_scripts/install-cli-tool.sh <tool-folder>`.
-- JSON is the default data output for automation and piping.
-- Human status messages belong on stderr; stdout stays clean for data.
-- Browser-backed tools use shared profile/auth helpers from `cli-tools-shared`.
-- Repo-local agent skills live in `_repo/skills` so agents can load CLI-specific usage guidance before running a tool.
+- Repo-local service skills in `_repo/skills/<tool>-cli/`.
+- Repo-local framework skills and expert agents for building and maintaining
+  the tools.
+- Generated `usage.json` command maps for agent command planning.
+- Shared auth, cache, profile, browser-session, and output helpers.
+- A Keychain-backed secret manager for CLI credentials.
+- One install command per tool.
 
-## Public Use Notice
+## Quick Start
 
-Some tools use official APIs. Others use browser automation, local app data, or
-undocumented service surfaces where no public API exists. These integrations are
-unofficial, may break when a service changes, and should be used only with
-accounts and data you are authorized to access.
-
-## Install a Tool
+Install a tool from its folder name:
 
 ```bash
 _repo/_scripts/install-cli-tool.sh <tool-folder>
@@ -32,13 +49,92 @@ _repo/_scripts/install-cli-tool.sh amazon
 _repo/_scripts/install-cli-tool.sh wordpress
 ```
 
+Then run the installed command:
+
+```bash
+airtable --help
+amazon orders list --table
+wordpress posts list --limit 5
+```
+
+## Design Principles
+
+- Commands should be predictable and discoverable through `--help`.
+- JSON is the default data output for automation and piping.
+- Human status messages belong on stderr; stdout stays clean for data.
+- Browser-backed tools use shared profile/auth helpers from `cli-tools-shared`.
+- API-backed tools use the same profile, cache, auth, and output patterns.
+- Credentials belong in the CLI-tools secret manager or tool-owned profile
+  state, never in source files.
+- Agent-facing usage guidance lives next to the repo in `_repo/skills`.
+
+## Architecture
+
+The repo is organized around a shared CLI framework, not around one-off command
+scripts. Each service folder is an installable Python package with a consistent
+entry point, command structure, output contract, and runtime state layout.
+
+At a high level, a tool is usually one of these adapters:
+
+- **API adapter:** wraps a public or private HTTP API in stable CLI commands.
+- **Browser adapter:** wraps a browser-authenticated workflow behind a CLI.
+- **Local app/data adapter:** wraps local app data, SQLite stores, AppleScript,
+  or operating-system automation.
+- **CLI adapter:** wraps an existing command-line program with a more predictable
+  command shape and output contract for agents.
+
+The common parts live in [`cli-tools-shared`](_repo/cli-tools-shared/). Tools
+reuse that package for the behaviors agents need to be consistent across
+services:
+
+- command app construction and standard command conventions
+- JSON-first output and table output for interactive use
+- authentication profile layout under `~/.local/share/cli-tools/<tool>`
+- shared cache commands and cache behavior
+- browser session/profile handling for browser-backed tools
+- reusable auth verification and status checks
+
+This means an agent does not need to relearn each integration from scratch. Once
+it knows the framework, it can expect familiar command groups such as `auth`,
+`cache`, `list`, and `get`, inspect the tool-specific `usage.json`, and then run
+the service operation through one predictable interface.
+
+### Caching
+
+Tools that read from APIs or browser-backed service surfaces use a common cache
+pattern. Cacheable commands keep network and browser reads repeatable, reduce
+unnecessary service calls, and make agent workflows easier to debug. The exact
+cache keys and freshness rules are tool-specific, but the operational shape is
+consistent: tools expose cache management commands, support fresh reads where
+needed, and keep cached data out of stdout unless the command is returning data.
+
+### Browser Automation
+
+Browser-backed tools use the shared browser/profile architecture instead of
+custom browser code per service. The shared package owns the common lifecycle:
+persistent browser profiles, auth markers, session checks, storage-state
+handling, and status verification. Individual tools provide the service-specific
+URLs and selectors needed to confirm authentication or collect data.
+
+That separation keeps browser automation predictable for agents: the tool owns
+the service workflow, while the shared package owns the browser session and auth
+plumbing.
+
+## Public Use Notice
+
+Some tools use official APIs. Others use browser automation, local app data, or
+undocumented service surfaces where no public API exists. These integrations are
+unofficial, may break when a service changes, and should be used only with
+accounts and data you are authorized to access.
+
 ## Shared Building Blocks
 
 | Component | Purpose |
 | --- | --- |
 | [`cli-tools-shared`](_repo/cli-tools-shared/) | Shared command, browser-auth, cache, profile, and output helpers used by tool packages. |
 | [`secret-manager`](_repo/_secret-manager/) | CLI-tools Keychain helper for credentials that belong to CLI tooling. |
-| [`skills`](_repo/skills/) | Agent-facing CLI skill bundles. Each installable tool has a matching `<tool>-cli` skill with command guidance and a `usage.json` command tree. |
+| [`skills`](_repo/skills/) | Agent-facing CLI skill bundles. Each installable tool has a matching `<tool>-cli` skill with command guidance and a `usage.json` command tree. Framework support skills such as `cli-tool` and `cli-tool-secrets` also live here. |
+| [`agents`](_repo/agents/) | Repo-owned expert agent definitions for maintaining CLI tools across agent harnesses. |
 
 ## Secret Manager
 
@@ -104,6 +200,34 @@ repo-local skill before running service operations for that CLI. Skill bundles
 are documentation and orchestration guidance only; they do not replace the
 installable CLI package under `<tool>/`.
 
+Two framework support skills also live in `_repo/skills`:
+
+- `_repo/skills/cli-tool/` is the framework skill for creating, testing,
+  updating, removing, and validating CLI tools in this repo.
+- `_repo/skills/cli-tool-secrets/` documents the CLI-tools secret-manager
+  workflow for reusable CLI credentials.
+
+These support skills intentionally do not map to installable service commands.
+They describe how to build and maintain the CLI framework itself.
+
+## Expert Agent
+
+The CLI tool expert agent is repo-owned so it can evolve with the framework
+instead of drifting in user-level agent folders:
+
+```text
+_repo/agents/cli-tool-expert.toml  # TOML agent format
+_repo/agents/cli-tool-expert.md    # Markdown agent format
+```
+
+User-level harness folders should symlink to those repo files. That keeps normal
+agent invocation working while making the repo the source of truth:
+
+```text
+~/.codex/agents/cli-tool-expert.toml -> <cli-tools-root>/_repo/agents/cli-tool-expert.toml
+~/.claude/agents/cli-tool-expert.md  -> <cli-tools-root>/_repo/agents/cli-tool-expert.md
+```
+
 ### `usage.json`
 
 `usage.json` is the structured command map for a CLI. It lets an agent inspect
@@ -157,9 +281,9 @@ flags are added or removed, defaults change, or examples in `--help` change.
 6. Verify by checking that every documented command path still appears in live
    help and that the skill references the current `usage.json`.
 
-Only skills with a corresponding installable CLI package belong in this
-directory. Supporting skills without a matching CLI package should live outside
-this repo.
+Most service skills in `_repo/skills` must have a corresponding installable CLI
+package. The explicit exceptions are framework support skills that maintain the
+repo itself, currently `cli-tool` and `cli-tool-secrets`.
 
 ## Tool Catalog
 
@@ -303,7 +427,12 @@ cli-tools/
     README.md
   _repo/cli-tools-shared/        # shared runtime library
   _repo/_secret-manager/          # credential helper for CLI tooling
+  _repo/agents/                   # repo-owned expert agent definitions
+    cli-tool-expert.toml
+    cli-tool-expert.md
   _repo/skills/                   # agent-facing skill bundles for CLI usage
+    cli-tool/
+    cli-tool-secrets/
     <tool>-cli/
       SKILL.md
       usage.json
