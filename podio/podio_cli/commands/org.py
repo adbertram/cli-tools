@@ -36,7 +36,7 @@ def list_orgs(
     Examples:
         podio org list
         podio org list --limit 10
-        podio org list --filter "name:ATA"
+        podio org list --filter "name:Example"
         podio org list --properties "org_id,name"
         podio org list --table
     """

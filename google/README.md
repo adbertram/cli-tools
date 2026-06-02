@@ -414,7 +414,7 @@ Or use the `--property` flag to override per-command.
 ```bash
 # List report assets
 google lookerstudio reports list
-google lookerstudio reports list --title "ATA" --limit 25
+google lookerstudio reports list --title "Example" --limit 25
 google lookerstudio reports list --owner owner@example.com --order-by title --table
 
 # Get a report asset by report ID
@@ -422,12 +422,12 @@ google lookerstudio reports get <report-id>
 google lookerstudio reports get <report-id> --properties name,title,owner
 
 # Generate a Linking API URL for creating a report from an existing report
-google lookerstudio reports create-link --report-id <report-id> --report-name "ATA Blog Dashboard"
+google lookerstudio reports create-link --report-id <report-id> --report-name "Example Dashboard"
 
 # Generate a Linking API URL with a Google Analytics data source configuration
 google lookerstudio reports create-link \
   --report-id <report-id> \
-  --report-name "ATA Blog Dashboard" \
+  --report-name "Example Dashboard" \
   --ga-alias ds0 \
   --ga-account-id <ga-account-id> \
   --ga-property-id <ga4-property-id> \

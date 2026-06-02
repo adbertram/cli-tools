@@ -30,7 +30,7 @@ claude-code-sessions auth status
 claude-code-sessions auth login
 
 # List sessions for a project
-claude-code-sessions sessions list --project Agent-ATABlogger
+claude-code-sessions sessions list --project ExampleProject
 ```
 
 ## How It Works
@@ -71,92 +71,92 @@ claude-code-sessions projects list
 
 ```bash
 # List sessions for a project
-claude-code-sessions sessions list --project Agent-ATABlogger
-claude-code-sessions sessions list --project Agent-ATABlogger
+claude-code-sessions sessions list --project ExampleProject
+claude-code-sessions sessions list --project ExampleProject
 
 # Get specific session
-claude-code-sessions sessions get <session-id> --project Agent-ATABlogger
+claude-code-sessions sessions get <session-id> --project ExampleProject
 ```
 
 ### Conversations
 
 ```bash
 # List conversations for a project
-claude-code-sessions conversations list --project Agent-ATABlogger
-claude-code-sessions conversations list -p Agent-ATABlogger --session-id abc123
-claude-code-sessions conversations list -p Agent-ATABlogger --since 1d --table
+claude-code-sessions conversations list --project ExampleProject
+claude-code-sessions conversations list -p ExampleProject --session-id abc123
+claude-code-sessions conversations list -p ExampleProject --since 1d --table
 
 # Filter by message count
-claude-code-sessions conversations list -p Agent-ATABlogger --filter "message_count:gt:10"
+claude-code-sessions conversations list -p ExampleProject --filter "message_count:gt:10"
 
 # Get a specific conversation
-claude-code-sessions conversations get abc123:1 --project Agent-ATABlogger
+claude-code-sessions conversations get abc123:1 --project ExampleProject
 ```
 
 ### Subagent Activity
 
 ```bash
 # List subagent activity for a project
-claude-code-sessions subagent-activity list --project Agent-ATABlogger
-claude-code-sessions subagent-activity list --project Agent-ATABlogger --since 1d
+claude-code-sessions subagent-activity list --project ExampleProject
+claude-code-sessions subagent-activity list --project ExampleProject --since 1d
 
 # Filter by agent type
-claude-code-sessions subagent-activity list --project Agent-ATABlogger --filter "agent_type:eq:Explore"
+claude-code-sessions subagent-activity list --project ExampleProject --filter "agent_type:eq:Explore"
 ```
 
 ### Tool Calls
 
 ```bash
 # List tool calls for a project
-claude-code-sessions tool-calls list --project Agent-ATABlogger
-claude-code-sessions tool-calls list --project Agent-ATABlogger --since 1d
+claude-code-sessions tool-calls list --project ExampleProject
+claude-code-sessions tool-calls list --project ExampleProject --since 1d
 
 # Filter by tool name
-claude-code-sessions tool-calls list --project Agent-ATABlogger --filter "tool:eq:Read"
+claude-code-sessions tool-calls list --project ExampleProject --filter "tool:eq:Read"
 ```
 
 ### Todos
 
 ```bash
 # List todos for a project
-claude-code-sessions todos list --project Agent-ATABlogger
-claude-code-sessions todos list --project Agent-ATABlogger --since 1d
+claude-code-sessions todos list --project ExampleProject
+claude-code-sessions todos list --project ExampleProject --since 1d
 
 # Filter by status
-claude-code-sessions todos list --project Agent-ATABlogger --filter "status:eq:completed"
+claude-code-sessions todos list --project ExampleProject --filter "status:eq:completed"
 
 # Get specific todo
-claude-code-sessions todos get <todo-id> --project Agent-ATABlogger
+claude-code-sessions todos get <todo-id> --project ExampleProject
 ```
 
 ### Skills
 
 ```bash
 # List skill/command invocations for a project
-claude-code-sessions skills list --project Agent-ATABlogger
-claude-code-sessions skills list --project Agent-ATABlogger --since 1h
+claude-code-sessions skills list --project ExampleProject
+claude-code-sessions skills list --project ExampleProject --since 1h
 
 # Filter by skill name
-claude-code-sessions skills list --project Agent-ATABlogger --filter "name:eq:start-post-pipeline"
+claude-code-sessions skills list --project ExampleProject --filter "name:eq:start-post-pipeline"
 
 # Get specific skill invocation
-claude-code-sessions skills get <skill-id> --project Agent-ATABlogger
+claude-code-sessions skills get <skill-id> --project ExampleProject
 ```
 
 ### Timeline
 
 ```bash
 # Consolidated timeline - show ALL activity for a session
-claude-code-sessions timeline consolidated --session-id <session-id> --project Agent-ATABlogger
-claude-code-sessions timeline consolidated -S <session-id> -p Agent-ATABlogger
-claude-code-sessions timeline consolidated -S <session-id> -p Agent-ATABlogger --hide-agent-tools
+claude-code-sessions timeline consolidated --session-id <session-id> --project ExampleProject
+claude-code-sessions timeline consolidated -S <session-id> -p ExampleProject
+claude-code-sessions timeline consolidated -S <session-id> -p ExampleProject --hide-agent-tools
 
 # Get timeline for a specific session (positional session ID)
-claude-code-sessions timeline get <session-id> --project Agent-ATABlogger
+claude-code-sessions timeline get <session-id> --project ExampleProject
 
 # List timeline across recent sessions
-claude-code-sessions timeline list --project Agent-ATABlogger --since 1d
-claude-code-sessions timeline list --project Agent-ATABlogger --limit 50
+claude-code-sessions timeline list --project ExampleProject --since 1d
+claude-code-sessions timeline list --project ExampleProject --limit 50
 ```
 
 The `consolidated` command shows all activity in a single view:

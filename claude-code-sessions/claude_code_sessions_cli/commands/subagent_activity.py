@@ -22,10 +22,10 @@ def list_subagent_activity(
     List all subagent invocations for a project.
 
     Example:
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --since 5h
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --filter "type:eq:Explore"
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions subagent-activity list --project ExampleProject
+        claude-code-sessions subagent-activity list --project ExampleProject --since 5h
+        claude-code-sessions subagent-activity list --project ExampleProject --filter "type:eq:Explore"
+        claude-code-sessions subagent-activity list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
@@ -83,7 +83,7 @@ def get_subagent(
     Get full details for a subagent invocation.
 
     Example:
-        claude-code-sessions subagent-activity get tool-123 --project Agent-ATABlogger
+        claude-code-sessions subagent-activity get tool-123 --project ExampleProject
     """
     try:
         client = get_client()

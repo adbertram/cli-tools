@@ -46,7 +46,7 @@ def test_analytics_properties_command_lists_ga4_properties(monkeypatch):
             "accountSummaries": [
                 {
                     "account": "accounts/123",
-                    "displayName": "ATA",
+                    "displayName": "Example",
                     "propertySummaries": [
                         {
                             "property": "properties/456",
@@ -68,7 +68,7 @@ def test_analytics_properties_command_lists_ga4_properties(monkeypatch):
     assert result.exit_code == 0
     assert json.loads(result.stdout) == [
         {
-            "account_name": "ATA",
+            "account_name": "Example",
             "account_id": "123",
             "property_name": "example.com",
             "property_id": "456",

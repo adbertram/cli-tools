@@ -26,12 +26,12 @@ def list_tool_calls(
     List all tool calls for a project.
 
     Example:
-        claude-code-sessions tool-calls list --project Agent-ATABlogger
-        claude-code-sessions tool-calls list --project Agent-ATABlogger --since 1d
-        claude-code-sessions tool-calls list --project Agent-ATABlogger --filter "status:eq:error"
-        claude-code-sessions tool-calls list --project Agent-ATABlogger --filter "tool:eq:Bash"
-        claude-code-sessions tool-calls list --project Agent-ATABlogger --include-subagents
-        claude-code-sessions tool-calls list --project Agent-ATABlogger --subagent-id toolu_01ABC...
+        claude-code-sessions tool-calls list --project ExampleProject
+        claude-code-sessions tool-calls list --project ExampleProject --since 1d
+        claude-code-sessions tool-calls list --project ExampleProject --filter "status:eq:error"
+        claude-code-sessions tool-calls list --project ExampleProject --filter "tool:eq:Bash"
+        claude-code-sessions tool-calls list --project ExampleProject --include-subagents
+        claude-code-sessions tool-calls list --project ExampleProject --subagent-id toolu_01ABC...
     """
     try:
         # Validate conversation_id requires session_id
@@ -101,7 +101,7 @@ def get_tool_call(
     Get details for a specific tool call.
 
     Example:
-        claude-code-sessions tool-calls get toolu_123 --project Agent-ATABlogger
+        claude-code-sessions tool-calls get toolu_123 --project ExampleProject
     """
     try:
         client = get_client()

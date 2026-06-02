@@ -387,7 +387,7 @@ def extract_project_name(encoded_path: str) -> str:
         encoded_path: Path like "-path-to-project-name"
 
     Returns:
-        Project name like "Agent-ATABlogger"
+        Project name like "ExampleProject"
     """
     # The last segment after the known prefixes is typically the project name
     # Handle cases like "-path-to-project-name"

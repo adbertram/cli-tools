@@ -55,7 +55,7 @@ class FakeLookerStudioClient:
             LookerStudioAsset(
                 assetType="REPORT",
                 name="report-123",
-                title="ATA Blog",
+                title="Example Blog",
                 trashed=False,
             )
         ]
@@ -134,7 +134,7 @@ def test_reports_list_outputs_report_assets_and_sends_search_options(monkeypatch
             "reports",
             "list",
             "--title",
-            "ATA",
+            "Example",
             "--owner",
             "owner@example.com",
             "--include-trashed",
@@ -150,10 +150,10 @@ def test_reports_list_outputs_report_assets_and_sends_search_options(monkeypatch
     )
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == [{"name": "report-123", "title": "ATA Blog"}]
+    assert json.loads(result.stdout) == [{"name": "report-123", "title": "Example Blog"}]
     assert client.search_calls == [
         {
-            "title": "ATA",
+            "title": "Example",
             "owner": "owner@example.com",
             "include_trashed": True,
             "order_by": "title",
@@ -177,7 +177,7 @@ def test_reports_get_outputs_single_report(monkeypatch):
     )
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == {"name": "report-123", "title": "ATA Blog"}
+    assert json.loads(result.stdout) == {"name": "report-123", "title": "Example Blog"}
 
 
 def test_parse_linking_parameter_requires_alias_key_value_shape():
@@ -193,7 +193,7 @@ def test_parse_linking_parameter_requires_alias_key_value_shape():
 def test_build_report_link_outputs_ga4_linking_api_url():
     link = build_report_link(
         report_id="report-123",
-        report_name="ATA Blog Dashboard",
+        report_name="Example Dashboard",
         page_id="page-1",
         mode="view",
         explain=True,
@@ -216,7 +216,7 @@ def test_build_report_link_outputs_ga4_linking_api_url():
         "c.pageId": "page-1",
         "c.mode": "view",
         "c.explain": "true",
-        "r.reportName": "ATA Blog Dashboard",
+        "r.reportName": "Example Dashboard",
         "r.measurementId": "G-ABC123",
         "r.keepMeasurementId": "false",
         "ds.ds0.connector": "googleAnalytics",
@@ -236,7 +236,7 @@ def test_reports_create_link_command_outputs_link_without_api_call():
             "--report-id",
             "report-123",
             "--report-name",
-            "ATA Blog Dashboard",
+            "Example Dashboard",
             "--ga-alias",
             "ds0",
             "--ga-account-id",
@@ -253,7 +253,7 @@ def test_reports_create_link_command_outputs_link_without_api_call():
     assert output["report_id"] == "report-123"
     assert query_params(output["url"]) == {
         "c.reportId": "report-123",
-        "r.reportName": "ATA Blog Dashboard",
+        "r.reportName": "Example Dashboard",
         "ds.ds0.connector": "googleAnalytics",
         "ds.ds0.accountId": "54516992",
         "ds.ds0.propertyId": "213025502",
@@ -290,7 +290,7 @@ def test_lookerstudio_client_search_reports_calls_assets_search_endpoint():
                 {
                     "assetType": "REPORT",
                     "name": "report-123",
-                    "title": "ATA Blog",
+                    "title": "Example Blog",
                     "trashed": False,
                 }
             ],
@@ -300,7 +300,7 @@ def test_lookerstudio_client_search_reports_calls_assets_search_endpoint():
     client = LookerStudioClient(session=session)
 
     reports = client.search_reports(
-        title="ATA",
+        title="Example",
         owner="owner@example.com",
         include_trashed=True,
         order_by="title",
@@ -315,7 +315,7 @@ def test_lookerstudio_client_search_reports_calls_assets_search_endpoint():
             "url": "https://datastudio.googleapis.com/v1/assets:search",
             "params": {
                 "assetTypes": ["REPORT"],
-                "title": "ATA",
+                "title": "Example",
                 "includeTrashed": True,
                 "owner": "owner@example.com",
                 "orderBy": "title",
@@ -333,7 +333,7 @@ def test_lookerstudio_client_accepts_search_report_assets_without_trashed_field(
                 {
                     "assetType": "REPORT",
                     "name": "report-123",
-                    "title": "ATA Blog",
+                    "title": "Example Blog",
                 }
             ],
         }
@@ -346,7 +346,7 @@ def test_lookerstudio_client_accepts_search_report_assets_without_trashed_field(
         LookerStudioAsset(
             assetType="REPORT",
             name="report-123",
-            title="ATA Blog",
+            title="Example Blog",
             trashed=None,
         )
     ]

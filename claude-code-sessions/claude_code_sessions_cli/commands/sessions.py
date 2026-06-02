@@ -38,7 +38,7 @@ def list_sessions(
     List sessions. With no --project / --project-path, returns sessions across all projects.
 
     Example:
-        claude-code-sessions sessions list --project Agent-ATABlogger
+        claude-code-sessions sessions list --project ExampleProject
         claude-code-sessions sessions list --date-alias yesterday --limit 5
         claude-code-sessions sessions list --date 2026-05-15 --min-tool-calls 1
         claude-code-sessions sessions list --date-alias yesterday --include-prompts first:3,last:3 --prompts-clean
@@ -202,7 +202,7 @@ def search_sessions(
     Search for sessions containing a query string.
 
     Example:
-        claude-code-sessions sessions search "authentication" --project Agent-ATABlogger
+        claude-code-sessions sessions search "authentication" --project ExampleProject
         claude-code-sessions sessions search "error" --project-path /path/to/project --since 1d
     """
     resolved = project_path or project

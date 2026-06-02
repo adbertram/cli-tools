@@ -8,7 +8,7 @@ WordPress publication, including:
 - Automatic link attribute processing (adds rel="sponsored nofollow")
 - Conversion to WordPress Block Editor (Gutenberg) format via blocks module
 
-Migrated from: Agent-ATABlogger/tools/wordpress/docx_utils.py
+Migrated from: ExampleProject/tools/wordpress/docx_utils.py
 Updated location: cli-tools/wordpress/wordpress_cli/utils/docx.py
 """
 

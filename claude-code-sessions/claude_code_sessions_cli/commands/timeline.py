@@ -76,10 +76,10 @@ def list_timeline(
     Combines skills, tool calls, subagent launches, and errors into one chronological view.
 
     Example:
-        claude-code-sessions timeline list --project Agent-ATABlogger --since 1h
-        claude-code-sessions timeline list --project Agent-ATABlogger --session-id abc123
-        claude-code-sessions timeline list --project Agent-ATABlogger --errors-only
-        claude-code-sessions timeline list --project Agent-ATABlogger --filter "event_type:eq:skill"
+        claude-code-sessions timeline list --project ExampleProject --since 1h
+        claude-code-sessions timeline list --project ExampleProject --session-id abc123
+        claude-code-sessions timeline list --project ExampleProject --errors-only
+        claude-code-sessions timeline list --project ExampleProject --filter "event_type:eq:skill"
     """
     try:
         # Validate conversation_id requires session_id
@@ -168,11 +168,11 @@ def consolidated_timeline(
     into one chronological timeline.
 
     Example:
-        claude-code-sessions timeline consolidated --session-id abc123 --project Agent-ATABlogger
-        claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --table
-        claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --hide-agent-tools
-        claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --show-thinking
-        claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --filter "status:eq:error" --wide
+        claude-code-sessions timeline consolidated --session-id abc123 --project ExampleProject
+        claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --table
+        claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --hide-agent-tools
+        claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --show-thinking
+        claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --filter "status:eq:error" --wide
     """
     try:
         client = get_client()
@@ -234,7 +234,7 @@ def get_timeline(
     Get timeline for a specific session.
 
     Example:
-        claude-code-sessions timeline get abc123 --project Agent-ATABlogger
+        claude-code-sessions timeline get abc123 --project ExampleProject
     """
     try:
         client = get_client()

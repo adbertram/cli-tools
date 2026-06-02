@@ -23,10 +23,10 @@ def list_skills(
     List all skill/command invocations for a project.
 
     Example:
-        claude-code-sessions skills list --project Agent-ATABlogger
-        claude-code-sessions skills list --project Agent-ATABlogger --since 1h
-        claude-code-sessions skills list --project Agent-ATABlogger --filter "name:eq:start-post-pipeline"
-        claude-code-sessions skills list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions skills list --project ExampleProject
+        claude-code-sessions skills list --project ExampleProject --since 1h
+        claude-code-sessions skills list --project ExampleProject --filter "name:eq:start-post-pipeline"
+        claude-code-sessions skills list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
@@ -72,7 +72,7 @@ def get_skill(
     Get details for a specific skill/command invocation.
 
     Example:
-        claude-code-sessions skills get <skill-id> --project Agent-ATABlogger
+        claude-code-sessions skills get <skill-id> --project ExampleProject
     """
     try:
         client = get_client()

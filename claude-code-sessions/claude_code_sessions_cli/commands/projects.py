@@ -62,7 +62,7 @@ def get_project(
     Get details for a specific project.
 
     Example:
-        claude-code-sessions projects get Agent-ATABlogger
+        claude-code-sessions projects get ExampleProject
     """
     try:
         client = get_client()

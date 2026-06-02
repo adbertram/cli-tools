@@ -22,10 +22,10 @@ def list_todos(
     List all todos from sessions in a project.
 
     Example:
-        claude-code-sessions todos list --project Agent-ATABlogger
-        claude-code-sessions todos list --project Agent-ATABlogger --filter "status:eq:pending"
-        claude-code-sessions todos list --project Agent-ATABlogger --since 1d
-        claude-code-sessions todos list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions todos list --project ExampleProject
+        claude-code-sessions todos list --project ExampleProject --filter "status:eq:pending"
+        claude-code-sessions todos list --project ExampleProject --since 1d
+        claude-code-sessions todos list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
@@ -68,7 +68,7 @@ def get_todo(
     Get a specific todo by ID.
 
     Example:
-        claude-code-sessions todos get <todo-id> --project Agent-ATABlogger
+        claude-code-sessions todos get <todo-id> --project ExampleProject
     """
     try:
         client = get_client()
