@@ -304,6 +304,103 @@ class _ServiceElement:
         )
 
 
+class _ServiceRequestResponse:
+    """Playwright-compatible response returned by ``context.request.get``.
+
+    Exposes the subset of the Playwright ``APIResponse`` API that callers
+    use: ``ok`` (bool), ``status`` (int), ``status_text`` (str), and
+    ``body()`` (bytes). The bytes come from a base64 string captured by an
+    in-page ``fetch`` (see :class:`_ServiceRequestContext`).
+    """
+
+    def __init__(self, *, ok: bool, status: int, status_text: str, body_base64: str):
+        self._ok = ok
+        self._status = status
+        self._status_text = status_text
+        self._body_base64 = body_base64
+
+    @property
+    def ok(self) -> bool:
+        return self._ok
+
+    @property
+    def status(self) -> int:
+        return self._status
+
+    @property
+    def status_text(self) -> str:
+        return self._status_text
+
+    def body(self) -> bytes:
+        import base64
+        return base64.b64decode(self._body_base64)
+
+
+class _ServiceRequestContext:
+    """Playwright-compatible ``context.request`` shim.
+
+    Performs HTTP GETs *inside the live page* via ``fetch`` so the request
+    inherits the authenticated browser session (cookies, headers). The
+    harness evaluates an ``async`` arrow function and awaits the promise, so
+    the resolved ``{ok, status, statusText, bodyBase64}`` object comes back
+    directly. Failures (network error, harness eval error) propagate — no
+    silent fallback.
+    """
+
+    def __init__(self, svc: BrowserHarnessService):
+        self._svc = svc
+
+    def get(self, url: str) -> _ServiceRequestResponse:
+        if not url:
+            raise BrowserHarnessError("context.request.get: url must be non-empty")
+        # fetch with same-origin/include credentials so the session cookie is
+        # sent. Read the body as an ArrayBuffer and base64-encode it inside the
+        # page (binary-safe; survives the JSON transport back to Python).
+        result = self._svc.evaluate(
+            """async (url) => {
+                const resp = await fetch(url, { credentials: 'include' });
+                const buf = await resp.arrayBuffer();
+                let binary = '';
+                const bytes = new Uint8Array(buf);
+                const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {
+                    binary += String.fromCharCode.apply(
+                        null, bytes.subarray(i, i + chunk)
+                    );
+                }
+                return {
+                    ok: resp.ok,
+                    status: resp.status,
+                    statusText: resp.statusText,
+                    bodyBase64: btoa(binary),
+                };
+            }""",
+            url,
+        )
+        if not isinstance(result, dict):
+            raise BrowserHarnessError(
+                f"context.request.get: unexpected fetch result for {url}: {result!r}"
+            )
+        return _ServiceRequestResponse(
+            ok=bool(result.get("ok")),
+            status=int(result.get("status") or 0),
+            status_text=str(result.get("statusText") or ""),
+            body_base64=str(result.get("bodyBase64") or ""),
+        )
+
+
+class _ServiceBrowserContext:
+    """Playwright-compatible ``page.context`` shim.
+
+    Only exposes ``request`` (an authenticated GET helper). The harness has
+    no real ``BrowserContext`` object; this binds the request shim to the
+    owning service so the GET runs against the live, logged-in page.
+    """
+
+    def __init__(self, svc: BrowserHarnessService):
+        self.request = _ServiceRequestContext(svc)
+
+
 def _select_option(svc: BrowserHarnessService, element_js: str, *,
                    value: str = None, label: str = None) -> None:
     if value is None and label is None:

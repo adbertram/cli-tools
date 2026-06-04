@@ -817,6 +817,65 @@ class BrowserHarnessService:
         value = self.evaluate("document.title")
         return value if isinstance(value, str) else ""
 
+    # ---------------- Authenticated requests (page.context.request) ----------------
+
+    @property
+    def context(self) -> "_ServiceBrowserContext":
+        """Playwright-compatible ``page.context`` accessor.
+
+        Callers written against Playwright reach the authenticated request
+        API via ``page.context.request.get(url)``. The harness has no
+        ``BrowserContext`` object, so this returns a thin shim whose
+        ``request.get(...)`` performs the GET *inside the live page* via
+        ``fetch``. Running the request in-page means it inherits the
+        browser's cookies and session — required for logged-in-only URLs
+        (e.g. Brick Owl message attachments). See
+        :class:`_ServiceRequestContext` for the response object contract.
+        """
+        self._require_open()
+        from ._elements import _ServiceBrowserContext
+        return _ServiceBrowserContext(self)
+
+    # ---------------- Dialog handling (page.once) ----------------
+
+    def once(self, event: str, handler: Any) -> None:
+        """Playwright-compatible one-time event registration.
+
+        Only ``event == "dialog"`` is supported. The harness drives Chrome
+        over CDP and does not surface Playwright's event/Dialog objects, so a
+        true one-shot listener with a real ``Dialog`` argument is not
+        available. Instead this installs a page-side auto-accept by overriding
+        ``window.confirm``/``window.alert``/``window.prompt`` so the *next*
+        native dialog the page raises (during the immediately following
+        interaction) is accepted automatically.
+
+        Behavior / limitations:
+          - The supplied ``handler`` is NOT invoked with a Dialog object. The
+            only real caller accepts the dialog (``dialog.accept()``); the JS
+            override unconditionally accepts, which matches that intent.
+          - The override persists on the current document until the next
+            navigation (a confirm() during a same-page form submit, then a
+            redirect, is the exact Brick Owl refund flow this covers). It is
+            therefore effectively one-shot for that interaction because the
+            post-submit redirect re-parses the document and drops the override.
+          - Any event name other than ``"dialog"`` raises
+            :class:`BrowserHarnessError` — no silent generic no-op.
+        """
+        self._require_open()
+        if event != "dialog":
+            raise BrowserHarnessError(
+                f"once: unsupported event {event!r}. Only 'dialog' is supported "
+                "by BrowserHarnessService (page-side auto-accept of "
+                "confirm/alert/prompt)."
+            )
+        # Accept confirm()/beforeunload-style prompts, no-op alert(). prompt()
+        # returns an empty string so a defaulted prompt resolves truthily.
+        self.evaluate(
+            "() => { window.confirm = () => true; "
+            "window.alert = () => {}; "
+            "window.prompt = () => ''; }"
+        )
+
     # ---------------- Keyboard ----------------
 
     def keyboard_press(self, key: str) -> Dict[str, Any]:

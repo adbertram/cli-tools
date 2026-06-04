@@ -918,3 +918,113 @@ def test_service_element_supports_scoped_locator_chaining():
 def test_scoped_css_js_prefixes_scope_for_leading_combinator():
     js = _scoped_css_js("baseJs", "> div")
     assert ':scope > div' in js
+
+
+# ---------------------------------------------------------------------------
+# page.context.request.get — authenticated in-page fetch
+#
+# Regression guard: brickowl ``download_attachments`` calls
+# ``self._page.context.request.get(url)`` to download logged-in-only message
+# attachments. ``BrowserHarnessService`` exposed neither ``context`` nor the
+# request shim; callers hit ``AttributeError: 'BrowserHarnessService' object
+# has no attribute 'context'``. These tests pin the request shim's presence
+# and the .ok/.status/.status_text/.body() contract.
+# ---------------------------------------------------------------------------
+
+
+def test_context_request_get_evaluates_authenticated_fetch(monkeypatch):
+    import base64
+
+    payload = b"\x89PNG\r\n\x1a\nbinary-bytes"
+    fetch_result = {
+        "ok": True,
+        "status": 200,
+        "statusText": "OK",
+        "bodyBase64": base64.b64encode(payload).decode("ascii"),
+    }
+    service, calls = _open_service_with_eval(monkeypatch, [fetch_result])
+
+    resp = service.context.request.get("https://www.brickowl.com/attach/1")
+
+    # The GET must run as an in-page fetch (inherits the auth session) and
+    # forward the URL as the evaluate arg.
+    assert "fetch(" in calls[0]
+    assert "credentials: 'include'" in calls[0]
+    assert resp.ok is True
+    assert resp.status == 200
+    assert resp.status_text == "OK"
+    assert resp.body() == payload
+
+
+def test_context_request_get_maps_non_ok_response(monkeypatch):
+    fetch_result = {
+        "ok": False,
+        "status": 404,
+        "statusText": "Not Found",
+        "bodyBase64": "",
+    }
+    service, _calls = _open_service_with_eval(monkeypatch, [fetch_result])
+
+    resp = service.context.request.get("https://www.brickowl.com/missing")
+
+    assert resp.ok is False
+    assert resp.status == 404
+    assert resp.status_text == "Not Found"
+    assert resp.body() == b""
+
+
+def test_context_request_get_rejects_non_dict_result(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [None])
+
+    with pytest.raises(BrowserHarnessError, match="unexpected fetch result"):
+        service.context.request.get("https://www.brickowl.com/x")
+
+
+def test_context_request_get_rejects_empty_url(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [{}])
+
+    with pytest.raises(BrowserHarnessError, match="must be non-empty"):
+        service.context.request.get("")
+
+
+def test_context_requires_open():
+    service = BrowserHarnessService("test-session")
+    assert service._opened is False
+    with pytest.raises(BrowserHarnessError, match="No browser open"):
+        _ = service.context
+
+
+# ---------------------------------------------------------------------------
+# page.once("dialog", ...) — one-time dialog auto-accept
+#
+# Regression guard: brickowl ``_submit_refund_and_verify`` calls
+# ``self._page.once("dialog", lambda dialog: dialog.accept())`` right before
+# submitting a refund (Brick Owl raises a JS confirm()). The harness exposed
+# no ``once``; the refund silently failed to post. These tests pin that
+# ``once("dialog", ...)`` installs the page-side auto-accept and that any
+# other event name fails loudly.
+# ---------------------------------------------------------------------------
+
+
+def test_once_dialog_installs_auto_accept(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.once("dialog", lambda dialog: dialog.accept())
+
+    assert len(calls) == 1
+    assert "window.confirm = () => true" in calls[0]
+    assert "window.alert = () => {}" in calls[0]
+
+
+def test_once_rejects_unsupported_event(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [None])
+
+    with pytest.raises(BrowserHarnessError, match="unsupported event"):
+        service.once("response", lambda _r: None)
+
+
+def test_once_requires_open():
+    service = BrowserHarnessService("test-session")
+    assert service._opened is False
+    with pytest.raises(BrowserHarnessError, match="No browser open"):
+        service.once("dialog", lambda _d: None)
