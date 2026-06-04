@@ -44,3 +44,10 @@ def test_model_reference_describes_models_as_optional():
         "references/model-standards.md still treats local models as mandatory. "
         f"Remove or rewrite: {found}"
     )
+
+
+def test_skill_places_usage_json_in_cli_skill_folder():
+    text = _read("SKILL.md")
+
+    assert "<cli-tools-root>/_repo/skills/<tool>-cli/usage.json" in text
+    assert "Do not look for the command map in the CLI source folder" in text

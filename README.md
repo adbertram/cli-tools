@@ -35,11 +35,22 @@ verify consistently.
 
 ## Quick Start
 
-Install a tool from its folder name:
+A fresh clone gives you the source, per-tool agent skills, and generated command
+maps. It does not automatically install every CLI command or register those
+skills with your agent harness. Do both steps before asking an agent to use a
+tool.
+
+### Install a CLI
 
 ```bash
+git clone <repo-url> cli-tools
+cd cli-tools
 _repo/_scripts/install-cli-tool.sh <tool-folder>
 ```
+
+The installer uses `uv tool install --editable`, so install `uv` first if your
+machine does not already have it. The installed command must also be on your
+shell `PATH`.
 
 Examples:
 
@@ -56,6 +67,50 @@ airtable --help
 amazon orders list --table
 wordpress posts list --limit 5
 ```
+
+Some tools require service credentials or browser-authenticated profile state
+before data commands work. Start with the tool's `auth` commands and the
+tool-specific README when authentication is required.
+
+### Set Up Your Agent Harness
+
+Point the agent at this repo's skills before asking it to use a CLI tool. The
+portable rule is:
+
+```text
+For CLI service operations, load <cli-tools-root>/_repo/skills/<tool>-cli/SKILL.md
+and inspect <cli-tools-root>/_repo/skills/<tool>-cli/usage.json before running
+the installed CLI command. Run CLI commands through Bash. For CLI-tool lifecycle
+work, use <cli-tools-root>/_repo/skills/cli-tool/SKILL.md and the repo-owned
+cli-tool-expert agent.
+```
+
+Use that rule in the place your harness reads project instructions:
+
+- **Codex:** add it to `AGENTS.md` in this repo, your consuming project, or your
+  user-level Codex instructions.
+- **Claude Code:** add it to `CLAUDE.md` in this repo, your consuming project,
+  or your user-level Claude instructions.
+- **Other agent harnesses:** register `<cli-tools-root>/_repo/skills` as a
+  skill or knowledge root when supported. If the harness does not support skill
+  roots, paste the rule above into its system, developer, or project
+  instructions.
+
+Optional repo-owned expert-agent links for harnesses that support custom agents:
+
+```bash
+CLI_TOOLS_ROOT="$(pwd)"
+mkdir -p "$HOME/.codex/agents" "$HOME/.claude/agents"
+ln -sfn "$CLI_TOOLS_ROOT/_repo/agents/cli-tool-expert.toml" \
+  "$HOME/.codex/agents/cli-tool-expert.toml"
+ln -sfn "$CLI_TOOLS_ROOT/_repo/agents/cli-tool-expert.md" \
+  "$HOME/.claude/agents/cli-tool-expert.md"
+```
+
+After setup, a good agent workflow is: identify the tool folder, load the
+matching `_repo/skills/<tool>-cli/SKILL.md`, inspect `usage.json`, verify the
+installed command with `<tool> --help`, authenticate if needed, then run the
+requested command.
 
 ## Design Principles
 

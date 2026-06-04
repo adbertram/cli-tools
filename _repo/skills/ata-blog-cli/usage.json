@@ -1,0 +1,2470 @@
+{
+  "tool": "ata-blog",
+  "description": "ATA Blog WordPress and Notion wrapper",
+  "discovered_at": "2026-06-03T12:26:14.226190+00:00",
+  "total_commands": 69,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "categories": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "cat_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Category ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "earnings": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post ID or slug to get earnings for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--period",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
+              "default": "last30d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD). Overrides --period",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD). Overrides --period",
+              "short": "-e"
+            },
+            {
+              "name": "--exclude-sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Skip sponsored posts"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--post-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by WordPress post ID"
+            },
+            {
+              "name": "--post-title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by post title (partial match)"
+            },
+            {
+              "name": "--period",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
+              "default": "last30d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD). Overrides --period",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD). Overrides --period",
+              "short": "-e"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--exclude-sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude posts tagged as Sponsored"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). E.g., earnings:gt:50, rpm:gt:20",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "media": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "delete": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "media_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "media_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Media ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "upload": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "notion-page": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "comments": {
+          "help": "",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--body",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment body text",
+                  "short": "-b"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "comment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion comment ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum comments to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., text:contains:bug)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-P"
+                },
+                {
+                  "name": "--no-context",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Exclude parent block context"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "content": {
+          "help": "",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "append": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Markdown file to append",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--output",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Output file path (default: stdout)",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "set": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Markdown file to set as content",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "create": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Article title"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Article description/synopsis"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category: IT Ops|Home Ops|DevOps|Cloud|Information Security|Ebook"
+            },
+            {
+              "name": "--keywords",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated SEO keywords"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post type (default: Standard)",
+              "default": "Standard"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override default status (template sets 'Idea' by default)",
+              "short": "-s"
+            },
+            {
+              "name": "--template-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Notion template ID (defaults to Standard ATA Tutorial AI-Created Idea)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by Status (single or pipe-separated)",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum articles",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-P"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "publish": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID to publish"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress status (draft/publish)",
+              "short": "-s",
+              "default": "draft"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Custom URL slug (auto-generated if not provided)"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)",
+              "short": "-d"
+            },
+            {
+              "name": "--auto-schedule",
+              "type": "bool",
+              "required": false,
+              "help": "Auto-find next available slot"
+            },
+            {
+              "name": "--no-duplicate-check",
+              "type": "bool",
+              "required": false,
+              "help": "Skip duplicate slug check"
+            },
+            {
+              "name": "--featured-image",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to featured image file to upload and attach"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Force republish even if already published",
+              "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "schema": {
+          "help": "",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add-property": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "database_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion database ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Property (column) name to create",
+                  "short": "-n"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Property type. Supported (empty-config types only): rich_text, url, checkbox, number, date, email, phone_number, files. (select/multi_select require options and are out of scope for this command.)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "search": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (searches title)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "statuses": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "Output as JSON array",
+              "short": "-j"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "New status value",
+              "short": "-s"
+            },
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "Property update (Name:value)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "raptive": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "disable": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--all",
+              "type": "bool",
+              "required": false,
+              "help": "--no-all             Disable ALL ads (default)",
+              "default": "all"
+            },
+            {
+              "name": "--content-only",
+              "type": "bool",
+              "required": false,
+              "help": "Disable only content ads",
+              "short": "-c"
+            },
+            {
+              "name": "--video-only",
+              "type": "bool",
+              "required": false,
+              "help": "Disable only video auto-insert",
+              "short": "-v"
+            },
+            {
+              "name": "--re-enable-days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Auto re-enable after N days",
+              "short": "-d"
+            },
+            {
+              "name": "--re-enable-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auto re-enable on date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "enable": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--all",
+              "type": "bool",
+              "required": false,
+              "help": "--no-all          Enable ALL ads (default)",
+              "default": "all"
+            },
+            {
+              "name": "--content-only",
+              "type": "bool",
+              "required": false,
+              "help": "Enable only content ads",
+              "short": "-c"
+            },
+            {
+              "name": "--video-only",
+              "type": "bool",
+              "required": false,
+              "help": "Enable only video auto-insert",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "fields": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "schema": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "Output as JSON",
+              "short": "-j"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum posts to check",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "remove": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID"
+            },
+            {
+              "name": "schema_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "SCHEMA_TYPE:{Article|TechArticle|Review}  Schema type (Article, TechArticle, Review)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--proficiency",
+              "type": "bool",
+              "required": false,
+              "help": "[Beginner|Intermediate|Expert]  Proficiency level for TechArticle (Beginner, Intermediate, Expert)",
+              "short": "-p"
+            },
+            {
+              "name": "--rating",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Rating value 1-5 for Review schema",
+              "short": "-r"
+            },
+            {
+              "name": "--item",
+              "type": "TEXT",
+              "required": false,
+              "help": "Name of item being reviewed for Review schema",
+              "short": "-i"
+            },
+            {
+              "name": "--dependencies",
+              "type": "TEXT",
+              "required": false,
+              "help": "Prerequisites/dependencies for TechArticle",
+              "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "types": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "shoutouts": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post",
+              "type": "TEXT",
+              "required": true,
+              "help": "WordPress post ID or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--position",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Insert after content block N (default: 1)",
+              "short": "-p",
+              "default": "1"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Shoutout HTML content"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post",
+              "type": "TEXT",
+              "required": true,
+              "help": "WordPress post ID or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--position",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Position of the shoutout to get",
+              "short": "-p"
+            },
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "Output as JSON",
+              "short": "-j"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post",
+              "type": "POST",
+              "required": false,
+              "help": "WordPress post ID or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--sponsor",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sponsor name from ATABlogger config/sponsors.json"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "remove": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post",
+              "type": "TEXT",
+              "required": true,
+              "help": "WordPress post ID or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--position",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Position of the shoutout to remove",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tags": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "tag_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Tag ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "wordpress-admin": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "plugins": {
+          "help": "",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "activate": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "deactivate": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "install": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "slug",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin slug from wordpress.org"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--activate",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Activate after installation",
+                  "short": "-a"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum plugins to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Forwarded filter expressions for wordpress admin",
+                  "short": "-f"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status (active, inactive)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "upgrade": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "wordpress-page": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page title"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page content"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page status (publish, draft, pending, private, future)",
+              "default": "draft"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "URL slug"
+            },
+            {
+              "name": "--from-docx",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to DOCX file to convert"
+            },
+            {
+              "name": "--from-markdown",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to Markdown file to convert"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)"
+            },
+            {
+              "name": "--parent",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Parent page ID"
+            },
+            {
+              "name": "--menu-order",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Order in menus"
+            },
+            {
+              "name": "--template",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page template slug"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page excerpt"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "wordpress-post": {
+      "help": "",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post title"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post content"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post status (publish, draft, pending, private, future)",
+              "default": "draft"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "URL slug"
+            },
+            {
+              "name": "--from-docx",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to DOCX file to convert"
+            },
+            {
+              "name": "--from-markdown",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to Markdown file to convert"
+            },
+            {
+              "name": "--sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Sponsored post (nofollow links, Sponsored tag, disable ads)"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)"
+            },
+            {
+              "name": "--categories",
+              "type": "TEXT",
+              "required": false,
+              "help": "Category IDs (comma-separated)"
+            },
+            {
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tag IDs (comma-separated)"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post excerpt"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--include-ads",
+              "type": "bool",
+              "required": false,
+              "help": "Live-scan the post URL for advertisers via Google Publisher Tag (adds 'ads' key). JSON only -- incompatible with --table",
+              "short": "-A"
+            },
+            {
+              "name": "--ad-checks",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Reloads per scan",
+              "default": "3"
+            },
+            {
+              "name": "--ad-interval",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Seconds between reloads",
+              "default": "5"
+            },
+            {
+              "name": "--ad-timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max seconds per check",
+              "default": "30"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Only show sponsored posts"
+            },
+            {
+              "name": "--exclude-sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude sponsored posts"
+            },
+            {
+              "name": "--include-ads",
+              "type": "bool",
+              "required": false,
+              "help": "Live-scan each post URL for advertisers via Google Publisher Tag (adds 'ads' key per item). JSON only -- incompatible with --table",
+              "short": "-A"
+            },
+            {
+              "name": "--ad-checks",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Reloads per scan",
+              "default": "3"
+            },
+            {
+              "name": "--ad-interval",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Seconds between reloads",
+              "default": "5"
+            },
+            {
+              "name": "--ad-timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max seconds per check",
+              "default": "30"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "schedule": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress post ID to schedule"
+            }
+          ],
+          "options": [
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)",
+              "short": "-d"
+            },
+            {
+              "name": "--auto-schedule",
+              "type": "bool",
+              "required": false,
+              "help": "Auto-find next available slot"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stats": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post ID or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)",
+              "short": "-e"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

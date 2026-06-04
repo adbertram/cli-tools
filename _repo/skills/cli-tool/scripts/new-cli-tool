@@ -23,6 +23,11 @@ CLI_TOOLS_DIR = Path(__file__).resolve().parents[4]
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 LOCAL_BIN_DIR = Path.home() / ".local" / "bin"  # Symlinks go here (works in all shells)
 CLI_TOOLS_DOC = CLI_TOOLS_DIR / "_repo" / "docs" / "cli_tools.md"
+SHARED_ROOT = CLI_TOOLS_DIR / "_repo" / "cli-tools-shared"
+if str(SHARED_ROOT) not in sys.path:
+    sys.path.insert(0, str(SHARED_ROOT))
+
+from cli_tools_shared.config import config_env_path_for_tool, env_path_for_profile
 
 # Common CLI command to brew package name mappings
 # Add entries here when the brew package name differs from the CLI command
@@ -49,6 +54,22 @@ BREW_PACKAGE_MAP = {
 # IMPORTANT: Auth-capable templates must resolve tool_dir via
 # cli_tools_shared.config.resolve_tool_dir(DIST_NAME), not from __file__.
 # Wrapper templates still use shared config paths for CLI_COMMAND / CLI_PATH.
+AUTH_ENV_FIELDS = {
+    "api_key": ("API_KEY",),
+    "personal_access_token": ("PERSONAL_ACCESS_TOKEN",),
+    "oauth": ("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN", "REFRESH_TOKEN", "TOKEN_EXPIRES_AT"),
+    "oauth_authorization_code": (
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "ACCESS_TOKEN",
+        "REFRESH_TOKEN",
+        "TOKEN_EXPIRES_AT",
+        "REDIRECT_URI",
+    ),
+    "username_password": ("USERNAME", "PASSWORD"),
+    "browser_session": (),
+    "none": (),
+}
 
 
 def print_step(msg: str):
@@ -228,6 +249,86 @@ def update_cli_tools_doc(tool_name: str, description: str):
     except Exception as e:
         print_warning(f"Failed to update docs/cli_tools.md: {e}")
         return False
+
+
+def update_env_file(env_path: Path, updates: dict[str, str]) -> None:
+    """Create or update an env file without discarding unrelated values."""
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    lines = env_path.read_text().splitlines() if env_path.exists() else []
+    updated_lines = []
+    seen_keys = set()
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if key in updates:
+                updated_lines.append(f"{key}={updates[key]}")
+                seen_keys.add(key)
+                continue
+        updated_lines.append(line)
+
+    for key, value in updates.items():
+        if key not in seen_keys:
+            updated_lines.append(f"{key}={value}")
+
+    env_path.write_text("\n".join(updated_lines) + "\n")
+
+
+def create_runtime_config(tool_name: str, tool_type: str, base_url: str, cli_command: str) -> None:
+    """Create the default runtime profile and root config for a scaffolded tool."""
+    profile_env_path = env_path_for_profile(tool_name, "default")
+    update_env_file(profile_env_path, {"ACTIVE": "true"})
+    print_success(f"Created default runtime profile at {profile_env_path}")
+
+    root_config_updates = {}
+    if base_url:
+        root_config_updates["BASE_URL"] = base_url
+    if tool_type == "wrapper" and cli_command:
+        root_config_updates["CLI_COMMAND"] = cli_command
+
+    if root_config_updates:
+        config_env_path = config_env_path_for_tool(tool_name)
+        update_env_file(config_env_path, root_config_updates)
+        print_success(f"Created runtime config at {config_env_path}")
+
+
+def create_env_example(
+    output_dir: Path,
+    tool_name: str,
+    tool_type: str,
+    base_url: str,
+    cli_command: str,
+    auth_types: list[str],
+) -> None:
+    """Create the source-only env template for a scaffolded tool."""
+    root_config_fields = {}
+    if base_url:
+        root_config_fields["BASE_URL"] = base_url
+    if tool_type == "wrapper" and cli_command:
+        root_config_fields["CLI_COMMAND"] = cli_command
+
+    auth_fields = []
+    for auth_type in auth_types:
+        auth_fields.extend(AUTH_ENV_FIELDS[auth_type])
+
+    lines = [
+        f"# {to_pascal_case(tool_name)} CLI configuration",
+        "ACTIVE=true",
+    ]
+
+    if root_config_fields:
+        lines.extend(["", "# Non-authentication configuration"])
+        lines.extend(f"{key}={value}" for key, value in root_config_fields.items())
+
+    if auth_fields:
+        lines.extend(["", "# Secret-manager references or CLI-managed auth state"])
+        for field in dict.fromkeys(auth_fields):
+            lines.append(f"{field}=")
+
+    (output_dir / ".env.example").write_text("\n".join(lines) + "\n")
+    print_success("Created .env.example")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -523,10 +624,8 @@ PASSWORD=secret://{name}-password
                 auth_file.unlink()
                 print_success("Removed auth.py (--auth-type none)")
 
-        # Create .env with ACTIVE=true (not in template since .gitignore excludes it)
-        env_file = output_dir / ".env"
-        env_file.write_text("ACTIVE=true\n")
-        print_success("Created .env with ACTIVE=true")
+        create_env_example(output_dir, name, args.type, args.base_url, cli_command, args.auth_type)
+        create_runtime_config(name, args.type, args.base_url, cli_command)
 
         print_success("Template files copied and processed")
     except Exception as e:

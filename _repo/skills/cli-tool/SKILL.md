@@ -95,6 +95,17 @@ After creating a CLI tool, you MUST update `<cli-tools-root>/_repo/docs/cli_tool
 - Document: command name and description
 </principle>
 
+<principle name="Usage JSON Lives In The CLI Skill">
+**The canonical `usage.json` for a service CLI lives in its repo-owned skill
+folder:** `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json`.
+
+Do not look for the command map in the CLI source folder, package folder,
+runtime profile folder, or installed uv tool directory. Service-operation agents
+must load `<cli-tools-root>/_repo/skills/<tool>-cli/SKILL.md` and consult the
+adjacent `usage.json` before running that CLI. CLI lifecycle workflows that
+change commands or parameters must refresh that same skill-folder `usage.json`.
+</principle>
+
 <principle name="⛔ Zero Test Failures Policy">
 **ALL test-cli-tool.sh failures MUST be fixed. No exceptions.**
 
