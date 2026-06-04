@@ -92,6 +92,17 @@ def test_config_uses_active_profile_marker(tmp_path, monkeypatch, isolated_data_
     assert config._get("API_URL") == "https://active.example.com"
 
 
+def test_storage_dir_uses_active_profile_data_dir(tmp_path, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path)
+    active = get_profiles_base_dir(tool_dir.name) / "active" / ".env"
+    _write_profile(active, active=True, api_url="https://active.example.com")
+
+    config = CustomConfig(tool_dir=tool_dir)
+
+    assert config.storage_dir == config.get_profile_data_dir()
+    assert config.storage_dir == active.parent
+
+
 def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     profiles_base = get_profiles_base_dir(tool_dir.name)

@@ -1277,6 +1277,11 @@ class BaseConfig:
         profile_dir.mkdir(parents=True, exist_ok=True)
         return profile_dir
 
+    @property
+    def storage_dir(self) -> Path:
+        """Backward-compatible profile storage directory for cache helpers."""
+        return self.get_profile_data_dir()
+
     def get_browser_data_dir(self) -> Path:
         """Get browser data directory for the active profile."""
         browser_dir = self.get_profile_data_dir() / "browser-data"
