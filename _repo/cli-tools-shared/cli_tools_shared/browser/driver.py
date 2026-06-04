@@ -768,6 +768,55 @@ class BrowserHarnessService:
         """Backward-compatible wrapper for legacy page-eval callers."""
         return {"result": self.evaluate(js, arg)}
 
+    def content(self) -> str:
+        """Return the full serialized HTML of the current page.
+
+        Playwright-compatible shim: callers written against the Playwright
+        ``page.content()`` API expect a method that returns the page's outer
+        HTML. The harness has no native equivalent, so we serialize the live
+        DOM via ``evaluate``.
+        """
+        self._require_open()
+        html = self.evaluate("document.documentElement.outerHTML")
+        return html if isinstance(html, str) else ""
+
+    def select_option(self, selector: str, value: str = None, *, label: str = None) -> None:
+        """Select an ``<option>`` within the first element matching ``selector``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.select_option(selector, value=..., label=...)`` API
+        expect this method on the page object. The harness resolves ``selector``
+        against the live DOM and selects the option by value or visible label,
+        reusing the same ``_select_option`` helper the element/locator wrappers
+        use so behavior is identical across call sites.
+        """
+        self._require_open()
+        from ._elements import _select_option
+        element_js = f"document.querySelector({json.dumps(selector)})"
+        _select_option(self, element_js, value=value, label=label)
+
+    def fill(self, selector: str, text: str) -> None:
+        """Fill the first element matching ``selector`` with ``text``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.fill(selector, text)`` API expect this method on the
+        page object. Resolves ``selector`` against the live DOM and reuses the
+        same fill behavior as the element/locator wrappers.
+        """
+        self._require_open()
+        from ._elements import _ServiceElement
+        _ServiceElement(self, css=selector).fill(text)
+
+    def title(self) -> str:
+        """Return the current page title.
+
+        Playwright-compatible shim for ``page.title()``; reads ``document.title``
+        from the live DOM via ``evaluate``.
+        """
+        self._require_open()
+        value = self.evaluate("document.title")
+        return value if isinstance(value, str) else ""
+
     # ---------------- Keyboard ----------------
 
     def keyboard_press(self, key: str) -> Dict[str, Any]:

@@ -396,6 +396,53 @@ def test_locator_select_option_supports_value(monkeypatch):
     assert "unread" in calls[0]
 
 
+def test_page_content_returns_serialized_html(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, ["<html><body>hi</body></html>"])
+
+    assert service.content() == "<html><body>hi</body></html>"
+    assert "outerHTML" in calls[0]
+
+
+def test_page_content_coerces_non_string_to_empty(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [None])
+
+    assert service.content() == ""
+
+
+def test_page_select_option_resolves_selector_and_label(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.select_option('select[name*="type"]', label="User Specific Coupon")
+
+    assert "document.querySelector(" in calls[0]
+    assert 'select[name*=\\"type\\"]' in calls[0]
+    assert "criterion = \"label\"" in calls[0]
+    assert "User Specific Coupon" in calls[0]
+
+
+def test_page_fill_resolves_selector_and_text(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.fill('input[name*="recipient"]', "chuchlama")
+
+    assert "document.querySelector(" in calls[0]
+    assert 'input[name*=\\"recipient\\"]' in calls[0]
+    assert "chuchlama" in calls[0]
+
+
+def test_page_title_returns_document_title(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, ["Coupons - Brick Owl"])
+
+    assert service.title() == "Coupons - Brick Owl"
+    assert "document.title" in calls[0]
+
+
+def test_page_title_coerces_non_string_to_empty(monkeypatch):
+    service, _calls = _open_service_with_eval(monkeypatch, [None])
+
+    assert service.title() == ""
+
+
 # ---------------------------------------------------------------------------
 # Phase B1 — Detect-and-refuse on live SingletonLock
 # ---------------------------------------------------------------------------
