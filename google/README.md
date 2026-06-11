@@ -253,6 +253,24 @@ google gmail archive <message-id1> <message-id2>
 google gmail labels list <message-id>
 google gmail labels add <message-id> --label STARRED
 google gmail labels remove <message-id> --label UNREAD
+
+# Manage Gmail filters (users.settings.filters)
+google gmail filters list
+google gmail filters list --table
+google gmail filters list --filter "from:contains:newsletter" --properties id --properties from
+google gmail filters get <filter-id>
+google gmail filters get <filter-id> --table
+
+# Create a filter: at least one criterion (--from/--to/--subject/--query/
+# --negated-query/--has-attachment/--size) and one action
+# (--add-label/--remove-label/--forward) are required
+google gmail filters create --from "news@example.com" --add-label <label-id>
+google gmail filters create --from "news@example.com" --remove-label INBOX  # auto-archive
+google gmail filters create --query "subject:invoice has:attachment" --add-label <label-id> --remove-label UNREAD
+google gmail filters create --subject "Daily digest" --size 5000000 --size-comparison larger --remove-label INBOX
+
+# Delete a filter (prompts unless --confirm/-y)
+google gmail filters delete <filter-id> --confirm
 ```
 
 **Note:** The `send`, `reply`, and `reply-all` commands show a preview by default. Add `--confirm` to actually send the email.

@@ -12,6 +12,7 @@ COMMAND_CREDENTIALS = {
     "reply": ["custom"],
     "reply-all": ["custom"],
     "labels": ["custom"],
+    "filters": ["custom"],
 }
 
 import typer
@@ -68,6 +69,8 @@ def _resolve_wsl_path(file_path: Path) -> Path:
 app = typer.Typer(help="Access Gmail messages")
 labels_app = typer.Typer(help="Manage message labels")
 app.add_typer(labels_app, name="labels")
+filters_app = typer.Typer(help="Manage Gmail filters")
+app.add_typer(filters_app, name="filters")
 
 
 def normalize_filename(name: str) -> str:
@@ -1367,6 +1370,189 @@ def labels_remove(
 
         print_success(f"Removed {len(label)} label(s) from message {message_id}")
         print_json({'message_id': message_id, 'removed_labels': label})
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+def normalize_gmail_filter(raw: dict) -> dict:
+    """Flatten a Gmail API filter resource into a single-level record."""
+    criteria = raw.get('criteria', {})
+    action = raw.get('action', {})
+    return {
+        'id': raw['id'],
+        'from': criteria.get('from'),
+        'to': criteria.get('to'),
+        'subject': criteria.get('subject'),
+        'query': criteria.get('query'),
+        'negated_query': criteria.get('negatedQuery'),
+        'has_attachment': criteria.get('hasAttachment'),
+        'exclude_chats': criteria.get('excludeChats'),
+        'size': criteria.get('size'),
+        'size_comparison': criteria.get('sizeComparison'),
+        'add_label_ids': action.get('addLabelIds'),
+        'remove_label_ids': action.get('removeLabelIds'),
+        'forward': action.get('forward'),
+    }
+
+
+@filters_app.command("list")
+def filters_list(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of filters to list"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., from:contains:newsletter)"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """List Gmail filters."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        response = service.users().settings().filters().list(userId='me').execute()
+        filters = [normalize_gmail_filter(raw) for raw in response.get('filter', [])]
+
+        if filter:
+            filters = apply_filters(filters, filter)
+        filters = filters[:limit]
+        if properties:
+            filters = [{k: v for k, v in record.items() if k in properties} for record in filters]
+
+        if table:
+            table_cols = properties[:4] if properties else ["id", "from", "subject", "add_label_ids"]
+            print_table(filters, table_cols, table_cols)
+        else:
+            print_json(filters)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("get")
+def filters_get(
+    filter_id: str = typer.Argument(..., help="Filter ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get a Gmail filter by ID."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        raw = service.users().settings().filters().get(
+            userId='me',
+            id=filter_id
+        ).execute()
+
+        if table:
+            record = normalize_gmail_filter(raw)
+            cols = ["id", "from", "to", "subject", "query", "add_label_ids", "remove_label_ids", "forward"]
+            print_table([record], cols, cols)
+        else:
+            print_json(raw)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("create")
+def filters_create(
+    from_: Optional[str] = typer.Option(None, "--from", help="Match sender address/pattern"),
+    to: Optional[str] = typer.Option(None, "--to", help="Match recipient address/pattern"),
+    subject: Optional[str] = typer.Option(None, "--subject", help="Match subject text"),
+    query: Optional[str] = typer.Option(None, "--query", help="Gmail search query the message must match"),
+    negated_query: Optional[str] = typer.Option(None, "--negated-query", help="Gmail search query the message must NOT match"),
+    has_attachment: bool = typer.Option(False, "--has-attachment", help="Match only messages with attachments"),
+    exclude_chats: bool = typer.Option(False, "--exclude-chats", help="Exclude chat messages"),
+    size: Optional[int] = typer.Option(None, "--size", help="Message size in bytes (use with --size-comparison)"),
+    size_comparison: Optional[str] = typer.Option(None, "--size-comparison", help="Size comparison: larger or smaller"),
+    add_label: Optional[List[str]] = typer.Option(None, "--add-label", help="Label ID to add (repeatable)"),
+    remove_label: Optional[List[str]] = typer.Option(None, "--remove-label", help="Label ID to remove, e.g. INBOX, UNREAD, SPAM (repeatable)"),
+    forward: Optional[str] = typer.Option(None, "--forward", help="Forward matching messages to this verified address"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Create a Gmail filter.
+
+    Requires at least one matching criterion and at least one action.
+    Common actions: --add-label <LABEL_ID>, --remove-label INBOX (archive),
+    --remove-label UNREAD (mark read), --add-label TRASH (delete).
+    """
+    try:
+        criteria = {
+            'from': from_,
+            'to': to,
+            'subject': subject,
+            'query': query,
+            'negatedQuery': negated_query,
+            'hasAttachment': has_attachment or None,
+            'excludeChats': exclude_chats or None,
+            'size': size,
+            'sizeComparison': size_comparison,
+        }
+        criteria = {k: v for k, v in criteria.items() if v is not None}
+
+        action = {
+            'addLabelIds': add_label or None,
+            'removeLabelIds': remove_label or None,
+            'forward': forward,
+        }
+        action = {k: v for k, v in action.items() if v is not None}
+
+        if not criteria:
+            print_error("At least one criterion is required (--from, --to, --subject, --query, --negated-query, --has-attachment, --size)")
+            raise typer.Exit(1)
+        if not action:
+            print_error("At least one action is required (--add-label, --remove-label, --forward)")
+            raise typer.Exit(1)
+
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        created = service.users().settings().filters().create(
+            userId='me',
+            body={'criteria': criteria, 'action': action}
+        ).execute()
+
+        print_json(created)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("delete")
+def filters_delete(
+    filter_id: str = typer.Argument(..., help="Filter ID"),
+    confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Delete a Gmail filter."""
+    try:
+        if not confirm:
+            typer.confirm(f"Are you sure you want to delete filter '{filter_id}'?", abort=True)
+
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        service.users().settings().filters().delete(
+            userId='me',
+            id=filter_id
+        ).execute()
+
+        print_json({'filter_id': filter_id, 'deleted': True})
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

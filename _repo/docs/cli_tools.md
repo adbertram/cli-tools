@@ -4,6 +4,8 @@
 |---|---|
 | `ata-blog` | Wrapper for ATA Blog operations across Notion, WordPress, Raptive, schema, earnings, and sponsored shoutouts. |
 | `codex-sessions` | Query and analyze OpenAI Codex session transcripts from ~/.codex |
+| `descript` | CLI interface for Descript projects, compositions, raw asset exports, and full desktop-app composition exports. |
+| `google` | CLI interface for Google Workspace APIs -- Gmail (messages, labels, filters), Calendar, Drive, Docs, Sheets, Search Console, Analytics (GA4), Chat, and Cloud. |
 | `harmony` | Manage Logitech Harmony hubs, activities, devices, and commands |
 | `jira` | CLI interface for Jira Cloud tickets |
 | `manus` | CLI interface for the Manus API v2: authenticate with an API key and create, wait on, inspect, update, stop, delete, and confirm AI tasks. |

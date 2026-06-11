@@ -22,6 +22,8 @@ google <service> <action> [arguments] [options]
 | List Gmail inbox | `google gmail list --table` |
 | Send an email | `google gmail send --to "user@example.com" --subject "Hi" --body "Hello"` |
 | Search Gmail | `google gmail search "from:boss subject:urgent" --table` |
+| List Gmail filters | `google gmail filters list --table` |
+| Create a Gmail filter | `google gmail filters create --from "news@example.com" --remove-label INBOX` |
 | List today's calendar events | `google calendar today --table` |
 | List Drive files | `google drive list --table` |
 | Search Drive | `google drive search "quarterly report" --table` |
@@ -41,7 +43,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **cloud** -- Google Cloud resources (projects, credentials)
 - **docs** -- Google Docs (list, get, read, create, export, update, tables)
 - **drive** -- Google Drive files (list, get, search, download)
-- **gmail** -- Gmail messages (list, get, read, search, send, archive, draft, reply, reply-all, labels, download-attachment)
+- **gmail** -- Gmail messages (list, get, read, search, send, archive, draft, reply, reply-all, labels, filters, download-attachment)
 - **searchconsole** -- Search Console (index, sites, urls)
 - **sheets** -- Google Sheets (list, get, read, create, append, update)
 </principle>
