@@ -66,6 +66,35 @@ The plan MUST document:
 
 Understanding existing patterns before modifying prevents introducing inconsistencies. The plan ensures changes align with established conventions.
 
+## Step 1.6: Browser Automation Approval Gate
+
+When an added or changed command needs a web action that is not already covered
+by the CLI's current API client, investigate in this order before writing code:
+
+1. Public API or official SDK support for the exact action
+2. Internal XHR/JSON API support in the authenticated web app
+3. Browser automation only if neither API path is usable
+
+If no public or internal API path is available and the command must use browser
+automation, stop before adding browser code, browser credentials, or selectors
+and ask Adam:
+
+```
+No usable public or internal API path is available for this action. Should I make this command browser-driven?
+```
+
+Continue only after explicit approval, then document the approval in the
+implementation notes and validate browser selectors against real DOM captures.
+
+## Step 1.7: Patch Against Current File Anchors
+
+Before using `apply_patch` in this workflow, reread the exact target file and
+copy anchors from the current on-disk lines. Do not build a hunk from a sentence
+in the plan, prior diff, test failure, or expected converted text unless that
+exact line currently exists. If the target text is embedded in a longer
+paragraph, anchor on the whole current line or an existing verified heading and
+insert relative to that.
+
 ## Step 2: Navigate to CLI Directory
 
 ```bash
@@ -75,17 +104,31 @@ cd <cli-tools-root>/<name>
 Verify the CLI structure:
 ```bash
 ls -la <name>_cli/
-ls -la <name>_cli/commands/
+find <name>_cli -maxdepth 2 -type f | sort
 ```
+
+If a test or cleanup step requires flattening a single
+`<name>_cli/commands/<group>.py` package into `<name>_cli/commands.py`, move the
+real module first, update imports, and delete `<name>_cli/commands/__init__.py`.
+Before `rmdir <name>_cli/commands`, remove only generated cache directories:
+
+```bash
+find <name>_cli/commands -type d -name __pycache__ -prune -exec rm -rf {} +
+rmdir <name>_cli/commands
+```
+
+Keep `rmdir` as the final deletion check. If it still fails, inspect and handle
+the remaining real files instead of recursively deleting the package directory.
 
 ## Step 3: Implement Changes by Type
 
 ### Adding a New Command to Existing Resource
 
-Edit `<name>_cli/commands/<resource>.py`:
+Edit `<name>_cli/main.py` for the scaffold-default layout, or
+`<name>_cli/commands/<resource>.py` if this CLI is already split:
 
 ```python
-@app.command("new-command")
+@items_app.command("new-command")
 def new_command(
     # Required parameters
     id: str = typer.Argument(..., help="Resource ID"),
@@ -126,7 +169,10 @@ def normalize_new_resource(raw: dict) -> dict:
 
 **Step 2: Create Command File**
 
-Create `<name>_cli/commands/newresource.py`:
+For the scaffold-default layout, add the new command group in
+`<name>_cli/main.py`. Only create `<name>_cli/commands/newresource.py` when the
+CLI already uses split command modules or the extra group clearly justifies the
+split:
 
 ```python
 import typer
@@ -168,17 +214,17 @@ def get_resource(
         print_json(result)
 ```
 
-2. Register in `<name>_cli/commands/__init__.py`:
+2. Mount the subcommand app in `<name>_cli/main.py`:
 
 ```python
-from . import auth, existingresource, newresource
+app.add_typer(newresource.app, name="newresource")
 ```
 
-3. Add to `<name>_cli/main.py`:
+3. If you created `commands/newresource.py`, import it in `main.py` before the
+mount:
 
 ```python
 from .commands import newresource
-app.add_typer(newresource.app, name="newresource")
 ```
 
 4. Implement client methods in `<name>_cli/client.py`:
@@ -206,7 +252,9 @@ def get_new_resource(self, id: str) -> dict:
 
 ### Modifying Authentication
 
-Edit `<name>_cli/client.py` and `<name>_cli/commands/auth.py`:
+Edit `<name>_cli/client.py` and the auth mount in `<name>_cli/main.py` (or
+`<name>_cli/commands/auth.py` only if this CLI already uses split auth
+modules):
 
 1. Update auth methods in client:
 ```python
@@ -309,6 +357,7 @@ The script returns JSON with `success`, `summary`, `failures[]`, and `auth_requi
 - Warnings are acceptable; failures are not
 - NEVER dismiss failures as "pre-existing", "auth-required", or "environment-related" without PROVING it by showing the same test passed before your changes
 - If `"success": false`, you are NOT done. Investigate every failure -- even if you believe the cause is external.
+- For auth-required CLIs without real credentials, follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
 ## Step 6.5: Final Code Simplification
 
@@ -321,21 +370,23 @@ Invoke the `debloat` skill on the CLI directory.
 2. Re-run `test-cli-tool.sh` to confirm zero failures
 3. Only proceed when both `/debloat` is clean and tests pass
 
-## Step 6.6: Update CLI Tool Skill (if exists)
+## Step 6.6: Refresh CLI Tool Skill Usage (if exists)
 
 If commands or parameters were added, modified, or removed, check for a corresponding CLI tool skill:
 
 ```bash
-ls <cli-tools-root>/_repo/skills/<name>-cli/usage.json 2>/dev/null
+test -f <cli-tools-root>/_repo/skills/<name>-cli/usage.json
 ```
 
-If the file exists, invoke the `create-cli-tool-skill` skill with "update" intent to re-discover commands and merge changes into `usage.json`:
+If the file exists, refresh its command map with the repo-owned generator:
 
-```
-/create-cli-tool-skill update <name>
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
 ```
 
-This keeps the skill's command reference in sync with the actual CLI.
+Do not import `cli_test_utils` from ad-hoc Python snippets. The generator owns
+the test-helper import path and keeps the skill-folder `usage.json` in sync with
+the installed CLI help.
 
 ## Step 7: Commit Changes
 

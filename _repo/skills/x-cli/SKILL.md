@@ -1,6 +1,10 @@
 ---
-name: "x-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute x operations using the `x` CLI tool. CLI interface for X API -- post and manage tweets. Triggers: x, x cli, twitter, tweet, post tweet, my tweets, x api, send tweet, delete tweet, x timeline"
+name: x-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute x operations using the `x` CLI tool.
+  CLI interface for X API -- post and manage tweets.
+  Triggers: x, x cli, twitter, tweet, post tweet, my tweets, x api, send tweet, delete tweet, x timeline
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 ---
-name: "gemini-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute gemini operations using the `gemini` CLI tool. CLI interface for Gemini API -- chat, image generation, video analysis, deep research, file management, and usage tracking. Triggers: gemini, gemini cli, gemini chat, gemini image, gemini research, ask gemini, generate image with gemini, analyze video with gemini, gemini api usage, gemini deep research"
+name: gemini-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute gemini operations using the `gemini` CLI tool.
+  CLI interface for Gemini API -- chat, image generation, video analysis, deep research, file management, and usage tracking.
+  Triggers: gemini, gemini cli, gemini chat, gemini image, gemini research, ask gemini, generate image with gemini, analyze video with gemini, gemini api usage, gemini deep research
 ---
 
 <objective>

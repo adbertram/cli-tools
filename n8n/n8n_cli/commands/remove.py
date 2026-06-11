@@ -19,10 +19,11 @@ def remove_node(
     keep_credentials: bool = typer.Option(False, "--keep-credentials", help="Keep associated credentials"),
 ):
     """
-    Remove a community node from the n8n server.
+    Remove a node package from the n8n server.
 
-    Uninstalls the npm package from the community nodes directory,
-    deletes associated credentials, and restarts n8n.
+    Third-party community packages are uninstalled through the running n8n
+    instance. Custom/generated packages are removed from the community nodes
+    directory and n8n is restarted.
 
     Example:
         n8n nodes remove brickowl

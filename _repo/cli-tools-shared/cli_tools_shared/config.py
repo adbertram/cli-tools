@@ -796,6 +796,12 @@ class BaseConfig:
     # List of (field_name, prompt_label, hide_input) tuples
     # Prompted AFTER standard credential prompts but BEFORE login_handler or browser login
     AUTH_EXTRA_PROMPTS: list = []
+    # Required non-secret config prompts collected before credential prompts.
+    # Example: [("BASE_URL", "Service base URL", False)]
+    AUTH_CONFIG_PROMPTS: list = []
+    # Preferred setup/help text shown before the first auth/config prompt.
+    # Use this for canonical token/app creation URLs and brief instructions.
+    AUTH_SETUP_INSTRUCTIONS: str = ""
 
     # Custom credential type field definitions (only used when CREDENTIAL_TYPES includes CUSTOM)
     CUSTOM_REQUIRED_FIELDS: list = []

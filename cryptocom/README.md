@@ -1,8 +1,10 @@
 # Crypto.com Exchange CLI
 
-Command-line access to the Crypto.com Exchange REST API for public market data and authenticated account data.
+## DESCRIPTION
 
-Official API docs: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
+The `cryptocom` CLI provides command-line access to Crypto.com Exchange API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

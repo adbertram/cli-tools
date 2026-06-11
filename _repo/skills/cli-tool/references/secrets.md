@@ -76,6 +76,34 @@ Before asking Adam for any CLI-tool credential:
 
 Never print secret values in logs, final answers, test output, screenshots, or command examples.
 
+## Interactive Prompt Automation
+
+Prefer non-echoing command input such as stdin, `SECRET_VALUE`, or a first-class CLI flag over automating an interactive credential prompt. Do not automate CLI credential prompts with `expect` while user logging is enabled. `expect` can echo sent input into terminal output, transcripts, and logs even when the underlying prompt would hide the value.
+
+When `expect` is unavoidable, disable logging before sending any secret and re-enable it only after the prompt has advanced past the secret input:
+
+```tcl
+set timeout -1
+log_user 1
+spawn <cli> auth login
+expect "Client ID:"
+send -- "$env(CLIENT_ID)\r"
+expect "Client Secret:"
+log_user 0
+send -- "$env(CLIENT_SECRET)\r"
+expect {
+    "Redirect URI:" {
+        log_user 1
+        send -- "$env(REDIRECT_URI)\r"
+    }
+    eof {
+        log_user 1
+    }
+}
+```
+
+Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into Terminal.app or GUI prompts through Computer Use; use the CLI-tools secret manager or the CLI's own non-echoing input path.
+
 ## Naming
 
 The canonical naming schema is `<cli-tool>-<type>`.

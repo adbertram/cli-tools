@@ -1,5 +1,6 @@
 """Videos commands for YouTube CLI."""
 COMMAND_CREDENTIALS = {
+    "chapters": ["no_auth"],
     "list": ["no_auth"],
     "get": ["no_auth"],
     "download": ["no_auth"],
@@ -11,8 +12,11 @@ from pathlib import Path
 
 from ..client import get_client, ClientError, MAX_RESOLUTION_FORMATS, MAX_RESOLUTION_VALUES
 from cli_tools_shared.output import print_success, print_error, print_info, print_table, print_json
+from ..chapter_validation import validate_chapters_description
 
 app = typer.Typer(help="Download YouTube videos")
+chapters_app = typer.Typer(help="Validate YouTube video chapter timestamps", no_args_is_help=True)
+app.add_typer(chapters_app, name="chapters")
 
 
 def _format_duration(seconds: int) -> str:
@@ -69,6 +73,47 @@ def _format_upload_date(date_str: str) -> str:
     if len(date_str) == 8:
         return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
     return date_str
+
+
+@chapters_app.command("validate")
+def chapters_validate(
+    description: str = typer.Option(
+        ...,
+        "--description",
+        help="Video description text to validate",
+    ),
+    duration_seconds: Optional[int] = typer.Option(
+        None,
+        "--duration-seconds",
+        help="Video duration in seconds; enables final-chapter length validation",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Validate YouTube manual Video Chapters in a description."""
+    if duration_seconds is not None and duration_seconds <= 0:
+        print_error("--duration-seconds must be greater than 0")
+        raise typer.Exit(1)
+
+    result = validate_chapters_description(
+        description,
+        duration_seconds=duration_seconds,
+    )
+
+    if table:
+        print_table(
+            [
+                {
+                    "valid": result["valid"],
+                    "chapter_count": result["chapter_count"],
+                    "issues": len(result["issues"]),
+                    "duration_checked": result["duration_checked"],
+                }
+            ],
+            ["valid", "chapter_count", "issues", "duration_checked"],
+            ["Valid", "Chapters", "Issues", "Duration Checked"],
+        )
+    else:
+        print_json(result)
 
 
 @app.command("list")

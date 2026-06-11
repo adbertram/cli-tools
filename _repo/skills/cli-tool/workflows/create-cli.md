@@ -107,7 +107,13 @@ Browser automation is appropriate when:
 - Authentication requires complex browser interactions (CAPTCHAs, MFA)
 ```
 
-Use **`browser` type** only as the last resort.
+Do not auto-select **`browser` type**. Stop and ask Adam:
+
+```
+No usable public or internal API path is available for this action. Should I make this command browser-driven?
+```
+
+Use **`browser` type** only after explicit approval.
 
 ### 2.4 Decision Tree
 
@@ -119,13 +125,33 @@ Is there an existing CLI tool for this service?
     ├── LEGACY/CLOSED AUTH ONLY → Ask whether Adam has the required credential; otherwise ask whether to use "browser" type
     └── NO → Did you discover internal APIs? (Step 2.2)
         ├── YES → Use "api" type (with discovered endpoints)
-        └── NO → Use "browser" type (last resort)
+        └── NO → STOP: ask whether Adam wants a browser-driven command
 ```
 
 **Report your findings to the user** before proceeding:
 - What investigation you performed
 - What APIs (if any) you discovered
 - Your recommended CLI type with justification
+- If no usable API exists, the explicit browser-driven approval question above
+
+### 2.4.5 Safe Repo Example Inspection
+
+When comparing nearby CLIs or tests during discovery or planning, do not guess
+optional paths such as `<other-cli>/tests/test_cli.py` or
+`<cli-tools-root>/_repo/skills/<example>-cli`. First discover existing service
+skill directories from the verified `<cli-tools-root>/_repo/skills` root, then
+inspect only discovered paths. Do not run `find`, `rg`, `sed`, `cat`, `nl`,
+`wc`, `head`, `tail`, `grep`, or similar with a guessed service-skill example
+path. If a preferred example skill is absent, report that absence and choose
+another discovered example or continue without one.
+This is the cli-tools-specific application of the file-operand rule in
+`/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
+
+Keep repository inspection searches line-local and literal unless multiline
+matching is deliberately required. Do not compose one complex `rg` regex with
+alternation and `\n` escapes for mixed code-shape checks; use separate `rg -F`
+probes with shaped no-match handling instead. Use `rg -U` only when the search
+must match across real line breaks, and state that intent before running it.
 
 ## Step 2.5: Implementation Planning
 
@@ -300,11 +326,12 @@ def list_items(self, limit: int = 100) -> list[dict]:
    - Verify environment variable names
    - Add any additional config options
 
-3. `<name>_cli/commands/`:
-   - Add command modules for each resource
+3. `<name>_cli/main.py` by default:
+   - Keep the initial resource group in `main.py`
    - Implement `--table`/`-t` option on all list commands
    - Implement `--filter`/`-f` option on all list commands
    - Implement `--limit`/`-l` option on list commands
+   - Split into `commands/<group>.py` only when multiple groups justify it
 
 **For Wrapper type:**
 1. `<name>_cli/client.py`:
@@ -402,6 +429,7 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 - **Re-run until all pass** - Execute the script repeatedly until `"success": true`
 - **Warnings are acceptable** - Only failures must be fixed; warnings may be addressed later
 - **No exceptions for "wrapper CLIs" or "passthrough patterns"** - If the test expects an option, implement it
+- **Auth-required CLIs without credentials** - Follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
 **Common failures and fixes:**
 | Failure | Fix |
@@ -418,7 +446,7 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 
 ## Step 9: AI Review (MANDATORY for API CLIs)
 
-**After test-cli-tool passes, you MUST perform the AI review.** Read `<name>_cli/client.py` and `<name>_cli/commands/*.py`, then verify:
+**After test-cli-tool passes, you MUST perform the AI review.** Read `<name>_cli/client.py`, `<name>_cli/main.py`, and any existing `<name>_cli/commands/*.py`, then verify:
 
 ### 9.1 --limit Implementation
 

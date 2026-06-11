@@ -1,6 +1,10 @@
 # ElevenLabs CLI
 
-A command-line interface for the [ElevenLabs API](https://elevenlabs.io/docs/api-reference). It supports API-key authentication, voice discovery, model inspection, subscription quota checks, pronunciation dictionaries, and text-to-speech audio generation.
+## DESCRIPTION
+
+The `elevenlabs` CLI provides a command-line interface for Elevenlabs API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

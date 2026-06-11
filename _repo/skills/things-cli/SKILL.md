@@ -1,6 +1,6 @@
 ---
 name: "things-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute things operations using the `things` CLI tool. CLI interface for Things 3 task management. Triggers: things, things cli, things todos, things tasks, my tasks, my todos, task list, things projects, things areas, things tags, create todo, complete task, today tasks"
+description: "MANDATORY: Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. Execute things operations using the `things` CLI tool. CLI interface for Things 3 task management. Triggers: things, things cli, things todos, things tasks, my tasks, my todos, task list, things projects, things areas, things tags, create todo, complete task, today tasks"
 ---
 
 <objective>
@@ -57,19 +57,19 @@ Exclude WF-tagged items by default when listing todos: pipe output through `jq '
 
 ### 1. `things projects create --area` hangs / times out and creates orphan project in Inbox
 
-**Symptom:** `things projects create "Title" --area <UUID> -n "..."` appears to hang for 60+ seconds with no output. One observed failure surfaced `AppleScript error: 74:501: execution error: Things3 got an error: AppleEvent timed out. (-1712)`. After the hang the project may actually exist but with `area: null` — the AppleScript created the project, then hung on a separate `set area of newProject to area id "..."` statement, leaving an orphan in the Inbox. Running the command again creates more duplicates. Read commands (`things projects list`, `things areas list`) work fine throughout. First observed on a freshly App-Store-installed Things 3 (3.22.11) on macOS Tahoe (Darwin 25.3.0).
+**Symptom:** `things projects create "Title" --area <UUID> -n "..."` (and the `~/.claude/hooks/things/create-project.sh` wrapper) appears to hang for 60+ seconds with no output. One observed failure surfaced `AppleScript error: 74:501: execution error: Things3 got an error: AppleEvent timed out. (-1712)`. After the hang the project may actually exist but with `area: null` — the AppleScript created the project, then hung on a separate `set area of newProject to area id "..."` statement, leaving an orphan in the Inbox. Running the command again creates more duplicates. Read commands (`things projects list`, `things areas list`) work fine throughout. First observed on a freshly App-Store-installed Things 3 (3.22.11) on macOS Tahoe (Darwin 25.3.0).
 
 **Cause:** Two compounding bugs in the `things` CLI's `create_project` AppleScript path:
 1. `make new project` and `set area` were two sequential statements. If Things3 hung between them (common right after first launch / during initial Things Cloud sync warmup), the project was committed without an area and `osascript` blocked indefinitely on the area assignment.
 2. `_run_applescript` ran `osascript` with no `timeout=` on the subprocess, so any AppleEvent hang produced an indefinite block instead of a clear error.
 
-**Fix:** Patched `<repo-root>/things/things_cli/client.py`:
+**Fix:** Patched `/Users/adam/Dropbox/GitRepos/cli-tools/things/things_cli/client.py`:
 - `create_project` now resolves the area first and passes it inside the `make new project` property bag (`{name:..., notes:..., area:theArea}`), so creation + area assignment is one atomic AppleScript operation. No more orphaned projects on hang.
 - `_run_applescript` now accepts `timeout=` (default 30s) and raises a `ClientError` with actionable next steps when `osascript` exceeds it.
 
 Reinstall after editing the editable source:
 ```bash
-_repo/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**
@@ -99,11 +99,11 @@ things projects delete <returned-uuid> --yes
 
 **Symptom:** `things todos create "X" --deadline 2026-05-02` (and the same flag on `update`, and `--when <ISO date>` or `--when today`) exits 0, prints `Created todo: <uuid>`, but the returned JSON shows `"deadline": null` and/or `"start_date": null`. Opening Things 3 visually shows the date IS set on the todo, so the write succeeded but the CLI response says it didn't. This breaks any automation that conditions on the JSON response.
 
-**Cause:** `_date_int_to_iso()` in `<repo-root>/things/things_cli/client.py` decoded `TMTask.startDate` and `TMTask.deadline` as "days since 2001-01-01" (Core Data NSDate semantics). Things 3 actually stores those columns as a packed integer: `(year << 16) | (month << 12) | (day << 7)`. With the wrong decoder, a real packed value like `132798336` (= 2026-05-15) was interpreted as ~363,557 days since 2001-01-01, which overflowed `datetime` and the `except (ValueError, OverflowError)` returned `None`. The AppleScript write path was always working; only the read-back was broken. Verified by comparing `osascript ... due date of theToDo` (correct date) against `SELECT deadline FROM TMTask` (packed int) for the same UUID.
+**Cause:** `_date_int_to_iso()` in `/Users/adam/Dropbox/GitRepos/cli-tools/things/things_cli/client.py` decoded `TMTask.startDate` and `TMTask.deadline` as "days since 2001-01-01" (Core Data NSDate semantics). Things 3 actually stores those columns as a packed integer: `(year << 16) | (month << 12) | (day << 7)`. With the wrong decoder, a real packed value like `132798336` (= 2026-05-15) was interpreted as ~363,557 days since 2001-01-01, which overflowed `datetime` and the `except (ValueError, OverflowError)` returned `None`. The AppleScript write path was always working; only the read-back was broken. Verified by comparing `osascript ... due date of theToDo` (correct date) against `SELECT deadline FROM TMTask` (packed int) for the same UUID.
 
 **Fix:** Rewrote `_date_int_to_iso` to decode the packed format and `_iso_to_date_int` to encode it (the inverse helper is currently unused but kept for parity). After editing the editable source, reinstall:
 ```bash
-_repo/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**
@@ -127,13 +127,13 @@ Clean up with `things todos delete <uuid> --yes` for each.
 
 **Cause:** Feature gap. `client.py:update_todo` did not accept `project` / `area` kwargs and `commands/todos.py:todos_update` did not surface the CLI flags. Things 3 AppleScript fully supports `set project of theToDo to project id "<uuid>"` and `set area of theToDo to area id "<uuid>"`, so the underlying capability existed — just not wired up.
 
-**Fix:** Added `--project` and `--area` flags to `things todos update` (mutually exclusive). Editable install at `<repo-root>/things/things_cli/`:
+**Fix:** Added `--project` and `--area` flags to `things todos update` (mutually exclusive). Editable install at `/Users/adam/Dropbox/GitRepos/cli-tools/things/things_cli/`:
 - `client.py` `update_todo()` accepts `project: Optional[str]` and `area: Optional[str]`. Each emits an `updates.append(...)` AppleScript fragment inside the existing `tell application "Things3" / set theToDo to to do id "<uuid>" / ...` block. Raises `ValueError` if both are passed.
 - `commands/todos.py` `todos_update` exposes `--project PROJECT_UUID` and `--area AREA_UUID`. CLI-level guard exits 2 with stderr message if both passed.
 
 After editing the editable source, reinstall is not required (it's an editable install — changes are live), but a sanity reinstall is safe:
 ```bash
-_repo/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**
@@ -147,22 +147,3 @@ things todos update <todo-uuid> --project X --area Y  # should exit 2 with "Pass
 **Recurrence Prevention:** Feature now exists in the editable install. If the editable mapping is ever broken or someone reinstalls from PyPI/origin without this patch, the symptom will be the same `No such option: --project` error and the same fix applies. If/when the upstream things-cli repo accepts a PR with this change, this Known Issue can be downgraded to a Domain Knowledge entry documenting the flags.
 
 **General rule:** When a CLI command requires moving a record across containers (project ↔ project, area ↔ area, project ↔ area), expose those moves on the `update` command rather than a separate `move` command. The single-update surface keeps the mental model "every property of a record is mutable via update" and avoids the cliff where some properties have flags and others require a different verb.
-
-### 5. Recurring backing todos are not the same row as visible Today instances
-
-**Symptom:** A recurring todo is visible in Things Today, but `things todos complete <uuid>` against the recurring backing row times out or leaves the visible Today task incomplete. `things todos list --when today` can also miss overdue generated instances if it exact-matches `startDate`.
-
-**Cause:** Things stores repeating todos as a backing/template row plus generated instance rows. The backing row contains recurrence metadata (`rt1_recurrenceRule`), while actionable Today instances point back through `rt1_repeatingTemplate`. Completing the backing row does not complete the visible generated instance. Things date columns are packed date integers, and the Today view includes generated instances with `startDate <= today`, not only exact today.
-
-**Fix:** Patched `<repo-root>/things/things_cli/client.py`:
-- `list_todos(when="today")` now uses Things packed dates and includes overdue generated instances with `startDate <= today`.
-- `complete_todo()` resolves recurring backing rows to the latest open generated instance due today or earlier, then completes that instance.
-
-**Verification:**
-```bash
-uv run --with pytest python -m pytest
-things todos list --when today --status incomplete --exclude-tag WF --properties uuid,title,status,deadline,start_date,when
-things todos complete <recurring-backing-uuid>
-```
-
-**General rule:** For recurring Things todos, automate against generated instance rows for user-visible actions, and treat backing rows as recurrence definitions.

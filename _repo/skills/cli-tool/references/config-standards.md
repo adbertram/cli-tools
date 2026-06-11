@@ -74,6 +74,28 @@ class Config(BaseConfig):
 
 For tools that manage their own custom field set (instead of declaring `CREDENTIAL_TYPES`), set `CREDENTIAL_TYPES: list = []` and override `has_credentials` / `save_*` / `clear_credentials`. The path resolution still inherits from `BaseConfig`.
 
+## Direct Python Probes
+
+For ad-hoc Python imports outside the CLI entrypoint, use the installed CLI
+interpreter and pass an explicit profile when auth state matters:
+
+```bash
+launcher="$(command -v mytool)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" -c "from mytool_cli.config import get_config; print(get_config(profile='default').env_file_path)"
+```
+
+Profile resolution priority is:
+1. Explicit `profile=...` / `Config(profile=...)`
+2. Runtime command-profile override set by the CLI entrypoint
+3. Active profile for the requested auth type
+4. Single active profile for CLIs with one implicit auth type
+
+`BaseConfig` does not read ad-hoc shell variables such as `JIRA_PROFILE` or
+`CLI_TOOLS_PROFILE` to pick a profile for direct Python probes. If multiple
+profiles are active and the probe does not pass `profile=...`, `ConfigError`
+is the expected behavior.
+
 ## What Goes in the Root `.env`
 - API base URLs
 - Cache enable/TTL settings

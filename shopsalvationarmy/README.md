@@ -1,6 +1,10 @@
 # ShopSalvationArmy CLI Guide
 
-Complete reference for the `shopsalvationarmy` command-line interface for searching Shop The Salvation Army auctions.
+## DESCRIPTION
+
+The `shopsalvationarmy` CLI provides a command-line interface for Shop The Salvation Army auction site.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 

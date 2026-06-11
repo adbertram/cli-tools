@@ -19,6 +19,7 @@ import typer
 from .output import print_success, print_error, print_info
 
 DEFAULT_TOKEN_EXPIRY = 7200
+DEFAULT_TOKEN_EXCHANGE_TIMEOUT = 30
 
 
 def parse_and_save_tokens(config, token_response: dict, fallback_refresh: str = None) -> int:
@@ -109,6 +110,22 @@ def build_token_auth_headers(config) -> tuple:
     return headers, extra_data
 
 
+def exchange_oauth_code_for_tokens(token_url: str, headers: dict, token_data: dict):
+    """Exchange an OAuth authorization code for tokens with a bounded timeout."""
+    try:
+        return requests.post(
+            token_url,
+            headers=headers,
+            data=token_data,
+            timeout=DEFAULT_TOKEN_EXCHANGE_TIMEOUT,
+        )
+    except requests.Timeout as exc:
+        raise RuntimeError(
+            f"Token exchange timed out after {DEFAULT_TOKEN_EXCHANGE_TIMEOUT} seconds. "
+            "Retry auth login and verify the OAuth token endpoint is reachable."
+        ) from exc
+
+
 def oauth_login(config, force: bool) -> None:
     """Built-in OAuth 2.0 Authorization Code login handler.
 
@@ -197,7 +214,11 @@ def oauth_login(config, force: bool) -> None:
         token_data["code_verifier"] = code_verifier
 
     token_url = config.OAUTH_TOKEN_URL
-    response = requests.post(token_url, headers=headers, data=token_data)
+    try:
+        response = exchange_oauth_code_for_tokens(token_url, headers, token_data)
+    except RuntimeError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
 
     if response.status_code != 200:
         try:

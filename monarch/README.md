@@ -1,6 +1,10 @@
 # Monarch CLI
 
-A command-line interface for [Monarch Money](https://monarchmoney.com) personal finance.
+## DESCRIPTION
+
+The `monarch` CLI provides a command-line interface for Monarch API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

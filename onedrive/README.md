@@ -1,6 +1,10 @@
 # OneDrive CLI
 
-A command-line interface for [OneDrive for Business](https://learn.microsoft.com/en-us/graph/onedrive-concept-overview) via Microsoft Graph API.
+## DESCRIPTION
+
+The `onedrive` CLI provides a command-line interface for Onedrive API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

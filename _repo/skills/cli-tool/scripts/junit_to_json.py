@@ -105,7 +105,7 @@ def main() -> int:
 
     success = exit_code == 0 and precheck_status != "failed"
 
-    json.dump({
+    payload = {
         "success": success,
         "cli_name": cli_name,
         "command_filter": command,
@@ -114,9 +114,11 @@ def main() -> int:
         "auth_command": auth_command,
         "failures": failures,
         "raw_output": raw_output,
-    }, sys.stdout, indent=2)
+    }
+
+    json.dump(payload, sys.stdout, indent=2)
     sys.stdout.write("\n")
-    return 0
+    return 0 if success else 1
 
 
 if __name__ == "__main__":

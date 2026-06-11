@@ -1,6 +1,10 @@
 ---
-name: "freshbooks-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute freshbooks operations using the `freshbooks` CLI tool. CLI interface for FreshBooks accounting API -- manage invoices and customers. Triggers: freshbooks, freshbooks cli, freshbooks invoices, freshbooks customers, create invoice, send invoice, freshbooks billing, unpaid invoices, freshbooks accounting"
+name: freshbooks-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute freshbooks operations using the `freshbooks` CLI tool.
+  CLI interface for FreshBooks accounting API -- manage invoices and customers.
+  Triggers: freshbooks, freshbooks cli, freshbooks invoices, freshbooks customers, create invoice, send invoice, freshbooks billing, unpaid invoices, freshbooks accounting
 ---
 
 <objective>

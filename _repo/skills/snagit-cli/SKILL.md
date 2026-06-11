@@ -1,6 +1,10 @@
 ---
-name: "snagit-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute snagit operations using the `snagit` CLI tool. CLI for managing Snagit capture files (.snagx format) -- list, view, and export captures. Triggers: snagit, snagit cli, snagit captures, snagit screenshots, export snagit, view snagit capture, list snagit files, snagx files, snagit images"
+name: snagit-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute snagit operations using the `snagit` CLI tool.
+  CLI for managing Snagit capture files (.snagx format) -- list, view, and export captures.
+  Triggers: snagit, snagit cli, snagit captures, snagit screenshots, export snagit, view snagit capture, list snagit files, snagx files, snagit images
 ---
 
 <objective>

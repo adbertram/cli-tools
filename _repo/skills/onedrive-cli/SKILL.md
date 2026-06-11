@@ -1,6 +1,10 @@
 ---
-name: "onedrive-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute onedrive operations using the `onedrive` CLI tool. OneDrive for Business CLI via Microsoft Graph API. Triggers: onedrive, onedrive cli, onedrive files, onedrive folders, onedrive drives, list files in onedrive, upload to onedrive, download from onedrive, share onedrive file, onedrive sharing link, my onedrive"
+name: onedrive-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute onedrive operations using the `onedrive` CLI tool.
+  OneDrive for Business CLI via Microsoft Graph API.
+  Triggers: onedrive, onedrive cli, onedrive files, onedrive folders, onedrive drives, list files in onedrive, upload to onedrive, download from onedrive, share onedrive file, onedrive sharing link, my onedrive
 ---
 
 <objective>

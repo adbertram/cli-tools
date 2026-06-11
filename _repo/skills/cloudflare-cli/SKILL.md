@@ -1,6 +1,10 @@
 ---
-name: "cloudflare-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute cloudflare operations using the `cloudflare` CLI tool. CLI interface for Cloudflare API \u2014 manage zones, DNS records, cache, and IP access rules. Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare"
+name: cloudflare-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute cloudflare operations using the `cloudflare` CLI tool.
+  CLI interface for Cloudflare API — manage zones, DNS records, cache, and IP access rules.
+  Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 ---
-name: "descript-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute descript operations using the `descript` CLI tool. CLI interface for Descript API -- manage projects, compositions, video exports, and network monitoring. Triggers: descript, descript cli, descript projects, descript compositions, descript export, export descript video, list descript projects, descript assets, descript monitor"
+name: descript-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute descript operations using the `descript` CLI tool.
+  CLI interface for Descript API -- manage projects, compositions, video exports, and network monitoring.
+  Triggers: descript, descript cli, descript projects, descript compositions, descript export, export descript video, list descript projects, descript assets, descript monitor
 ---
 
 <objective>
@@ -35,6 +39,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **projects** — List and inspect Descript projects (find project IDs)
 - **compositions** — Manage compositions within projects (list, get, export video, list assets)
 - **monitor** — Monitor Descript app network activity for debugging (start, stop, status, tail)
+</principle>
+
+<principle name="Composition Export Wait">
+Full composition exports render through the Descript desktop app and can take awhile. The CLI waits up to 30 minutes after the save dialog is accepted before timing out.
 </principle>
 </essential_principles>
 

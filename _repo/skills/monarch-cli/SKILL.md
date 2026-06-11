@@ -39,15 +39,15 @@ For requests to review, categorize, recategorize, audit, clean up, or start revi
 
 For these review workflows, do not read `usage.json`, run `monarch` commands, list transactions, load categories, or perform setup in the parent session before spawning the reviewer. The reviewer agent owns those steps.
 
-The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `_repo/skills/agent-expert/references/global-standards.md`.
+The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
 </principle>
 
 <principle name="Review Rules Memory">
-**MANDATORY: Read `rules.md` at the start of EVERY review — before listing categories or transactions.** It is the persistent memory of the user's preferences (categorization defaults, rule-recommendation policy, evidence thresholds, skip lists). Apply every rule there as the baseline policy for the run.
+**MANDATORY: Read `rules.md` at the start of EVERY review — before listing categories or transactions.** It is the persistent memory of Adam's preferences (categorization defaults, rule-recommendation policy, evidence thresholds, skip lists). Apply every rule there as the baseline policy for the run.
 
-**WRITE ON FEEDBACK.** Whenever the user gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `rules.md` BEFORE ending the review. Mirror the edit to both `_repo/skills/monarch-cli/rules.md` and `_repo/skills/monarch-cli/rules.md`. Mention each rule added or changed in the work summary.
+**WRITE ON FEEDBACK.** Whenever Adam gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `/Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/rules.md` BEFORE ending the review. The Claude and Codex runtime roots are symlinks to the central skill folder, so do not create separate runtime copies. Mention each rule added or changed in the work summary.
 
-Do not invent rules from a single category change. Only persist what the user has explicitly stated or unmistakably framed as a durable preference.
+Do not invent rules from a single category change. Only persist what Adam has explicitly stated or unmistakably framed as a durable preference.
 </principle>
 
 <principle name="Usage Reference">
@@ -74,7 +74,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <reference_index>
 - **`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
-- **`rules.md`** -- Persistent memory of the user's review preferences. MANDATORY reading at the start of every transaction review. Update on user feedback.
+- **`rules.md`** -- Persistent memory of Adam's review preferences. MANDATORY reading at the start of every transaction review. Update on user feedback.
 - **`workflows/recommend-rule.md`** -- Decision criteria for when the reviewer should propose creating a Monarch rule alongside a single-transaction category change. MANDATORY reading whenever the reviewer is about to surface a category-change recommendation.
 - **`data/venmo-classification-rules.json`** -- Explicit deterministic Venmo note/counterparty to Monarch category mappings. Do not infer categories outside these rules.
 </reference_index>

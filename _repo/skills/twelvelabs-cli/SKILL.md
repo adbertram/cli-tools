@@ -1,6 +1,10 @@
 ---
-name: "twelvelabs-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute twelvelabs operations using the `twelvelabs` CLI tool. CLI interface for TwelveLabs video AI API. Triggers: twelvelabs, twelvelabs cli, twelve labs, video ai, video analysis, analyze video, video index, generate text from video, video understanding, video transcription"
+name: twelvelabs-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute twelvelabs operations using the `twelvelabs` CLI tool.
+  CLI interface for TwelveLabs video AI API.
+  Triggers: twelvelabs, twelvelabs cli, twelve labs, video ai, video analysis, analyze video, video index, generate text from video, video understanding, video transcription
 ---
 
 <objective>

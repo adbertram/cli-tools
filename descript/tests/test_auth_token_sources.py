@@ -1,5 +1,6 @@
 """Regression tests for Descript desktop auth token lookup."""
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -29,7 +30,7 @@ def _make_client(tmp_path: Path) -> DescriptClient:
     return DescriptClient(config=config)
 
 
-def _encrypt_v10_cookie(plaintext: str, password: str) -> bytes:
+def _encrypt_v10_cookie(plaintext: str | bytes, password: str) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA1(),
         length=CHROMIUM_KEY_LENGTH,
@@ -39,7 +40,8 @@ def _encrypt_v10_cookie(plaintext: str, password: str) -> bytes:
     key = kdf.derive(password.encode("utf-8"))
 
     padder = padding.PKCS7(algorithms.AES.block_size).padder()
-    padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
+    plaintext_bytes = plaintext if isinstance(plaintext, bytes) else plaintext.encode("utf-8")
+    padded = padder.update(plaintext_bytes) + padder.finalize()
 
     cipher = Cipher(algorithms.AES(key), modes.CBC(CHROMIUM_IV))
     encryptor = cipher.encryptor()
@@ -77,6 +79,16 @@ def test_read_encrypted_session_cookie_reads_descript_partition_db(tmp_path, mon
 def test_decrypt_chromium_v10_value_returns_plaintext(tmp_path):
     client = _make_client(tmp_path)
     encrypted_value = _encrypt_v10_cookie("jwt-token", "safe-storage-password")
+
+    decrypted = client._decrypt_chromium_v10_value(encrypted_value, "safe-storage-password")
+
+    assert decrypted == "jwt-token"
+
+
+def test_decrypt_chromium_v10_value_strips_host_digest_prefix(tmp_path):
+    client = _make_client(tmp_path)
+    host_digest = hashlib.sha256(b".descript.com").digest()
+    encrypted_value = _encrypt_v10_cookie(host_digest + b"jwt-token", "safe-storage-password")
 
     decrypted = client._decrypt_chromium_v10_value(encrypted_value, "safe-storage-password")
 

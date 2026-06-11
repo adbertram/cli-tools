@@ -1,6 +1,10 @@
 # Cloudflare CLI
 
-A command-line interface for the [Cloudflare API](https://developers.cloudflare.com/api/). Manage Cloudflare zones and cache.
+## DESCRIPTION
+
+The `cloudflare` CLI provides a command-line interface for Cloudflare API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

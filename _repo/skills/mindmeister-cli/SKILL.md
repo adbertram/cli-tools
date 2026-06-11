@@ -1,6 +1,10 @@
 ---
-name: "mindmeister-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute mindmeister operations using the `mindmeister` CLI tool. CLI interface for MindMeister API -- manage mind maps, ideas/nodes, and exports. Triggers: mindmeister, mindmeister cli, mind map, mind maps, mindmeister maps, create mind map, mindmeister ideas, export mind map, mindmeister nodes"
+name: mindmeister-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute mindmeister operations using the `mindmeister` CLI tool.
+  CLI interface for MindMeister API -- manage mind maps, ideas/nodes, and exports.
+  Triggers: mindmeister, mindmeister cli, mind map, mind maps, mindmeister maps, create mind map, mindmeister ideas, export mind map, mindmeister nodes
 ---
 
 <objective>

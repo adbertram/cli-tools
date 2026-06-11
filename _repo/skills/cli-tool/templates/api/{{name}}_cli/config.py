@@ -11,6 +11,14 @@ class Config(BaseConfig):
     DIST_NAME = "{{name}}-cli"
     CREDENTIAL_TYPES = [{{credential_types}}]
     DEFAULT_BASE_URL = "{{base_url}}"
+    # Uncomment when auth login needs required non-secret config first.
+    # AUTH_CONFIG_PROMPTS = [("BASE_URL", "{{Name}} base URL", False)]
+    # Uncomment when the user must create a token/app before logging in.
+    # AUTH_SETUP_INSTRUCTIONS = (
+    #     "Before logging in:\n"
+    #     "  1. Create the required token/app: https://example.com/settings/api\n"
+    #     "  2. Follow the service instructions, then continue here."
+    # )
 
     def __init__(self, profile=None):
         super().__init__(

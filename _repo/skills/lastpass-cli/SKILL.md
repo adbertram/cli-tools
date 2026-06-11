@@ -1,6 +1,10 @@
 ---
-name: "lastpass-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute lastpass operations using the `lastpass` CLI tool. LastPass password manager CLI wrapper for retrieving passwords, usernames, and vault entries. Triggers: lastpass, lastpass cli, lastpass password, lastpass vault, get password from lastpass, lastpass credentials, lastpass login, list lastpass entries, search lastpass, lastpass username"
+name: lastpass-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute lastpass operations using the `lastpass` CLI tool.
+  LastPass password manager CLI wrapper for retrieving passwords, usernames, and vault entries.
+  Triggers: lastpass, lastpass cli, lastpass password, lastpass vault, get password from lastpass, lastpass credentials, lastpass login, list lastpass entries, search lastpass, lastpass username
 ---
 
 <objective>

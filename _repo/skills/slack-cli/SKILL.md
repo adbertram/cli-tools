@@ -1,6 +1,10 @@
 ---
-name: "slack-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute slack operations using the `slack` CLI tool. CLI interface for Slack API \u2014 messages, channels, DMs, files, notifications, users, canvases, and reminders. Triggers: slack, slack cli, slack messages, slack channels, send slack message, slack DMs, slack files, slack notifications, slack users, slack reminders, slack canvas, read slack, search slack"
+name: slack-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute slack operations using the `slack` CLI tool.
+  CLI interface for Slack API — messages, channels, DMs, files, notifications, users, canvases, and reminders.
+  Triggers: slack, slack cli, slack messages, slack channels, send slack message, slack DMs, slack files, slack notifications, slack users, slack reminders, slack canvas, read slack, search slack
 ---
 
 <objective>
@@ -62,16 +66,3 @@ Slack uses mrkdwn, not standard markdown. Bold = `*text*` (single asterisk). Lin
 - Output is displayed in requested format
 - Correct command and flags used (verified against usage.json)
 </success_criteria>
-
-## Known Issues
-
-### 1. Browser Auth Can Stop at Slack CAPTCHA After Clearing a Profile
-**Symptom:** `slack auth login --force` opens Slack sign-in, reaches reCAPTCHA, and if the process is interrupted before successful login the target profile can be left with empty `ACCESS_TOKEN` and `REFRESH_TOKEN` values. `slack auth test` then reports missing credentials or `invalid_auth`.
-
-**Cause:** The forced login flow clears saved Slack credentials before launching the browser. Slack may require a human reCAPTCHA, so an interrupted login can leave the profile in the cleared state.
-
-**Fix:** Prefer accepting invites and completing Slack sign-in in a dedicated browser profile first. Then create a dedicated Slack CLI profile, save the authenticated browser session's `xoxc` token and `d` cookie into that profile, and verify it with `slack --profile <profile> --no-cache auth test --table`. If an existing profile was cleared and no saved `d` cookie is available, complete `slack --profile <profile> auth login` through the CAPTCHA flow instead of relying on the access token alone.
-
-**Verification:** Run `slack --profile <profile> --no-cache auth test --table` and confirm the intended team and user show `api_test: passed`.
-
-**Recurrence Prevention:** Before using `--force`, confirm the active profile and avoid interrupting the browser login after credentials have been cleared. For invite flows, use a new profile name so existing workspace profiles are not disturbed.

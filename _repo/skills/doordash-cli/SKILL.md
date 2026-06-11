@@ -1,6 +1,10 @@
 ---
-name: "doordash-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute doordash operations using the `doordash` CLI tool. CLI interface for DoorDash via browser automation -- list orders, get order details, browse stores, and reorder a previous order. Triggers: doordash, doordash cli, doordash orders, food delivery, list restaurants, doordash stores, recent orders, delivery orders, place doordash order, reorder doordash, doordash reorder, re-place doordash order, place a doordash order"
+name: doordash-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute doordash operations using the `doordash` CLI tool.
+  CLI interface for DoorDash via browser automation -- list orders, get order details, browse stores, and reorder a previous order.
+  Triggers: doordash, doordash cli, doordash orders, food delivery, list restaurants, doordash stores, recent orders, delivery orders, place doordash order, reorder doordash, doordash reorder, re-place doordash order, place a doordash order
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 # Udemy CLI
 
-Command-line access to Udemy instructor courses. Course list/get commands use the Udemy Instructor API. Course management read/update commands use an authenticated browser session because Udemy does not provide an API for those manage pages.
+## DESCRIPTION
+
+The `udemy` CLI provides a command-line interface for Udemy API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

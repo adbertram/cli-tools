@@ -12,6 +12,9 @@ class PositionalArgWarning(UserWarning):
     pass
 
 
+PROBLEM_MARKERS = ("Success", "✓", "Done", "Fetching", "Loading", "Retrieved")
+
+
 def test_list_commands_have_no_required_positional_args(cli_executable, cli_name, test_config, help_cache, command_filter):
     """Assertion 28: List commands have no required positional arguments.
 
@@ -153,14 +156,12 @@ def test_stdout_stderr_separation(cli_executable, cli_name, test_config, cli_fix
 
         if result.returncode == 0:
             # Stdout should be ONLY JSON, no interleaved messages
-            problem_markers = ["Success", "✓", "Done", "Fetching", "Loading", "Retrieved"]
-            for marker in problem_markers:
-                if marker in result.stdout:
-                    errors.append(
-                        f"'{cli_name} {cmd_path}' has non-JSON content '{marker}' in stdout. "
-                        f"Fix: Use print_json() for data only."
-                    )
-                    break
+            marker = _stdout_progress_marker(result.stdout, PROBLEM_MARKERS)
+            if marker:
+                errors.append(
+                    f"'{cli_name} {cmd_path}' has non-JSON content '{marker}' in stdout. "
+                    f"Fix: Use print_json() for data only."
+                )
 
             # Stderr should not contain JSON
             if result.stderr:
@@ -311,6 +312,42 @@ def _is_skippable_failure(result, fixture_args):
     stderr_lower = (result.stderr or "").lower()
     missing_arg = "missing option" in stderr_lower or "missing argument" in stderr_lower or "is required" in stderr_lower
     return missing_arg and not fixture_args
+
+
+def _stdout_progress_marker(stdout, problem_markers):
+    """Return a leaked marker from stdout, ignoring marker text inside valid JSON values."""
+    stripped = stdout.lstrip()
+    leading_whitespace_length = len(stdout) - len(stripped)
+
+    try:
+        _, json_end = json.JSONDecoder().raw_decode(stripped)
+    except json.JSONDecodeError:
+        envelope = stdout
+    else:
+        envelope = stdout[:leading_whitespace_length] + stripped[json_end:]
+
+    for marker in problem_markers:
+        if marker in envelope:
+            return marker
+    return None
+
+
+def test_stdout_progress_marker_detection_allows_marker_inside_valid_json_value():
+    payload = json.dumps([{"status": "Done"}])
+
+    assert _stdout_progress_marker(payload, PROBLEM_MARKERS) is None
+
+
+def test_stdout_progress_marker_detection_rejects_marker_before_json_payload():
+    payload = f"Done\n{json.dumps([{'status': 'ok'}])}"
+
+    assert _stdout_progress_marker(payload, PROBLEM_MARKERS) == "Done"
+
+
+def test_stdout_progress_marker_detection_rejects_marker_after_json_payload():
+    payload = f"{json.dumps([{'status': 'ok'}])}\nRetrieved"
+
+    assert _stdout_progress_marker(payload, PROBLEM_MARKERS) == "Retrieved"
 
 
 def test_list_commands_limit_is_respected(cli_executable, cli_name, test_config, cli_fixtures, command_filter, require_authenticated, help_cache):

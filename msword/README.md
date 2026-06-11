@@ -1,6 +1,10 @@
 # Msword CLI
 
-Read Word documents, convert to Markdown, and extract comments with context.
+## DESCRIPTION
+
+The `msword` CLI lets you read Word docs, convert to markdown, and extract comments with context.
+
+Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
 ## Installation
 

@@ -19,6 +19,23 @@ from .output import print_json, print_table, print_output, print_success, print_
 logger = get_debug_logger("cli_tools.auth_commands")
 
 
+def _login_setup_instructions(config) -> Optional[str]:
+    """Return the preferred auth setup message for a config."""
+    for attr_name in ("AUTH_SETUP_INSTRUCTIONS", "LOGIN_INSTRUCTIONS"):
+        value = getattr(config, attr_name, None)
+        if value:
+            return str(value).strip()
+    return None
+
+
+def _has_prompt_placeholder_value(config, field_name: str, current_value: Optional[str]) -> bool:
+    """Return True when a stored prompt value still matches the config default."""
+    if not current_value:
+        return False
+    default_value = getattr(config, f"DEFAULT_{field_name}", None)
+    return bool(default_value) and current_value == default_value
+
+
 def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
     """Prompt for credential fields and save values to config.
 
@@ -31,16 +48,15 @@ def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
         True if any field was prompted.
     """
     instructions_shown = False
+    setup_instructions = _login_setup_instructions(config)
     prompted = False
     for field_name, prompt_text, hide in prompts:
         current = config._get(field_name)
-        if current and skip_if_set:
+        if current and skip_if_set and not _has_prompt_placeholder_value(config, field_name, current):
             continue
-        # Show LOGIN_INSTRUCTIONS once before the first prompt
         if not instructions_shown:
-            instructions = getattr(config, "LOGIN_INSTRUCTIONS", None)
-            if instructions:
-                print_info(instructions)
+            if setup_instructions:
+                print_info(setup_instructions)
             instructions_shown = True
         prompted = True
         value = typer.prompt(f"Enter {prompt_text}", hide_input=hide)
@@ -509,6 +525,12 @@ def create_auth_app(
         if force:
             _clear_login_state(config, active_types)
             print_info("Existing sessions cleared")
+
+        _prompt_and_save(
+            config,
+            getattr(config, "AUTH_CONFIG_PROMPTS", []),
+            skip_if_set=True,
+        )
 
         # Browser session only — skip all prompts, go directly to browser login
         if resolved_type == CredentialType.BROWSER_SESSION:

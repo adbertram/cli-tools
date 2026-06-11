@@ -1,6 +1,10 @@
 # Snagit CLI
 
-A command-line interface for managing Snagit capture files (.snagx format).
+## DESCRIPTION
+
+The `snagit` CLI provides a command-line interface for Snagit API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

@@ -1,6 +1,10 @@
 # Leanpub CLI
 
-Command-line interface for the [Leanpub API](https://leanpub.com/help/api), focused on author revenue, royalties, and copies-sold stats.
+## DESCRIPTION
+
+The `leanpub` CLI provides a command-line interface for Leanpub API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

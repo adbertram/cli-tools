@@ -971,10 +971,10 @@
                 }
               ],
               "examples": [
-                "kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"example organization\" --category \"Utilities\"",
+                "kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"",
                 "kick rule-groups rules add -g 43b5276c-... -c \"Amazon\" -e \"My Business\" --category \"Shopping\" --apply-existing"
               ],
-              "usage_instructions": "Add a new rule to a rule group. Notable options: --group/-g, --counterparty/-c, --entity/-e, --category, --apply-existing. Example: `kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"example organization\" --category \"Utilities\"`."
+              "usage_instructions": "Add a new rule to a rule group. Notable options: --group/-g, --counterparty/-c, --entity/-e, --category, --apply-existing. Example: `kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"`."
             },
             "delete": {
               "help": "Delete a rule.",

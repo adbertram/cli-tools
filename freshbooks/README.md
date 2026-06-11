@@ -1,6 +1,10 @@
 # FreshBooks CLI Guide
 
-Complete reference for the `freshbooks` command-line interface for managing FreshBooks accounting data.
+## DESCRIPTION
+
+The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 

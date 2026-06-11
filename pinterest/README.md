@@ -1,11 +1,10 @@
 # Pinterest CLI
 
-Command-line access to Pinterest API v5 for authenticated account, board, and pin reads.
+## DESCRIPTION
 
-Docs used for this CLI:
-- OAuth setup: https://developers.pinterest.com/docs/getting-started/set-up-authentication-and-authorization/
-- First API call: https://developers.pinterest.com/docs/getting-started/make-an-api-call/
-- Boards and Pins guide: https://developers.pinterest.com/docs/work-with-organic-content-and-users/create-boards-and-pins/
+The `pinterest` CLI lets you manage Pinterest account, boards, and pins via API v5.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

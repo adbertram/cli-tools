@@ -30,7 +30,7 @@ venmo auth test
 # Multi-account profiles
 venmo auth profiles list
 venmo auth profiles create staging
-venmo auth profiles set-default default
+venmo auth profiles set-default adam-bertram
 venmo transactions list --profile staging          # query this auth profile without changing the active profile
 
 # Transaction history (data plane is read-only — records are the FULL raw Venmo API payload)
@@ -57,8 +57,8 @@ venmo cache clear                                  # wipe cache for the active p
 <principle name="Credentials Come From the Keychain">
 The CLI does NOT prompt for a username or password. Both are stored once in the CLI-tools macOS keychain (`cli-tools` service):
 ```bash
-<repo-root>/secret-manager/secrets.sh set venmo-username
-<repo-root>/secret-manager/secrets.sh set venmo-password
+/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh set venmo-username
+/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh set venmo-password
 ```
 Never store them in `.env`. After `venmo auth login` succeeds, a long-lived access token + trusted device id are persisted to `~/.local/share/cli-tools/venmo/.profiles/<profile>/.env` — they survive across sessions.
 </principle>
@@ -80,7 +80,7 @@ The `auth refresh` command exists in the shared CLI scaffold but does nothing us
 </principle>
 
 <principle name="Dotted-Path Filters and Properties">
-Both `--filter` and `--properties` accept dotted paths into the nested record. Use `payment.amount:gt:100` (NOT `amount:gt:100`), `payment.status:eq:settled`, `payment.action:eq:pay`, `payment.actor.username:eq:example-user`, `payment.target.user.display_name:contains:Example`. For `--properties`, the resulting JSON uses the dotted path AS the key (e.g. `"payment.amount": 70.0`).
+Both `--filter` and `--properties` accept dotted paths into the nested record. Use `payment.amount:gt:100` (NOT `amount:gt:100`), `payment.status:eq:settled`, `payment.action:eq:pay`, `payment.actor.username:eq:Adam-Bertram`, `payment.target.user.display_name:contains:Zac`. For `--properties`, the resulting JSON uses the dotted path AS the key (e.g. `"payment.amount": 70.0`).
 </principle>
 
 <principle name="AI Instruction Results">

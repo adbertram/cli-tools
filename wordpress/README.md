@@ -1,6 +1,10 @@
 # WordPress CLI
 
-A command-line interface for managing WordPress posts and media via the [WordPress REST API](https://developer.wordpress.org/rest-api/). Supports creating posts from manual content, DOCX files, or Markdown files with automatic image upload and link processing.
+## DESCRIPTION
+
+The `wordpress` CLI provides a command-line interface for Wordpress API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

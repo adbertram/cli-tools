@@ -1,6 +1,13 @@
 ---
-name: "copilot-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute Copilot Studio operations using the `copilot` CLI tool. CLI interface for Microsoft Copilot Studio agents via Dataverse API. Triggers: copilot, copilot cli, copilot studio, copilot agent, manage copilot agents, copilot studio agents, copilot topics, copilot knowledge, copilot tools, copilot connectors, power platform copilot, copilot flows, copilot solutions, copilot prompts, copilot models, copilot environment, copilot connections"
+name: copilot-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute Copilot Studio operations using the `copilot` CLI tool.
+  CLI interface for Microsoft Copilot Studio agents via Dataverse API.
+  Triggers: copilot, copilot cli, copilot studio, copilot agent, manage copilot agents,
+  copilot studio agents, copilot topics, copilot knowledge, copilot tools,
+  copilot connectors, power platform copilot, copilot flows, copilot solutions,
+  copilot prompts, copilot models, copilot environment, copilot connections
 ---
 
 <objective>
@@ -58,8 +65,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>
 
-<validated_behaviors>
-<behavior name="JSON examples in instructions or response-format files">
+<gotchas>
+<gotcha name="JSON examples in instructions or response-format files">
 **`copilot agent update <id> --instructions-file <f>` and `--response-format-file <f>` write into TemplateLine fields whose default template format is Power Fx.** Power Fx treats `{ ... }` as a record literal, so a JSON example inside the file (e.g. `{ "summary_markdown": "..." }`) breaks `copilot agent publish` with:
 
 ```
@@ -69,9 +76,9 @@ Unexpected character in expression '
 
 The CLI handles this automatically: when content contains `{`, the emitted YAML adds `template: { kind: TemplateEngineOptions, format: Mustache }` so the publisher uses Mustache (which uses `{{ ... }}` for expressions) and a single `{` is plain text. **No escaping is needed in the source content.** Keep JSON shape examples written naturally.
 
-</behavior>
-
-</validated_behaviors>
+If you ever see "Unexpected character in expression" on `copilot agent publish` for an agent whose response-format file or instructions file contains `{`, suspect the Mustache opt-in is missing — check `client.py` `build_gpt_component_yaml`.
+</gotcha>
+</gotchas>
 
 <success_criteria>
 - Command executes without error

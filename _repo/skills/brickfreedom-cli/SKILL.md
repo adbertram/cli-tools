@@ -1,6 +1,10 @@
 ---
-name: "brickfreedom-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute brickfreedom operations using the `brickfreedom` CLI tool. CLI interface for BrickFreedom dashboard automation -- manage LEGO orders and tasks across Bricklink and Brick Owl. Triggers: brickfreedom, brickfreedom cli, brickfreedom orders, brickfreedom tasks, LEGO orders, process orders, ship orders, replacement parts, missing parts, order tracking"
+name: brickfreedom-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute brickfreedom operations using the `brickfreedom` CLI tool.
+  CLI interface for BrickFreedom dashboard automation -- manage LEGO orders and tasks across Bricklink and Brick Owl.
+  Triggers: brickfreedom, brickfreedom cli, brickfreedom orders, brickfreedom tasks, LEGO orders, process orders, ship orders, replacement parts, missing parts, order tracking
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 # USPS CLI
 
-A command-line interface for the [USPS Tracking API](https://developer.usps.com/api/97). Query package tracking status for USPS shipments.
+## DESCRIPTION
+
+The `usps` CLI provides a command-line interface for Usps API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

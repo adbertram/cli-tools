@@ -1,11 +1,15 @@
 # Airtable CLI
 
-A command-line interface for the [Airtable API](https://airtable.com/developers/web/api/introduction). Manage Airtable records and fields from the command line.
+## DESCRIPTION
+
+The `airtable` CLI provides a command-line interface for Airtable API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 
 - **Full CRUD Operations**: List, get, create, update, and delete records
-- **Field Schema Operations**: Create fields and update field names, descriptions, and options
+- **Field Schema Operations**: List, get, create, and update fields. Airtable's public Web/Meta API does not support field deletion.
 - **Default Base ID**: Configure a default base to avoid repetition
 - **Advanced Filtering**: Use Airtable formulas to filter records
 - **Pagination Support**: Handle large datasets with pagination
@@ -236,6 +240,14 @@ airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
 # Update field options
 airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
   --options '{"formula":"{Hours} * {Rate}"}'
+```
+
+#### Delete a Field
+
+```bash
+# Field deletion is not supported by Airtable's public Web/Meta API.
+# Delete the field in Airtable's web UI, then verify removal with fields get/list.
+airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX
 ```
 
 ## Output Formats

@@ -1,7 +1,7 @@
 {
   "tool": "ata-blog",
-  "description": "ATA Blog WordPress and Notion wrapper",
-  "discovered_at": "2026-06-03T12:26:14.226190+00:00",
+  "description": "CLI for managing ATA Blog (adamtheautomator.com)",
+  "discovered_at": "2026-06-10T17:17:12Z",
   "total_commands": 69,
   "global_options": [
     {
@@ -20,12 +20,14 @@
   ],
   "commands": {
     "auth": {
-      "help": "",
+      "help": "Manage ata-blog authentication",
+      "usage_instructions": "Use `ata-blog auth` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
-          "help": "",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `ata-blog auth login` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -45,7 +47,8 @@
           ]
         },
         "logout": {
-          "help": "",
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Use `ata-blog auth logout` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -58,12 +61,14 @@
           ]
         },
         "profiles": {
-          "help": "",
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `ata-blog auth profiles` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "create": {
-              "help": "",
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use `ata-blog auth profiles create` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -75,7 +80,8 @@
               "options": []
             },
             "delete": {
-              "help": "",
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use `ata-blog auth profiles delete` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -95,7 +101,8 @@
               ]
             },
             "get": {
-              "help": "",
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use `ata-blog auth profiles get` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -115,7 +122,8 @@
               ]
             },
             "list": {
-              "help": "",
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use `ata-blog auth profiles list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
                 {
@@ -149,7 +157,7 @@
               ]
             },
             "remove": {
-              "help": "",
+              "help": "Delete a profile and its data.",
               "arguments": [
                 {
                   "name": "name",
@@ -169,7 +177,7 @@
               ]
             },
             "select": {
-              "help": "",
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
@@ -183,7 +191,8 @@
           }
         },
         "status": {
-          "help": "",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `ata-blog auth status` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -203,7 +212,8 @@
           ]
         },
         "test": {
-          "help": "",
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `ata-blog auth test` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -232,19 +242,22 @@
       }
     },
     "cache": {
-      "help": "",
+      "help": "Manage response cache",
+      "usage_instructions": "Use `ata-blog cache` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [],
       "commands": {
         "clear": {
-          "help": "",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `ata-blog cache clear` with the documented arguments and options shown below.",
           "arguments": [],
           "options": []
         }
       }
     },
     "categories": {
-      "help": "",
+      "help": "Manage WordPress categories",
+      "usage_instructions": "Use `ata-blog categories` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -256,7 +269,8 @@
       ],
       "commands": {
         "create": {
-          "help": "",
+          "help": "Create a category.",
+          "usage_instructions": "Use `ata-blog categories create` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "name",
@@ -275,7 +289,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get category details.",
+          "usage_instructions": "Use `ata-blog categories get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "cat_id",
@@ -301,7 +316,8 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress categories.",
+          "usage_instructions": "Use `ata-blog categories list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -343,7 +359,8 @@
       }
     },
     "earnings": {
-      "help": "",
+      "help": "Query ad earnings and revenue data",
+      "usage_instructions": "Use `ata-blog earnings` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -355,7 +372,14 @@
       ],
       "commands": {
         "get": {
-          "help": "",
+          "help": "Get earnings for a specific post by ID or slug.",
+          "examples": [
+            "ata-blog earnings get 26786",
+            "ata-blog earnings get my-post-slug --table",
+            "ata-blog earnings get 26786 --period last7d",
+            "ata-blog earnings get 26786 --exclude-sponsored"
+          ],
+          "usage_instructions": "Use `ata-blog earnings get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "identifier",
@@ -408,7 +432,17 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List post earnings from Raptive ad data. Query ad revenue, pageviews, RPM, and impressions for your posts. Supports filtering by post ID, title, or numeric thresholds.",
+          "examples": [
+            "ata-blog earnings list --table",
+            "ata-blog earnings list --post-id 26786",
+            "ata-blog earnings list --post-title \"PowerShell\"",
+            "ata-blog earnings list --filter \"earnings:gt:50\"",
+            "ata-blog earnings list --filter \"rpm:gt:20\" --period last7d",
+            "ata-blog earnings list --start 2025-01-01 --end 2025-12-31 --limit 50",
+            "ata-blog earnings list --exclude-sponsored"
+          ],
+          "usage_instructions": "Use `ata-blog earnings list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -490,7 +524,8 @@
       }
     },
     "media": {
-      "help": "",
+      "help": "Manage WordPress media",
+      "usage_instructions": "Use `ata-blog media` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -502,7 +537,8 @@
       ],
       "commands": {
         "delete": {
-          "help": "",
+          "help": "Delete media. All options passed to: wordpress media delete",
+          "usage_instructions": "Use `ata-blog media delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "media_id",
@@ -521,7 +557,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get media details. All options passed to: wordpress media get",
+          "usage_instructions": "Use `ata-blog media get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "media_id",
@@ -547,7 +584,8 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress media. All options passed to: wordpress media list",
+          "usage_instructions": "Use `ata-blog media list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -587,7 +625,8 @@
           ]
         },
         "upload": {
-          "help": "",
+          "help": "Upload media file. All options passed to: wordpress media upload",
+          "usage_instructions": "Use `ata-blog media upload` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "file_path",
@@ -608,7 +647,8 @@
       }
     },
     "notion-page": {
-      "help": "",
+      "help": "Manage Notion pages",
+      "usage_instructions": "Use `ata-blog notion-page` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -620,12 +660,18 @@
       ],
       "commands": {
         "comments": {
-          "help": "",
+          "help": "Manage comments on Notion pages",
+          "usage_instructions": "Use `ata-blog notion-page comments` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "add": {
-              "help": "",
+              "help": "Add a comment to a Notion page. Posts a top-level comment to the specified page using the same Notion authentication as the rest of the `notion-page` subcommands.",
+              "examples": [
+                "ata-blog notion-page comments add PAGE_ID --body \"No affiliate match — needs human review\"",
+                "ata-blog notion-page comments add PAGE_ID -b \"Quick note from CLI\""
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments add` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -651,7 +697,12 @@
               ]
             },
             "get": {
-              "help": "",
+              "help": "Get a single Notion comment by ID.",
+              "examples": [
+                "ata-blog notion-page comments get COMMENT_ID",
+                "ata-blog notion-page comments get COMMENT_ID --table"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments get` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "comment_id",
@@ -677,7 +728,15 @@
               ]
             },
             "list": {
-              "help": "",
+              "help": "List comments on a Notion page with context. Returns comments with the text they're attached to, useful for gathering human review feedback from Notion inline comments.",
+              "examples": [
+                "ata-blog notion-page comments list PAGE_ID",
+                "ata-blog notion-page comments list PAGE_ID --table",
+                "ata-blog notion-page comments list PAGE_ID --limit 10",
+                "ata-blog notion-page comments list PAGE_ID --filter \"text:contains:review\"",
+                "ata-blog notion-page comments list PAGE_ID --no-context"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments list` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -733,12 +792,17 @@
           }
         },
         "content": {
-          "help": "",
+          "help": "Manage article content",
+          "usage_instructions": "Use `ata-blog notion-page content` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "append": {
-              "help": "",
+              "help": "Append markdown content to article.",
+              "examples": [
+                "ata-blog notion-page content append PAGE_ID --file ./additions.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content append` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -764,7 +828,12 @@
               ]
             },
             "get": {
-              "help": "",
+              "help": "Get article content as markdown.",
+              "examples": [
+                "ata-blog notion-page content get PAGE_ID",
+                "ata-blog notion-page content get PAGE_ID --output ./post.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content get` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -790,7 +859,11 @@
               ]
             },
             "set": {
-              "help": "",
+              "help": "Replace article content with markdown from file. Local image references (paths that are not http/https URLs) are uploaded to the WordPress media library before the markdown is pushed to Notion, and the markdown is rewritten to point at the returned WordPress URLs.",
+              "examples": [
+                "ata-blog notion-page content set PAGE_ID --file ./post.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content set` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -818,7 +891,12 @@
           }
         },
         "create": {
-          "help": "",
+          "help": "Create a new article idea in the Notion database. Creates a page using the Standard ATA Tutorial AI-Created Idea template with the provided title, excerpt, category, and optional keywords.",
+          "examples": [
+            "ata-blog notion-page create --title \"My Post\" --excerpt \"Desc\" --category \"IT Ops\"",
+            "ata-blog notion-page create --title \"My Post\" --excerpt \"Desc\" --category \"Cloud\" --keywords \"azure, cloud\" --status \"Good Idea\""
+          ],
+          "usage_instructions": "Use `ata-blog notion-page create` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -874,7 +952,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get article details from Notion.",
+          "usage_instructions": "Use `ata-blog notion-page get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -900,7 +979,15 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List articles from Notion database.",
+          "examples": [
+            "ata-blog notion-page list --status \"Draft\"",
+            "ata-blog notion-page list --status \"Draft|Review\"",
+            "ata-blog notion-page list --filter \"Status:in:Good Idea|Human Review\"",
+            "ata-blog notion-page list --filter \"Title:contains:outsmarting\"",
+            "ata-blog notion-page list --filter \"Title:ilike:%azure%\""
+          ],
+          "usage_instructions": "Use `ata-blog notion-page list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -948,7 +1035,8 @@
           ]
         },
         "publish": {
-          "help": "",
+          "help": "Publish Notion article to WordPress with metadata mapping.",
+          "usage_instructions": "Use `ata-blog notion-page publish` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -1013,12 +1101,19 @@
           ]
         },
         "schema": {
-          "help": "",
+          "help": "Manage Notion database schema (properties/columns)",
+          "usage_instructions": "Use `ata-blog notion-page schema` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "add-property": {
-              "help": "",
+              "help": "Add a new property (column) to a Notion database schema. Delegates to the underlying `notion field add` CLI, which performs the PATCH https://api.notion.com/v1/databases/{database_id} call using the same Notion authentication path as every other ata-blog notion-page subcommand. On success, emits a JSON object to stdout: {\"database_id\": \"...\", \"property_name\": \"...\", \"type\": \"...\", \"created\": true}",
+              "examples": [
+                "ata-blog notion-page schema add-property DB_ID --name \"Affiliate Promotion\" --type rich_text",
+                "ata-blog notion-page schema add-property DB_ID --name \"Source URL\" --type url",
+                "ata-blog notion-page schema add-property DB_ID --name \"Reviewed\" --type checkbox"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page schema add-property` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "database_id",
@@ -1053,7 +1148,13 @@
           }
         },
         "search": {
-          "help": "",
+          "help": "Search articles by title.",
+          "examples": [
+            "ata-blog notion-page search \"azure functions\"",
+            "ata-blog notion-page search \"azure\" --status \"Draft\"",
+            "ata-blog notion-page search \"powershell\" --table"
+          ],
+          "usage_instructions": "Use `ata-blog notion-page search` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "query",
@@ -1094,7 +1195,12 @@
           ]
         },
         "statuses": {
-          "help": "",
+          "help": "List valid article status values.",
+          "examples": [
+            "ata-blog notion-page statuses",
+            "ata-blog notion-page statuses --json"
+          ],
+          "usage_instructions": "Use `ata-blog notion-page statuses` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -1113,7 +1219,14 @@
           ]
         },
         "update": {
-          "help": "",
+          "help": "Update article properties in Notion.",
+          "examples": [
+            "ata-blog notion-page update PAGE_ID --status \"Draft\"",
+            "ata-blog notion-page update PAGE_ID --status \"Developmental Review\"",
+            "ata-blog notion-page update PAGE_ID --property \"Keywords:azure, cloud\"",
+            "ata-blog notion-page update PAGE_ID -s \"Draft\" -p \"Dev Review Iterations:2\""
+          ],
+          "usage_instructions": "Use `ata-blog notion-page update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -1148,7 +1261,8 @@
       }
     },
     "raptive": {
-      "help": "",
+      "help": "Manage Raptive (AdThrive) ad settings",
+      "usage_instructions": "Use `ata-blog raptive` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1160,7 +1274,15 @@
       ],
       "commands": {
         "disable": {
-          "help": "",
+          "help": "Disable Raptive ads on a WordPress post. By default disables ALL ads. Use flags to disable specific ad types only.",
+          "examples": [
+            "ata-blog raptive disable 12345                    # Disable all ads",
+            "ata-blog raptive disable 12345 --content-only     # Disable content ads only",
+            "ata-blog raptive disable 12345 --video-only       # Disable video players only",
+            "ata-blog raptive disable 12345 --re-enable-days 30  # Re-enable after 30 days",
+            "ata-blog raptive disable 12345 --re-enable-date 2026-02-01"
+          ],
+          "usage_instructions": "Use `ata-blog raptive disable` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1213,7 +1335,13 @@
           ]
         },
         "enable": {
-          "help": "",
+          "help": "Re-enable Raptive ads on a WordPress post. Removes the disable flags from post meta to restore ads.",
+          "examples": [
+            "ata-blog raptive enable 12345                  # Enable all ads",
+            "ata-blog raptive enable 12345 --content-only  # Enable content ads only",
+            "ata-blog raptive enable 12345 --video-only    # Enable video players only"
+          ],
+          "usage_instructions": "Use `ata-blog raptive enable` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1253,7 +1381,8 @@
           ]
         },
         "fields": {
-          "help": "",
+          "help": "List all Raptive post meta field names. Useful for manual debugging or direct API calls.",
+          "usage_instructions": "Use `ata-blog raptive fields` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -1265,7 +1394,12 @@
           ]
         },
         "status": {
-          "help": "",
+          "help": "Check Raptive ad status for a WordPress post. Shows which ad types are disabled and any scheduled re-enable date.",
+          "examples": [
+            "ata-blog raptive status 12345",
+            "ata-blog raptive status 12345 --table"
+          ],
+          "usage_instructions": "Use `ata-blog raptive status` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1293,7 +1427,8 @@
       }
     },
     "schema": {
-      "help": "",
+      "help": "Manage Rank Math schema markup",
+      "usage_instructions": "Use `ata-blog schema` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1305,7 +1440,8 @@
       ],
       "commands": {
         "get": {
-          "help": "",
+          "help": "Get current schema configuration for a WordPress post.",
+          "usage_instructions": "Use `ata-blog schema get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1338,7 +1474,13 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress posts with their schema configurations.",
+          "examples": [
+            "ata-blog schema list --table",
+            "ata-blog schema list --limit 100",
+            "ata-blog schema list --filter schema_type:eq:TechArticle"
+          ],
+          "usage_instructions": "Use `ata-blog schema list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -1379,7 +1521,8 @@
           ]
         },
         "remove": {
-          "help": "",
+          "help": "Remove Rank Math schema from a WordPress post.",
+          "usage_instructions": "Use `ata-blog schema remove` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1398,7 +1541,13 @@
           ]
         },
         "set": {
-          "help": "",
+          "help": "SCHEMA_TYPE:{Article|TechArticle|Review} Set Rank Math schema on a WordPress post.",
+          "examples": [
+            "ata-blog schema set 123 TechArticle --proficiency Intermediate",
+            "ata-blog schema set 456 Review --rating 4.5 --item \"Azure DevOps\"",
+            "ata-blog schema set 789 Article"
+          ],
+          "usage_instructions": "Use `ata-blog schema set` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -1451,7 +1600,8 @@
           ]
         },
         "types": {
-          "help": "",
+          "help": "List available schema types.",
+          "usage_instructions": "Use `ata-blog schema types` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -1465,7 +1615,8 @@
       }
     },
     "shoutouts": {
-      "help": "",
+      "help": "Manage sponsored shoutouts in posts",
+      "usage_instructions": "Use `ata-blog shoutouts` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1477,7 +1628,12 @@
       ],
       "commands": {
         "add": {
-          "help": "",
+          "help": "Add a shoutout after a specific content block position. The text will have rel=\"noreferrer noopener sponsored\" automatically added to all <a> tags. Works with both Classic Editor and Gutenberg posts.",
+          "examples": [
+            "ata-blog shoutouts add 12345 --position 3 --text '<a href=\"https://example.com\">Check this out!</a>'",
+            "ata-blog shoutouts add my-post-slug -p 4 --text 'Sponsored by <a href=\"https://sponsor.com\">Sponsor</a>'"
+          ],
+          "usage_instructions": "Use `ata-blog shoutouts add` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post",
@@ -1510,7 +1666,12 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get a specific shoutout by position.",
+          "examples": [
+            "ata-blog shoutouts get 12345 --position 2",
+            "ata-blog shoutouts get my-post-slug -p 4 --json"
+          ],
+          "usage_instructions": "Use `ata-blog shoutouts get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post",
@@ -1550,7 +1711,13 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List all shoutouts in a WordPress post. Works with both Classic Editor and Gutenberg posts.",
+          "examples": [
+            "ata-blog shoutouts list 12345",
+            "ata-blog shoutouts list my-post-slug --table",
+            "ata-blog shoutouts list 12345 --filter position:gt:2"
+          ],
+          "usage_instructions": "Use `ata-blog shoutouts list` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post",
@@ -1603,7 +1770,12 @@
           ]
         },
         "remove": {
-          "help": "",
+          "help": "Remove a shoutout at a specific position. Works with both Classic Editor and Gutenberg posts.",
+          "examples": [
+            "ata-blog shoutouts remove 12345 --position 2",
+            "ata-blog shoutouts remove my-post-slug -p 4"
+          ],
+          "usage_instructions": "Use `ata-blog shoutouts remove` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post",
@@ -1631,7 +1803,8 @@
       }
     },
     "tags": {
-      "help": "",
+      "help": "Manage WordPress tags",
+      "usage_instructions": "Use `ata-blog tags` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1643,7 +1816,8 @@
       ],
       "commands": {
         "create": {
-          "help": "",
+          "help": "Create tag. All options passed to: wordpress tags create",
+          "usage_instructions": "Use `ata-blog tags create` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "name",
@@ -1662,7 +1836,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get tag details. All options passed to: wordpress tags get",
+          "usage_instructions": "Use `ata-blog tags get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "tag_id",
@@ -1688,7 +1863,8 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress tags. All options passed to: wordpress tags list",
+          "usage_instructions": "Use `ata-blog tags list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -1730,7 +1906,8 @@
       }
     },
     "wordpress-admin": {
-      "help": "",
+      "help": "Manage WordPress admin operations",
+      "usage_instructions": "Use `ata-blog wordpress-admin` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1742,12 +1919,14 @@
       ],
       "commands": {
         "plugins": {
-          "help": "",
+          "help": "Manage WordPress plugins",
+          "usage_instructions": "Use `ata-blog wordpress-admin plugins` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "activate": {
-              "help": "",
+              "help": "Activate a WordPress plugin.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins activate` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "plugin",
@@ -1766,7 +1945,8 @@
               ]
             },
             "deactivate": {
-              "help": "",
+              "help": "Deactivate a WordPress plugin.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins deactivate` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "plugin",
@@ -1785,7 +1965,8 @@
               ]
             },
             "delete": {
-              "help": "",
+              "help": "Delete an inactive WordPress plugin.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins delete` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "plugin",
@@ -1804,7 +1985,8 @@
               ]
             },
             "get": {
-              "help": "",
+              "help": "Get details for a specific WordPress plugin.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins get` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "plugin",
@@ -1837,7 +2019,8 @@
               ]
             },
             "install": {
-              "help": "",
+              "help": "Install a plugin from wordpress.org.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins install` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "slug",
@@ -1863,7 +2046,8 @@
               ]
             },
             "list": {
-              "help": "",
+              "help": "List installed WordPress plugins.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
                 {
@@ -1910,7 +2094,8 @@
               ]
             },
             "upgrade": {
-              "help": "",
+              "help": "Upgrade a plugin through the WordPress CLI's native updater path.",
+              "usage_instructions": "Use `ata-blog wordpress-admin plugins upgrade` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "plugin",
@@ -1933,7 +2118,8 @@
       }
     },
     "wordpress-page": {
-      "help": "",
+      "help": "Manage WordPress pages",
+      "usage_instructions": "Use `ata-blog wordpress-page` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -1945,7 +2131,8 @@
       ],
       "commands": {
         "create": {
-          "help": "",
+          "help": "Create a page.",
+          "usage_instructions": "Use `ata-blog wordpress-page create` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -2024,7 +2211,8 @@
           ]
         },
         "delete": {
-          "help": "",
+          "help": "Delete a page.",
+          "usage_instructions": "Use `ata-blog wordpress-page delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -2043,7 +2231,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get page details.",
+          "usage_instructions": "Use `ata-blog wordpress-page get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -2069,7 +2258,8 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress pages.",
+          "usage_instructions": "Use `ata-blog wordpress-page list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -2109,7 +2299,8 @@
           ]
         },
         "update": {
-          "help": "",
+          "help": "Update a page.",
+          "usage_instructions": "Use `ata-blog wordpress-page update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "page_id",
@@ -2130,7 +2321,8 @@
       }
     },
     "wordpress-post": {
-      "help": "",
+      "help": "Manage WordPress posts",
+      "usage_instructions": "Use `ata-blog wordpress-post` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -2142,7 +2334,8 @@
       ],
       "commands": {
         "create": {
-          "help": "",
+          "help": "Create a post.",
+          "usage_instructions": "Use `ata-blog wordpress-post create` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -2221,7 +2414,8 @@
           ]
         },
         "delete": {
-          "help": "",
+          "help": "Delete a post.",
+          "usage_instructions": "Use `ata-blog wordpress-post delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -2240,7 +2434,8 @@
           ]
         },
         "get": {
-          "help": "",
+          "help": "Get post details.",
+          "usage_instructions": "Use `ata-blog wordpress-post get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -2294,7 +2489,8 @@
           ]
         },
         "list": {
-          "help": "",
+          "help": "List WordPress posts.",
+          "usage_instructions": "Use `ata-blog wordpress-post list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -2374,7 +2570,8 @@
           ]
         },
         "schedule": {
-          "help": "",
+          "help": "Schedule an existing WordPress draft post for publication.",
+          "usage_instructions": "Use `ata-blog wordpress-post schedule` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -2406,7 +2603,13 @@
           ]
         },
         "stats": {
-          "help": "",
+          "help": "Get traffic stats for a post (pageviews, unique users, time spent, bounce rate).",
+          "examples": [
+            "ata-blog wordpress-post stats 26786",
+            "ata-blog wordpress-post stats my-post-slug --table",
+            "ata-blog wordpress-post stats 26786 -s 2026-01-01 -e 2026-03-30"
+          ],
+          "usage_instructions": "Use `ata-blog wordpress-post stats` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "identifier",
@@ -2446,7 +2649,8 @@
           ]
         },
         "update": {
-          "help": "",
+          "help": "Update a post.",
+          "usage_instructions": "Use `ata-blog wordpress-post update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "post_id",
@@ -2466,5 +2670,6 @@
         }
       }
     }
-  }
+  },
+  "usage_instructions": "Use `` with the documented arguments and options shown below."
 }

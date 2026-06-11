@@ -1,10 +1,10 @@
 # YouTube CLI
 
-A command-line interface that combines:
+## DESCRIPTION
 
-1. **Public download commands** (no auth) for any YouTube video/transcript using `yt-dlp`.
-2. **Channel management commands** (OAuth) for the authenticated user's own channel via the YouTube Data API v3 — list, get, upload, update, and delete videos.
-3. **Owned-channel commands** (OAuth) to list every YouTube channel available under the authenticated Google account/profile, update the banner image for one owned channel, plus `youtube channels create` guidance for the unsupported channel-creation boundary.
+The `youtube` CLI provides a command-line interface for Youtube API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -106,7 +106,20 @@ youtube videos download --channel channelname --sync --folder-path ./videos --ex
 youtube videos download --channel channelname -o ./videos -t
 ```
 
-### Auth (OAuth, required for `channel ...` and `channels ...` commands)
+### Video Chapters
+
+```bash
+# Validate manual YouTube Video Chapters in a description
+youtube videos chapters validate \
+    --description $'00:00 Intro\n00:12 Setup\n02:05 Demo'
+
+# Include video duration to validate the final chapter length
+youtube videos chapters validate \
+    --description $'00:00 Intro\n00:12 Setup\n02:05 Demo' \
+    --duration-seconds 180
+```
+
+### Auth (OAuth for API commands, browser session for community posts)
 
 Channel management uses the YouTube Data API v3 with OAuth 2.0.
 
@@ -123,17 +136,24 @@ youtube auth login
 # Required scopes: youtube, youtube.upload, youtube.force-ssl.
 ```
 
-The credentials and OAuth token are stored under `~/.local/share/cli-tools/youtube/authentication_profiles/<profile>/`.
+Community posts use the signed-in YouTube web UI because the Data API no longer supports creating channel bulletins/community posts. The same profile must have both its existing YouTube OAuth token and a signed-in browser session before `channel posts create`:
+
+```bash
+youtube auth login --credential-type browser_session
+# A browser opens. Sign into the YouTube account that can manage the channel.
+```
+
+The credentials, OAuth token, and browser session are stored under `~/.local/share/cli-tools/youtube/authentication_profiles/<profile>/`.
 
 **Other auth commands:**
 
 ```bash
 youtube auth status                       # Inspect saved credentials/token
 youtube auth test                         # Verify the token works (calls channels.list mine=True)
-youtube auth refresh                      # Refresh the access token
 youtube auth logout                       # Clear credentials/token for the active profile
 youtube auth login --force                # Re-run consent (clears the token first)
 youtube auth login --profile work         # Authenticate a named profile
+youtube auth login --credential-type browser_session --profile work
 ```
 
 **Profiles:**
@@ -169,6 +189,12 @@ youtube channel videos upload ./my-video.mp4 \
     --privacy private \
     --thumbnail ./thumb.png
 
+# Ask the calling AI agent to add recommended Video Chapters before upload
+youtube channel videos upload ./my-video.mp4 \
+    --title "My new video" \
+    --description "Long description..." \
+    --include-recommended-chapters
+
 # Schedule a video (must stay private until publish-at)
 youtube channel videos upload ./video.mp4 \
     --title "Scheduled video" \
@@ -182,9 +208,35 @@ youtube channel videos upload ./video.mp4 --title "Kids video" --made-for-kids
 youtube channel videos update VIDEO_ID --title "Updated title" --privacy public
 youtube channel videos update VIDEO_ID --thumbnail ./new-thumb.jpg
 youtube channel videos update VIDEO_ID --tag tagA --tag tagB   # replaces existing tags
+youtube channel videos update VIDEO_ID \
+    --description "Long description..." \
+    --include-recommended-chapters
 
 # Delete a video (prompts for confirmation; use --yes/-y to skip)
 youtube channel videos delete VIDEO_ID --yes
+```
+
+### Community Posts (`youtube channel posts ...`)
+
+These commands derive the owned channel from the selected YouTube profile, then drive that channel page in a browser session. They fail if the profile does not have both OAuth and browser-session auth, if the browser profile cannot manage that channel, or if YouTube does not show the community-post composer.
+
+```bash
+# Create a text community post for the profile's owned channel
+youtube channel posts create \
+    --message "New inventory workflow notes are live." \
+    --profile brickbuddy
+
+# Safe validation without publishing
+youtube channel posts create \
+    --message "New inventory workflow notes are live." \
+    --profile brickbuddy \
+    --dry-run
+
+# Table output
+youtube channel posts create \
+    --message "New inventory workflow notes are live." \
+    --profile brickbuddy \
+    --table
 ```
 
 ### Owned Channels (`youtube channels ...`)

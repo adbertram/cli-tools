@@ -1,6 +1,10 @@
 # ShopGoodwill CLI
 
-A command-line interface for [ShopGoodwill.com](https://shopgoodwill.com), the online auction marketplace operated by Goodwill Industries. Search listings, view item details, and manage authentication directly from your terminal.
+## DESCRIPTION
+
+The `shopgoodwill` CLI provides a command-line interface for ShopGoodwill.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

@@ -11,6 +11,25 @@ pip install -e .
 
 After installation, the `bricklink` command will be available in your terminal.
 
+## Testing
+
+From this directory, run BrickLink's tests through the uv project environment and
+add pytest for the run:
+
+```bash
+uv run --with pytest python -m pytest tests
+```
+
+For a focused regression test:
+
+```bash
+uv run --with pytest python -m pytest tests/test_browser_runtime.py::test_get_page_for_does_not_require_networkidle -vv
+```
+
+Do not use bare `python -m pytest` or `uv run python -m pytest` for this repo.
+The first misses project dependencies such as `cli_tools_shared`; the second
+does not include pytest unless it is supplied for the run.
+
 ## Quick Start
 
 ```bash

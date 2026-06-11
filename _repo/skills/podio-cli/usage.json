@@ -1851,7 +1851,7 @@
           "examples": [
             "podio comment list item 12345",
             "podio comment list item 12345 --limit 50",
-            "podio comment list item 12345 --filter \"created_by.name:Example User\"",
+            "podio comment list item 12345 --filter \"created_by.name:Adam\"",
             "podio comment list item 12345 --properties \"comment_id,value\"",
             "podio comment list item 12345 --table"
           ],

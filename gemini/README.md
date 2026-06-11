@@ -1,6 +1,10 @@
 # Gemini CLI
 
-A command-line interface for the [Google Gemini API](https://ai.google.dev/gemini-api/docs). Supports video analysis, content generation, and file management.
+## DESCRIPTION
+
+The `gemini` CLI provides a command-line interface for Gemini API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

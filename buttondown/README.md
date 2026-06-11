@@ -1,6 +1,10 @@
 # Buttondown CLI
 
-Command-line access to the Buttondown REST API for subscribers, emails, and tags.
+## DESCRIPTION
+
+The `buttondown` CLI provides a command-line interface for Buttondown API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

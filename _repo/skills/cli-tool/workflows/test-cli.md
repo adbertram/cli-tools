@@ -21,6 +21,40 @@ $TOOL_NAME --help >/dev/null 2>&1
 
 If this fails, investigate the CLI startup error BEFORE running tests.
 
+**Harness-only collection:** When validating changes to the cli-tool test
+harness itself, collect tests with the batch confirmation flag so
+`pytest_configure` does not abort:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest --collect-only <cli-tools-root>/_repo/skills/cli-tool/tests --force
+```
+
+This only proves the harness collects. It is not a replacement for CLI-specific validation through `test-cli-tool.sh --cli-name "$TOOL_NAME"`.
+
+**Targeted harness execution:** If you run a direct `pytest -k ...` selection
+against harness tests and the selection includes any CLI-dependent test, pass
+`--cli-name "$TOOL_NAME"`. Use `--force` only for batch or collect-only harness
+checks where CLI-dependent tests are allowed to skip.
+
+**Direct per-tool pytest execution:** When running a tool's own tests directly,
+use that tool's uv project environment and add pytest to the run environment.
+Do not run `PYTHONPATH=. pytest`, `python -m pytest`, or another ambient
+interpreter from the tool directory; shared dependencies such as
+`cli_tools_shared` are resolved by the uv project declared in the tool's
+`pyproject.toml`.
+
+```bash
+uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
+```
+
+**Harness unit monkeypatches:** When a harness unit test patches an imported
+helper such as `run_cli_command`, patch the module object that owns the
+reference used by the code under test (for example,
+`monkeypatch.setattr(sys.modules[__name__], "run_cli_command", fake)`) or import
+the module under test and patch that object. Do not use a bare string target
+such as `"test_profiles.run_cli_command"`; pytest may collect the file under a
+different module name, causing the real helper to execute.
+
 **Run the test script for structured JSON results:**
 
 ```bash
@@ -62,6 +96,26 @@ If `auth_required` is true in the JSON response, complete testing is blocked unt
 5. **If user chooses to skip:**
    - Report that complete testing is blocked by missing authentication
    - Do not present the harness as passing
+
+### Live-auth blockers for new auth CLIs
+
+New auth CLIs can complete static/source compliance without real credentials, but
+they cannot complete live compliance until the required credential exists and
+`auth status` returns an authenticated profile. Do not create fake credentials,
+mark the CLI as no-auth, disable live tests, or edit validator expectations to
+force a pass.
+
+When credentials are unavailable, finish the code/static fixes that do not need
+live auth, then report `LIVE_AUTH_BLOCKED` with:
+
+- `auth_required: true`
+- the `auth_command` from `test-cli-tool.sh`
+- the exact `auth status` output or schema error
+- the exact live execution tests that remain blocked
+
+After credentials are stored through the CLI-tools secret manager or captured by
+the CLI's own login flow, run the auth command and re-run `test-cli-tool.sh`
+until `"success": true`.
 
 ## Step 2: Create Master Todo List (MANDATORY)
 
@@ -140,7 +194,7 @@ ALL timestamps displayed in table output MUST use the `format_local_time()` or `
 - Use `format_local_time_only(timestamp)` for "14:30:45" format (time only)
 - NEVER display raw ISO timestamps (e.g., "2025-01-13T14:30:45Z") in table output
 - All times MUST be converted to local timezone before display
-- Check all command files in the commands/ directory for timestamp display
+- Check `main.py` plus any existing `commands/*.py` files for timestamp display
 
 **CRITICAL --filter Requirements:**
 ALL CLI tools MUST expose --filter flags on list commands, regardless of whether the underlying API supports filtering. The filter_translator MUST translate the standard CLI tool filtering syntax to whatever method is required:

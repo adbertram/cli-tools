@@ -93,6 +93,52 @@ def test_single_credential_type_help_does_not_register_credential_type_option():
     assert "No such option" in invalid.output
 
 
+def test_auth_login_prints_setup_instructions_and_prompts_for_non_secret_config_first():
+    class AuthConfig:
+        CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
+        DEFAULT_BASE_URL = "https://placeholder.example.test"
+        AUTH_EXTRA_PROMPTS = []
+        AUTH_CONFIG_PROMPTS = [("BASE_URL", "Service base URL", False)]
+        AUTH_SETUP_INSTRUCTIONS = (
+            "Before logging in:\n"
+            "  1. Create an API token: https://example.com/tokens\n"
+            "  2. Enter your account email as USERNAME and the token as PASSWORD."
+        )
+        OAUTH_AUTH_URL = None
+        OAUTH_TOKEN_URL = None
+
+        def __init__(self):
+            self.values = {"BASE_URL": self.DEFAULT_BASE_URL}
+
+        def _get(self, field_name):
+            return self.values.get(field_name)
+
+        def _set(self, field_name, value):
+            self.values[field_name] = value
+
+        def get_browser(self):
+            return None
+
+    config = AuthConfig()
+    app = create_auth_app(lambda profile=None: config, tool_name="tool", include_profiles=False)
+
+    result = CliRunner().invoke(
+        app,
+        ["login"],
+        input="https://api.example.test\nadam@example.com\ntoken-123\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Create an API token: https://example.com/tokens" in result.output
+    assert "Enter Service base URL:" in result.output
+    assert result.output.index("Enter Service base URL:") < result.output.index("Enter Username:")
+    assert config.values == {
+        "BASE_URL": "https://api.example.test",
+        "USERNAME": "adam@example.com",
+        "PASSWORD": "token-123",
+    }
+
+
 def test_browser_session_login_skips_live_probe_when_no_session_on_disk(tmp_path):
     """No on-disk session → nothing to live-verify → open browser to log in."""
     browser = MagicMock()

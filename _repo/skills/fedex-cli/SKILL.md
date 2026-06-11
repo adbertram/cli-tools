@@ -1,6 +1,10 @@
 ---
-name: "fedex-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute fedex operations using the `fedex` CLI tool. CLI interface for FedEx API -- schedule pickups, check availability, and manage authentication profiles. Triggers: fedex, fedex cli, fedex pickup, schedule fedex pickup, fedex availability, cancel fedex pickup, fedex shipping"
+name: fedex-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute fedex operations using the `fedex` CLI tool.
+  CLI interface for FedEx API -- schedule pickups, check availability, and manage authentication profiles.
+  Triggers: fedex, fedex cli, fedex pickup, schedule fedex pickup, fedex availability, cancel fedex pickup, fedex shipping
 ---
 
 <objective>

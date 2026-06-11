@@ -111,7 +111,7 @@ After every `cj` command, inspect stdout. If it is JSON with `type: "ai_instruct
 **Verification:**
 1. `cj advertisers search "Google Cloud" --limit 3` returns JSON with `"network_rank": "3"` (string) and no `int()` traceback.
 2. `cj relationships list --status notjoined --limit 5` returns JSON and exits 0; no `float()` traceback.
-3. `cd <repo-root>/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest python -m pytest tests/test_bugfixes.py` — all 7 tests pass, including `test_bug1_network_rank_accepts_sentinel_string`, `test_bug3_epc_accepts_na_sentinel`, and `test_bug3_epc_accepts_numeric_value`.
+3. `cd ~/Dropbox/GitRepos/cli-tools/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest python -m pytest tests/test_bugfixes.py` — all 7 tests pass, including `test_bug1_network_rank_accepts_sentinel_string`, `test_bug3_epc_accepts_na_sentinel`, and `test_bug3_epc_accepts_numeric_value`.
 
 **Recurrence Prevention:** Regression tests in `tests/test_bugfixes.py` feed hand-crafted XML with `<network-rank>New</network-rank>` and `<seven-day-epc>N/A</seven-day-epc>` through `create_advertiser` and `create_advertiser_detail` and assert the strings round-trip. If a future change reintroduces blind `int()` / `float()` coercion, those tests fail at the model layer before they reach a live API call.
 
@@ -142,7 +142,7 @@ After every `cj` command, inspect stdout. If it is JSON with `type: "ai_instruct
 
 **Verification:**
 1. `cj auth status` and `cj relationships apply --dry-run <id>` agree: both succeed with a valid saved session; both fail with `no saved browser session` after `cj auth logout`.
-2. `cd <repo-root>/cli-tools-common && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-common-tests uv run pytest tests/test_command_registry.py` — `test_browser_session_gate_uses_has_session_without_storage_or_cookie_hooks` and `test_browser_session_gate_fails_when_has_session_returns_false` both pass, asserting `browser.is_authenticated()` is never called when neither hook is declared.
+2. `cd ~/Dropbox/GitRepos/cli-tools/cli-tools-common && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-common-tests uv run pytest tests/test_command_registry.py` — `test_browser_session_gate_uses_has_session_without_storage_or_cookie_hooks` and `test_browser_session_gate_fails_when_has_session_returns_false` both pass, asserting `browser.is_authenticated()` is never called when neither hook is declared.
 3. Full cli-tools-common suite: 357 passed.
 
 **Recurrence Prevention:** Two regression tests in `cli-tools-common/tests/test_command_registry.py` lock the contract: the gate MUST use `has_session` and MUST NOT call `is_authenticated` when no `AUTH_STORAGE_KEY` / `AUTH_COOKIE_PATTERNS` is set. The retired test `test_browser_session_gate_uses_live_check_without_storage_key` enforced the buggy behavior and was replaced. Any future change that adds a live-check fallback inside `_check_credentials` will fail these tests immediately.
@@ -159,12 +159,12 @@ After every `cj` command, inspect stdout. If it is JSON with `type: "ai_instruct
 
 1. Added `AUTH_LOGIN_FORM_SELECTOR = ""` class constant to `BrowserAutomation` in `cli-tools-common/cli_tools_common/browser_automation.py`. When declared, `_check_auth` inserts a new priority-1 check between the URL-pattern check and the cookie check: if the login-form element is NOT visible on the page (and we are not on a login URL), the user is authenticated. Returns False if the element IS visible.
 2. Updated `CJBrowser` in `cj/cj_cli/browser.py` — removed `AUTH_SUCCESS_SELECTOR = "a[href*='/member/publisher/']"` and added `AUTH_LOGIN_FORM_SELECTOR = 'input[type="password"], input[name="password"], form[action*="login"], form#loginForm'`.
-3. Reinstalled the editable shared infra into the cj uv tool venv: `uv pip install --python ~/.local/share/uv/tools/cj-cli/bin/python3 -e <repo-root>/cli-tools-common`.
+3. Reinstalled the editable shared infra into the cj uv tool venv: `uv pip install --python /Users/adam/.local/share/uv/tools/cj-cli/bin/python3 -e ~/Dropbox/GitRepos/cli-tools/cli-tools-common`.
 
 **Verification:**
 1. `cd cli-tools-common && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cli-tools-common-tests uv run pytest tests/test_browser_automation.py -k bug5 -v` — 3 new tests pass: `test_bug5_check_auth_returns_true_when_login_form_absent`, `test_bug5_check_auth_returns_false_when_login_form_visible`, `test_bug5_check_auth_login_form_check_takes_priority_over_stale_positive_selector`.
 2. Full cli-tools-common suite: 360 passed.
-3. `cd cj && uv run --with pytest --with <repo-root>/cli-tools-common pytest` — 8 passed (includes new `test_bug5_cj_browser_uses_absence_of_login_form_check`).
+3. `cd cj && uv run --with pytest --with ~/Dropbox/GitRepos/cli-tools/cli-tools-common pytest` — 8 passed (includes new `test_bug5_cj_browser_uses_absence_of_login_form_check`).
 4. `cj relationships apply --dry-run 7453049` → reports `outcome: "skipped"` (auth check no longer blocks).
 5. `cj relationships apply 7453049` (real) → auth gate passes, browser navigates to Marketplace detail page. (A separate downstream issue — stale Marketplace `_APPLY_SELECTORS` — prevents the click stage from finding the Apply button; that is a different bug and out of scope for Bug 5.)
 
@@ -194,7 +194,7 @@ There is also a per-advertiser second step: every "Manual application review" ad
 6. **One REST round-trip** instead of two: `_lookup_advertiser` runs once; `_outcome_from_status` decides short-circuit; the advertiser name from the same call is passed as the keyword.
 
 **Verification:**
-1. `cd <repo-root>/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest pytest tests/test_bugfixes.py` — 13 passed (4 new Bug-6 tests pin the URL shape, the row-scoped locator contract, the absence of the legacy dead-letter selectors, and the end-to-end mocked apply flow).
+1. `cd ~/Dropbox/GitRepos/cli-tools/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest pytest tests/test_bugfixes.py` — 13 passed (4 new Bug-6 tests pin the URL shape, the row-scoped locator contract, the absence of the legacy dead-letter selectors, and the end-to-end mocked apply flow).
 2. Full cli-tools-common suite: 360 passed.
 3. cli-tool compliance for cj: 128 passed, 21 skipped (all browser-CLI skips).
 4. Real apply against advertiser 7453049 navigated through findAdvertisers → joinprograms.do → "Application submitted for review" (confirmed by page title). CJ's REST `relationship_status` propagation lags the UI by minutes; the row on the search page drops its Apply button immediately, which is the CLI's signal that the apply registered.
@@ -226,7 +226,7 @@ A secondary contributing factor: the manual-review T&C form's `wait_for_selector
 
 **Verification:**
 
-1. `cd <repo-root>/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest --with <repo-root>/cli-tools-common pytest tests/test_bugfixes.py` — 19 passed (6 new Bug-7 tests + 13 prior bug regressions).
+1. `cd ~/Dropbox/GitRepos/cli-tools/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest --with ~/Dropbox/GitRepos/cli-tools/cli-tools-common pytest tests/test_bugfixes.py` — 19 passed (6 new Bug-7 tests + 13 prior bug regressions).
 2. NordVPN status confirmed: `cj relationships get 4837117` returns `relationship_status: "joined"` (auto-approve succeeded on the first click despite the prior client-side timeout — this was the original symptom proof).
 3. No live re-apply was performed during the fix — Bug-7 verification is via the regression-test suite. The first real apply attempt after this fix will exercise the REST-first short-circuit on auto-approve advertisers and the bumped timeout on manual-review advertisers.
 

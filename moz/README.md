@@ -1,6 +1,10 @@
 # Moz CLI
 
-A command-line interface for the [Moz API](https://api.moz.com/api/json/). Interact with Moz
+## DESCRIPTION
+
+The `moz` CLI provides a command-line interface for Moz API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

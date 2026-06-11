@@ -1,6 +1,10 @@
 # Facebook CLI
 
-A command-line tool for Facebook Marketplace, Messenger, and Groups via browser automation (playwright).
+## DESCRIPTION
+
+The `facebook` CLI wraps playwright with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

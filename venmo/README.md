@@ -1,15 +1,10 @@
 # Venmo CLI
 
-A command-line interface for retrieving Venmo transaction history.
+## DESCRIPTION
 
-Venmo does not expose a public consumer API, so this CLI uses the reverse-engineered
-[venmo-api](https://github.com/mmohades/Venmo) library, which talks to Venmo's private
-mobile API at `https://api.venmo.com`. Authentication is username + password + SMS OTP;
-a long-lived access token is saved after the first successful login so subsequent runs
-do not re-prompt.
+The `venmo` CLI provides a command-line interface for Venmo API.
 
-> Unofficial integration. Venmo can change its private API at any time. The CLI is
-> read-only by design — only `transactions list` and `transactions get` are exposed.
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

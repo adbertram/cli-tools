@@ -1,6 +1,10 @@
 # Google CLI
 
-Command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar, Chat), Google Analytics, Google Search Console, and Google Cloud.
+## DESCRIPTION
+
+The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar).
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

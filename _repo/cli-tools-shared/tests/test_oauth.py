@@ -2,9 +2,10 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+import requests
 from click.exceptions import Exit
 
-from cli_tools_shared.oauth import oauth_login
+from cli_tools_shared.oauth import DEFAULT_TOKEN_EXCHANGE_TIMEOUT, oauth_login
 from cli_tools_shared.token_manager import TokenManager
 
 
@@ -55,8 +56,8 @@ def test_oauth_login_uses_system_browser_and_pasted_redirect_url(monkeypatch):
         lambda prompt: "https://example.com/callback?code=auth-code-789",
     )
 
-    def fake_post(url, headers, data):
-        token_requests.append({"url": url, "headers": headers, "data": data})
+    def fake_post(url, headers, data, timeout):
+        token_requests.append({"url": url, "headers": headers, "data": data, "timeout": timeout})
         return FakeTokenResponse()
 
     monkeypatch.setattr("cli_tools_shared.oauth.requests.post", fake_post)
@@ -81,6 +82,7 @@ def test_oauth_login_uses_system_browser_and_pasted_redirect_url(monkeypatch):
                 "client_id": "client-123",
                 "client_secret": "secret-456",
             },
+            "timeout": DEFAULT_TOKEN_EXCHANGE_TIMEOUT,
         }
     ]
     assert saved_tokens["access_token"] == "new-access-token"
@@ -124,8 +126,8 @@ def test_oauth_login_can_omit_redirect_uri_when_provider_uses_registered_callbac
         lambda prompt: "https://example.com/callback?code=auth-code-789",
     )
 
-    def fake_post(url, headers, data):
-        token_requests.append({"url": url, "headers": headers, "data": data})
+    def fake_post(url, headers, data, timeout):
+        token_requests.append({"url": url, "headers": headers, "data": data, "timeout": timeout})
         return FakeTokenResponse()
 
     monkeypatch.setattr("cli_tools_shared.oauth.requests.post", fake_post)
@@ -135,7 +137,50 @@ def test_oauth_login_can_omit_redirect_uri_when_provider_uses_registered_callbac
     auth_query = parse_qs(urlparse(opened_urls[0]).query)
     assert "redirect_uri" not in auth_query
     assert "redirect_uri" not in token_requests[0]["data"]
+    assert token_requests[0]["timeout"] == DEFAULT_TOKEN_EXCHANGE_TIMEOUT
     assert saved_tokens["access_token"] == "new-access-token"
+
+
+def test_oauth_login_reports_token_exchange_timeout(monkeypatch, capsys):
+    config = SimpleNamespace(
+        access_token=None,
+        token_expires_at=None,
+        redirect_uri="https://example.com/callback",
+        OAUTH_REDIRECT_URI="",
+        OAUTH_PKCE=False,
+        OAUTH_SCOPES=["profile"],
+        OAUTH_EXTRA_AUTH_PARAMS={},
+        OAUTH_AUTH_URL="https://auth.example.com/oauth",
+        OAUTH_TOKEN_URL="https://auth.example.com/token",
+        OAUTH_TOKEN_AUTH="body",
+        client_id="client-123",
+        client_secret="secret-456",
+        save_tokens=lambda access, refresh, expires_at: None,
+    )
+
+    monkeypatch.setattr("cli_tools_shared.oauth.webbrowser.open", lambda url: None)
+    monkeypatch.setattr(
+        "cli_tools_shared.oauth.typer.prompt",
+        lambda prompt: "https://example.com/callback?code=auth-code-789",
+    )
+
+    observed = {}
+
+    def fake_post(url, headers, data, timeout):
+        observed.update({"url": url, "headers": headers, "data": data, "timeout": timeout})
+        raise requests.Timeout("token endpoint timed out")
+
+    monkeypatch.setattr("cli_tools_shared.oauth.requests.post", fake_post)
+
+    with pytest.raises(Exit):
+        oauth_login(config, force=True)
+
+    captured = capsys.readouterr()
+    assert observed["timeout"] == DEFAULT_TOKEN_EXCHANGE_TIMEOUT
+    assert (
+        f"Token exchange timed out after {DEFAULT_TOKEN_EXCHANGE_TIMEOUT} seconds."
+        in captured.err
+    )
 
 
 def test_oauth_login_errors_when_pasted_redirect_has_no_code(monkeypatch):

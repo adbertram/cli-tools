@@ -1,6 +1,10 @@
 ---
-name: "instacart-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute instacart operations using the `instacart` CLI tool. CLI interface for Instacart API -- grocery delivery orders, cart, and account management. Triggers: instacart, instacart cli, grocery delivery, instacart orders, instacart cart, shopping cart, grocery orders, track delivery, instacart account"
+name: instacart-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute instacart operations using the `instacart` CLI tool.
+  CLI interface for Instacart API -- grocery delivery orders, cart, and account management.
+  Triggers: instacart, instacart cli, grocery delivery, instacart orders, instacart cart, shopping cart, grocery orders, track delivery, instacart account
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 # Cvs CLI
 
-A command-line interface for the [Cvs API](https://www.cvs.com). CLI interface for CVS Health -- prescriptions, orders, and refills
+## DESCRIPTION
+
+The `cvs` CLI provides a command-line interface for Cvs API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

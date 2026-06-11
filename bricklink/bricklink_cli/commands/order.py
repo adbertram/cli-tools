@@ -1,7 +1,7 @@
 """Order commands for Bricklink CLI."""
 COMMAND_CREDENTIALS = {
     "file": ["oauth"],
-    "get": ["oauth"],
+    "get": ["oauth", "browser_session"],
     "items": ["oauth"],
     "list": ["oauth"],
     "search": ["browser_session"],
@@ -160,10 +160,16 @@ def order_get(
         if include_messages:
             raw_msgs = client.get_order_messages(order_id)
             messages = [_normalize_api_message(m, order_id) for m in raw_msgs]
+        
+        nss_alert = None
+        if raw_order.get("status", "") == "NSS":
+            nss_alert = run_browser(lambda browser: browser.get_nss_alert(order_id))
+
         order = {
             **raw_order,
             "shipped": is_shipped_status(raw_order.get("status", "")),
             "messages": messages,
+            "nss_alert": nss_alert,
         }
 
         print_detail(order, table)

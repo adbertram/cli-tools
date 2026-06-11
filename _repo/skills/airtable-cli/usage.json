@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when needed.",
-  "discovered_at": "2026-05-20T14:36:09.795262+00:00",
-  "total_commands": 23,
+  "discovered_at": "2026-06-09T19:45:01Z",
+  "total_commands": 25,
   "global_options": [
     {
       "name": "--version",
@@ -22,9 +22,14 @@
   "commands": {
     "auth": {
       "help": "Manage Airtable API authentication",
+      "usage_instructions": "Authentication management for Airtable. Use `auth login` to configure credentials, `auth status` for a quick profile-level check, `auth test` to verify stored credentials work against the live API, `auth profiles` to manage multiple saved profiles, and `auth logout` to clear credentials.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Configure Airtable credentials for the current or named profile. Use --credential-type/-c to re-enter only one credential type, --profile/-p to write to a specific profile, and --force/-F to clear stored credentials before reauthenticating.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -39,19 +44,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'personal_access_token')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Configure Airtable credentials for the current or named profile. Use --credential-type/-c to re-enter only one credential type, --profile/-p to write to a specific profile, and --force/-F to clear stored credentials before reauthenticating."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Clear stored Airtable credentials. Use --profile/-p to clear a specific profile's credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -60,11 +59,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Clear stored Airtable credentials. Use --profile/-p to clear a specific profile's credentials."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management for multiple Airtable accounts or environments. Use to create, list, switch, or delete profiles. One profile is set as default at a time.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new profile with NAME (required positional argument). Creates from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete a profile and all its data by NAME (required positional argument). Prompts for confirmation unless --force/-F is used.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Get details for a single profile by NAME (required positional argument). Use --table/-t for formatted output.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all configured Airtable profiles. Shows which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., is_default:eq:True).",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Check current auth status without making API calls. Use --profile/-p for a specific profile. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -80,11 +210,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check current auth status without making API calls. Use --profile/-p for a specific profile. Use --table/-t for formatted output."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Test that stored credentials actually work by making an API call. Use --verbose/-v for detailed checks. Use --profile/-p for a specific profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -107,133 +238,464 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Test that stored credentials actually work by making an API call. Use --verbose/-v for detailed checks. Use --profile/-p for a specific profile."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all configured Airtable profiles. Shows which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., is_default:eq:True)."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Get details for a single profile by NAME (required positional argument). Use --table/-t for formatted output."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new profile with NAME (required positional argument). Creates from .env.example template."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Set a profile as the default by NAME (required positional argument). Default profile is used when --profile is not specified."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete a profile and all its data by NAME (required positional argument). Prompts for confirmation unless --force/-F is used."
-            }
-          },
-          "usage_instructions": "Profile management for multiple Airtable accounts or environments. Use to create, list, switch, or delete profiles. One profile is set as default at a time."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management for Airtable. Use `auth login` to configure credentials, `auth status` for a quick profile-level check, `auth test` to verify stored credentials work against the live API, `auth profiles` to manage multiple saved profiles, and `auth logout` to clear credentials."
+      }
     },
     "cache": {
       "help": "Manage response cache",
+      "usage_instructions": "Manage the local Airtable CLI response cache.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Clear all cached Airtable CLI responses. Use when stale cached API data is affecting command output."
+          "usage_instructions": "Clear all cached Airtable CLI responses. Use when stale cached API data is affecting command output.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Manage the local Airtable CLI response cache."
+      }
+    },
+    "fields": {
+      "help": "Manage Airtable fields",
+      "usage_instructions": "Schema field operations for Airtable tables. Use `fields list` to enumerate a table schema, `fields get` to inspect one field, `fields create` to add a new field, and `fields update` to change a field name, description, or type-specific options. Airtable's public Web/Meta API does not support deleting fields; use the Airtable web UI for field deletion, then verify removal with fields get/list. Write operations require a token with `schema.bases:write`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a field in an Airtable table.",
+          "examples": [
+            "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
+            "airtable fields create tblXXXXXXXXXXXXXX \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'"
+          ],
+          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID, beginning with tbl"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "The field name"
+            },
+            {
+              "name": "field_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "The Airtable field type, such as singleLineText"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Field description",
+              "short": "-d"
+            },
+            {
+              "name": "--options",
+              "type": "TEXT",
+              "required": false,
+              "help": "Field options as a JSON object",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Report that field deletion is not supported by Airtable's public API.",
+          "examples": [
+            "airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX",
+            "airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --yes"
+          ],
+          "usage_instructions": "This command is guarded because Airtable's public Web/Meta API does not support deleting fields. It returns an unsupported-operation error before making any API request. Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID, beginning with tbl"
+            },
+            {
+              "name": "field_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The field ID, beginning with fld"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a single field schema by ID or name.",
+          "usage_instructions": "Get one field definition by TABLE_ID and FIELD_ID. TABLE_ID may be a table ID or table name; FIELD_ID may be a field ID or field name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or table name"
+            },
+            {
+              "name": "field_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The field ID or field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List fields in an Airtable table.",
+          "examples": [
+            "airtable fields list tblXXXXXXXXXXXXXX",
+            "airtable fields list \"Slides\" --table"
+          ],
+          "usage_instructions": "List schema fields for TABLE_ID, which may be a table ID or table name. Use --base/-b to override AIRTABLE_BASE_ID, --limit/-l to cap results, --filter/-f with field:op:value expressions such as name:eq:Status or type:eq:singleLineText, --properties/-p to project specific keys, and --table/-t for tabular output.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or table name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum fields to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:Status, type:eq:singleLineText)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update a field's name, description, or options.",
+          "examples": [
+            "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name \"New Status\"",
+            "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --options '{\"formula\":\"{Hours} * {Rate}\"}'"
+          ],
+          "usage_instructions": "Update FIELD_ID in TABLE_ID. Specify at least one of --name/-n, --description/-d, or --options/-o; --options must be a JSON object. Use --base/-b to override BASE_ID and --table/-t for table output.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID, beginning with tbl"
+            },
+            {
+              "name": "field_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The field ID, beginning with fld"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New field name",
+              "short": "-n"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "New field description",
+              "short": "-d"
+            },
+            {
+              "name": "--options",
+              "type": "TEXT",
+              "required": false,
+              "help": "Field options as a JSON object",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "records": {
       "help": "Manage Airtable records",
+      "usage_instructions": "CRUD operations on Airtable records. All record commands require TABLE_ID (name or ID) as first positional argument. Base ID defaults to .env but can be overridden with --base/-b. Field values for create/update use 'FieldName=value' pairs.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a new record.",
+          "examples": [
+            "airtable records create \"Tasks\" \"Name=New Task\" \"Status=Todo\"",
+            "airtable records create \"Tasks\" \"Name=Task\" \"Priority=1\" --typecast",
+            "airtable records create \"Tasks\" 'Tags=[\"urgent\",\"work\"]'"
+          ],
+          "usage_instructions": "Create a new record. TABLE_ID is required positional, followed by FIELD_VALUES as 'FieldName=value' pairs. Use --typecast to enable automatic type conversion. Use --base/-b to override default base.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or name"
+            },
+            {
+              "name": "field_values",
+              "type": "TEXT",
+              "required": true,
+              "help": "FIELD_VALUES...  Field values as 'FieldName=value' pairs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--typecast",
+              "type": "bool",
+              "required": false,
+              "help": "Enable automatic type conversion"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a record.",
+          "examples": [
+            "airtable records delete \"Tasks\" recXXX",
+            "airtable records delete \"Tasks\" recXXX --yes"
+          ],
+          "usage_instructions": "Delete a record. TABLE_ID and RECORD_ID are required positional args. Prompts for confirmation unless --yes/-y is used. Use --base/-b to override default base.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or name"
+            },
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific record by ID.",
+          "examples": [
+            "airtable records get \"Tasks\" recXXXXXXXXXXXXXX",
+            "airtable records get \"Tasks\" recXXX --table"
+          ],
+          "usage_instructions": "Get a single record by TABLE_ID and RECORD_ID (both required positional). Use --base/-b to override default base. Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or name"
+            },
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List records from an Airtable table.",
+          "examples": [
+            "airtable records list \"Table Name\"",
+            "airtable records list \"Tasks\" --base appXXX",
+            "airtable records list \"Tasks\" --limit 10",
+            "airtable records list \"Tasks\" --filter \"Status:eq:Active\"",
+            "airtable records list \"Tasks\" --formula \"Status='Active'\"",
+            "airtable records list \"Tasks\" --sort-field \"Created\" --sort-direction desc",
+            "airtable records list \"Tasks\" --properties \"Name,Status,Priority\"",
+            "airtable records list \"Tasks\" --table"
+          ],
+          "usage_instructions": "List records from a table. TABLE_ID is required (positional). Use --base/-b to override default base. Use --filter/-f for field filtering (e.g., Status:eq:Active) or --formula for raw Airtable formulas. Use --sort-field and --sort-direction for ordering. Use --view to filter by view. Default limit is 100. Use --properties/-p to select specific fields.",
           "arguments": [
             {
               "name": "table_id",
@@ -310,60 +772,23 @@
               "type": "TEXT",
               "required": false,
               "help": "Airtable filterByFormula (raw formula)"
-            }
-          ],
-          "examples": [
-            "airtable records list \"Table Name\"",
-            "airtable records list \"Tasks\" --base appXXX",
-            "airtable records list \"Tasks\" --limit 10",
-            "airtable records list \"Tasks\" --filter \"Status:eq:Active\"",
-            "airtable records list \"Tasks\" --formula \"Status='Active'\"",
-            "airtable records list \"Tasks\" --sort-field \"Created\" --sort-direction desc",
-            "airtable records list \"Tasks\" --properties \"Name,Status,Priority\"",
-            "airtable records list \"Tasks\" --table"
-          ],
-          "usage_instructions": "List records from a table. TABLE_ID is required (positional). Use --base/-b to override default base. Use --filter/-f for field filtering (e.g., Status:eq:Active) or --formula for raw Airtable formulas. Use --sort-field and --sort-direction for ordering. Use --view to filter by view. Default limit is 100. Use --properties/-p to select specific fields."
-        },
-        "get": {
-          "help": "Get a specific record by ID.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID or name"
             },
             {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The record ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "airtable records get \"Tasks\" recXXXXXXXXXXXXXX",
-            "airtable records get \"Tasks\" recXXX --table"
-          ],
-          "usage_instructions": "Get a single record by TABLE_ID and RECORD_ID (both required positional). Use --base/-b to override default base. Use --table/-t for formatted output."
+          ]
         },
         "update": {
           "help": "Update a record's fields. Use PATCH (default) to update only specified fields, or --replace for PUT to clear unspecified fields.",
+          "examples": [
+            "airtable records update \"Tasks\" recXXX \"Status=Complete\" \"Priority=High\"",
+            "airtable records update \"Tasks\" recXXX \"Name=New Task\" --replace",
+            "airtable records update \"Tasks\" recXXX \"Completed=true\" --typecast"
+          ],
+          "usage_instructions": "Update a record. TABLE_ID and RECORD_ID are required positional args, followed by FIELD_VALUES as 'FieldName=value' pairs. Default is PATCH (partial update); use --replace for PUT (clears unspecified fields). Use --typecast to enable automatic type conversion.",
           "arguments": [
             {
               "name": "table_id",
@@ -403,205 +828,44 @@
               "type": "bool",
               "required": false,
               "help": "Replace entire record (PUT) instead of updating (PATCH)"
-            }
-          ],
-          "examples": [
-            "airtable records update \"Tasks\" recXXX \"Status=Complete\" \"Priority=High\"",
-            "airtable records update \"Tasks\" recXXX \"Name=New Task\" --replace",
-            "airtable records update \"Tasks\" recXXX \"Completed=true\" --typecast"
-          ],
-          "usage_instructions": "Update a record. TABLE_ID and RECORD_ID are required positional args, followed by FIELD_VALUES as 'FieldName=value' pairs. Default is PATCH (partial update); use --replace for PUT (clears unspecified fields). Use --typecast to enable automatic type conversion."
-        },
-        "create": {
-          "help": "Create a new record.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID or name"
             },
             {
-              "name": "field_values",
-              "type": "TEXT",
-              "required": true,
-              "help": "FIELD_VALUES...  Field values as 'FieldName=value' pairs"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--typecast",
-              "type": "bool",
-              "required": false,
-              "help": "Enable automatic type conversion"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "airtable records create \"Tasks\" \"Name=New Task\" \"Status=Todo\"",
-            "airtable records create \"Tasks\" \"Name=Task\" \"Priority=1\" --typecast",
-            "airtable records create \"Tasks\" 'Tags=[\"urgent\",\"work\"]'"
-          ],
-          "usage_instructions": "Create a new record. TABLE_ID is required positional, followed by FIELD_VALUES as 'FieldName=value' pairs. Use --typecast to enable automatic type conversion. Use --base/-b to override default base."
-        },
-        "delete": {
-          "help": "Delete a record.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID or name"
-            },
-            {
-              "name": "record_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The record ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
-              "type": "TEXT",
-              "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--yes",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-y"
-            }
-          ],
-          "examples": [
-            "airtable records delete \"Tasks\" recXXX",
-            "airtable records delete \"Tasks\" recXXX --yes"
-          ],
-          "usage_instructions": "Delete a record. TABLE_ID and RECORD_ID are required positional args. Prompts for confirmation unless --yes/-y is used. Use --base/-b to override default base."
+          ]
         }
-      },
-      "usage_instructions": "CRUD operations on Airtable records. All record commands require TABLE_ID (name or ID) as first positional argument. Base ID defaults to .env but can be overridden with --base/-b. Field values for create/update use 'FieldName=value' pairs."
+      }
     },
-    "fields": {
-      "help": "Manage Airtable fields",
+    "tables": {
+      "help": "Manage Airtable tables",
+      "usage_instructions": "Table-level schema operations for an Airtable base. Use `tables list` to enumerate all tables in a base, `tables get` to inspect one table schema, `tables create` to create a new table, and `tables update` to rename a table or change its description. The Meta API requires at least one field on create; if --fields is omitted, a single primary singleLineText field named \"Name\" is added automatically. Base ID defaults to AIRTABLE_BASE_ID but can be overridden with --base/-b. Airtable does not expose a public delete-table endpoint, so this command group has no `delete` action.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List fields in an Airtable table.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID or table name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
-              "type": "TEXT",
-              "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum fields to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:Status, type:eq:singleLineText)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of fields to include in output",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "airtable fields list tblXXXXXXXXXXXXXX",
-            "airtable fields list \"Slides\" --table"
-          ],
-          "usage_instructions": "List schema fields for TABLE_ID, which may be a table ID or table name. Use --base/-b to override AIRTABLE_BASE_ID, --limit/-l to cap results, --filter/-f with field:op:value expressions such as name:eq:Status or type:eq:singleLineText, --properties/-p to project specific keys, and --table/-t for tabular output."
-        },
-        "get": {
-          "help": "Get a single field schema by ID or name.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID or table name"
-            },
-            {
-              "name": "field_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The field ID or field name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
-              "type": "TEXT",
-              "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Get one field definition by TABLE_ID and FIELD_ID. TABLE_ID may be a table ID or table name; FIELD_ID may be a field ID or field name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output."
-        },
         "create": {
-          "help": "Create a field in an Airtable table.",
+          "help": "Create a new table in an Airtable base. The Meta API requires at least one field; if --fields is omitted, a single primary field named \"Name\" of type singleLineText is created.",
+          "examples": [
+            "airtable tables create \"Tasks\"",
+            "airtable tables create \"Tasks\" --description \"Task tracker\"",
+            "airtable tables create \"Tasks\" --fields '[{\"name\":\"Title\",\"type\":\"singleLineText\"},{\"name\":\"Done\",\"type\":\"checkbox\",\"options\":{\"icon\":\"check\",\"color\":\"greenBright\"}}]'"
+          ],
+          "usage_instructions": "Create a new table in a base. NAME is the table name (required positional). --description/-d sets a description (max 20,000 chars). --fields takes a JSON array of {name, type, options?, description?} field objects; the first entry becomes the primary field and must be a supported primary field type. If --fields is omitted, a default `[{\"name\":\"Name\",\"type\":\"singleLineText\"}]` is used. --base/-b overrides AIRTABLE_BASE_ID. --table/-t for tabular output. Requires schema.bases:write.",
           "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID, beginning with tbl"
-            },
             {
               "name": "name",
               "type": "TEXT",
               "required": true,
-              "help": "The field name"
-            },
-            {
-              "name": "field_type",
-              "type": "TEXT",
-              "required": true,
-              "help": "The Airtable field type, such as singleLineText"
+              "help": "The new table name"
             }
           ],
           "options": [
@@ -616,15 +880,14 @@
               "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Field description",
+              "help": "Table description (max 20,000 chars)",
               "short": "-d"
             },
             {
-              "name": "--options",
+              "name": "--fields",
               "type": "TEXT",
               "required": false,
-              "help": "Field options as a JSON object",
-              "short": "-o"
+              "help": "Fields as a JSON array of {name, type, ...} objects. Defaults to a single primary 'Name' singleLineText field if omitted"
             },
             {
               "name": "--table",
@@ -632,28 +895,24 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
-            "airtable fields create tblXXXXXXXXXXXXXX \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'"
-          ],
-          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output."
+          ]
         },
-        "update": {
-          "help": "Update a field's name, description, or options.",
+        "get": {
+          "help": "Get one table schema by ID or name.",
+          "usage_instructions": "Get one table schema by TABLE_ID, which may be either a table ID or a table name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output.",
           "arguments": [
             {
               "name": "table_id",
               "type": "TEXT",
               "required": true,
-              "help": "The table ID, beginning with tbl"
-            },
-            {
-              "name": "field_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The field ID, beginning with fld"
+              "help": "The table ID (beginning with tbl) or table name"
             }
           ],
           "options": [
@@ -665,48 +924,29 @@
               "short": "-b"
             },
             {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "New field name",
-              "short": "-n"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "New field description",
-              "short": "-d"
-            },
-            {
-              "name": "--options",
-              "type": "TEXT",
-              "required": false,
-              "help": "Field options as a JSON object",
-              "short": "-o"
-            },
-            {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name \"New Status\"",
-            "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --options '{\"formula\":\"{Hours} * {Rate}\"}'"
-          ],
-          "usage_instructions": "Update FIELD_ID in TABLE_ID. Specify at least one of --name/-n, --description/-d, or --options/-o; --options must be a JSON object. Use --base/-b to override BASE_ID and --table/-t for table output."
-        }
-      },
-      "usage_instructions": "Schema field operations for Airtable tables. Use `fields list` to enumerate a table schema, `fields get` to inspect one field, `fields create` to add a new field, and `fields update` to change a field name, description, or type-specific options. Write operations require a token with `schema.bases:write`."
-    },
-    "tables": {
-      "help": "Manage Airtable tables",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List tables in an Airtable base.",
+          "examples": [
+            "airtable tables list",
+            "airtable tables list --base appXXXXXXXXXXXXXX --table",
+            "airtable tables list --filter \"name:contains:log\""
+          ],
+          "usage_instructions": "List every table in a base. Use --base/-b to override AIRTABLE_BASE_ID, --table/-t for a tabular display, --filter/-f with field:op:value (e.g., name:contains:log), --limit/-l to cap results, and --properties/-p to project specific keys. JSON output is a summary list with `id`, `name`, `primaryFieldId`, `description`, and `field_count`; use `tables get` for the full schema including fields and views.",
+          "arguments": [],
           "options": [
             {
               "name": "--base",
@@ -743,91 +983,22 @@
               "required": false,
               "help": "Comma-separated list of fields to include in output",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "airtable tables list",
-            "airtable tables list --base appXXXXXXXXXXXXXX --table",
-            "airtable tables list --filter \"name:contains:log\""
-          ],
-          "usage_instructions": "List every table in a base. Use --base/-b to override AIRTABLE_BASE_ID, --table/-t for a tabular display, --filter/-f with field:op:value (e.g., name:contains:log), --limit/-l to cap results, and --properties/-p to project specific keys. JSON output is a summary list with `id`, `name`, `primaryFieldId`, `description`, and `field_count`; use `tables get` for the full schema including fields and views."
-        },
-        "get": {
-          "help": "Get one table schema by ID or name.",
-          "arguments": [
-            {
-              "name": "table_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The table ID (beginning with tbl) or table name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
-              "type": "TEXT",
-              "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
             },
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get one table schema by TABLE_ID, which may be either a table ID or a table name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output."
-        },
-        "create": {
-          "help": "Create a new table in an Airtable base. The Meta API requires at least one field; if --fields is omitted, a single primary field named \"Name\" of type singleLineText is created.",
-          "arguments": [
-            {
-              "name": "name",
-              "type": "TEXT",
-              "required": true,
-              "help": "The new table name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--base",
-              "type": "TEXT",
-              "required": false,
-              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
-              "short": "-b"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Table description (max 20,000 chars)",
-              "short": "-d"
-            },
-            {
-              "name": "--fields",
-              "type": "TEXT",
-              "required": false,
-              "help": "Fields as a JSON array of {name, type, ...} objects. Defaults to a single primary 'Name' singleLineText field if omitted"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "airtable tables create \"Tasks\"",
-            "airtable tables create \"Tasks\" --description \"Task tracker\"",
-            "airtable tables create \"Tasks\" --fields '[{\"name\":\"Title\",\"type\":\"singleLineText\"},{\"name\":\"Done\",\"type\":\"checkbox\",\"options\":{\"icon\":\"check\",\"color\":\"greenBright\"}}]'"
-          ],
-          "usage_instructions": "Create a new table in a base. NAME is the table name (required positional). --description/-d sets a description (max 20,000 chars). --fields takes a JSON array of {name, type, options?, description?} field objects; the first entry becomes the primary field and must be a supported primary field type. If --fields is omitted, a default `[{\"name\":\"Name\",\"type\":\"singleLineText\"}]` is used. --base/-b overrides AIRTABLE_BASE_ID. --table/-t for tabular output. Requires schema.bases:write."
+          ]
         },
         "update": {
           "help": "Update a table's name or description.",
+          "examples": [
+            "airtable tables update tblXXXXXXXXXXXXXX --name \"Renamed Table\"",
+            "airtable tables update \"Tasks\" --description \"Updated description\""
+          ],
+          "usage_instructions": "Rename a table or update its description. TABLE_ID may be a table ID (tbl...) or a table name. Specify at least one of --name/-n or --description/-d. --base/-b overrides AIRTABLE_BASE_ID. --table/-t for tabular output. Requires schema.bases:write.",
           "arguments": [
             {
               "name": "table_id",
@@ -864,16 +1035,16 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "airtable tables update tblXXXXXXXXXXXXXX --name \"Renamed Table\"",
-            "airtable tables update \"Tasks\" --description \"Updated description\""
-          ],
-          "usage_instructions": "Rename a table or update its description. TABLE_ID may be a table ID (tbl...) or a table name. Specify at least one of --name/-n or --description/-d. --base/-b overrides AIRTABLE_BASE_ID. --table/-t for tabular output. Requires schema.bases:write."
+          ]
         }
-      },
-      "usage_instructions": "Table-level schema operations for an Airtable base. Use `tables list` to enumerate all tables in a base, `tables get` to inspect one table schema, `tables create` to create a new table, and `tables update` to rename a table or change its description. The Meta API requires at least one field on create; if --fields is omitted, a single primary singleLineText field named \"Name\" is added automatically. Base ID defaults to AIRTABLE_BASE_ID but can be overridden with --base/-b. Airtable does not expose a public delete-table endpoint, so this command group has no `delete` action."
+      }
     }
   }
 }

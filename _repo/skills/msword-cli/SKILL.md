@@ -1,6 +1,10 @@
 ---
-name: "msword-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute msword operations using the `msword` CLI tool. Read Word docs, convert to markdown, and manage comments (list, add inline). Triggers: msword, msword cli, word document, docx, read word file, convert docx to markdown, word comments, extract word comments, add word comment, inline comment"
+name: msword-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute msword operations using the `msword` CLI tool.
+  Read Word docs, convert to markdown, and manage comments (list, add inline).
+  Triggers: msword, msword cli, word document, docx, read word file, convert docx to markdown, word comments, extract word comments, add word comment, inline comment
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 # n8n CLI
 
-Manage n8n server - nodes, executions, credentials, data tables, and logs.
+## DESCRIPTION
+
+The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

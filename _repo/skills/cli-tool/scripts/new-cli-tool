@@ -10,9 +10,9 @@ Usage:
 """
 
 import argparse
+import shutil
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -183,12 +183,22 @@ def copy_and_process_template(
                 shutil.copy2(src_path, dest_path)
 
 
+def validate_template_dir(template_dir: Path) -> None:
+    """Validate required files for a CLI template directory."""
+    required_files = ["README.md"]
+    missing = [name for name in required_files if not (template_dir / name).is_file()]
+    if missing:
+        names = ", ".join(missing)
+        raise FileNotFoundError(f"Template {template_dir.name} is missing required file(s): {names}")
+
+
 def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
     """Install the package using uv tool install."""
     print_step("Installing via uv tool install...")
+    python3 = shutil.which("python3") or "python3"
 
     result = subprocess.run(
-        ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh", "--python", "python3"],
+        ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh", "--python", python3],
         capture_output=True,
         text=True,
     )
@@ -197,6 +207,14 @@ def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
         return False
 
     print_success("Package installed via uv")
+
+    launcher = LOCAL_BIN_DIR / tool_name
+    if not launcher.is_symlink():
+        print_error(f"uv install did not create the expected launcher symlink: {launcher}")
+        return False
+    if not os.access(launcher, os.X_OK):
+        print_error(f"uv launcher symlink is not executable: {launcher}")
+        return False
 
     # Browser CLIs use browser-harness (a transitive dependency of
     # cli-tools-shared). The harness drives Chrome via CDP and manages its
@@ -448,6 +466,11 @@ Examples:
     if not template_dir.exists():
         print_error(f"Template not found: {template_dir}")
         sys.exit(1)
+    try:
+        validate_template_dir(template_dir)
+    except FileNotFoundError as exc:
+        print_error(str(exc))
+        sys.exit(1)
     
     # Check output doesn't exist
     if output_dir.exists():
@@ -635,7 +658,7 @@ PASSWORD=secret://{name}-password
     # Install via uv
     if not args.no_install:
         if not install_with_uv(output_dir, name, args.type):
-            print_warning("Continuing without uv install...")
+            sys.exit(1)
     
     # Update the repo-owned CLI inventory with the new tool entry
     service_name = name_pascal if not args.cli_command else to_pascal_case(args.cli_command)

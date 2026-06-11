@@ -1,6 +1,10 @@
 # Globiflow CLI
 
-A command-line interface for [Globiflow](https://workflow-automation.podio.com) using browser automation. Globiflow workflow automation for Podio
+## DESCRIPTION
+
+The `globiflow` CLI provides a command-line interface for Globiflow (browser automation).
+
+Use it when you need repeatable access to globiflow workflows that are only available through a signed-in website.
 
 ## Installation
 

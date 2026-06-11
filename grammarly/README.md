@@ -1,6 +1,10 @@
 # Grammarly CLI
 
-Command-line interface for Grammarly plagiarism and docs workflows.
+## DESCRIPTION
+
+The `grammarly` CLI provides a command-line interface for Grammarly API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

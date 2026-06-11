@@ -17,6 +17,8 @@ from cli_tools_shared.output import print_info, print_error
 
 CDP_PORT = 9222
 DESCRIPT_BASE_URL = "https://web.descript.com"
+SAVE_DIALOG_TIMEOUT_SECONDS = 60
+EXPORT_COMPLETE_TIMEOUT_SECONDS = 1800
 
 
 def _get_cdp_targets() -> list[dict]:
@@ -44,6 +46,15 @@ def _get_project_page_ws(project_id: str) -> str:
             if ws_url:
                 return ws_url
     return ""
+
+
+def _connect_cdp(ws_url: str, timeout: int):
+    """Connect to a CDP websocket without sending an Origin header."""
+    return websocket.create_connection(
+        ws_url,
+        timeout=timeout,
+        suppress_origin=True,
+    )
 
 
 def _find_dom_node(root: dict, testid: str) -> Optional[dict]:
@@ -85,6 +96,52 @@ def _run_applescript(script: str) -> str:
     return result.stdout.strip()
 
 
+def _find_save_dialog_window_index(timeout: int = SAVE_DIALOG_TIMEOUT_SECONDS) -> int:
+    """Find the Descript window with the native save sheet attached."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            window_index = _run_applescript('''
+                tell application "System Events"
+                    tell process "Descript"
+                        repeat with windowIndex from 1 to count of windows
+                            set candidateWindow to window windowIndex
+                            if (count of sheets of candidateWindow) > 0 then
+                                set candidateSheet to sheet 1 of candidateWindow
+                                if exists text field "Save As:" of candidateSheet then
+                                    return windowIndex as text
+                                end if
+                            end if
+                        end repeat
+                    end tell
+                end tell
+                return ""
+            ''')
+            if window_index:
+                return int(window_index)
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    raise ClientError(f"Save dialog did not appear within {timeout} seconds")
+
+
+def _count_descript_sheets() -> int:
+    """Count native sheets attached to Descript windows."""
+    count = _run_applescript('''
+        tell application "System Events"
+            tell process "Descript"
+                set sheetCount to 0
+                repeat with windowIndex from 1 to count of windows
+                    set sheetCount to sheetCount + (count of sheets of window windowIndex)
+                end repeat
+                return sheetCount as text
+            end tell
+        end tell
+    ''')
+    return int(count)
+
+
 def navigate_to_composition(project_id: str, composition_id: str) -> None:
     """Navigate Descript to a specific composition.
 
@@ -101,7 +158,7 @@ def navigate_to_composition(project_id: str, composition_id: str) -> None:
         )
 
     # Navigate via CDP
-    ws = websocket.create_connection(ws_url, timeout=15)
+    ws = _connect_cdp(ws_url, timeout=15)
     try:
         ws.send(json.dumps({
             "id": 1,
@@ -119,7 +176,7 @@ def navigate_to_composition(project_id: str, composition_id: str) -> None:
             new_ws_url = _get_project_page_ws(project_id)
             if not new_ws_url:
                 continue
-            ws = websocket.create_connection(new_ws_url, timeout=10)
+            ws = _connect_cdp(new_ws_url, timeout=10)
             try:
                 root = _cdp_get_dom(ws)
                 if _find_dom_node(root, "export-popover-trigger"):
@@ -143,7 +200,7 @@ def _trigger_local_export(project_id: str) -> None:
     if not ws_url:
         raise ClientError("Lost connection to Descript")
 
-    ws = websocket.create_connection(ws_url, timeout=15)
+    ws = _connect_cdp(ws_url, timeout=15)
     try:
         # Runtime.evaluate .click() works but return values are unreliable
         # in this Electron context. So: click once, wait, click export.
@@ -216,7 +273,7 @@ def _trigger_local_export(project_id: str) -> None:
         ws.close()
 
 
-def _handle_save_dialog(output_path: Path, window_title: str) -> None:
+def _handle_save_dialog(output_path: Path, _window_title: str) -> None:
     """Handle the native macOS save dialog via AppleScript.
 
     Sets the filename and navigates to the output directory.
@@ -227,29 +284,13 @@ def _handle_save_dialog(output_path: Path, window_title: str) -> None:
     # Activate Descript to ensure save dialog is visible
     _run_applescript('tell application "Descript" to activate')
 
-    # Wait for the save sheet to appear
-    for _ in range(20):
-        try:
-            count = _run_applescript(f'''
-                tell application "System Events"
-                    tell process "Descript"
-                        return count of sheets of window "{window_title}"
-                    end tell
-                end tell
-            ''')
-            if int(count) > 0:
-                break
-        except Exception:
-            pass
-        time.sleep(0.5)
-    else:
-        raise ClientError("Save dialog did not appear within 10 seconds")
+    window_index = _find_save_dialog_window_index()
 
     # Set the filename
     _run_applescript(f'''
         tell application "System Events"
             tell process "Descript"
-                set s to sheet 1 of window "{window_title}"
+                set s to sheet 1 of window {window_index}
                 set value of text field "Save As:" of s to "{filename}"
             end tell
         end tell
@@ -282,7 +323,7 @@ def _handle_save_dialog(output_path: Path, window_title: str) -> None:
     _run_applescript(f'''
         tell application "System Events"
             tell process "Descript"
-                set s to sheet 1 of window "{window_title}"
+                set s to sheet 1 of window {window_index}
                 click button "Save" of s
             end tell
         end tell
@@ -294,7 +335,7 @@ def _handle_save_dialog(output_path: Path, window_title: str) -> None:
         result = _run_applescript(f'''
             tell application "System Events"
                 tell process "Descript"
-                    set s to sheet 1 of window "{window_title}"
+                    set s to sheet 1 of window {window_index}
                     set innerSheet to sheet 1 of s
                     click button "Replace" of innerSheet
                     return "replaced"
@@ -305,22 +346,19 @@ def _handle_save_dialog(output_path: Path, window_title: str) -> None:
         pass  # No replace dialog — file didn't exist
 
 
-def _wait_for_export_complete(output_path: Path, window_title: str, timeout: int = 300) -> None:
+def _wait_for_export_complete(
+    output_path: Path,
+    _window_title: str,
+    timeout: int = EXPORT_COMPLETE_TIMEOUT_SECONDS,
+) -> None:
     """Wait for the Descript export to complete.
 
-    Monitors the save dialog sheet — export is done when the sheet closes.
+    Monitors Descript native sheets — export is done when all sheets close.
     """
     start = time.time()
     while time.time() - start < timeout:
         try:
-            count = _run_applescript(f'''
-                tell application "System Events"
-                    tell process "Descript"
-                        return count of sheets of window "{window_title}"
-                    end tell
-                end tell
-            ''')
-            if int(count) == 0:
+            if _count_descript_sheets() == 0:
                 # Sheet closed — export complete
                 if output_path.exists():
                     return
@@ -361,7 +399,7 @@ def export_composition_local(
     if not ws_url:
         raise ClientError("Lost connection to Descript after navigation")
 
-    ws = websocket.create_connection(ws_url, timeout=15)
+    ws = _connect_cdp(ws_url, timeout=15)
     try:
         # Get the window title for AppleScript
         msg_id = 1

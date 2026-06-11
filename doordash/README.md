@@ -1,8 +1,10 @@
 # DoorDash CLI
 
-A command-line interface for [DoorDash](https://www.doordash.com) food ordering and delivery management.
+## DESCRIPTION
 
-Uses a hybrid approach: browser-based authentication (once) + GraphQL API calls for all data operations.
+The `doordash` CLI provides a command-line interface for Doordash (browser automation).
+
+Use it when you need repeatable access to doordash workflows that are only available through a signed-in website.
 
 ## Installation
 

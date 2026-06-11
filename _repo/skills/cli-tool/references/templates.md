@@ -28,21 +28,24 @@ Three template types are available. Each creates a complete CLI structure with d
 <name>/
 ├── <name>_cli/
 │   ├── __init__.py
-│   ├── main.py           # Typer app setup
+│   ├── main.py           # Typer app setup and default items command group
 │   ├── client.py         # HTTP requests, auth, retry, normalization
 │   ├── config.py         # Configuration & .env
 │   ├── models.py         # Optional: only when local models earn their cost
-│   └── commands/
-│       ├── __init__.py
-│       ├── auth.py       # login, status, logout
-│       └── items.py      # Resource commands
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
 
+The generated API scaffold keeps the initial `items` command group in `main.py`.
+Create `commands/<group>.py` modules only after multiple command groups or file
+size justify the split. Do not leave a single-module `commands/` directory in
+place; `test_flat_module_layout.py` fails that layout.
+
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
+
+When login needs required non-secret setup such as `BASE_URL`, declare `AUTH_CONFIG_PROMPTS` on `Config` instead of telling the user to edit `.env` manually. When the user must create a token or app first, declare `AUTH_SETUP_INSTRUCTIONS` with the canonical setup URL and brief steps.
 
 ### Key Components
 
@@ -136,7 +139,8 @@ requests>=2.31.0
 - Form submission and browser-based automation
 - Hybrid CLIs with both API and browser session auth
 
-**IMPORTANT:** Only use after confirming no API exists.
+**IMPORTANT:** Only use after confirming no public or internal API exists and
+Adam explicitly approves making the command browser-driven.
 
 **Requires:** Nothing in PATH. `browser-harness` is a transitive dependency
 of `cli-tools-shared`; it drives Chrome via CDP and manages its own browser
@@ -172,9 +176,6 @@ type to `--auth-type browser_session`).
 │   ├── parsers.py        # Normalizers for DOM data returned by page.evaluate(...)
 │   ├── config.py         # BaseConfig subclass with get_browser()
 │   ├── models.py         # Optional: only when validation/serialization needs it
-│   └── commands/
-│       ├── __init__.py
-│       └── search.py     # Search/scrape commands
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
@@ -193,6 +194,10 @@ type to `--auth-type browser_session`).
 **Note:** No `commands/auth.py` — auth is handled by `create_auth_app()`
 from `cli-tools-shared`.
 
+The generated browser scaffold keeps its default search commands in `main.py`.
+Split into `commands/<group>.py` only when the CLI grows beyond a single
+resource group.
+
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The user-data `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 ### Key Components
@@ -210,6 +215,12 @@ class Config(BaseConfig):
     DIST_NAME = "mysite-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://example.com"
+    AUTH_CONFIG_PROMPTS = [("BASE_URL", "Site base URL", False)]
+    AUTH_SETUP_INSTRUCTIONS = (
+        "Before logging in:\n"
+        "  1. Create the required token/app at https://example.com/settings/api\n"
+        "  2. Follow the site's instructions, then continue here."
+    )
 
     def __init__(self, profile: Optional[str] = None):
         super().__init__(
@@ -397,15 +408,15 @@ example built on `BrowserAutomation` from `cli_tools_shared`.
 │   ├── parsers.py        # Output parsing (CRITICAL)
 │   ├── config.py         # Configuration
 │   ├── models.py         # Optional: only when local models earn their cost
-│   └── commands/
-│       ├── __init__.py
-│       ├── auth.py       # OPTIONAL: Delegates to underlying CLI (see below)
-│       └── items.py      # Parses underlying CLI output
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
+
+The generated wrapper scaffold also starts flat: default commands live in
+`main.py`, and `commands/<group>.py` is optional when multiple groups justify
+it.
 
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
 
@@ -437,11 +448,11 @@ def parse_list_output(output: str) -> List[Dict]:
     return items
 ```
 
-**auth.py (REQUIRED - `create_auth_app` mount):**
+**auth.py (optional split-out `create_auth_app` mount):**
 
 **Hard rule:** wrapper CLIs MUST mount `create_auth_app` just like API CLIs — no hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions. The upstream-CLI delegation happens inside `Config.test_connection()` (for status) and a `login_handler` passed to `create_auth_app` (for login). If the underlying CLI has no auth, skip auth entirely with `--auth-type none` when scaffolding.
 
-The entire `commands/auth.py` is ~4 lines:
+If you split auth out of `main.py`, the entire `commands/auth.py` is ~4 lines:
 
 ```python
 """Authentication commands for MyWrapper CLI."""
@@ -790,8 +801,10 @@ from cli_tools_shared.output import print_json, print_table, print_error, print_
 
 No local `output.py` file is needed in CLIs.
 
-### `commands/<resource>.py`
-Individual command modules:
+### Optional `commands/<resource>.py`
+Use a command module only when the CLI already has multiple command groups or
+`main.py` has grown large enough that the split earns its complexity. Fresh
+scaffolds keep the first resource group in `main.py`.
 
 ```python
 """Item commands for MyTool CLI."""
@@ -919,9 +932,10 @@ def callback(ctx: typer.Context, version: ...):
         raise typer.Exit()
 ```
 
-### Subcommand Apps (commands/*.py)
+### Subcommand Apps
 
-All subcommand apps MUST include `no_args_is_help=True`:
+Whether a subcommand app lives in `main.py` or `commands/*.py`, it MUST include
+`no_args_is_help=True`:
 
 ```python
 # REQUIRED - ensures help shown when no command specified
@@ -939,7 +953,7 @@ After scaffolding, customize:
   - Exact JSON fields and table columns
   - Required derived fields such as stable IDs
   - Local models only when validation, polymorphism, or serialization earns the code
-- Add resource commands in `commands/`
+- Start with resource commands in `main.py`; split into `commands/` only when multiple groups justify it
 - Update `.env.example` with required variables
 - Implement auth methods
 

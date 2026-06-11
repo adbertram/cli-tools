@@ -19,6 +19,88 @@ json_error() {
     MESSAGE="$1" python3 -c 'import json, os; print(json.dumps({"error": os.environ["MESSAGE"]}))'
 }
 
+json_test_failure() {
+    local test_name="$1"
+    local file_name="$2"
+    local message="$3"
+    CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" TEST_NAME="$test_name" FILE_NAME="$file_name" MESSAGE="$message" \
+        python3 - <<'PY'
+import json
+import os
+
+message = os.environ["MESSAGE"]
+test_name = os.environ["TEST_NAME"]
+payload = {
+    "success": False,
+    "cli_name": os.environ["CLI_NAME"],
+    "command_filter": os.environ.get("COMMAND") or None,
+    "summary": {"passed": 0, "failed": 1, "skipped": 0, "errors": 0},
+    "auth_required": False,
+    "auth_command": None,
+    "failures": [{
+        "test_name": test_name,
+        "file": os.environ["FILE_NAME"],
+        "message": message[:300],
+        "todo": {
+            "content": f"Fix: {message}"[:150],
+            "activeForm": f"Fixing {test_name}"[:100],
+            "status": "pending",
+        },
+    }],
+    "raw_output": message,
+}
+print(json.dumps(payload, indent=2))
+PY
+}
+
+validate_readme_description_block() {
+    local readme_path="$CLI_DIR/README.md"
+    if [[ ! -f "$readme_path" ]]; then
+        json_error "README.md is required for CLI tool: $CLI_NAME" >&2
+        exit 1
+    fi
+
+    if ! README_DESCRIPTION_ERROR="$(
+        README_PATH="$readme_path" \
+        UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+        uv run --project "$SKILL_DIR" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+path = Path(os.environ["README_PATH"])
+lines = path.read_text().splitlines()
+
+try:
+    start = lines.index("## DESCRIPTION")
+except ValueError:
+    print("README.md must contain a ## DESCRIPTION block")
+    raise SystemExit(1)
+
+end = len(lines)
+for index in range(start + 1, len(lines)):
+    if lines[index].startswith("## ") and index != start:
+        end = index
+        break
+
+block = "\n".join(lines[start + 1 : end]).strip()
+sentences = re.findall(r"[^.!?]+[.!?]", block)
+if len(sentences) < 2 or len(sentences) > 3:
+    print("README.md DESCRIPTION block must contain 2-3 sentences")
+    raise SystemExit(1)
+
+if "use" not in block.lower():
+    print("README.md DESCRIPTION block must explain why someone would use the CLI")
+    raise SystemExit(1)
+PY
+    )"; then
+        json_error "$README_DESCRIPTION_ERROR" >&2
+        exit 1
+    fi
+
+    echo "[PASS] readme_description_block: README.md contains DESCRIPTION block" >&2
+}
+
 run_auth_status_schema_preflight() {
     UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
     PYTHONPATH="$SKILL_DIR/tests${PYTHONPATH:+:$PYTHONPATH}" \
@@ -100,7 +182,7 @@ while [[ $# -gt 0 ]]; do
         --command) COMMAND="$2"; shift 2 ;;
         --verbose) VERBOSE=true; shift ;;
         --file) FILE_PATH="$2"; shift 2 ;;
-        *) json_error "Unknown argument: $1" >&2; exit 1 ;;
+        *) json_error "Unknown argument: $1. Use --cli-name <name> or --file <path>." >&2; exit 1 ;;
     esac
 done
 
@@ -187,15 +269,16 @@ PY
 fi
 
 CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
-if [[ -x "$CANONICAL_UV_LAUNCHER" ]]; then
-    CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
-else
-    CLI_EXECUTABLE="$(command -v "$CLI_NAME" 2>/dev/null || true)"
-fi
-if [[ -z "$CLI_EXECUTABLE" ]]; then
-    json_error "CLI executable not found on PATH: $CLI_NAME" >&2
+if [[ ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
+    json_test_failure \
+        "test_cli_executable_linked" \
+        "test-cli-tool.sh" \
+        "CLI executable link missing or not executable: $CANONICAL_UV_LAUNCHER"
     exit 1
 fi
+CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
+
+validate_readme_description_block
 
 FORBIDDEN_ROOT_ENV_FILES=()
 for env_file in "$CLI_DIR"/.env "$CLI_DIR"/.env.*; do
@@ -264,7 +347,7 @@ PYTEST_ARGS+=(-k "not test_auth_status_schema")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
-uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
+uv run python -m pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
 EXIT_CODE=$?
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \

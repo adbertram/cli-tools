@@ -1,6 +1,10 @@
 # Dropbox CLI
 
-A command-line interface for [Dropbox](https://www.dropbox.com). Manage files, folders, and account information directly from your terminal.
+## DESCRIPTION
+
+The `dropbox` CLI provides a command-line interface for Dropbox API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

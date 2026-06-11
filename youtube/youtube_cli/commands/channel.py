@@ -7,6 +7,7 @@ COMMAND_CREDENTIALS = {
     "delete": ["custom"],
     "get": ["custom"],
     "list": ["custom"],
+    "posts": ["custom", "browser_session"],
     "update": ["custom"],
     "upload": ["custom"],
     "videos": ["custom"],
@@ -14,11 +15,13 @@ COMMAND_CREDENTIALS = {
 
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import typer
 from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import (
     handle_error,
+    print_ai_instruction,
     print_error,
     print_info,
     print_json,
@@ -29,6 +32,9 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from ..api_client import get_api_client
+from ..chapter_validation import build_recommended_chapters_instruction
+from ..client import YouTubeBrowserClient, get_browser_client
+from ..config import get_config
 from ..models import (
     DeleteResult,
     PrivacyStatus,
@@ -43,7 +49,98 @@ from ..models import (
 
 app = typer.Typer(help="Manage the authenticated user's YouTube channel")
 videos_app = typer.Typer(help="Manage videos on the authenticated user's channel")
+posts_app = typer.Typer(help="Post messages to a YouTube channel")
 app.add_typer(videos_app, name="videos")
+app.add_typer(posts_app, name="posts")
+
+
+def _validate_channel_url(channel_url: str) -> str:
+    """Return a clean YouTube channel URL or fail before browser navigation."""
+    parsed = urlsplit(channel_url.strip())
+    if parsed.scheme != "https" or parsed.netloc != "www.youtube.com" or not parsed.path.strip("/"):
+        raise ValueError("Channel URL must be a full https://www.youtube.com/... channel URL")
+    return urlunsplit(("https", "www.youtube.com", parsed.path.rstrip("/"), "", ""))
+
+
+def _owned_channel_target(profile: Optional[str]) -> dict:
+    """Return the owned channel URL and metadata for the authenticated profile."""
+    client = get_api_client(profile=profile)
+    service = client.get_youtube_service()
+    response = service.channels().list(part="id,snippet", mine=True).execute()
+    items = response.get("items", [])
+    if not items:
+        raise RuntimeError("No owned channel found for the authenticated profile")
+
+    channel_data = items[0]
+    snippet = channel_data.get("snippet", {})
+    custom_url = snippet.get("customUrl")
+    if custom_url:
+        handle = custom_url if custom_url.startswith("@") else f"@{custom_url.lstrip('@')}"
+        channel_url = f"https://www.youtube.com/{handle}"
+    else:
+        channel_url = f"https://www.youtube.com/channel/{channel_data['id']}"
+
+    return {
+        "channel_id": channel_data["id"],
+        "channel_title": snippet.get("title"),
+        "channel_url": _validate_channel_url(channel_url),
+    }
+
+
+def _create_text_post(browser, channel_url: str, message: str, dry_run: bool = False) -> dict:
+    return YouTubeBrowserClient(browser=browser).create_community_post(
+        channel_url,
+        message,
+        dry_run=dry_run,
+    )
+
+
+def _require_description_for_recommended_chapters(description: Optional[str]) -> str:
+    if not description or not description.strip():
+        print_error("--include-recommended-chapters requires --description")
+        raise typer.Exit(1)
+    return description
+
+
+@posts_app.command("create")
+def posts_create(
+    message: str = typer.Option(..., "--message", "-m", help="Text message to post"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Fill the composer but do not click Post"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Create a text community post for the authenticated profile's owned channel."""
+    if not message.strip():
+        print_error("--message cannot be empty")
+        raise typer.Exit(1)
+
+    try:
+        target = _owned_channel_target(profile)
+        config = get_config(profile=profile)
+        result = _create_text_post(
+            get_browser_client(profile=profile).browser,
+            target["channel_url"],
+            message,
+            dry_run=dry_run,
+        )
+        result.update(
+            {
+                "profile": profile or config.get_active_profile_name(),
+                "channel_id": target["channel_id"],
+                "channel_title": target["channel_title"],
+            }
+        )
+    except Exception as exc:
+        raise typer.Exit(handle_error(exc))
+
+    if table:
+        print_table(
+            [result],
+            ["posted", "dry_run", "profile", "channel_title", "visibility"],
+            ["Posted", "Dry Run", "Profile", "Channel", "Visibility"],
+        )
+    else:
+        print_json(result)
 
 
 def _get_uploads_playlist_id(service) -> str:
@@ -277,12 +374,38 @@ def videos_upload(
         exists=True,
         dir_okay=False,
     ),
+    include_recommended_chapters: bool = typer.Option(
+        False,
+        "--include-recommended-chapters",
+        help="Return AI instructions to add recommended Video Chapters before uploading",
+    ),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Upload a video file to the authenticated user's channel."""
     if publish_at and privacy != PrivacyStatus.PRIVATE:
         print_error("--publish-at requires --privacy private (YouTube schedules private uploads)")
         raise typer.Exit(1)
+    if include_recommended_chapters:
+        chapter_description = _require_description_for_recommended_chapters(description)
+        print_ai_instruction(
+            build_recommended_chapters_instruction(
+                command="channel videos upload",
+                description=chapter_description,
+                original_command={
+                    "file": str(file),
+                    "title": title,
+                    "description": description,
+                    "tags": tags,
+                    "category_id": category_id,
+                    "privacy": privacy.value,
+                    "publish_at": publish_at,
+                    "made_for_kids": made_for_kids,
+                    "thumbnail": str(thumbnail) if thumbnail else None,
+                    "profile": profile,
+                },
+            )
+        )
+        return
 
     try:
         client = get_api_client(profile=profile)
@@ -365,9 +488,33 @@ def videos_update(
         exists=True,
         dir_okay=False,
     ),
+    include_recommended_chapters: bool = typer.Option(
+        False,
+        "--include-recommended-chapters",
+        help="Return AI instructions to add recommended Video Chapters before updating",
+    ),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Update title, description, tags, privacy, or thumbnail of an existing video."""
+    if include_recommended_chapters:
+        chapter_description = _require_description_for_recommended_chapters(description)
+        print_ai_instruction(
+            build_recommended_chapters_instruction(
+                command="channel videos update",
+                description=chapter_description,
+                original_command={
+                    "video_id": video_id,
+                    "title": title,
+                    "description": description,
+                    "tags": tags,
+                    "category_id": category_id,
+                    "privacy": privacy.value if privacy else None,
+                    "thumbnail": str(thumbnail) if thumbnail else None,
+                    "profile": profile,
+                },
+            )
+        )
+        return
     if not any([title, description, tags is not None, category_id, privacy, thumbnail]):
         print_error("Provide at least one field to update")
         raise typer.Exit(1)

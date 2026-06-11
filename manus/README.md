@@ -1,6 +1,10 @@
 # Manus CLI Guide
 
-Reference for the `manus` command-line interface for the public Manus API v2.
+## DESCRIPTION
+
+The `manus` CLI provides a command-line interface for Manus AI API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 

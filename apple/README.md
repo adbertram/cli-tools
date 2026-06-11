@@ -1,8 +1,10 @@
 # Apple CLI
 
-Read-only Apple purchase and subscription history lookup using the private
-`reportaproblem.apple.com/api/purchase/search` endpoint with a persisted Apple
-browser session.
+## DESCRIPTION
+
+The `apple` CLI provides a command-line interface for Apple purchase and subscription history.
+
+Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
 ## Installation
 

@@ -1,12 +1,10 @@
 # ClickBank CLI
 
-CLI for the documented ClickBank REST APIs at `https://api.clickbank.com/rest/1.3`.
+## DESCRIPTION
 
-Implemented endpoint families:
-- `orders2`
-- `products`
-- `quickstats`
-- `marketplace` (browser-driven; see [Marketplace](#marketplace) below)
+The `clickbank` CLI provides a command-line interface for Clickbank API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Install
 

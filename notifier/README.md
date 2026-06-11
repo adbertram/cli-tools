@@ -1,6 +1,10 @@
 # Notifier CLI
 
-A command-line wrapper for [terminal-notifier](https://github.com/julienXX/terminal-notifier) to send macOS desktop notifications.
+## DESCRIPTION
+
+The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

@@ -1,6 +1,10 @@
 # {{Name}} CLI
 
-A standardized command-line wrapper for [{{cli_command}}]({{docs_url}}). {{description}}
+## DESCRIPTION
+
+A standardized command-line wrapper for [{{cli_command}}]({{docs_url}}). {{description}}.
+
+Use this CLI when you need the wrapped command exposed through the cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

@@ -1,6 +1,10 @@
 # Brickfreedom CLI
 
-A command-line interface for [Brickfreedom](https://brickfreedom.com) using browser automation. Manage LEGO marketplace orders and tasks from the command line.
+## DESCRIPTION
+
+The `brickfreedom` CLI provides a command-line interface for Brickfreedom (browser automation).
+
+Use it when you need repeatable access to brickfreedom workflows that are only available through a signed-in website.
 
 ## Installation
 

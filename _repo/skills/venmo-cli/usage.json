@@ -104,7 +104,7 @@
           "usage_instructions": "Look up a single transaction by `payment_id` (the CLI-injected top-level field; also at `payment.id`). NOTE: top-level `id` in the raw payload is Venmo's `story_id` which is null for items returned by /stories/target-or-actor — always use `payment_id` here. Searches the most recent 500 transactions. Returns the same full raw record shape as one entry from `transactions list`. `--profile <name>` queries a specific Venmo auth profile without changing the active profile. `--table` and `--properties` (dotted paths) behave the same as on `list`. Example: `venmo transactions get 4418053612741823878 --profile personal --table`."
         }
       },
-      "usage_instructions": "Read-only transaction history. Each record is the FULL raw Venmo API payload (the unmodified `Transaction._json` from venmo-api) plus a CLI-injected top-level `payment_id` for convenience. The shape is nested — scalar fields live both at the top level (`id`/story_id, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment_id`) and inside the nested `payment` object (`payment.id`, `payment.status`, `payment.action`, `payment.amount`, `payment.actor.*` user object, `payment.target.user.*` user object, `payment.target.merchant`, `payment.date_completed`). Related collections include `likes`, `reactions`, `comments`, `mentions`, `app`, `transfer`, `authorization`. Both `--filter` and `--properties` accept dotted paths (`payment.amount:gt:100`, `payment.actor.username:eq:example-user`)."
+      "usage_instructions": "Read-only transaction history. Each record is the FULL raw Venmo API payload (the unmodified `Transaction._json` from venmo-api) plus a CLI-injected top-level `payment_id` for convenience. The shape is nested — scalar fields live both at the top level (`id`/story_id, `type`, `note`, `date_created`, `date_updated`, `audience`, `transaction_external_id`, `payment_id`) and inside the nested `payment` object (`payment.id`, `payment.status`, `payment.action`, `payment.amount`, `payment.actor.*` user object, `payment.target.user.*` user object, `payment.target.merchant`, `payment.date_completed`). Related collections include `likes`, `reactions`, `comments`, `mentions`, `app`, `transfer`, `authorization`. Both `--filter` and `--properties` accept dotted paths (`payment.amount:gt:100`, `payment.actor.username:eq:Adam-Bertram`)."
     },
     "auth": {
       "help": "Manage venmo authentication",
@@ -134,7 +134,7 @@
               "short": "-c"
             }
           ],
-          "usage_instructions": "Authenticate with Venmo. Reads `venmo-username` and `venmo-password` from the CLI-tools keychain (`<repo-root>/secret-manager/secrets.sh`). Triggers an SMS OTP from Venmo; prompt for the 6-digit code interactively, or set `VENMO_OTP=<code>` env var. Use `--force` to clear saved tokens and re-authenticate. Example: `VENMO_OTP=123456 venmo auth login --force`."
+          "usage_instructions": "Authenticate with Venmo. Reads `venmo-username` and `venmo-password` from the CLI-tools keychain (`/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh`). Triggers an SMS OTP from Venmo; prompt for the 6-digit code interactively, or set `VENMO_OTP=<code>` env var. Use `--force` to clear saved tokens and re-authenticate. Example: `VENMO_OTP=123456 venmo auth login --force`."
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",

@@ -1,6 +1,10 @@
 # dev_to CLI
 
-CLI for publishing and reading DEV Community posts through the official Forem API.
+## DESCRIPTION
+
+The `dev_to` CLI provides a command-line interface for the DEV Community API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## API contract
 

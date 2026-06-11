@@ -20,6 +20,8 @@ no_auth_clis = [
     "snagit",
     "claude-code-sessions",
     "powerpoint-slide-recorder",
+    "harmony",
+    "weather",
 ]
 
 # Orchestration/framework CLIs that don't follow standard resource patterns
@@ -274,3 +276,7 @@ command_timeout = 120
 [cli_specific.msword.param_fixtures]
 "docs comments list" = { "_pos1" = "docx_file" }
 "docs comments get" = { "_pos1" = "docx_file" }
+
+[cli_specific.weather.param_fixtures]
+"conditions list" = { "_pos1" = "zip_code" }
+"forecast list" = { "_pos1" = "zip_code" }

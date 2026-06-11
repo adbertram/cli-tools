@@ -1,6 +1,10 @@
 # eBay CLI
 
-A command-line interface for eBay APIs. Manage your eBay seller tools, marketplace categories, and account from the terminal.
+## DESCRIPTION
+
+The `ebay` CLI provides a command-line interface for eBay Fulfillment API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

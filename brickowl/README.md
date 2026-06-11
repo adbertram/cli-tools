@@ -1,6 +1,10 @@
 # Brick Owl CLI
 
-A command-line interface for the [Brick Owl API](https://api.brickowl.com/v1). Manage orders, inventory, catalog data, messages, refunds, coupons, and quotes for your Brick Owl LEGO marketplace store.
+## DESCRIPTION
+
+The `brickowl` CLI provides a command-line interface for Brickowl API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

@@ -1,6 +1,10 @@
 ---
-name: "asana-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute asana operations using the `asana` CLI tool. CLI interface for Asana API -- manage tasks, projects, sections, custom fields, users, and workspaces. Triggers: asana, asana cli, asana tasks, asana projects, list asana tasks, create asana task, my asana tasks, search asana, asana workspace, asana sections"
+name: asana-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute asana operations using the `asana` CLI tool.
+  CLI interface for Asana API -- manage tasks, projects, sections, custom fields, users, and workspaces.
+  Triggers: asana, asana cli, asana tasks, asana projects, list asana tasks, create asana task, my asana tasks, search asana, asana workspace, asana sections
 ---
 
 <objective>

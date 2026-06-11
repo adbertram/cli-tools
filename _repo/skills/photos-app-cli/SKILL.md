@@ -1,6 +1,10 @@
 ---
-name: "photos-app-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute photos-app operations using the `photos-app` CLI tool. Query and export photos from macOS Photos library. Triggers: photos-app, photos-app cli, photos app, list photos, download photos, export photos, photo albums, my photos, photos library, enhance photos, add photos to album"
+name: photos-app-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute photos-app operations using the `photos-app` CLI tool.
+  Query and export photos from macOS Photos library.
+  Triggers: photos-app, photos-app cli, photos app, list photos, download photos, export photos, photo albums, my photos, photos library, enhance photos, add photos to album
 ---
 
 <objective>

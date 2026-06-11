@@ -1,6 +1,10 @@
 ---
-name: "shopgoodwill-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute shopgoodwill operations using the `shopgoodwill` CLI tool. CLI interface for ShopGoodwill. Triggers: shopgoodwill, shopgoodwill cli, shop goodwill, goodwill auction, search goodwill, goodwill listings, shopgoodwill search"
+name: shopgoodwill-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute shopgoodwill operations using the `shopgoodwill` CLI tool.
+  CLI interface for ShopGoodwill.
+  Triggers: shopgoodwill, shopgoodwill cli, shop goodwill, goodwill auction, search goodwill, goodwill listings, shopgoodwill search
 ---
 
 <objective>

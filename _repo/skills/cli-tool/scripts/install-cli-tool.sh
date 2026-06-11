@@ -31,7 +31,9 @@ fi
 # When pyproject.toml's requires-python has an upper bound (e.g. ">=3.13,<3.14"),
 # uv tool install would otherwise pick the system python and ignore that bound,
 # leading to source-build failures. Honor the bound by passing --python.
-PY_FLAG=()
+SYSTEM_PYTHON3="$(command -v python3 2>/dev/null || true)"
+[ -z "$SYSTEM_PYTHON3" ] && SYSTEM_PYTHON3="python3"
+PY_FLAG=(--python "$SYSTEM_PYTHON3")
 OVERRIDE_FLAG=()
 if [ -f "$TOOL_DIR/pyproject.toml" ]; then
     UPPER_PY=$(python3 - <<PYEOF 2>/dev/null
@@ -180,16 +182,21 @@ fi
 # Smoke test: --help
 # ============================================================================
 HELP_WORKS="false"
+SYMLINK_EXISTS="false"
 if [ $INSTALL_EXIT -eq 0 ]; then
     # Prefer the uv-managed launcher we just installed; PATH may resolve to an
     # unrelated system binary with the same command name.
     SMOKE_BIN=""
-    if [ -f "$HOME/.local/bin/$CLI_NAME" ]; then
+    if [ -L "$HOME/.local/bin/$CLI_NAME" ]; then
+        SYMLINK_EXISTS="true"
         SMOKE_BIN="$HOME/.local/bin/$CLI_NAME"
     elif [ -f "$HOME/.local/bin/$CLI_NAME.exe" ]; then
+        SYMLINK_EXISTS="true"
         SMOKE_BIN="$HOME/.local/bin/$CLI_NAME.exe"
     else
-        SMOKE_BIN=$(command -v "$CLI_NAME" 2>/dev/null)
+        INSTALL_EXIT=1
+        INSTALL_OUTPUT="${INSTALL_OUTPUT}
+ERROR: uv tool install completed but did not create expected launcher: $HOME/.local/bin/$CLI_NAME"
     fi
     if [ -n "$SMOKE_BIN" ]; then
         "$SMOKE_BIN" --help >/dev/null 2>&1 && HELP_WORKS="true"
@@ -200,7 +207,7 @@ fi
 # Determine success
 # ============================================================================
 SUCCESS="false"
-[ $INSTALL_EXIT -eq 0 ] && [ "$HELP_WORKS" = "true" ] && SUCCESS="true"
+[ $INSTALL_EXIT -eq 0 ] && [ "$SYMLINK_EXISTS" = "true" ] && [ "$HELP_WORKS" = "true" ] && SUCCESS="true"
 
 # ============================================================================
 # Escape install output for JSON
@@ -225,6 +232,7 @@ cat <<EOF
   "editable_location": $EDITABLE_LOCATION_JSON,
   "shared_editable_install": "$SHARED_EDITABLE_INSTALL",
   "shared_editable_location": $SHARED_EDITABLE_LOCATION_JSON,
+  "symlink_exists": $SYMLINK_EXISTS,
   "help_works": $HELP_WORKS
 }
 EOF

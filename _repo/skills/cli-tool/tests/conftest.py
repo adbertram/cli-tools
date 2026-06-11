@@ -15,6 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cli_test_utils import discover_list_commands, run_cli_command
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
+CLI_SELECTION_FIXTURE = "cli_name"
+CLI_NAME_REQUIRED_MESSAGE = (
+    "WARNING: No --cli-name specified for CLI-dependent tests.\n"
+    "Use --cli-name <name> to execute CLI-dependent tests. "
+    "--force only confirms batch/collect-only harness work where those tests may skip."
+)
 
 
 def _credential_types_from_config(cli_dir: Path, cli_name: str) -> list[str] | None:
@@ -196,16 +202,21 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_configure(config):
-    """Validate CLI name or batch mode."""
-    cli_name = config.getoption("--cli-name")
-    force = config.getoption("--force")
+def _selected_tests_need_cli_name(items) -> bool:
+    """Return whether any selected test needs the CLI-specific fixture graph."""
+    return any(
+        CLI_SELECTION_FIXTURE in getattr(item, "fixturenames", ())
+        for item in items
+    )
 
-    if cli_name is None and not force:
-        pytest.exit(
-            "WARNING: No --cli-name specified. This will test ALL CLI tools.\n"
-            "Add --force to confirm or specify --cli-name <name>"
-        )
+
+def pytest_collection_finish(session):
+    """Validate CLI name or batch mode after pytest has selected tests."""
+    cli_name = session.config.getoption("--cli-name")
+    force = session.config.getoption("--force")
+
+    if cli_name is None and not force and _selected_tests_need_cli_name(session.items):
+        pytest.exit(CLI_NAME_REQUIRED_MESSAGE)
 
 
 def _resolve_cli_dir_from_launcher(cli_name: str) -> Path:

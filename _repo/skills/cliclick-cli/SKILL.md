@@ -1,6 +1,10 @@
 ---
-name: "cliclick-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute cliclick operations using the `cliclick` CLI tool. CLI wrapper for cliclick mouse/keyboard automation on macOS. Triggers: cliclick, cliclick cli, mouse click, keyboard automation, click coordinates, type text, mouse position, drag and drop, screen automation, macOS mouse control"
+name: cliclick-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute cliclick operations using the `cliclick` CLI tool.
+  CLI wrapper for cliclick mouse/keyboard automation on macOS.
+  Triggers: cliclick, cliclick cli, mouse click, keyboard automation, click coordinates, type text, mouse position, drag and drop, screen automation, macOS mouse control
 ---
 
 <objective>
@@ -12,6 +16,12 @@ The `cliclick` CLI follows this pattern:
 ```bash
 cliclick <command-group> <action> [arguments] [options]
 ```
+
+Do not pass native cliclick tokens directly to the wrapper. Commands such as
+`cliclick c:100,200` are invalid here and fail because `c:100,200` is parsed as
+a top-level command. For a simple click, use `cliclick mouse click 100 200`.
+For native cliclick syntax, wrap the full sequence with `cliclick exec run
+"c:100,200"`.
 
 | Task | Command |
 |------|---------|

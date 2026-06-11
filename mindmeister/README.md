@@ -1,6 +1,10 @@
 # MindMeister CLI
 
-A command-line interface for the [MindMeister API](https://developers.mindmeister.com/docs) - manage mind maps from the terminal.
+## DESCRIPTION
+
+The `mindmeister` CLI provides a command-line interface for Mindmeister API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

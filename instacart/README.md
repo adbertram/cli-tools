@@ -1,6 +1,10 @@
 # Instacart CLI
 
-A command-line interface for Instacart using browser session authentication. Manage orders, view carts, and access your Instacart account from the terminal.
+## DESCRIPTION
+
+The `instacart` CLI provides a command-line interface for Instacart API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Authentication
 

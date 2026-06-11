@@ -6,6 +6,7 @@ COMMAND_CREDENTIALS = {
     "create": [
         "personal_access_token"
     ],
+    "delete": [],
     "list": [
         "personal_access_token"
     ],
@@ -25,6 +26,12 @@ from cli_tools_shared.filters import apply_filters, apply_properties_filter, val
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success
 
 app = typer.Typer(help="Manage Airtable fields", no_args_is_help=True)
+
+UNSUPPORTED_FIELD_DELETE_MESSAGE = (
+    "Airtable's public Web/Meta API does not support deleting fields. "
+    "Delete the field in Airtable's web UI, then verify removal with "
+    "`airtable fields get` or `airtable fields list --filter name:eq:<field name>`."
+)
 
 
 def parse_options(options: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -198,5 +205,27 @@ def fields_update(
         )
         print_success(f"Field {field_id} updated successfully")
         print_field(result, table)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("delete")
+def fields_delete(
+    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    field_id: str = typer.Argument(..., help="The field ID, beginning with fld"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    Report that field deletion is not supported by Airtable's public API.
+
+    Examples:
+        airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX
+        airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --yes
+    """
+    try:
+        raise ValueError(UNSUPPORTED_FIELD_DELETE_MESSAGE)
+    except typer.Exit:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))

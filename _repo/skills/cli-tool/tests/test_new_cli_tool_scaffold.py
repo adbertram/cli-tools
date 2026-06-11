@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,40 @@ from cli_tools_shared.config import config_env_path_for_tool, get_profiles_base_
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CLI_TOOLS_DOC = REPO_ROOT / "_repo" / "docs" / "cli_tools.md"
+
+
+def _template_names() -> list[str]:
+    return sorted(
+        path.name
+        for path in (SKILL_ROOT / "templates").iterdir()
+        if path.is_dir()
+    )
+
+
+@pytest.mark.parametrize("template_name", _template_names())
+def test_all_cli_tool_templates_include_readme(template_name: str) -> None:
+    readme_path = SKILL_ROOT / "templates" / template_name / "README.md"
+
+    assert readme_path.is_file()
+
+
+@pytest.mark.parametrize("template_name", _template_names())
+def test_pyproject_templates_include_pytest_dev_dependency(template_name: str) -> None:
+    pyproject_path = SKILL_ROOT / "templates" / template_name / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text())
+
+    assert "pytest>=7.0.0" in pyproject["dependency-groups"]["dev"]
+
+
+@pytest.mark.parametrize("template_name", _template_names())
+def test_readme_templates_include_description_block(template_name: str) -> None:
+    readme_path = SKILL_ROOT / "templates" / template_name / "README.md"
+    lines = readme_path.read_text().splitlines()
+
+    assert lines[0] == "# {{Name}} CLI"
+    assert lines[2] == "## DESCRIPTION"
+    assert "{{description}}" in lines[4]
+    assert "Use this CLI when" in lines[6]
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -72,6 +107,11 @@ def test_new_cli_tool_creates_runtime_default_profile_without_source_env(
         assert result.returncode == 0, result.stderr
         assert not (tool_dir / ".env").exists()
         assert sorted(path.name for path in tool_dir.glob(".env*")) == [".env.example"]
+        expected_display_name = "".join(part.capitalize() for part in tool_name.split("-"))
+        readme_lines = (tool_dir / "README.md").read_text().splitlines()
+        assert readme_lines[2] == "## DESCRIPTION"
+        assert f"Interact with {expected_display_name}" in readme_lines[4]
+        assert "Use this CLI when" in readme_lines[6]
 
         profile_env = get_profiles_base_dir(tool_name) / "default" / ".env"
         assert profile_env.exists()

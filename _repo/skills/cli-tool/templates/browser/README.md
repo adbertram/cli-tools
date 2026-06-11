@@ -1,6 +1,10 @@
 # {{Name}} CLI
 
-A command-line interface for [{{Name}}]({{base_url}}) using browser automation. {{description}}
+## DESCRIPTION
+
+A command-line interface for [{{Name}}]({{base_url}}) using browser automation. {{description}}.
+
+Use this CLI when you need repeatable access to {{Name}} workflows that are only available through the website.
 
 ## Installation
 

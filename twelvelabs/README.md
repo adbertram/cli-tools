@@ -1,6 +1,10 @@
 # TwelveLabs CLI
 
-A command-line interface for the [TwelveLabs API](https://docs.twelvelabs.io) - video AI for video understanding, indexing, and text generation.
+## DESCRIPTION
+
+The `twelvelabs` CLI provides a command-line interface for Twelvelabs API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

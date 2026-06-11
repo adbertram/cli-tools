@@ -1,6 +1,10 @@
 # iMessage CLI
 
-CLI tool for interacting with iMessage on macOS. Uses SQLite for fast reads from the Messages database and AppleScript for sending messages.
+## DESCRIPTION
+
+The `imessage` CLI provides command-line access for iMessage on macOS.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Requirements
 

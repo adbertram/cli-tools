@@ -1,6 +1,10 @@
 ---
-name: "ring-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute ring operations using the `ring` CLI tool. CLI for Ring doorbells, cameras, chimes, and intercoms — devices, events, snapshots, recording downloads, motion detection, lights, siren, chime test, volume. Triggers: ring, ring cli, ring doorbell, ring camera, ring chime, ring devices, ring events, ring motion, ring snapshot, ring history, ring recording, ring download, my ring, my doorbell, motion detection ring, ring floodlight, ring siren, ring intercom, list ring devices, last ring event, doorbell battery, doorbell wifi, ring 2fa."
+name: ring-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Execute ring operations using the `ring` CLI tool.
+  CLI for Ring doorbells, cameras, chimes, and intercoms — devices, events, snapshots, recording downloads, motion detection, lights, siren, chime test, volume.
+  Triggers: ring, ring cli, ring doorbell, ring camera, ring chime, ring devices, ring events, ring motion, ring snapshot, ring history, ring recording, ring download, my ring, my doorbell, my doorbell camera, motion detection ring, ring floodlight, ring siren, ring intercom, ring doorbells list, ring devices list, list ring devices, last ring event, latest ring motion, latest doorbell ring, doorbell battery, doorbell wifi, ring battery, ring 2fa, ring 2fa code.
 ---
 
 <objective>

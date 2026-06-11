@@ -1,6 +1,10 @@
 # Techsmith CLI
 
-A command-line interface for [Techsmith](https://www.techsmith.com/resources/affiliate-partners/) using browser automation. Browser CLI for TechSmith affiliate workflows
+## DESCRIPTION
+
+The `techsmith` CLI provides a command-line interface for Techsmith (browser automation).
+
+Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website.
 
 ## Installation
 

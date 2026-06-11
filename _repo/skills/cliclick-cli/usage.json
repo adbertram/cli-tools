@@ -922,5 +922,5 @@
       "usage_instructions": "Execute raw cliclick native command strings directly. Use for complex multi-step sequences in a single call. Syntax: c:x,y (click), dc:x,y (double-click), m:x,y (move), t:text (type), kp:key (press), w:ms (wait), etc."
     }
   },
-  "usage_instructions": "Use for macOS mouse and keyboard automation via cliclick. Commands follow `cliclick <group> <action>` pattern. Requires macOS Accessibility permissions. All mouse/keyboard commands support --test/-T for dry runs and --verbose/-V for detailed output. Use --no-restore to keep the mouse at the new position after an action."
+  "usage_instructions": "Use for macOS mouse and keyboard automation via cliclick. Commands follow `cliclick <group> <action>` pattern. Do not pass native cliclick tokens directly to the wrapper: `cliclick c:100,200` is invalid because `c:100,200` is parsed as a top-level command. For a simple click, use `cliclick mouse click 100 200`. For native cliclick syntax, wrap the full sequence with `cliclick exec run \"c:100,200\"`. Requires macOS Accessibility permissions. All mouse/keyboard commands support --test/-T for dry runs and --verbose/-V for detailed output. Use --no-restore to keep the mouse at the new position after an action."
 }

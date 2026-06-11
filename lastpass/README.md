@@ -1,6 +1,10 @@
 # LastPass CLI
 
-A standardized command-line wrapper for [lpass](https://github.com/lastpass/lastpass-cli) (LastPass CLI).
+## DESCRIPTION
+
+The `lastpass` CLI wraps lpass with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

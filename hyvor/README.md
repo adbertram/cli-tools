@@ -1,6 +1,10 @@
 # Hyvor CLI
 
-A command-line interface for the [Hyvor Talk API](https://talk.hyvor.com/docs/api-console). Manage Hyvor Talk comments and discussions on your website.
+## DESCRIPTION
+
+The `hyvor` CLI provides a command-line interface for Hyvor API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

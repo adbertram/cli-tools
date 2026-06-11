@@ -30,6 +30,8 @@ activity = get_activity_logger("bricklink")
 class BricklinkRuntimeBrowser(BricklinkBrowser):
     """Bricklink browser automation using shared BrowserAutomation base."""
 
+    NAVIGATION_READY_STATE = "domcontentloaded"
+
     def __init__(self, config=None):
         config = config or get_config()
         super().__init__(config)
@@ -49,6 +51,11 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         if self._is_auth_failure_page(page):
             return False
         return super()._check_auth(page)
+
+    def _goto_page(self, page, url: str) -> None:
+        # BrickLink can keep background requests open; selectors prove readiness.
+        page.goto(url, wait_until=self.NAVIGATION_READY_STATE)
+        page.wait_for_selector("body", state="visible", timeout=15000)
 
     def _read_confirmation_code(self) -> str:
         prompt = (
@@ -85,8 +92,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 f"URL: {page.url}"
             )
         page.wait_for_timeout(2000)
-        page.goto(requested_url, wait_until="networkidle")
-        page.wait_for_selector("body", state="visible", timeout=15000)
+        self._goto_page(page, requested_url)
         if self._is_confirmation_code_page(page):
             raise ConfirmationRequiredError("this operation")
 
@@ -219,9 +225,8 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         out on a missing form element.
         """
         activity.info("Navigating to %s", url)
-        page = self.get_page(url)
-        page.goto(url, wait_until="networkidle")
-        page.wait_for_selector("body", state="visible", timeout=15000)
+        page = self.get_page()
+        self._goto_page(page, url)
         self._handle_confirmation_code_page(page, url)
         self._check_session_expired(page)
 
@@ -243,8 +248,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 waf_attempts, max_waf_retries, url,
             )
             page.wait_for_timeout(2000 * waf_attempts)
-            page.goto(url, wait_until="networkidle")
-            page.wait_for_selector("body", state="visible", timeout=15000)
+            self._goto_page(page, url)
             self._handle_confirmation_code_page(page, url)
             self._check_session_expired(page)
 
@@ -561,6 +565,24 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         """Get refund page info for an order."""
         url = f"{self.REFUND_URL}?id={order_id}"
         page = self._get_page_for(url)
+
+        # Check for explicit empty state / error message on the page
+        error_msg = page.evaluate(
+            """() => {
+                const emptyTitleEl = document.querySelector('.empty-state__title');
+                if (emptyTitleEl) {
+                    const descEl = emptyTitleEl.nextElementSibling;
+                    const titleText = emptyTitleEl.innerText.trim();
+                    const descText = descEl ? descEl.innerText.trim() : '';
+                    return `${titleText}${descText ? ': ' + descText : ''}`;
+                }
+                return null;
+            }"""
+        )
+        if error_msg:
+            raise RuntimeError(
+                f"Refund page for order {order_id} displays: {error_msg!r}"
+            )
 
         info = page.evaluate("""() => {
             const getFieldValue = (labelText) => {
@@ -1320,3 +1342,132 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return {"success": success,
                 "message": "Wanted list notification sent" if success else "Notification may have failed. Verify on Bricklink."}
+
+    # ==================== NSS Alerts ====================
+
+    def list_nss_alerts(self) -> list:
+        """List active Non-Shipping Seller (NSS) alerts against the seller."""
+        url = "https://www.bricklink.com/orderReceived.asp?st=s"
+        page = self._get_page_for(url)
+
+        # Check if there's any orders on the page
+        try:
+            page.wait_for_selector('a[href*="orderDetail.asp?ID="], a[href*="orderDetail.asp?id="]', timeout=5000)
+        except Exception:
+            return []
+
+        orders = page.evaluate("""() => {
+            const results = [];
+            const links = Array.from(document.querySelectorAll('a[href*="orderDetail.asp?ID="], a[href*="orderDetail.asp?id="]'));
+            const seen = new Set();
+            for (const link of links) {
+                const href = link.getAttribute('href');
+                const match = href.match(/ID=(\\d+)/i);
+                if (!match) continue;
+                const orderId = match[1];
+                if (seen.has(orderId)) continue;
+                seen.add(orderId);
+                
+                const tr = link.closest('tr');
+                if (!tr) continue;
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => (td.textContent || '').trim());
+                if (cells.length < 13) continue;
+                
+                let buyer = cells[6] || '';
+                buyer = buyer.replace(/\\u00a0/g, ' ').split('(')[0].trim();
+                
+                results.push({
+                    order_id: orderId,
+                    date: cells[2] || '',
+                    buyer: buyer,
+                    items_cost: cells[9] || '',
+                    grand_total: cells[10] || '',
+                    final_total: cells[11] || '',
+                    status: cells[12] || 'NSS',
+                    url: 'https://www.bricklink.com/' + href
+                });
+            }
+            return results;
+        }""")
+        return orders
+
+    def get_nss_alert(self, order_id: str) -> dict:
+        """Get details for a specific Non-Shipping Seller (NSS) alert by order ID."""
+        url = f"https://www.bricklink.com/retractOrder.asp?ID={order_id}"
+        page = self._get_page_for(url)
+
+        info = page.evaluate("""() => {
+            const bodyText = document.body.innerText;
+            
+            // Status and Cancel
+            let status = '';
+            const statusMatch = bodyText.match(/Current Problem Status:\\s*([\\s\\S]*?)(?=\\n\\n|\\nMy Next|\\nComments|\\nProblem Comments)/i);
+            if (statusMatch) status = statusMatch[1].trim();
+            
+            let cancellation_info = '';
+            const cancelMatch = bodyText.match(/This order can be cancelled after\\s*([^\\n]*)/i);
+            if (cancelMatch) cancellation_info = cancelMatch[0].trim();
+            
+            let reason = '';
+            const reasonMatch = bodyText.match(/Reason:\\s*([^\\n]*)/i);
+            if (reasonMatch) reason = reasonMatch[1].trim();
+            
+            let details = '';
+            const detailsMatch = bodyText.match(/Details:\\s*([\\s\\S]*?)(?=\\n\\n|\\nFrom:|\\nBrickLink)/i);
+            if (detailsMatch) details = detailsMatch[1].trim();
+            
+            // Let's extract comments/history
+            const comments = [];
+            const commentsIndex = bodyText.indexOf('Problem Comments:');
+            if (commentsIndex !== -1) {
+                const commentsSection = bodyText.substring(commentsIndex).trim();
+                const parts = commentsSection.split(/\\nFrom:\\s*/);
+                for (let i = 1; i < parts.length; i++) {
+                    const part = parts[i].trim();
+                    const lines = part.split('\\n');
+                    const header = lines[0] || '';
+                    const headerMatch = header.match(/^([^\\t(]+)(?:\\(([^)]+)\\))?\\s*\\t*Posted on:\\s*([^\\t\\n]+)/);
+                    
+                    let user = '';
+                    let date = '';
+                    if (headerMatch) {
+                        user = headerMatch[1].trim();
+                        date = headerMatch[3].trim();
+                    } else {
+                        const postedOnIndex = header.indexOf('Posted on:');
+                        if (postedOnIndex !== -1) {
+                            user = header.substring(0, postedOnIndex).trim();
+                            date = header.substring(postedOnIndex + 10).trim();
+                        } else {
+                            user = header;
+                        }
+                    }
+                    user = user.replace(/\\u00a0/g, ' ').trim();
+                    date = date.replace(/\\u00a0/g, ' ').trim();
+                    
+                    let commentBody = lines.slice(1).join('\\n').trim();
+                    const footerIdx = commentBody.indexOf('\\nBrickLink');
+                    if (footerIdx !== -1) {
+                        commentBody = commentBody.substring(0, footerIdx).trim();
+                    } else if (commentBody.includes('BrickLink\\nAbout Us')) {
+                        const footerIdx2 = commentBody.indexOf('BrickLink\\nAbout Us');
+                        commentBody = commentBody.substring(0, footerIdx2).trim();
+                    }
+                    
+                    comments.push({
+                        user,
+                        date,
+                        message: commentBody
+                    });
+                }
+            }
+            
+            return {
+                status: status.replace(/\\u00a0/g, ' '),
+                cancellation_info: cancellation_info.replace(/\\u00a0/g, ' '),
+                reason: reason.replace(/\\u00a0/g, ' '),
+                details: details.replace(/\\u00a0/g, ' '),
+                comments
+            };
+        }""")
+        return {"order_id": order_id, **info, "url": page.url}

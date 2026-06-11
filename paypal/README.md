@@ -1,6 +1,10 @@
 # PayPal CLI
 
-Command-line interface for PayPal using the REST API.
+## DESCRIPTION
+
+The `paypal` CLI provides a command-line interface for PayPal API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

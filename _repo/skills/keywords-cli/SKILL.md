@@ -1,6 +1,10 @@
 ---
-name: "keywords-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute keywords operations using the `keywords` CLI tool. Query autocomplete suggestions from search engines for keyword research -- Google, YouTube, Bing, Amazon, DuckDuckGo. Triggers: keywords, keywords cli, keyword research, autocomplete suggestions, search suggestions, keyword ideas, seo keywords, suggest keywords, keyword tool"
+name: keywords-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute keywords operations using the `keywords` CLI tool.
+  Query autocomplete suggestions from search engines for keyword research -- Google, YouTube, Bing, Amazon, DuckDuckGo.
+  Triggers: keywords, keywords cli, keyword research, autocomplete suggestions, search suggestions, keyword ideas, seo keywords, suggest keywords, keyword tool
 ---
 
 <objective>

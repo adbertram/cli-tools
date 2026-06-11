@@ -1,6 +1,10 @@
 # Atlassian CLI
 
-A command-line interface for [Atlassian](https://www.flexoffers.com/affiliate-programs/atlassian-affiliate-program/) using browser automation. CLI interface for Atlassian affiliate-program browser automation
+## DESCRIPTION
+
+The `atlassian` CLI provides a command-line interface for Atlassian (browser automation).
+
+Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website.
 
 ## Installation
 

@@ -1,4 +1,16 @@
+## Project Purpose
+
+cli-tools is the central source tree for service-specific Python CLIs built for AI agents and humans. It exists to expose external services through documented, JSON-first, testable command surfaces instead of ad hoc browser clicks or one-off scripts.
+
 ## CLI Tool Skills
+
+Always load and follow the repo-owned `cli-tool` skill before creating,
+updating, testing, listing, troubleshooting, or running any CLI tool in this
+checkout:
+
+```text
+_repo/skills/cli-tool/SKILL.md
+```
 
 CLI-tool service skills live in this repository under `_repo/skills`.
 

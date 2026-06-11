@@ -1,4 +1,5 @@
 """Descript API client with automatic JWT refresh from the desktop app."""
+import hashlib
 import json
 import shutil
 import sqlite3
@@ -226,6 +227,9 @@ class DescriptClient:
 
         unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
         plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+        host_digest = hashlib.sha256(DESCRIPT_SESSION_COOKIE_HOST.encode("utf-8")).digest()
+        if plaintext.startswith(host_digest):
+            plaintext = plaintext[len(host_digest):]
         return plaintext.decode("utf-8")
 
     def _extract_jwt_from_app(self) -> str:

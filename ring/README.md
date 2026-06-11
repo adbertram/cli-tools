@@ -1,8 +1,10 @@
 # Ring CLI
 
-A command-line interface for [Ring](https://ring.com/) doorbells, cameras, chimes, and intercoms. Wraps the [`ring-doorbell`](https://python-ring-doorbell.readthedocs.io/) Python library — same library that powers the Home Assistant integration.
+## DESCRIPTION
 
-**Scope:** devices, events/history, recording downloads, snapshots, motion detection, lights, siren, chime test, volume. Ring Alarm arm/disarm and motion-zone editing are not exposed by the upstream library and are out of scope for this version; use the Ring mobile app for those.
+The `ring` CLI provides a command-line interface for Ring devices via python-ring-doorbell.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

@@ -1,6 +1,10 @@
 # TikTok CLI
 
-A command-line interface for downloading TikTok video transcripts using yt-dlp.
+## DESCRIPTION
+
+The `tiktok` CLI provides tikTok transcript downloader using yt-dlp.
+
+Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
 ## Installation
 

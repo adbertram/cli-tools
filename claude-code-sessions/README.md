@@ -1,6 +1,10 @@
 # ClaudeCodeSessions CLI
 
-A standardized command-line wrapper for [claude](). Query and analyze Claude Code session data from ~/.claude
+## DESCRIPTION
+
+The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

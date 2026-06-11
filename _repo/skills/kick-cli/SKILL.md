@@ -1,6 +1,10 @@
 ---
-name: "kick-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute kick operations using the `kick` CLI tool. CLI interface for Kick accounting/invoicing API -- transactions, categories, workspaces, entities, clients, rule groups, integrations, and statistics. Triggers: kick, kick cli, kick transactions, kick accounting, kick invoicing, list kick transactions, kick categories, kick clients, kick statistics, kick rule groups"
+name: kick-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute kick operations using the `kick` CLI tool.
+  CLI interface for Kick accounting/invoicing API -- transactions, categories, workspaces, entities, clients, rule groups, integrations, and statistics.
+  Triggers: kick, kick cli, kick transactions, kick accounting, kick invoicing, list kick transactions, kick categories, kick clients, kick statistics, kick rule groups
 ---
 
 <objective>

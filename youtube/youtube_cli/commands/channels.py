@@ -160,6 +160,12 @@ def _aggregate_owned_channels(
     return channels, errors
 
 
+def _report_profile_errors(errors: List[dict]) -> None:
+    """Print one stderr line per profile whose token failed during aggregation."""
+    for failure in errors:
+        print_error(f"Profile '{failure['profile']}' failed: {failure['error']}")
+
+
 def _get_owned_channel_resource(service, channel_id: str) -> Optional[dict]:
     next_token = None
 
@@ -232,8 +238,7 @@ def list_channels(
     except Exception as exc:
         raise typer.Exit(handle_error(exc))
 
-    for failure in errors:
-        print_error(f"Profile '{failure['profile']}' failed: {failure['error']}")
+    _report_profile_errors(errors)
 
     if filter:
         rows = apply_filters(rows, filter)
@@ -256,8 +261,7 @@ def get_channel(
     except Exception as exc:
         raise typer.Exit(handle_error(exc))
 
-    for failure in errors:
-        print_error(f"Profile '{failure['profile']}' failed: {failure['error']}")
+    _report_profile_errors(errors)
 
     for row in rows:
         if row["id"] == channel_id:

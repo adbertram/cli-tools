@@ -1,8 +1,10 @@
 # powerpoint-slide-recorder
 
-Record narrated PowerPoint slides.
+## DESCRIPTION
 
-The recorder builds a narration timeline from slide audio, reads each slide transcript, counts click-triggered slide animations from the PowerPoint deck, validates that each transcript has the same number of cue markers, estimates cue timing from transcript word ratios, validates the capture source size and aspect ratio, records the screen, sends Space at cue boundaries, sends Space between consecutive slides, and muxes the recorded video with the generated narration into one MP4 at the requested resolution.
+The `powerpoint-slide-recorder` CLI lets you record narrated PowerPoint slides.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Requirements
 

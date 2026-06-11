@@ -1,6 +1,10 @@
 ---
-name: "google-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute google operations using the `google` CLI tool. CLI interface for Google Workspace APIs -- Gmail, Calendar, Drive, Docs, Sheets, Search Console, Analytics (GA4), and Cloud. Triggers: google, google cli, google workspace, gmail, google calendar, google drive, google docs, google sheets, search console, google analytics, GA4, analytics report, top pages, traffic sources, realtime users, send email with google, list google drive files, read google doc, google cloud"
+name: google-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute google operations using the `google` CLI tool.
+  CLI interface for Google Workspace APIs -- Gmail, Calendar, Drive, Docs, Sheets, Search Console, Analytics (GA4), and Cloud.
+  Triggers: google, google cli, google workspace, gmail, google calendar, google drive, google docs, google sheets, search console, google analytics, GA4, analytics report, top pages, traffic sources, realtime users, send email with google, list google drive files, read google doc, google cloud
 ---
 
 <objective>

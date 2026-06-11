@@ -1,6 +1,10 @@
 ---
-name: "paypal-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute paypal operations using the `paypal` CLI tool. CLI interface for PayPal API. Triggers: paypal, paypal cli, paypal payouts, paypal transactions, PayPal transaction search, send paypal payment, paypal batch payout, pay someone with paypal, paypal payout status, my paypal, paypal auth profiles"
+name: paypal-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute paypal operations using the `paypal` CLI tool.
+  CLI interface for PayPal API.
+  Triggers: paypal, paypal cli, paypal payouts, send paypal payment, paypal batch payout, pay someone with paypal, paypal payout status, my paypal, paypal auth profiles
 ---
 
 <objective>
@@ -20,10 +24,8 @@ paypal <command-group> <action> [arguments] [options]
 | Check batch status | `paypal payouts get BATCH_ID` |
 | Get payout item | `paypal payouts get-item ITEM_ID` |
 | Cancel unclaimed payout | `paypal payouts cancel-item ITEM_ID` |
-| List transactions by date range | `paypal transactions list --start-date 2026-05-01 --end-date 2026-05-31` |
-| Search a transaction ID | `paypal transactions get TRANSACTION_ID --start-date 2026-05-01 --end-date 2026-05-31` |
 | List profiles | `paypal auth profiles list --table` |
-| Switch profile | `paypal auth profiles select production` |
+| Switch profile | `paypal auth profiles set-default production` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 </quick_start>
@@ -35,10 +37,9 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **payouts** -- Manage batch payouts (create, get, get-item, cancel-item)
-- **transactions** -- List PayPal business-account transactions by date range
-- **auth** -- Manage authentication (login, logout, status, test) and nested `auth profiles` management
-- **cache** -- Manage response cache
+- **payouts** -- Manage batch payouts (list, create, get, get-item, cancel-item)
+- **auth** -- Manage authentication (login, logout, status, refresh, test)
+- **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
 </essential_principles>
 

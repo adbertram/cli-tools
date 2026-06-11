@@ -14,11 +14,14 @@ _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
 
 
 def _clean_path() -> Dict[str, str]:
-    """Return env with test venv bin removed from PATH.
+    """Return env with harness Python state removed.
 
     CLIs are invoked by full path, so the test venv's bin/ is never needed.
     Keeping it in PATH can shadow CLI dependencies — same-named binaries
     installed in the test venv can mask the CLI under test.
+
+    Python interpreter env vars can also make a uv-tool launcher import from
+    the harness interpreter instead of the CLI's own isolated uv tool venv.
     """
     env = os.environ.copy()
     virtual_env = os.environ.get("VIRTUAL_ENV")
@@ -27,6 +30,8 @@ def _clean_path() -> Dict[str, str]:
         path_parts = env.get("PATH", "").split(os.pathsep)
         path_parts = [p for p in path_parts if p != venv_bin]
         env["PATH"] = os.pathsep.join(path_parts)
+    for key in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "__PYVENV_LAUNCHER__"):
+        env.pop(key, None)
     env["COLUMNS"] = "200"
     env["NO_COLOR"] = "1"
     return env

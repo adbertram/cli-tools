@@ -1,6 +1,10 @@
 # Ahrefs CLI
 
-A command-line interface for [Ahrefs](https://app.ahrefs.com) Site Audit using browser automation and internal APIs.
+## DESCRIPTION
+
+The `ahrefs` CLI provides a command-line interface for Ahrefs (browser automation).
+
+Use it when you need repeatable access to ahrefs workflows that are only available through a signed-in website.
 
 ## Installation
 

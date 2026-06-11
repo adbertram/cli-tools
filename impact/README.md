@@ -1,8 +1,10 @@
 # Impact CLI
 
-Impact.com Publisher API CLI for MediaPartner accounts.
+## DESCRIPTION
 
-Docs: https://integrations.impact.com/impact-publisher/reference/overview
+The `impact` CLI provides command-line access to Impact.com Publisher API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Authentication
 

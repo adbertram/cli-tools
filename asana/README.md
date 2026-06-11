@@ -1,6 +1,10 @@
 # Asana CLI
 
-Command-line interface for the Asana API - manage projects, tasks, custom fields, and more.
+## DESCRIPTION
+
+The `asana` CLI provides a command-line interface for Asana API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

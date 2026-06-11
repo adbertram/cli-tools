@@ -1,8 +1,8 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-05-20T16:34:40.274180+00:00",
-  "total_commands": 42,
+  "discovered_at": "2026-06-10T17:09:13Z",
+  "total_commands": 43,
   "global_options": [
     {
       "name": "--version",
@@ -19,11 +19,228 @@
     }
   ],
   "commands": {
+    "admin": {
+      "help": "WordPress admin commands",
+      "usage_instructions": "Run `wordpress admin --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "plugins": {
+          "help": "Manage WordPress plugins",
+          "usage_instructions": "Run `wordpress admin plugins --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "activate": {
+              "help": "Activate a WordPress plugin.",
+              "usage_instructions": "Run `wordpress admin plugins activate --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "deactivate": {
+              "help": "Deactivate a WordPress plugin.",
+              "usage_instructions": "Run `wordpress admin plugins deactivate --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete (uninstall) a WordPress plugin. Must be inactive first.",
+              "usage_instructions": "Run `wordpress admin plugins delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific WordPress plugin.",
+              "usage_instructions": "Run `wordpress admin plugins get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "install": {
+              "help": "Install a plugin from wordpress.org.",
+              "usage_instructions": "Run `wordpress admin plugins install --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "slug",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin slug from wordpress.org (e.g. mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--activate",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Activate after installation",
+                  "short": "-a"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List installed WordPress plugins.",
+              "usage_instructions": "Run `wordpress admin plugins list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of plugins to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., plugin:contains:acf, status:eq:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status (active, inactive)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "upgrade": {
+              "help": "Upgrade a plugin to the latest version through Jetpack's native updater.",
+              "usage_instructions": "Run `wordpress admin plugins upgrade --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "plugin",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "auth": {
       "help": "Manage WordPress API authentication",
+      "usage_instructions": "Run `wordpress auth --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `wordpress auth login --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +255,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'username_password')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Run `wordpress auth login --help` for exact arguments and options."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Run `wordpress auth logout --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +270,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `wordpress auth logout --help` for exact arguments and options."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `wordpress auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `wordpress auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `wordpress auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `wordpress auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `wordpress auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Run `wordpress auth status --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,11 +421,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Run `wordpress auth status --help` for exact arguments and options."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `wordpress auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -106,174 +449,108 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `wordpress auth test --help` for exact arguments and options."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `wordpress auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `wordpress auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `wordpress auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `wordpress auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `wordpress auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `wordpress auth profiles --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `wordpress auth --help` for exact arguments and options."
+      }
     },
     "cache": {
       "help": "Manage CLI cache",
+      "usage_instructions": "Run `wordpress cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `wordpress cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `wordpress cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `wordpress cache --help` for exact arguments and options."
+      }
     },
-    "posts": {
-      "help": "Manage WordPress posts",
+    "categories": {
+      "help": "Manage WordPress categories",
+      "usage_instructions": "Run `wordpress categories --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List WordPress posts.",
+        "create": {
+          "help": "Create a new WordPress category.",
+          "usage_instructions": "Run `wordpress categories create --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category name",
+              "short": "-n"
             },
             {
-              "name": "--limit",
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "URL slug for the category",
+              "short": "-s"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Category description",
+              "short": "-d"
+            },
+            {
+              "name": "--parent",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of posts to return",
-              "short": "-l",
-              "default": "100"
+              "help": "Parent category ID (0 for no parent)",
+              "short": "-p",
+              "default": "0"
             },
             {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display (supports dot-notation)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress posts list --help` for exact arguments and options."
+          ]
         },
-        "get": {
-          "help": "Get details for a specific WordPress post.",
+        "delete": {
+          "help": "Delete a WordPress category.",
+          "usage_instructions": "Run `wordpress categories delete --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "category_id",
               "type": "INTEGER",
               "required": true,
-              "help": "The post ID"
+              "help": "The category ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific WordPress category.",
+          "usage_instructions": "Run `wordpress categories get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "category_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The category ID"
             }
           ],
           "options": [
@@ -288,174 +565,130 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to display (supports dot-notation)",
+              "help": "Comma-separated fields to display",
               "short": "-p"
             },
             {
-              "name": "--raw",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Return raw Gutenberg blocks instead of rendered HTML",
-              "short": "-r"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress posts get --help` for exact arguments and options."
+          ]
         },
-        "create": {
-          "help": "Create a new WordPress post.",
+        "list": {
+          "help": "List WordPress categories.",
+          "usage_instructions": "Run `wordpress categories list --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "Post title (required for manual content)"
-            },
-            {
-              "name": "--content",
-              "type": "TEXT",
-              "required": false,
-              "help": "Post content (required for manual content)"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Post status (publish, draft, pending, private, future)",
-              "default": "draft"
-            },
-            {
-              "name": "--slug",
-              "type": "TEXT",
-              "required": false,
-              "help": "URL slug for the post"
-            },
-            {
-              "name": "--from-docx",
-              "type": "PATH",
-              "required": false,
-              "help": "Path to DOCX file to convert"
-            },
-            {
-              "name": "--from-markdown",
-              "type": "PATH",
-              "required": false,
-              "help": "Path to Markdown file to convert"
-            },
-            {
-              "name": "--sponsored",
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Add rel='sponsored nofollow' to all links"
+              "help": "Display as table",
+              "short": "-t"
             },
             {
-              "name": "--date",
-              "type": "TEXT",
+              "name": "--limit",
+              "type": "INTEGER",
               "required": false,
-              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
+              "help": "Maximum number of categories to return",
+              "short": "-l",
+              "default": "100"
             },
             {
-              "name": "--categories",
+              "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Category IDs (comma-separated)"
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
             },
             {
-              "name": "--tags",
+              "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Tag IDs (comma-separated)"
+              "help": "Comma-separated fields to display",
+              "short": "-p"
             },
             {
-              "name": "--excerpt",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Post excerpt"
-            },
-            {
-              "name": "--meta",
-              "type": "TEXT",
-              "required": false,
-              "help": "Post meta (key=value, repeatable)"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress posts create --help` for exact arguments and options."
+          ]
         },
         "update": {
-          "help": "Update an existing WordPress post.",
+          "help": "Update an existing WordPress category.",
+          "usage_instructions": "Run `wordpress categories update --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "category_id",
               "type": "INTEGER",
               "required": true,
-              "help": "The post ID to update"
+              "help": "The category ID to update"
             }
           ],
           "options": [
             {
-              "name": "--title",
+              "name": "--name",
               "type": "TEXT",
               "required": false,
-              "help": "New post title"
-            },
-            {
-              "name": "--content",
-              "type": "TEXT",
-              "required": false,
-              "help": "New post content"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "New post status (publish, draft, pending, private, future)"
+              "help": "New category name",
+              "short": "-n"
             },
             {
               "name": "--slug",
               "type": "TEXT",
               "required": false,
-              "help": "New URL slug"
+              "help": "New URL slug",
+              "short": "-s"
             },
             {
-              "name": "--date",
+              "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
+              "help": "New description",
+              "short": "-d"
             },
             {
-              "name": "--auto-schedule",
-              "type": "bool",
-              "required": false,
-              "help": "Auto-find next available slot (max 2/day, 4hr gaps, weekdays only)"
-            },
-            {
-              "name": "--featured-media",
+              "name": "--parent",
               "type": "INTEGER",
               "required": false,
-              "help": "Featured image media ID"
+              "help": "New parent category ID"
             },
             {
-              "name": "--tags",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Tag IDs (comma-separated)"
-            },
-            {
-              "name": "--meta",
-              "type": "TEXT",
-              "required": false,
-              "help": "Post meta (key=value, repeatable)"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress posts update --help` for exact arguments and options."
-        },
+          ]
+        }
+      }
+    },
+    "media": {
+      "help": "Manage WordPress media library",
+      "usage_instructions": "Run `wordpress media --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "delete": {
-          "help": "Delete a WordPress post.",
+          "help": "Delete a media item from WordPress.",
+          "usage_instructions": "Run `wordpress media delete --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "media_id",
               "type": "INTEGER",
               "required": true,
-              "help": "The post ID to delete"
+              "help": "The media ID to delete"
             }
           ],
           "options": [
@@ -464,59 +697,24 @@
               "type": "bool",
               "required": false,
               "help": "Permanently delete (skip trash)"
-            }
-          ],
-          "usage_instructions": "Run `wordpress posts delete --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `wordpress posts --help` for exact arguments and options."
-    },
-    "pages": {
-      "help": "Manage WordPress pages",
-      "commands": {
-        "list": {
-          "help": "List WordPress pages.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of pages to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display (supports dot-notation)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress pages list --help` for exact arguments and options."
+          ]
         },
         "get": {
-          "help": "Get details for a specific WordPress page.",
+          "help": "Get details for a specific WordPress media item.",
+          "usage_instructions": "Run `wordpress media get --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "page_id",
+              "name": "media_id",
               "type": "INTEGER",
               "required": true,
-              "help": "The page ID"
+              "help": "The media ID"
             }
           ],
           "options": [
@@ -535,17 +733,179 @@
               "short": "-p"
             },
             {
-              "name": "--raw",
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List WordPress media items.",
+          "usage_instructions": "Run `wordpress media list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Return raw Gutenberg blocks instead of rendered HTML",
-              "short": "-r"
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of media items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "upload": {
+          "help": "Upload a local file to WordPress media library.",
+          "usage_instructions": "Run `wordpress media upload --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to the file to upload"
             }
           ],
-          "usage_instructions": "Run `wordpress pages get --help` for exact arguments and options."
-        },
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "org": {
+      "help": "Manage WordPress.com organization access",
+      "usage_instructions": "Use `wordpress org token` commands for WordPress.com OAuth credentials and Jetpack plugin-update tokens.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "token": {
+          "help": "Manage the WordPress.com OAuth token",
+          "usage_instructions": "Run `wordpress org token` to acquire and save `WPCOM_ACCESS_TOKEN` using saved WordPress.com credentials, or pass all credential options directly.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--client-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress.com OAuth client id"
+            },
+            {
+              "name": "--client-secret",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress.com OAuth client secret"
+            },
+            {
+              "name": "--site",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress.com site identifier"
+            },
+            {
+              "name": "--redirect-uri",
+              "type": "TEXT",
+              "required": false,
+              "help": "Registered WordPress.com OAuth redirect URI"
+            }
+          ],
+          "commands": {
+            "save-credential": {
+              "help": "Save the WordPress.com credential bundle used to acquire Jetpack tokens.",
+              "usage_instructions": "Run `wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...` to save the WordPress.com credential bundle without requesting a token.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--client-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "WordPress.com OAuth client id"
+                },
+                {
+                  "name": "--client-secret",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "WordPress.com OAuth client secret"
+                },
+                {
+                  "name": "--site",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "WordPress.com site identifier"
+                },
+                {
+                  "name": "--redirect-uri",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Registered WordPress.com OAuth redirect URI"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "pages": {
+      "help": "Manage WordPress pages",
+      "usage_instructions": "Run `wordpress pages --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "create": {
           "help": "Create a new WordPress page.",
+          "usage_instructions": "Run `wordpress pages create --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--title",
@@ -619,12 +979,127 @@
               "type": "TEXT",
               "required": false,
               "help": "Page meta (key=value, repeatable)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a WordPress page.",
+          "usage_instructions": "Run `wordpress pages delete --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The page ID to delete"
             }
           ],
-          "usage_instructions": "Run `wordpress pages create --help` for exact arguments and options."
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Permanently delete (skip trash)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific WordPress page.",
+          "usage_instructions": "Run `wordpress pages get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw Gutenberg blocks instead of rendered HTML",
+              "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List WordPress pages.",
+          "usage_instructions": "Run `wordpress pages list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of pages to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update an existing WordPress page.",
+          "usage_instructions": "Run `wordpress pages update --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "page_id",
@@ -705,296 +1180,406 @@
               "type": "TEXT",
               "required": false,
               "help": "Page meta (key=value, repeatable)"
-            }
-          ],
-          "usage_instructions": "Run `wordpress pages update --help` for exact arguments and options."
-        },
-        "delete": {
-          "help": "Delete a WordPress page.",
-          "arguments": [
+            },
             {
-              "name": "page_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The page ID to delete"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Permanently delete (skip trash)"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress pages delete --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `wordpress pages --help` for exact arguments and options."
+      }
     },
-    "media": {
-      "help": "Manage WordPress media library",
-      "commands": {
-        "list": {
-          "help": "List WordPress media items.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of media items to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display (supports dot-notation)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `wordpress media list --help` for exact arguments and options."
-        },
-        "get": {
-          "help": "Get details for a specific WordPress media item.",
-          "arguments": [
-            {
-              "name": "media_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The media ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display (supports dot-notation)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `wordpress media get --help` for exact arguments and options."
-        },
-        "upload": {
-          "help": "Upload a local file to WordPress media library.",
-          "arguments": [
-            {
-              "name": "file_path",
-              "type": "PATH",
-              "required": true,
-              "help": "Path to the file to upload"
-            }
-          ],
-          "usage_instructions": "Run `wordpress media upload --help` for exact arguments and options."
-        },
-        "delete": {
-          "help": "Delete a media item from WordPress.",
-          "arguments": [
-            {
-              "name": "media_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The media ID to delete"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Permanently delete (skip trash)"
-            }
-          ],
-          "usage_instructions": "Run `wordpress media delete --help` for exact arguments and options."
+    "posts": {
+      "help": "Manage WordPress posts",
+      "usage_instructions": "Run `wordpress posts --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
         }
-      },
-      "usage_instructions": "Run `wordpress media --help` for exact arguments and options."
-    },
-    "categories": {
-      "help": "Manage WordPress categories",
+      ],
       "commands": {
-        "list": {
-          "help": "List WordPress categories.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of categories to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `wordpress categories list --help` for exact arguments and options."
-        },
-        "get": {
-          "help": "Get details for a specific WordPress category.",
-          "arguments": [
-            {
-              "name": "category_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The category ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `wordpress categories get --help` for exact arguments and options."
-        },
         "create": {
-          "help": "Create a new WordPress category.",
+          "help": "Create a new WordPress post.",
+          "usage_instructions": "Run `wordpress posts create --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
-              "name": "--name",
+              "name": "--title",
               "type": "TEXT",
-              "required": true,
-              "help": "Category name",
-              "short": "-n"
+              "required": false,
+              "help": "Post title (required for manual content)"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post content (required for manual content)"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post status (publish, draft, pending, private, future)",
+              "default": "draft"
             },
             {
               "name": "--slug",
               "type": "TEXT",
               "required": false,
-              "help": "URL slug for the category",
-              "short": "-s"
+              "help": "URL slug for the post"
             },
             {
-              "name": "--description",
+              "name": "--from-docx",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to DOCX file to convert"
+            },
+            {
+              "name": "--from-markdown",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to Markdown file to convert"
+            },
+            {
+              "name": "--sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Add rel='sponsored nofollow' to all links"
+            },
+            {
+              "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "Category description",
-              "short": "-d"
+              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
             },
             {
-              "name": "--parent",
-              "type": "INTEGER",
+              "name": "--categories",
+              "type": "TEXT",
               "required": false,
-              "help": "Parent category ID (0 for no parent)",
-              "short": "-p",
-              "default": "0"
+              "help": "Category IDs (comma-separated)"
+            },
+            {
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tag IDs (comma-separated)"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post excerpt"
+            },
+            {
+              "name": "--meta",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post meta (key=value, repeatable)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a WordPress post.",
+          "usage_instructions": "Run `wordpress posts delete --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The post ID to delete"
             }
           ],
-          "usage_instructions": "Run `wordpress categories create --help` for exact arguments and options."
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Permanently delete (skip trash)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific WordPress post.",
+          "usage_instructions": "Run `wordpress posts get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "post_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw Gutenberg blocks instead of rendered HTML",
+              "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List WordPress posts.",
+          "usage_instructions": "Run `wordpress posts list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of posts to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
-          "help": "Update an existing WordPress category.",
+          "help": "Update an existing WordPress post.",
+          "usage_instructions": "Run `wordpress posts update --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "category_id",
+              "name": "post_id",
               "type": "INTEGER",
               "required": true,
-              "help": "The category ID to update"
+              "help": "The post ID to update"
             }
           ],
           "options": [
             {
-              "name": "--name",
+              "name": "--title",
               "type": "TEXT",
               "required": false,
-              "help": "New category name",
-              "short": "-n"
+              "help": "New post title"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "New post content"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "New post status (publish, draft, pending, private, future)"
             },
             {
               "name": "--slug",
               "type": "TEXT",
               "required": false,
-              "help": "New URL slug",
-              "short": "-s"
+              "help": "New URL slug"
             },
             {
-              "name": "--description",
+              "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "New description",
-              "short": "-d"
+              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
             },
             {
-              "name": "--parent",
+              "name": "--auto-schedule",
+              "type": "bool",
+              "required": false,
+              "help": "Auto-find next available slot (max 2/day, 4hr gaps, weekdays only)"
+            },
+            {
+              "name": "--featured-media",
               "type": "INTEGER",
               "required": false,
-              "help": "New parent category ID"
-            }
-          ],
-          "usage_instructions": "Run `wordpress categories update --help` for exact arguments and options."
-        },
-        "delete": {
-          "help": "Delete a WordPress category.",
-          "arguments": [
+              "help": "Featured image media ID"
+            },
             {
-              "name": "category_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The category ID to delete"
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tag IDs (comma-separated)"
+            },
+            {
+              "name": "--meta",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post meta (key=value, repeatable)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress categories delete --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `wordpress categories --help` for exact arguments and options."
+      }
     },
     "tags": {
       "help": "Manage WordPress tags",
+      "usage_instructions": "Run `wordpress tags --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a new WordPress tag. Returns existing tag if name already exists.",
+          "usage_instructions": "Run `wordpress tags create --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tag name",
+              "short": "-n"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "URL slug for the tag",
+              "short": "-s"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tag description",
+              "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a WordPress tag.",
+          "usage_instructions": "Run `wordpress tags delete --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "tag_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The tag ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific WordPress tag.",
+          "usage_instructions": "Run `wordpress tags get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "tag_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The tag ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List WordPress tags.",
+          "usage_instructions": "Run `wordpress tags list --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -1024,67 +1609,18 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `wordpress tags list --help` for exact arguments and options."
-        },
-        "get": {
-          "help": "Get details for a specific WordPress tag.",
-          "arguments": [
-            {
-              "name": "tag_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The tag ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to display",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress tags get --help` for exact arguments and options."
-        },
-        "create": {
-          "help": "Create a new WordPress tag. Returns existing tag if name already exists.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tag name",
-              "short": "-n"
-            },
-            {
-              "name": "--slug",
-              "type": "TEXT",
-              "required": false,
-              "help": "URL slug for the tag",
-              "short": "-s"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Tag description",
-              "short": "-d"
-            }
-          ],
-          "usage_instructions": "Run `wordpress tags create --help` for exact arguments and options."
+          ]
         },
         "update": {
           "help": "Update an existing WordPress tag.",
+          "usage_instructions": "Run `wordpress tags update --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "tag_id",
@@ -1114,254 +1650,16 @@
               "required": false,
               "help": "New description",
               "short": "-d"
-            }
-          ],
-          "usage_instructions": "Run `wordpress tags update --help` for exact arguments and options."
-        },
-        "delete": {
-          "help": "Delete a WordPress tag.",
-          "arguments": [
+            },
             {
-              "name": "tag_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The tag ID to delete"
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `wordpress tags delete --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `wordpress tags --help` for exact arguments and options."
-    },
-    "admin": {
-      "help": "WordPress admin commands",
-      "commands": {
-        "plugins": {
-          "help": "Manage WordPress plugins",
-          "commands": {
-            "list": {
-              "help": "List installed WordPress plugins.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of plugins to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., plugin:contains:acf, status:eq:active)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--status",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter by status (active, inactive)",
-                  "short": "-s"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated fields to display",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific WordPress plugin.",
-              "arguments": [
-                {
-                  "name": "plugin",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated fields to display",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins get --help` for exact arguments and options."
-            },
-            "activate": {
-              "help": "Activate a WordPress plugin.",
-              "arguments": [
-                {
-                  "name": "plugin",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins activate --help` for exact arguments and options."
-            },
-            "deactivate": {
-              "help": "Deactivate a WordPress plugin.",
-              "arguments": [
-                {
-                  "name": "plugin",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins deactivate --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete (uninstall) a WordPress plugin. Must be inactive first.",
-              "arguments": [
-                {
-                  "name": "plugin",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins delete --help` for exact arguments and options."
-            },
-            "install": {
-              "help": "Install a plugin from wordpress.org.",
-              "arguments": [
-                {
-                  "name": "slug",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin slug from wordpress.org (e.g. mailchimp-for-wp)"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--activate",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Activate after installation",
-                  "short": "-a"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins install --help` for exact arguments and options."
-            },
-            "upgrade": {
-              "help": "Upgrade a plugin to the latest version through Jetpack's native updater.",
-              "arguments": [
-                {
-                  "name": "plugin",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
-                }
-              ],
-              "usage_instructions": "Run `wordpress admin plugins upgrade --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `wordpress admin plugins --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `wordpress admin --help` for exact arguments and options."
-    },
-    "org": {
-      "help": "Manage WordPress.com organization access",
-      "commands": {
-        "token": {
-          "help": "Manage the WordPress.com OAuth token",
-          "options": [
-            {
-              "name": "--client-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com OAuth client id"
-            },
-            {
-              "name": "--client-secret",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com OAuth client secret"
-            },
-            {
-              "name": "--username",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com username"
-            },
-            {
-              "name": "--password",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com password"
-            },
-            {
-              "name": "--site",
-              "type": "TEXT",
-              "required": false,
-              "help": "WordPress.com site identifier"
-            }
-          ],
-          "commands": {
-            "save-credential": {
-              "help": "Save the WordPress.com credential bundle used to acquire Jetpack tokens.",
-              "options": [
-                {
-                  "name": "--client-id",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com OAuth client id"
-                },
-                {
-                  "name": "--client-secret",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com OAuth client secret"
-                },
-                {
-                  "name": "--username",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com username"
-                },
-                {
-                  "name": "--password",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com password"
-                },
-                {
-                  "name": "--site",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "WordPress.com site identifier"
-                }
-              ],
-              "usage_instructions": "Run `wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...` to save the WordPress.com credential bundle without requesting a token."
-            }
-          },
-          "usage_instructions": "Run `wordpress org token` to acquire and save `WPCOM_ACCESS_TOKEN` using saved WordPress.com credentials, or pass all credential options directly."
-        }
-      },
-      "usage_instructions": "Use `wordpress org token` commands for WordPress.com OAuth credentials and Jetpack plugin-update tokens."
+      }
     }
   },
   "usage_instructions": "Use `wordpress --help` to inspect current commands, arguments, and options."

@@ -1,6 +1,10 @@
 ---
-name: "ahrefs-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute ahrefs operations using the `ahrefs` CLI tool. CLI interface for Ahrefs SEO platform (browser automation) -- site audits, authentication, profiles, and caching. Triggers: ahrefs, ahrefs cli, site audit, ahrefs site audit, ahrefs SEO, ahrefs crawl, ahrefs login, ahrefs auth profiles, check ahrefs auth, run site audit"
+name: ahrefs-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Execute ahrefs operations using the `ahrefs` CLI tool.
+  CLI interface for Ahrefs SEO platform (browser automation) -- site audits, authentication, profiles, and caching.
+  Triggers: ahrefs, ahrefs cli, site audit, ahrefs site audit, ahrefs SEO, ahrefs crawl, ahrefs login, ahrefs auth profiles, check ahrefs auth, run site audit
 ---
 
 <objective>

@@ -1,9 +1,10 @@
 # Copilot CLI Guide
 
-Command-line interface for managing Microsoft Copilot Studio agents via the Dataverse API.
+## DESCRIPTION
 
-> **Status: alpha (0.1.0).** APIs and command surface may change before 1.0.
-> Bug reports and feedback welcome at https://github.com/your-org/cli-tools/issues
+The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 

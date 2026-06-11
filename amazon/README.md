@@ -1,7 +1,10 @@
 # Amazon CLI
 
-Read-only Amazon order evidence lookup using a persistent browser session from
-`cli-tools-shared`.
+## DESCRIPTION
+
+The `amazon` CLI provides a command-line interface for Amazon (browser automation).
+
+Use it when you need repeatable access to amazon workflows that are only available through a signed-in website.
 
 ## Installation
 

@@ -1,6 +1,10 @@
 ---
-name: "roomba-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute roomba operations using the `roomba` CLI tool. CLI to control iRobot Roomba vacuums. Triggers: roomba, roomba cli, roomba vacuum, start roomba, stop roomba, dock roomba, roomba status, roomba battery, vacuum cleaner, irobot"
+name: roomba-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute roomba operations using the `roomba` CLI tool.
+  CLI to control iRobot Roomba vacuums.
+  Triggers: roomba, roomba cli, roomba vacuum, start roomba, stop roomba, dock roomba, roomba status, roomba battery, vacuum cleaner, irobot
 ---
 
 <objective>

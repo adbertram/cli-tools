@@ -1,6 +1,10 @@
 ---
-name: "moz-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute moz operations using the `moz` CLI tool. CLI interface for Moz API -- SEO keyword research and analysis. Triggers: moz, moz cli, moz keywords, keyword research, keyword volume, keyword difficulty, search intent, keyword suggestions, keyword ranking, seo metrics, moz seo"
+name: moz-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute moz operations using the `moz` CLI tool.
+  CLI interface for Moz API -- SEO keyword research and analysis.
+  Triggers: moz, moz cli, moz keywords, keyword research, keyword volume, keyword difficulty, search intent, keyword suggestions, keyword ranking, seo metrics, moz seo
 ---
 
 <objective>
@@ -53,7 +57,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 **Cause:** `moz_cli/client.py` used invalid JSON-RPC method strings (`KeywordSuggestions`, `RankingKeywords`) instead of Moz's V3 dotted `data.<resource>.<verb>` namespace. The Moz API normalizes unknown action names by lowercasing all but the first letter, which is why the error reported `Keywordsuggestions` / `Rankingkeywords`. The params shape was also wrong — both endpoints require a wrapped `serp_query` (and `target_query` for ranking), not a flat `{keyword: ...}` or `{url: ...}`.
 
-**Fix:** Update `<repo-root>/moz/moz_cli/client.py`:
+**Fix:** Update `~/Dropbox/GitRepos/cli-tools/moz/moz_cli/client.py`:
 - `get_keyword_suggestions` now calls `data.keyword.suggestions.list` with a `serp_query` block (`keyword`, `locale`, `device`, `engine`).
 - `get_ranking_keywords` now calls `data.site.ranking.keywords.list` with a `target_query` block (`query`, `scope`, `locale`), a `serp_query` block (`engine`, `locale`), and a `limit`. Valid scopes per the API: `domain`, `subdomain`, `subfolder`, `url` (NOT `page`/`root_domain` — those belong to other endpoints).
 - The ranking response field is `ranking_keywords` (not `keywords`).
@@ -63,7 +67,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 ```bash
 moz keywords get "powershell"                                                # baseline still works
 moz keywords suggestions "powershell" --limit 5                              # returns JSON or quota error, not "Action not found"
-moz keywords ranking "https://example.com/netstat-port/" --limit 5  # same
+moz keywords ranking "https://adamtheautomator.com/netstat-port/" --limit 5  # same
 ```
 A non-`Action not found` response confirms the action name reaches the API. A `403: The account does not have enough quota remaining` response is an account-level quota condition (specific quota pools for suggestions/ranking endpoints), NOT a regression — wait for the quota window to reset.
 

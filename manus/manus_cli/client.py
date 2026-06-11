@@ -170,7 +170,7 @@ class ManusClient:
         if cursor:
             params["cursor"] = cursor
         if verbose:
-            params["verbose"] = True
+            params["verbose"] = "true"
         if slides_format:
             params["slides_format"] = slides_format
 

@@ -1,6 +1,11 @@
 ---
-name: "dropbox-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute Dropbox operations using the `dropbox` CLI tool. CLI interface for Dropbox API \u2014 manage files, folders, sharing, and account info. Triggers: dropbox, dropbox cli, dropbox files, dropbox folders, dropbox sharing, list files in dropbox, dropbox search, dropbox download, dropbox upload, files in dropbox"
+name: dropbox-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute Dropbox operations using the `dropbox` CLI tool.
+  CLI interface for Dropbox API — manage files, folders, sharing, and account info.
+  Triggers: dropbox, dropbox cli, dropbox files, dropbox folders, dropbox sharing,
+  list files in dropbox, dropbox search, dropbox download, dropbox upload, files in dropbox
 ---
 
 <objective>

@@ -1,6 +1,10 @@
 ---
-name: "usps-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute usps operations using the `usps` CLI tool. CLI interface for USPS Tracking API -- track packages by tracking number. Triggers: usps, usps cli, usps tracking, track package, track usps, usps package, package tracking, where is my package, shipping status usps"
+name: usps-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute usps operations using the `usps` CLI tool.
+  CLI interface for USPS Tracking API -- track packages by tracking number.
+  Triggers: usps, usps cli, usps tracking, track package, track usps, usps package, package tracking, where is my package, shipping status usps
 ---
 
 <objective>

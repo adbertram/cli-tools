@@ -1,6 +1,10 @@
 # CJ Affiliate CLI
 
-`cj` is a publisher-side command-line interface for [CJ Affiliate](https://www.cj.com/) (Commission Junction). It enables bulk discovery of CJ advertiser programs through the public REST/GraphQL API and bulk application to those programs through the publisher Marketplace UI.
+## DESCRIPTION
+
+The `cj` CLI provides a command-line interface for Cj API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Why two auth mechanisms
 

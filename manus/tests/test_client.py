@@ -123,7 +123,7 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
         "limit": 25,
         "order": "asc",
         "cursor": "cursor-2",
-        "verbose": True,
+        "verbose": "true",
     }
 
     _, _, update_kwargs = calls[5]

@@ -169,10 +169,14 @@ def list_items(
     return items
 ```
 
-### In commands/items.py
+### In main.py or commands/items.py
+
+Fresh scaffolds keep the default `items` command group in `main.py`. If an
+existing CLI already split command groups into `commands/<group>.py`, apply the
+same pattern there.
 
 ```python
-@app.command("list")
+@items_app.command("list")  # Or @app.command("list") in a split command module
 def list_items(
     table: bool = typer.Option(False, "--table", "-t", help="Table output"),
     limit: int = typer.Option(100, "--limit", "-l", help="Max results"),

@@ -1,6 +1,10 @@
 # Kick CLI
 
-A command-line interface for [Kick.co](https://www.kick.co) - the self-driving bookkeeping platform.
+## DESCRIPTION
+
+The `kick` CLI provides a command-line interface for Kick API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

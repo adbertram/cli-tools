@@ -4,10 +4,12 @@ Direct SQLite access to the Things 3 database for read and write operations.
 - Reads: Safe anytime (database uses WAL mode for concurrent reads)
 - Writes: Only when Things.app is not running (to prevent corruption)
 """
+import multiprocessing as mp
 import secrets
 import sqlite3
 import string
 import subprocess
+import sys
 import time
 from datetime import datetime
 from glob import glob
@@ -32,6 +34,14 @@ class ClientError(Exception):
     pass
 
 
+def _glob_database_worker(pattern: str, queue):
+    """Run protected Things database glob in a killable child process."""
+    try:
+        queue.put(("ok", glob(pattern)))
+    except Exception as exc:  # pragma: no cover - defensive for child process failures
+        queue.put(("error", repr(exc)))
+
+
 class ThingsClient:
     """Client for interacting with Things 3 SQLite database."""
 
@@ -43,6 +53,35 @@ class ThingsClient:
         self.db_path = self._discover_database()
         self._validate_database()
 
+    def _glob_database_with_timeout(self, pattern: str, timeout: float = 5.0) -> List[str]:
+        """Glob the protected Things container without allowing TCC to hang forever."""
+        ctx = mp.get_context("fork")
+        queue = ctx.Queue()
+        proc = ctx.Process(target=_glob_database_worker, args=(pattern, queue))
+        proc.start()
+        proc.join(timeout)
+
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(1)
+            raise ClientError(
+                "Timed out while accessing the Things database container. "
+                "macOS privacy/TCC is blocking filesystem access to Things data. "
+                f"Grant Full Disk Access to the Python binary running this CLI ({sys.executable}), "
+                "then retry."
+            )
+
+        if queue.empty():
+            raise ClientError(
+                "Things database discovery failed before returning a result. "
+                "Check macOS privacy permissions for the Python binary running this CLI."
+            )
+
+        status, payload = queue.get()
+        if status == "error":
+            raise ClientError(f"Things database discovery failed: {payload}")
+        return payload
+
     def _discover_database(self) -> Path:
         """Find the Things database path.
 
@@ -53,7 +92,7 @@ class ThingsClient:
             ClientError: If database not found
         """
         pattern = str(Path.home() / self.DB_PATTERN)
-        matches = glob(pattern)
+        matches = self._glob_database_with_timeout(pattern)
         if not matches:
             raise ClientError(
                 "Things database not found. "

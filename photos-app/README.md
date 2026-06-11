@@ -1,6 +1,10 @@
 # photos-app CLI
 
-Query and export photos from the macOS Photos library. Uses SQLite for fast metadata queries and AppleScript for exports (which handles iCloud downloads automatically).
+## DESCRIPTION
+
+The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Installation
 

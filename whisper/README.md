@@ -1,6 +1,10 @@
 # Whisper CLI
 
-A standardized command-line wrapper for [OpenAI Whisper](https://github.com/openai/whisper) speech-to-text transcription.
+## DESCRIPTION
+
+The `whisper` CLI wraps whisper with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

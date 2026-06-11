@@ -1,6 +1,10 @@
 ---
-name: "cvs-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute cvs operations using the `cvs` CLI tool. CLI interface for CVS Health -- prescriptions, orders, and refills. Triggers: cvs, cvs cli, cvs prescriptions, cvs orders, cvs refills, check my prescriptions, prescription status, refill eligibility, cvs pharmacy, my cvs prescriptions, cvs order status"
+name: cvs-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute cvs operations using the `cvs` CLI tool.
+  CLI interface for CVS Health -- prescriptions, orders, and refills.
+  Triggers: cvs, cvs cli, cvs prescriptions, cvs orders, cvs refills, check my prescriptions, prescription status, refill eligibility, cvs pharmacy, my cvs prescriptions, cvs order status
 ---
 
 <objective>

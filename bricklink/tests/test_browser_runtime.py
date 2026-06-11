@@ -19,6 +19,34 @@ class _Page:
         self.url = url
 
 
+class _NoNetworkIdlePage:
+    def __init__(self):
+        self.url = None
+        self.goto_calls = []
+        self.waited_selectors = []
+
+    def goto(self, url, wait_until=None):
+        self.url = url
+        self.goto_calls.append((url, wait_until))
+        if wait_until == "networkidle":
+            raise TimeoutError("Page.goto: Timeout 60000ms exceeded")
+
+    def wait_for_selector(self, selector, **_kwargs):
+        self.waited_selectors.append(selector)
+        return object()
+
+    def evaluate(self, script):
+        if "document.title" in script:
+            return "BrickLink"
+        return None
+
+    def query_selector(self, _selector):
+        return None
+
+    def wait_for_timeout(self, _timeout):
+        return None
+
+
 def _make_runtime(monkeypatch):
     """Build a BricklinkRuntimeBrowser without invoking its __init__.
 
@@ -113,6 +141,20 @@ def test_check_auth_accepts_message_page(monkeypatch):
     page = _Page("https://www.bricklink.com/myMsg.asp")
 
     assert runtime._check_auth(page) is True
+
+
+def test_get_page_for_does_not_require_networkidle(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _NoNetworkIdlePage()
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/myMsg.asp?pg=1&a=i"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    runtime.get_page.assert_called_once_with()
+    assert page.goto_calls == [(url, "domcontentloaded")]
+    assert "body" in page.waited_selectors
 
 
 def test_check_session_expired_raises_actionable_even_if_clear_session_fails(monkeypatch):
@@ -347,3 +389,86 @@ def test_search_orders_by_item_splits_set_sequence(monkeypatch):
     assert healthy_page.submissions[0]["itemNo"] == "30103"
     assert healthy_page.submissions[0]["itemSeq"] == "1"
     assert healthy_page.submissions[0]["itemType"] == "S"
+
+
+def test_list_nss_alerts(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/orderReceived.asp?st=s"
+        def wait_for_selector(self, selector, timeout=0):
+            return None
+        def evaluate(self, script):
+            return [
+                {
+                    "order_id": "31748542",
+                    "date": "May 31, 2026",
+                    "buyer": "1mom",
+                    "items_cost": "16.69",
+                    "grand_total": "US $22.69",
+                    "final_total": "US $21.13",
+                    "status": "NSS",
+                    "url": "https://www.bricklink.com/orderDetail.asp?ID=31748542"
+                }
+            ]
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    result = runtime.list_nss_alerts()
+    assert len(result) == 1
+    assert result[0]["order_id"] == "31748542"
+    assert result[0]["buyer"] == "1mom"
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/orderReceived.asp?st=s")
+
+
+def test_get_nss_alert(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/retractOrder.asp?ID=31748542"
+        def evaluate(self, script):
+            return {
+                "status": "Non-Shipping Seller Alert is in effect and was filed on Jun 8, 2026 12:51 by 1mom (1)",
+                "cancellation_info": "This order can be cancelled after Jun 22, 2026 12:51 by 1mom (1)",
+                "reason": "Seller shipped order but order was incomplete",
+                "details": "[Used] Yellow Technic, Liftarm Thick 1 x 13 (x2) ..... US $0.25 each = US $0.50",
+                "comments": [
+                    {
+                        "user": "1mom",
+                        "date": "Jun 8, 2026 12:51",
+                        "message": "1mom initiated Non-Shipping Seller alert."
+                    }
+                ]
+            }
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    result = runtime.get_nss_alert("31748542")
+    assert result["order_id"] == "31748542"
+    assert "cancellation_info" in result
+    assert result["reason"] == "Seller shipped order but order was incomplete"
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/retractOrder.asp?ID=31748542")
+
+
+def test_get_refund_info_payment_not_found(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/v3/order/refund.page?id=31748542"
+        def evaluate(self, script, *args):
+            # The first evaluate check is for error_msg (checking .empty-state__title)
+            if "empty-state__title" in script:
+                return "Payment Not Found: We weren't able to find your payment attached to this order."
+            return None
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime.REFUND_URL = "https://www.bricklink.com/v3/order/refund.page"
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime.get_refund_info("31748542")
+
+    assert "Payment Not Found" in str(ei.value)
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/v3/order/refund.page?id=31748542")

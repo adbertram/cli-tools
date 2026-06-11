@@ -7,7 +7,7 @@ Model Design Principles:
 - Create specific model subclasses for different entity types
 """
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -102,6 +102,7 @@ class PostDetail(CLIModel):
     sticky: bool = False
     categories: List[int] = []
     tags: List[int] = []
+    meta: Optional[Dict[str, Any]] = None
 
 
 class PostCreate(CLIModel):
@@ -292,6 +293,7 @@ class PageDetail(CLIModel):
     parent: int = 0
     menu_order: int = 0
     template: Optional[str] = ""
+    meta: Optional[Dict[str, Any]] = None
 
 
 def create_page(data: dict) -> Page:

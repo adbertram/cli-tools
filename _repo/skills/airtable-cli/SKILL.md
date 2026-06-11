@@ -45,7 +45,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** -- Authentication management (login, logout, status, refresh, test) and nested `auth profiles`
 - **cache** -- Local response cache management
 - **tables** -- Airtable table schema operations (list, create, update). Note: Airtable's public Meta API does not expose a delete-table endpoint.
-- **fields** -- Airtable field schema operations (list, create, update)
+- **fields** -- Airtable field schema operations (list, create, update). Airtable's public Web/Meta API does not support deleting fields.
 - **records** -- CRUD operations on Airtable records (list, get, create, update, delete)
 </principle>
 </essential_principles>
@@ -77,3 +77,13 @@ This file contains complete command syntax, all arguments, all options, and usag
 **Recurrence Prevention:** Always JSON-quote digit-only or boolean-looking values intended for text fields: `'Field="123"'`, `'Field="true"'`. Until the CLI is patched, treat the bare `Field=Value` form as unsafe for any value that is valid JSON (numbers, booleans, null, objects, arrays) being written to a text field.
 
 **General rule:** When a CLI pre-parses user input with `json.loads` and falls back to string, digit-only and boolean-looking values silently become non-strings — always force-quote them to preserve string type.
+
+### 2. Field deletion is not supported by Airtable's public API
+
+**Symptom:** `airtable fields delete tbl... fld... --base app... --yes` fails instead of deleting the field.
+
+**Cause:** Airtable documents public Web/Meta API support for listing, creating, and updating schema fields, but it does not expose a public field-delete endpoint.
+
+**Correct path:** Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`.
+
+**CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.

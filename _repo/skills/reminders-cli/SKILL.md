@@ -1,6 +1,10 @@
 ---
-name: "reminders-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute reminders operations using the `reminders` CLI tool. CLI for managing macOS Reminders. Triggers: reminders, reminders cli, reminders app, create reminder, list reminders, complete reminder, my reminders, reminder lists, macos reminders"
+name: reminders-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute reminders operations using the `reminders` CLI tool.
+  CLI for managing macOS Reminders.
+  Triggers: reminders, reminders cli, reminders app, create reminder, list reminders, complete reminder, my reminders, reminder lists, macos reminders
 ---
 
 <objective>

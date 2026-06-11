@@ -1,6 +1,10 @@
 ---
-name: "notion-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute Notion operations using the `notion` CLI tool. CLI interface for Notion API with database query filtering. Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, notion page content, notion blocks, notion schema, notion templates"
+name: notion-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute Notion operations using the `notion` CLI tool.
+  CLI interface for Notion API with database query filtering.
+  Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, notion page content, notion blocks, notion schema, notion templates
 ---
 
 <objective>
@@ -25,6 +29,7 @@ notion <command-group> <action> [arguments] [options]
 | Get database schema | `notion database schema DB_ID --table` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
+| List page/block children | `notion pages blocks list --page-id PAGE_ID` |
 | Toggle existing heading on/off | `notion pages blocks update BLOCK_ID --toggleable` (or `--no-toggleable`) |
 </quick_start>
 
@@ -32,6 +37,12 @@ notion <command-group> <action> [arguments] [options]
 <principle name="Usage Reference">
 **MANDATORY: Consult `usage.json` before executing ANY `notion` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+Do not run a Notion command in the same parallel batch as the `usage.json` inspection; inspect the target command node first, then execute the exact syntax it shows.
+
+For `pages blocks list`, the page or block ID is a required option, not a positional argument:
+```bash
+notion pages blocks list --page-id PAGE_ID --markdown
+```
 </principle>
 
 <principle name="Section Updates vs Full Replace">
@@ -39,10 +50,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 For updating a specific section, always use `pages content replace-section`:
 ```bash
-#: Replace just one section, leaving the rest of the page untouched
+# Replace just one section, leaving the rest of the page untouched
 notion pages content replace-section PAGE_ID --heading "## Section Title" --file updated.md
 
-#: Dry run first to verify what will be changed
+# Dry run first to verify what will be changed
 notion pages content replace-section PAGE_ID --heading "## Section Title" --file updated.md --dry-run
 ```
 
@@ -80,18 +91,18 @@ A non-heading toggle is the `toggle` block type.
 
 **Three ways to create toggle headings:**
 ```bash
-#: 1. From markdown -- promote ALL headings to toggleable in one shot
+# 1. From markdown -- promote ALL headings to toggleable in one shot
 notion pages content append PAGE_ID --file chapter.md --is-toggleable
 notion pages content set    PAGE_ID --file outline.md --is-toggleable
 notion pages blocks  append BLOCK_ID --file content.md --is-toggleable
 notion pages create  PARENT_ID -t "Page" --content-file outline.md --is-toggleable
 
-#: 2. From raw JSON -- mix toggleable and non-toggleable headings
-#:    (markdown can't express which heading is toggleable per-heading)
+# 2. From raw JSON -- mix toggleable and non-toggleable headings
+#    (markdown can't express which heading is toggleable per-heading)
 notion pages blocks append PAGE_ID --json-file blocks.json
 
-#: 3. Flip an existing heading on or off
-#:    Auto-nests siblings as children when toggling ON (default).
+# 3. Flip an existing heading on or off
+#    Auto-nests siblings as children when toggling ON (default).
 notion pages blocks update BLOCK_ID --toggleable
 notion pages blocks update BLOCK_ID --toggleable --no-nest      # flip flag only
 notion pages blocks update BLOCK_ID --no-toggleable
@@ -148,7 +159,7 @@ There are three ways to put content inside a toggle:
 
 **Fix:** Use the normal command; the CLI now defaults to 25 workers and applies that count to both recursive block reads and block comment lookups: `notion comments list --page-id PAGE_ID --with-context --limit 100 > comments.json`.
 
-**Verification:** Confirm the output file contains valid JSON and `jq 'length' comments.json` returns the expected comment count. On the example workspace page `3f5aaa654fc74a11bc0fc3865cdfcedd`, the no-manual-worker command returned 34 comments in about 25 seconds after the rate-limit window cleared.
+**Verification:** Confirm the output file contains valid JSON and `jq 'length' comments.json` returns the expected comment count. On the BricklinkBook page `3f5aaa654fc74a11bc0fc3865cdfcedd`, the no-manual-worker command returned 34 comments in about 25 seconds after the rate-limit window cleared.
 
 **Recurrence Prevention:** Do not reintroduce silent exception suppression or a low default worker count in comment context reads. `--max-workers` remains available for diagnostics, but large-page review workflows should be fast by default. Avoid repeated parallel comment scans against the same large page; if 429 appears, wait the `Retry-After` period before rerunning.
 
@@ -160,7 +171,7 @@ There are three ways to put content inside a toggle:
 
 **Fix:** Use the parent block as the comment target. Use `notion comments list --page-id PAGE_ID --with-context --limit 100` for parent block and nearby block context. Current JSON output includes `context`, `context_before`, `context_after`, `context_around`, `selected_block`, and `selected_block_status`.
 
-**Verification:** A raw `GET /comments/{comment_id}` probe on example workspace comment `3535d9c8-5b2b-800a-a540-001dccf638dc` returned parent block metadata. Unit tests cover table-row context extraction and selected block output.
+**Verification:** A raw `GET /comments/{comment_id}` probe on BricklinkBook comment `3535d9c8-5b2b-800a-a540-001dccf638dc` returned parent block metadata. Unit tests cover table-row context extraction and selected block output.
 
 **Recurrence Prevention:** Review workflows must use the parent block as the comment target and use parent/nearby block context for revision planning.
 
@@ -171,7 +182,7 @@ There are three ways to put content inside a toggle:
 
 **Fix:** `replace-section` now calls the shared Markdown image processor only when `--file` is used and `--dry-run` is false, then calls `text_to_blocks(content, image_uploads=image_uploads)`.
 
-**Verification:** In `<repo-root>/notion`, `uv run --extra dev pytest -q` passes. Tests cover local image upload wiring and prove `--dry-run` does not call image upload processing.
+**Verification:** In `/Users/adam/Dropbox/GitRepos/cli-tools/notion`, `uv run --extra dev pytest -q` passes. Tests cover local image upload wiring and prove `--dry-run` does not call image upload processing.
 
 **Recurrence Prevention:** Any future Markdown-processing page command must match the append/set behavior for local images and must keep `--dry-run` read-only before making API upload calls.
 

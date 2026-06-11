@@ -1,6 +1,10 @@
 # Podio CLI
 
-A command-line interface for the Podio API built with Python and Typer. Automate and manage your Podio workspace from the terminal.
+## DESCRIPTION
+
+The `podio` CLI provides a command-line interface for Podio API using pypodio2.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

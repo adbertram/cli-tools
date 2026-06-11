@@ -31,6 +31,28 @@ Authentication commands (`auth login`, `auth status`) are **not required for all
 
 Before asking Adam for CLI credentials, or storing any new reusable CLI credential, follow `references/secrets.md`.
 
+## Pre-Auth Setup And Non-Secret Config Prompts
+
+If `auth login` needs non-secret setup such as `BASE_URL`, workspace IDs, tenant URLs, or account IDs, declare `AUTH_CONFIG_PROMPTS` on the `Config` subclass. `create_auth_app()` prompts for these fields before credential prompts and saves them through the shared config router, so root config such as `BASE_URL` lands in `~/.local/share/cli-tools/<tool>/.env`.
+
+If the user must create an API token, app password, or OAuth client before login, declare `AUTH_SETUP_INSTRUCTIONS` with the canonical setup URL and brief steps. `create_auth_app()` prints this before the first prompt.
+
+Do not tell the user to edit `.env` manually for required config or reusable credentials. `LOGIN_INSTRUCTIONS` remains as a compatibility fallback for older CLIs, but new and updated CLIs should use `AUTH_SETUP_INSTRUCTIONS` plus `AUTH_CONFIG_PROMPTS`.
+
+```python
+class Config(BaseConfig):
+    CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
+    DEFAULT_BASE_URL = "https://your-domain.example.com"
+    AUTH_CONFIG_PROMPTS = [
+        ("BASE_URL", "Service base URL (for example https://example.atlassian.net)", False),
+    ]
+    AUTH_SETUP_INSTRUCTIONS = (
+        "Before logging in:\n"
+        "  1. Create an API token: https://example.com/account/api-tokens\n"
+        "  2. Enter your account email as USERNAME and the token as PASSWORD."
+    )
+```
+
 ## `auth status` JSON Shape (Canonical)
 
 `create_auth_app` (in `cli_tools_shared.auth_commands`) emits a single canonical shape. Every CLI — including wrappers — returns this shape:
@@ -140,7 +162,8 @@ class Config(BaseConfig):
 - Fields shared across types (e.g., `USERNAME`) are prompted once
 
 **When to use multiple types:**
-- Service has an API but some actions require browser automation
+- Service has an API but some actions require browser automation after Adam
+  explicitly approves the browser-driven command boundary
 - OAuth API + browser session for scraping (e.g., Descript, PayPal)
 - API key + username/password for different service tiers
 

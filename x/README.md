@@ -1,6 +1,10 @@
 # X CLI
 
-A command-line interface for the [X API](https://api.twitter.com). Post tweets to X.com
+## DESCRIPTION
+
+The `x` CLI provides a command-line interface for X API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

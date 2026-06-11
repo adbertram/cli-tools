@@ -671,13 +671,13 @@
       "help": "Manage n8n node packages",
       "commands": {
         "test": {
-          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow \u2014 config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials in _repo/skills/n8n/.env - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test example-node -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
+          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow \u2014 config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials in /Users/adam/Dropbox/GitRepos/Agents/skills/n8n/.env - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
           "arguments": [
             {
               "name": "node_name",
               "type": "NODE_NAME",
               "required": false,
-              "help": "Name of the n8n node to test (e.g., example-node). Optional when --workflow is used"
+              "help": "Name of the n8n node to test (e.g., claudecode). Optional when --workflow is used"
             }
           ],
           "options": [
@@ -720,14 +720,14 @@
               "name": "--credentials",
               "type": "TEXT",
               "required": false,
-              "help": "Node credentials as JSON string, e.g. '{\"exampleNodeApi\":{\"id\":\"abc\",\"name\":\"My Cred\"}}'",
+              "help": "Node credentials as JSON string, e.g. '{\"claudeCodeApi\":{\"id\":\"abc\",\"name\":\"My Cred\"}}'",
               "short": "-c"
             },
             {
               "name": "--node-type",
               "type": "TEXT",
               "required": false,
-              "help": "Override full node type (e.g., n8n-nodes-example-node.exampleNode)"
+              "help": "Override full node type (e.g., n8n-nodes-claudecode.claudeCode)"
             },
             {
               "name": "--username",
@@ -812,7 +812,7 @@
           "usage_instructions": "Convert a standardized CLI tool into an n8n community node package. Parses the CLI's commands/options and generates the node source in the cli-tools repo."
         },
         "deploy": {
-          "help": "Deploy an n8n node package to the n8n server (deployment host). Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n nodes deploy shippo n8n nodes deploy <source-root>/n8n-nodes/brickowl n8n nodes deploy <source-root>/n8n-nodes-example-node n8n nodes deploy <source-root>/n8n-nodes/brickowl --skip-build",
+          "help": "Deploy an n8n node package to the n8n server (adam-server). Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n nodes deploy shippo n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes-claudecode n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl --skip-build",
           "arguments": [
             {
               "name": "package_path",
@@ -847,10 +847,10 @@
               "help": "Skip browser session auth check"
             }
           ],
-          "usage_instructions": "Deploy a generated/modified n8n node package to the n8n server (deployment host). Builds, uploads, and restarts n8n to pick it up."
+          "usage_instructions": "Deploy a generated/modified n8n node package to the n8n server (adam-server). Builds, uploads, and restarts n8n to pick it up."
         },
         "remove": {
-          "help": "Remove a community node from the n8n server. Uninstalls the npm package from the community nodes directory, deletes associated credentials, and restarts n8n. Example: n8n nodes remove brickowl n8n nodes remove @scope/n8n-nodes-example n8n nodes remove airtable --keep-credentials n8n nodes remove ebay --skip-restart",
+          "help": "Remove a node package from the n8n server. Third-party community packages are uninstalled through the running n8n instance; custom/generated packages are removed from the community nodes directory and n8n is restarted. Example: n8n nodes remove brickowl n8n nodes remove @scope/n8n-nodes-example n8n nodes remove airtable --keep-credentials n8n nodes remove ebay --skip-restart",
           "arguments": [
             {
               "name": "node_name",
@@ -873,7 +873,7 @@
               "help": "Keep associated credentials"
             }
           ],
-          "usage_instructions": "Uninstall a community node from the n8n server by package name."
+          "usage_instructions": "Remove a node package from the n8n server by package name. Pass scoped packages exactly, for example @scope/n8n-nodes-example."
         },
         "install": {
           "help": "Install a third-party community node package from npm. Installs the package through the running n8n instance so npm runs in the same server/runtime environment that loads community packages. Example: n8n nodes install n8n-nodes-duckduckgo-search n8n nodes install @scope/n8n-nodes-example n8n nodes install n8n-nodes-example --version 1.2.3 n8n nodes install n8n-nodes-mcp --skip-verify",
@@ -911,7 +911,7 @@
               "help": "Skip node verification after install"
             }
           ],
-          "usage_instructions": "Install a third-party community node package from npm through the running n8n server. Pass scoped packages exactly, for example @example/n8n-nodes-example; use --version for a pinned npm version and --skip-verify only when you will verify separately."
+          "usage_instructions": "Install a third-party community node package from npm through the running n8n server. Pass scoped packages exactly, for example @chrishdx/n8n-nodes-codex-cli-lm; use --version for a pinned npm version and --skip-verify only when you will verify separately."
         },
         "list": {
           "help": "List n8n node packages. Without --type, lists locally generated packages (from nodes create). With --type, queries the n8n server for installed nodes. Example: n8n nodes list                    # locally generated packages n8n nodes list --type default     # built-in nodes on server n8n nodes list --type community   # third-party community nodes on server n8n nodes list --type custom      # generated/custom packages on server n8n nodes list --type community --include-tools --table",
@@ -958,7 +958,7 @@
               "short": "-p"
             }
           ],
-          "usage_instructions": "List n8n node packages. Without --type, lists locally generated node packages. Use --type community for third-party packages and --type custom for locally generated packages installed on the server. Supports --filter/-f, --limit/-l, --table/-t."
+          "usage_instructions": "List n8n node packages. Without --type, lists locally generated node packages. Use --type community for third-party packages and --type custom for Adam-generated packages installed on the server. Supports --filter/-f, --limit/-l, --table/-t."
         },
         "get": {
           "help": "Get details for a node package or built-in node. Without --type, looks up locally generated packages. With --type, fetches the full node definition from the n8n server. Example: n8n nodes get brickowl n8n nodes get slack --type default n8n nodes get slack --type default --table",

@@ -1,6 +1,10 @@
 # Mailchimp CLI
 
-A Python CLI tool for managing Mailchimp via the Marketing API v3.0.
+## DESCRIPTION
+
+The `mailchimp` CLI provides a command-line interface for Mailchimp API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

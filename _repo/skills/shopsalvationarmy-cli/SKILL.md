@@ -1,6 +1,10 @@
 ---
-name: "shopsalvationarmy-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute shopsalvationarmy operations using the `shopsalvationarmy` CLI tool. CLI interface for Shop Salvation Army \u2014 search listings, browse categories, view item details. Triggers: shopsalvationarmy, shopsalvationarmy cli, salvation army shop, search salvation army, salvation army listings, salvation army items, browse salvation army, salvation army categories, salvation army auction"
+name: shopsalvationarmy-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute shopsalvationarmy operations using the `shopsalvationarmy` CLI tool.
+  CLI interface for Shop Salvation Army — search listings, browse categories, view item details.
+  Triggers: shopsalvationarmy, shopsalvationarmy cli, salvation army shop, search salvation army, salvation army listings, salvation army items, browse salvation army, salvation army categories, salvation army auction
 ---
 
 <objective>

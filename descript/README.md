@@ -1,6 +1,10 @@
 # Descript CLI
 
-CLI for managing Descript video projects via reverse-engineered internal API. Authenticates by extracting the signed-in desktop session JWT from Descript's Chromium cookie store.
+## DESCRIPTION
+
+The `descript` CLI provides a command-line interface for Descript API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Prerequisites
 
@@ -87,6 +91,10 @@ descript compositions assets <project-id> --table
 descript compositions export <project-id> <asset-id>
 descript compositions export <project-id> <asset-id> -o ./output.mp4
 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160
+
+# Export a full composition through the Descript desktop app
+# Local composition renders can take awhile; the CLI waits up to 30 minutes.
+descript compositions export <project-id> --composition "Catalog Page" -o ./catalog-page.mp4
 ```
 
 ### Monitor

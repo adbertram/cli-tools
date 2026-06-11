@@ -1,6 +1,10 @@
 ---
-name: "fitnesspal-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute fitnesspal operations using the `fitnesspal` CLI tool. MyFitnessPal CLI -- view diary, exercises, measurements, reports, food search, recipes, and meals. Triggers: fitnesspal, fitnesspal cli, myfitnesspal, food diary, calorie diary, fitness diary, fitnesspal exercises, fitnesspal measurements, fitnesspal recipes, fitnesspal food search"
+name: fitnesspal-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute fitnesspal operations using the `fitnesspal` CLI tool.
+  MyFitnessPal CLI -- view diary, exercises, measurements, reports, food search, recipes, and meals.
+  Triggers: fitnesspal, fitnesspal cli, myfitnesspal, food diary, calorie diary, fitness diary, fitnesspal exercises, fitnesspal measurements, fitnesspal recipes, fitnesspal food search
 ---
 
 <objective>

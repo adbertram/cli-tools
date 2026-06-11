@@ -1,6 +1,11 @@
 ---
-name: "n8n-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Use this skill for ALL n8n CLI operations. DO NOT run `n8n` CLI commands or guess flag syntax without loading this skill first. Covers workflows, nodes, executions, credentials, data tables, server/logs, auth, and profiles. Triggers: n8n, n8n cli, n8n workflows, n8n executions, n8n credentials, n8n nodes, n8n data tables, list n8n workflows, n8n server logs, my n8n, trigger n8n workflow, n8n execution history, install n8n node"
+name: n8n-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Use this skill for ALL n8n CLI operations. DO NOT run `n8n` CLI commands
+  or guess flag syntax without loading this skill first. Covers workflows, nodes, executions,
+  credentials, data tables, server/logs, auth, and profiles.
+  Triggers: n8n, n8n cli, n8n workflows, n8n executions, n8n credentials, n8n nodes, n8n data tables, list n8n workflows, n8n server logs, my n8n, trigger n8n workflow, n8n execution history, install n8n node
 ---
 
 <objective>

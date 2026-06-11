@@ -1,6 +1,10 @@
 # Notion CLI Guide
 
-Complete reference for the `notion` command-line interface for querying and managing Notion databases and pages.
+## DESCRIPTION
+
+The `notion` CLI provides a command-line interface for Notion API with database query filtering.
+
+Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
 ## Overview
 

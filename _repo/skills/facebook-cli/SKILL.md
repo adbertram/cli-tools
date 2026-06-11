@@ -1,6 +1,10 @@
 ---
-name: "facebook-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute facebook operations using the `facebook` CLI tool. Facebook CLI via Playwright browser automation -- Marketplace search, Messenger conversations, Groups posts, and caching. Triggers: facebook, facebook cli, facebook marketplace, facebook messenger, facebook groups, search facebook marketplace, facebook messages, send facebook message, facebook message requests, facebook group posts, read facebook group, list facebook groups"
+name: facebook-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute facebook operations using the `facebook` CLI tool.
+  Facebook CLI via Playwright browser automation -- Marketplace search, Messenger conversations, Groups posts, and caching.
+  Triggers: facebook, facebook cli, facebook marketplace, facebook messenger, facebook groups, search facebook marketplace, facebook messages, send facebook message, facebook message requests, facebook group posts, read facebook group, list facebook groups
 ---
 
 <objective>
@@ -76,4 +80,4 @@ Facebook strips Markdown (`**bold**`, `[label](url)`) when rendering comments �
 
 **Verification:** `facebook groups posts comment 2318028917/posts/<id> -m "..."` returned `success: true, verification: "confirmed", signal: "exact-post-comment-found"` with a new `commentId`. Independent read path confirmed `comment_count` incremented 5 → 6 and the comment text was present. (The facebook CLI has no delete-comment command; remove a test comment by driving the comment's `aria-label="Edit or delete this"` menu → Delete menuitem → confirm "Delete Comment?" dialog via the same authenticated session.)
 
-**Recurrence Prevention:** The locator no longer depends on Facebook nesting the permalink anchor and comment controls inside a `[role="article"]`. It relies on the more stable invariants of a single-post permalink page: one visible Lexical composer document-wide, or one comment activator in `[role="main"]`. If Facebook changes the composer/activator selectors again, capture the live DOM FIRST (instantiate `FacebookClient`, call `_get_page(url)`, then `page.evaluate(...)` to dump article/anchor/composer facts) before editing — diagnose from the live page, never from assumptions. The aria-label for the inline activator is currently "Leave a comment"; the composer's `aria-placeholder` is personalized (for example, "Answer as <profile>"), so never match on placeholder text.
+**Recurrence Prevention:** The locator no longer depends on Facebook nesting the permalink anchor and comment controls inside a `[role="article"]`. It relies on the more stable invariants of a single-post permalink page: one visible Lexical composer document-wide, or one comment activator in `[role="main"]`. If Facebook changes the composer/activator selectors again, capture the live DOM FIRST (instantiate `FacebookClient`, call `_get_page(url)`, then `page.evaluate(...)` to dump article/anchor/composer facts) before editing — diagnose from the live page, never from assumptions. The aria-label for the inline activator is currently "Leave a comment"; the composer's `aria-placeholder` is personalized (e.g. "Answer as Adam"), so never match on placeholder text.

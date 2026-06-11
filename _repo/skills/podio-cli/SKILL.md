@@ -1,6 +1,10 @@
 ---
-name: "podio-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute podio operations using the `podio` CLI tool. CLI interface for Podio API - Manage apps, items, tasks, and more. Triggers: podio, podio cli, podio items, podio apps, podio tasks, list podio items, podio workspace, podio conversations, podio files, podio webhooks, my podio"
+name: podio-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute podio operations using the `podio` CLI tool.
+  CLI interface for Podio API - Manage apps, items, tasks, and more.
+  Triggers: podio, podio cli, podio items, podio apps, podio tasks, list podio items, podio workspace, podio conversations, podio files, podio webhooks, my podio
 ---
 
 <objective>

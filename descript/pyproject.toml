@@ -17,6 +17,11 @@ dependencies = [
     "cryptography>=48.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 descript = "descript_cli.main:app"
 

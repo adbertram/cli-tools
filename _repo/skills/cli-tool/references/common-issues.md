@@ -66,6 +66,13 @@ $ myservice --version
 zsh: command not found: myservice
 ```
 
+Or a source checkout reinstall with system Python fails:
+
+```bash
+$ python3 -m pip install -e .
+error: externally-managed-environment
+```
+
 ### Diagnosis
 ```bash
 # Check if symlink exists
@@ -84,6 +91,16 @@ uv tool install -e <cli-tools-root>/myservice --force --refresh
 ```bash
 uv tool install -e <cli-tools-root>/myservice --force --refresh
 ```
+
+For the current checkout:
+
+```bash
+uv tool install --editable . --force
+```
+
+Do not use Homebrew/system `pip install -e .` or
+`--break-system-packages`. CLI tools are installed as uv tools, and
+`~/.local/bin/<tool>` should point into `~/.local/share/uv/tools/`.
 
 **Or use the install script:**
 ```bash
@@ -110,10 +127,16 @@ cat ~/.local/share/cli-tools/myservice/authentication_profiles/default/.env
 
 # Check reusable CLI secrets before asking Adam for the value; see references/secrets.md
 
-# Verify config.py path
-cd <cli-tools-root>/myservice
-python3 -c "from myservice_cli.config import get_config; print(get_config().env_path)"
+# Verify the installed CLI resolves the intended profile
+launcher="$(command -v myservice)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" -c "from myservice_cli.config import get_config; print(get_config(profile='default').env_file_path)"
 ```
+
+If the tool has multiple active profiles, direct Python probes must pass
+`profile='<name>'` or instantiate `Config(profile='<name>')`. Do not rely on
+ambient shell variables such as `MYSERVICE_PROFILE`, `JIRA_PROFILE`, or
+`CLI_TOOLS_PROFILE`; `BaseConfig` does not use them for ad-hoc Python imports.
 
 ### Fixes
 
@@ -149,31 +172,24 @@ Error: No such command 'items'.
 # Check available commands
 myservice --help
 
-# Check command registration
-grep -r "@app.command" <cli-tools-root>/myservice/myservice_cli/commands/
-grep "add_typer" <cli-tools-root>/myservice/myservice_cli/main.py
+# Check command registration in the actual layout
+rg -n '@.*command|add_typer' <cli-tools-root>/myservice/myservice_cli
 ```
 
 ### Fixes
 
 **Add missing command decorator:**
 ```python
-# In commands/items.py
-@app.command("list")  # Make sure this exists
+# In main.py (default scaffold) or commands/items.py (split layout)
+@items_app.command("list")  # Or @app.command("list") in a split command module
 def list_items(...):
     ...
 ```
 
-**Import command module:**
+**Register the subcommand app in main.py:**
 ```python
-# In commands/__init__.py
-from . import auth, items  # Add items here
-```
-
-**Register in main.py:**
-```python
-from .commands import items
-app.add_typer(items.app, name="items")  # Add this
+items_app = typer.Typer(help="Manage items", no_args_is_help=True)
+app.add_typer(items_app, name="items")
 ```
 
 **Reinstall after changes:**
@@ -336,6 +352,11 @@ $ python3 - <<'PY'
 import copilot_cli.main
 PY
 # ModuleNotFoundError: No module named 'httpx'
+
+$ python3 - <<'PY'
+import jira_cli.config
+PY
+# ModuleNotFoundError: No module named 'cli_tools_shared'
 ```
 
 ### Root Cause
@@ -356,17 +377,19 @@ nothing to do with the CLI itself — it's a wrong-interpreter diagnosis.
 
 ### Fix — Always Use the CLI's Own Interpreter for Ad-Hoc Imports
 
-**Never** import CLI modules with bare `python3`. Use the uv tool venv's
-interpreter directly:
+**Never** import CLI modules with bare `python3`. Inspect the installed
+launcher and use the interpreter named in its shebang:
 
 ```bash
 # Correct — apples-to-apples manual import test
-~/.local/share/uv/tools/copilot-cli/bin/python3 \
-    -c "import copilot_cli.main; print(copilot_cli.main.__file__)"
+launcher="$(command -v jira)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" -c "import jira_cli.config; print(jira_cli.config.__file__)"
 ```
 
-Replace `copilot-cli` with the target CLI's package name (as declared in
-`pyproject.toml` `[project].name`).
+Replace `jira` and `jira_cli.config` with the target CLI command and module.
+Do not derive the uv tool path from the command name; the launcher shebang is
+the source of truth.
 
 ### Second Wrinkle: sys.path Depends on CWD
 The uv tool venv's interpreter picks up the local editable source when run
@@ -376,8 +399,16 @@ installed copy specifically, `cd /` (or anywhere outside the repo) first.
 
 ### Validation
 Running the CLI itself (`copilot --help`, `copilot auth status`) is the
-real auth/functionality signal — not bare-python import tests. If
-`test-cli-tool.sh` or `validate-cli-tool.sh` report a shebang mismatch,
+real auth/functionality signal — not bare-python import tests. The installed
+CLI interpreter is also not the pytest runner. Its uv tool venv is runtime-only
+and does not include test-only packages such as `pytest`. For focused per-tool
+pytest runs, use the tool's uv project and inject pytest into that run:
+
+```bash
+uv run --project <cli-tools-root>/<name> --with pytest python -m pytest <cli-tools-root>/<name>/tests
+```
+
+If `test-cli-tool.sh` or `validate-cli-tool.sh` report a shebang mismatch,
 reinstall:
 ```bash
 uv tool install -e <cli-tools-root>/<name> --force --refresh
@@ -479,5 +510,5 @@ myservice items list --limit 5
 myservice items list --filter "status:active"
 
 # Full test suite
-<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh myservice
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name myservice
 ```

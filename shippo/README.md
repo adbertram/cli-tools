@@ -1,6 +1,10 @@
 # Shippo CLI
 
-A command-line interface for the [Shippo API](https://docs.goshippo.com/) - Create USPS shipping labels, get rates, and track packages.
+## DESCRIPTION
+
+The `shippo` CLI provides a command-line interface for Shippo API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
