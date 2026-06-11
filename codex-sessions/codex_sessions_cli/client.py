@@ -42,6 +42,7 @@ from .parsers import (
     iter_rollout_paths,
     load_rollout_index,
     load_rollout,
+    load_session_names,
     max_timestamp,
     message_records,
     output_for_record,
@@ -70,6 +71,12 @@ class CodexSessionsClient:
         self.config = get_config()
         self.codex_home = Path(codex_home).expanduser() if codex_home else self.config.codex_home
         self.load_errors: List[str] = []
+        self._session_names: Optional[Dict[str, str]] = None
+
+    def _get_session_names(self) -> Dict[str, str]:
+        if self._session_names is None:
+            self._session_names = load_session_names(self.codex_home)
+        return self._session_names
 
     def auth_status(self) -> Dict[str, Any]:
         exists = self.codex_home.exists()
@@ -152,13 +159,15 @@ class CodexSessionsClient:
         limit: int = 100,
     ) -> List[SessionSummary]:
         normalized = query.casefold()
-        sessions = [
-            self._session_summary(parsed)
-            for parsed in self._load_rollouts()
-            if normalized in session_text(parsed).casefold()
-            and self._matches_project(parsed, project, project_path)
-            and self._matches_since(max_timestamp(parsed.records), since)
-        ]
+        names = self._get_session_names()
+        sessions = []
+        for parsed in self._matching_rollouts(project, project_path, None, since):
+            sid = parsed.meta["id"]
+            name = names.get(sid, "")
+            in_text = normalized in session_text(parsed).casefold()
+            in_name = normalized in name.casefold()
+            if in_text or in_name:
+                sessions.append(self._session_summary(parsed))
         return self._apply_limit(self._sort_by_last_activity(sessions), limit)
 
     def list_conversations(
@@ -170,8 +179,9 @@ class CodexSessionsClient:
         limit: int = 100,
     ) -> List[ConversationSummary]:
         conversations: List[ConversationSummary] = []
+        resolved_id = self._resolve_session_id(session_id) if session_id else None
         for rollout_index in self._matching_rollout_indexes(project, project_path, since):
-            if session_id and rollout_index.session_id != session_id:
+            if resolved_id and rollout_index.session_id != resolved_id:
                 continue
             parsed = load_rollout(rollout_index.path)
             turn_records = [record for record in parsed.records if record.record_type == "turn_context"]
@@ -622,8 +632,10 @@ class CodexSessionsClient:
     def _session_summary(self, parsed: ParsedRollout) -> SessionSummary:
         meta = parsed.meta
         tokens = token_totals(parsed)
+        names = self._get_session_names()
         data = {
             "id": meta["id"],
+            "name": names.get(meta["id"]),
             "project": project_name(meta["cwd"]),
             "project_path": meta["cwd"],
             "created_at": meta["timestamp"],
@@ -718,7 +730,8 @@ class CodexSessionsClient:
         return indexes
 
     def _get_rollout(self, session_id: str) -> ParsedRollout:
-        path = self._get_rollout_path(session_id)
+        resolved = self._resolve_session_id(session_id)
+        path = self._get_rollout_path(resolved)
         return load_rollout(path)
 
     def _matching_rollouts(
@@ -729,7 +742,8 @@ class CodexSessionsClient:
         since: Optional[str],
     ):
         if session_id is not None:
-            parsed = self._get_rollout(session_id)
+            resolved = self._resolve_session_id(session_id)
+            parsed = self._get_rollout(resolved)
             if not self._matches_project(parsed, project, project_path):
                 return
             if not self._matches_since(max_timestamp(parsed.records), since):
@@ -853,6 +867,28 @@ class CodexSessionsClient:
             if isinstance(exit_code, int):
                 return exit_code
         return None
+
+    def _resolve_session_id(self, session_id_or_name: str) -> str:
+        try:
+            path = self._get_rollout_path(session_id_or_name)
+            if path.exists():
+                return session_id_or_name
+        except ClientError:
+            pass
+
+        names = self._get_session_names()
+        
+        # Exact match
+        for sid, tname in names.items():
+            if tname == session_id_or_name:
+                return sid
+                
+        # Case-insensitive match
+        for sid, tname in names.items():
+            if tname.casefold() == session_id_or_name.casefold():
+                return sid
+                
+        return session_id_or_name
 
 
 def get_client() -> CodexSessionsClient:

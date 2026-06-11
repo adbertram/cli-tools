@@ -686,3 +686,26 @@ def parse_include_prompts(value: str) -> Tuple[int, int]:
                 f"invalid --include-prompts key: {key!r}. Accepted keys: first, last."
             )
     return first_n, last_n
+
+
+def load_session_names(codex_home: Path) -> Dict[str, str]:
+    """Load session ID to thread_name mapping from session_index.jsonl."""
+    index_path = codex_home / "session_index.jsonl"
+    if not index_path.exists():
+        return {}
+
+    mapping = {}
+    try:
+        # File can be large/appended to; let's parse line-by-line
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                if isinstance(data, dict) and "id" in data and "thread_name" in data:
+                    mapping[str(data["id"])] = str(data["thread_name"])
+            except json.JSONDecodeError:
+                continue
+    except Exception:
+        pass
+    return mapping

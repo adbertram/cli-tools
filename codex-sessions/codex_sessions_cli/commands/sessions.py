@@ -15,8 +15,8 @@ from .common import emit_list, emit_one, model_to_dict
 app = typer.Typer(help="List, get, and search Codex sessions", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"], "search": ["custom"]}
 
-SESSION_COLUMNS = ["id", "project", "last_activity", "message_count", "tool_call_count", "has_errors"]
-SESSION_HEADERS = ["ID", "Project", "Last Activity", "Messages", "Tools", "Errors"]
+SESSION_COLUMNS = ["id", "name", "project", "last_activity", "message_count", "tool_call_count", "has_errors"]
+SESSION_HEADERS = ["ID", "Name", "Project", "Last Activity", "Messages", "Tools", "Errors"]
 
 
 @app.command("list")

@@ -3,7 +3,7 @@ name: codex-sessions-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute codex-sessions operations using the `codex-sessions` CLI tool.
-  Query and analyze OpenAI Codex session transcripts from <codex-session-root>.
+  Query and analyze OpenAI Codex session transcripts from ~/.codex.
   Triggers: codex-sessions, codex-sessions cli, codex session history, Codex transcripts, Codex sessions, list Codex sessions, search Codex sessions, Codex tool calls, Codex subagents, Codex timeline, Codex todos
 ---
 

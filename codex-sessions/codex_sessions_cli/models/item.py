@@ -29,6 +29,7 @@ class Project(CLIModel):
 
 class SessionSummary(CLIModel):
     id: str = Field(frozen=True)
+    name: Optional[str] = None
     project: str
     project_path: str
     created_at: str

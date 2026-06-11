@@ -1,8 +1,8 @@
 {
   "tool": "codex-sessions",
-  "description": "Query and analyze OpenAI Codex session data from <codex-session-root>",
-  "discovered_at": "2026-05-06T15:14:15.295208+00:00",
-  "total_commands": 21,
+  "description": "Query and analyze OpenAI Codex session data from ~/.codex",
+  "discovered_at": "2026-06-11T16:28:34Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -15,16 +15,181 @@
   "commands": {
     "auth": {
       "help": "Check local Codex access",
+      "usage_instructions": "Use auth commands to verify local `~/.codex` transcript access and Codex CLI availability. No real login is required because transcript data is read from local files.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Report local Codex access; no login is needed for local transcript files.",
+          "usage_instructions": "Use `codex-sessions auth login` when a workflow expects an auth check; it reports local access and does not change credentials. Add `--force`/`-F` to re-check local access and `--table`/`-t` for table output.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
             {
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Re-check local Codex access",
+              "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "No-op logout for local transcript files.",
+          "usage_instructions": "Use `codex-sessions auth logout` only when a standard CLI workflow requires logout; it does not remove Codex credentials or transcript files. Add `--table`/`-t` for table output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check whether Codex session data is readable.",
+          "usage_instructions": "Use `codex-sessions auth status` before transcript work to confirm `codex_home`, sessions directory, CLI availability, and Codex CLI version. Add `--table`/`-t` for a compact table.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
             },
             {
               "name": "--table",
@@ -33,11 +198,11 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions auth login` when a workflow expects an auth check; it reports local access and does not change credentials. Add `--force`/`-F` to re-check local access and `--table`/`-t` for table output."
+          ]
         },
-        "status": {
-          "help": "Check whether Codex session data is readable.",
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -45,31 +210,192 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions auth status` before transcript work to confirm `codex_home`, sessions directory, CLI availability, and Codex CLI version. Add `--table`/`-t` for a compact table."
-        },
-        "logout": {
-          "help": "No-op logout for local transcript files.",
-          "options": [
+            },
             {
-              "name": "--table",
+              "name": "--verbose",
               "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions auth logout` only when a standard CLI workflow requires logout; it does not remove Codex credentials or transcript files. Add `--table`/`-t` for table output."
+          ]
         }
-      },
-      "usage_instructions": "Use auth commands to verify local `<codex-session-root>` transcript access and Codex CLI availability. No real login is required because transcript data is read from local files."
+      }
+    },
+    "conversations": {
+      "help": "List and query conversation turns",
+      "usage_instructions": "Use conversations commands for turn-level summaries inside Codex sessions. Conversation ids use `session_id:number`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific conversation summary.",
+          "usage_instructions": "Use `codex-sessions conversations get <session-id>:<number>` for one turn summary. Add `--properties`/`-p` or `--table`/`-t` for output shaping.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation ID: session_id:number"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List conversation turns within sessions.",
+          "usage_instructions": "Use `codex-sessions conversations list` to inspect turns by project, path, session id, or age. Use `--session-id`/`-S` when known; default limit is 100.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project folder path"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to session",
+              "short": "-S"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "projects": {
       "help": "List and query projects",
+      "usage_instructions": "Use projects commands to discover working directories represented in Codex session rollouts. Start here when the user remembers the project but not the session id.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a project by name or full path.",
+          "usage_instructions": "Use `codex-sessions projects get <name-or-path>` when the exact project name or path is known. Add `--properties`/`-p` to return selected fields or `--table`/`-t` for table output.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name or full path"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List projects with Codex session transcripts.",
+          "usage_instructions": "Use `codex-sessions projects list` to find project names, paths, session counts, and last activity. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` to narrow or format results.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -99,18 +425,39 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions projects list` to find project names, paths, session counts, and last activity. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` to narrow or format results."
-        },
+          ]
+        }
+      }
+    },
+    "sessions": {
+      "help": "List, get, and search sessions",
+      "usage_instructions": "Use sessions commands for session-level discovery, full session details, and transcript text search. Prefer `--project`, `--project-path`, or `--since`/`-s` before broad listing when scope is known.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
-          "help": "Get a project by name or full path.",
+          "help": "Get full details for a session.",
+          "usage_instructions": "Use `codex-sessions sessions get <session-id>` when a session id is known and full raw records, messages, and tool calls are needed. Add `--properties`/`-p` for selected fields or `--table`/`-t` for a summary table.",
           "arguments": [
             {
-              "name": "name",
+              "name": "session_id",
               "type": "TEXT",
               "required": true,
-              "help": "Project name or full path"
+              "help": "Session/thread UUID"
             }
           ],
           "options": [
@@ -127,18 +474,19 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions projects get <name-or-path>` when the exact project name or path is known. Add `--properties`/`-p` to return selected fields or `--table`/`-t` for table output."
-        }
-      },
-      "usage_instructions": "Use projects commands to discover working directories represented in Codex session rollouts. Start here when the user remembers the project but not the session id."
-    },
-    "sessions": {
-      "help": "List, get, and search sessions",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List Codex sessions.",
+          "usage_instructions": "Use `codex-sessions sessions list` to find recent sessions and ids. Filter by `--project`/`-p`, exact `--project-path`, age with `--since`/`-s`, or fields with `--filter`/`-f`; default limit is 100.",
+          "arguments": [],
           "options": [
             {
               "name": "--project",
@@ -176,6 +524,49 @@
               "short": "-s"
             },
             {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to sessions whose last_activity falls on this local-calendar date (YYYY-MM-DD). Mutually exclusive with --date-range, --date-alias, --since"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local-calendar range START..END (YYYY-MM-DD..YYYY-MM-DD). Mutually exclusive with --date, --date-alias, --since"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "One of today, yesterday, this_week, last_week (ISO weeks, Monday-Sunday). Mutually exclusive with --date, --date-range, --since"
+            },
+            {
+              "name": "--min-tool-calls",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Drop sessions whose tool_call_count is below this threshold"
+            },
+            {
+              "name": "--include-prompts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Embed first/last user prompts on each session row. Format: first:N,last:N (either part optional, e.g., first:3 or first:3,last:3)"
+            },
+            {
+              "name": "--prompts-clean",
+              "type": "bool",
+              "required": false,
+              "help": "When --include-prompts is set, skip system reminders, Caveat: lines, and tool-result content"
+            },
+            {
+              "name": "--prompts-max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Truncate each embedded prompt to this many characters (default 400)",
+              "default": "400"
+            },
+            {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
@@ -186,41 +577,19 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions sessions list` to find recent sessions and ids. Filter by `--project`/`-p`, exact `--project-path`, age with `--since`/`-s`, or fields with `--filter`/`-f`; default limit is 100."
-        },
-        "get": {
-          "help": "Get full details for a session.",
-          "arguments": [
-            {
-              "name": "session_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Session/thread UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Comma-separated fields to include"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions sessions get <session-id>` when a session id is known and full raw records, messages, and tool calls are needed. Add `--properties`/`-p` for selected fields or `--table`/`-t` for a summary table."
+          ]
         },
         "search": {
           "help": "Search Codex session transcript content.",
+          "usage_instructions": "Use `codex-sessions sessions search <query>` to locate sessions containing prompt text, tool arguments, or outputs. Combine with `--project`/`-p`, `--project-path`, `--since`/`-s`, and `--limit`/`-l` to keep searches scoped.",
           "arguments": [
             {
               "name": "query",
@@ -277,465 +646,33 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions sessions search <query>` to locate sessions containing prompt text, tool arguments, or outputs. Combine with `--project`/`-p`, `--project-path`, `--since`/`-s`, and `--limit`/`-l` to keep searches scoped."
+          ]
         }
-      },
-      "usage_instructions": "Use sessions commands for session-level discovery, full session details, and transcript text search. Prefer `--project`, `--project-path`, or `--since`/`-s` before broad listing when scope is known."
-    },
-    "conversations": {
-      "help": "List and query conversation turns",
-      "commands": {
-        "list": {
-          "help": "List conversation turns within sessions.",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project name",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project folder path"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions conversations list` to inspect turns by project, path, session id, or age. Use `--session-id`/`-S` when known; default limit is 100."
-        },
-        "get": {
-          "help": "Get a specific conversation summary.",
-          "arguments": [
-            {
-              "name": "conversation_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Conversation ID: session_id:number"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions conversations get <session-id>:<number>` for one turn summary. Add `--properties`/`-p` or `--table`/`-t` for output shaping."
-        }
-      },
-      "usage_instructions": "Use conversations commands for turn-level summaries inside Codex sessions. Conversation ids use `session_id:number`."
-    },
-    "subagent-activity": {
-      "help": "Query subagent invocations",
-      "commands": {
-        "list": {
-          "help": "List subagent launches recorded as spawn-agent tool calls.",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project name",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project folder path"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions subagent-activity list` to see subagent type, name, prompt, status, and output. Combine `--session-id`/`-S`, `--project`/`-p`, `--since`/`-s`, `--filter`/`-f`, and `--properties`."
-        },
-        "get": {
-          "help": "Get a specific subagent invocation.",
-          "arguments": [
-            {
-              "name": "subagent_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Subagent/tool call ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions subagent-activity get <subagent-tool-call-id>` for one subagent launch. The id is the underlying tool call id from transcript records."
-        }
-      },
-      "usage_instructions": "Use subagent-activity commands to find `spawn_agent` or `Task` tool calls and their returned agent ids/nicknames. Scope by `--session-id`/`-S` when possible."
-    },
-    "tool-calls": {
-      "help": "Query tool call history",
-      "commands": {
-        "list": {
-          "help": "List tool calls recorded in Codex transcripts.",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project name",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project folder path"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields"
-            },
-            {
-              "name": "--include-subagents",
-              "type": "bool",
-              "required": false,
-              "help": "Accepted for CLI parity",
-              "short": "-a"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions tool-calls list` to inspect tool usage. Scope with `--session-id`/`-S`, `--project`/`-p`, or `--since`/`-s`; use `--filter`/`-f 'name:eq:exec_command'` for a tool name."
-        },
-        "get": {
-          "help": "Get a specific tool call.",
-          "arguments": [
-            {
-              "name": "tool_call_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tool call ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions tool-calls get <tool-call-id>` for one tool call's arguments and output. Add `--properties`/`-p` or `--table`/`-t` to shape output."
-        }
-      },
-      "usage_instructions": "Use tool-calls commands to inspect Codex tool invocations, arguments, outputs, cwd, status, and exit codes. This is the main group for command/tool auditing."
-    },
-    "todos": {
-      "help": "Query update-plan items",
-      "commands": {
-        "list": {
-          "help": "List update-plan items captured in Codex transcripts.",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project name",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project folder path"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions todos list` to list plan items. Scope by `--session-id`/`-S`, project, path, or age; filter statuses with `--filter`/`-f 'status:eq:completed'`."
-        },
-        "get": {
-          "help": "Get a specific update-plan item.",
-          "arguments": [
-            {
-              "name": "todo_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Todo ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions todos get <todo-id>` for one plan item. Todo ids are emitted by `todos list`."
-        }
-      },
-      "usage_instructions": "Use todos commands to inspect `update_plan` items captured in Codex sessions. This is useful for reconstructing work plans and task status."
+      }
     },
     "skills": {
       "help": "Query skill mentions",
+      "usage_instructions": "Use skills commands to find `$skill` and `@agent` mentions in user prompts captured by Codex. This reports mentions, not guaranteed skill execution.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List skill mentions captured in user prompt events.",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project name",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project folder path"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields"
-            }
-          ],
-          "usage_instructions": "Use `codex-sessions skills list` to find skill or agent mentions by project, session, or age. Filter by name with `--filter`/`-f 'name:eq:cli-tool'`."
-        },
         "get": {
           "help": "Get a specific skill mention.",
+          "usage_instructions": "Use `codex-sessions skills get <skill-invocation-id>` for one detected skill or agent mention. Skill ids are emitted by `skills list`.",
           "arguments": [
             {
               "name": "skill_id",
@@ -758,18 +695,309 @@
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List skill mentions captured in user prompt events.",
+          "usage_instructions": "Use `codex-sessions skills list` to find skill or agent mentions by project, session, or age. Filter by name with `--filter`/`-f 'name:eq:cli-tool'`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project folder path"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to session",
+              "short": "-S"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "subagent-activity": {
+      "help": "Query subagent invocations",
+      "usage_instructions": "Use subagent-activity commands to find `spawn_agent` or `Task` tool calls and their returned agent ids/nicknames. Scope by `--session-id`/`-S` when possible.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific subagent invocation.",
+          "usage_instructions": "Use `codex-sessions subagent-activity get <subagent-tool-call-id>` for one subagent launch. The id is the underlying tool call id from transcript records.",
+          "arguments": [
+            {
+              "name": "subagent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subagent/tool call ID"
             }
           ],
-          "usage_instructions": "Use `codex-sessions skills get <skill-invocation-id>` for one detected skill or agent mention. Skill ids are emitted by `skills list`."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List subagent launches recorded as spawn-agent tool calls.",
+          "usage_instructions": "Use `codex-sessions subagent-activity list` to see subagent type, name, prompt, status, and output. Combine `--session-id`/`-S`, `--project`/`-p`, `--since`/`-s`, `--filter`/`-f`, and `--properties`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project folder path"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to session",
+              "short": "-S"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use skills commands to find `$skill` and `@agent` mentions in user prompts captured by Codex. This reports mentions, not guaranteed skill execution."
+      }
     },
     "timeline": {
       "help": "View activity timelines",
+      "usage_instructions": "Use timeline commands to reconstruct chronological activity from Codex records. Prefer `timeline consolidated --session-id <id>` for one session.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "consolidated": {
+          "help": "Show all activity for a single session in chronological order.",
+          "usage_instructions": "Use `codex-sessions timeline consolidated --session-id <id>` to show all parsed events for one session. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` for output shaping.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Session UUID",
+              "short": "-S"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "500"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--show-agent-tools",
+              "type": "bool",
+              "required": false,
+              "help": "--hide-agent-tools             Accepted for CLI parity",
+              "default": "show-agent-tools"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get timeline events for a specific session.",
+          "usage_instructions": "Use `codex-sessions timeline get <session-id>` when a positional session id is more convenient than `timeline consolidated --session-id`. Add `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, or `--table`/`-t` as needed.",
+          "arguments": [
+            {
+              "name": "event_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Timeline event ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List timeline events across sessions.",
+          "usage_instructions": "Use `codex-sessions timeline list` for timeline events across sessions. Scope with `--session-id`/`-S`, `--project`/`-p`, `--project-path`, or `--since`/`-s`; add `--errors-only`/`-e` for failed/error events.",
+          "arguments": [],
           "options": [
             {
               "name": "--project",
@@ -832,18 +1060,87 @@
               "required": false,
               "help": "Show only error events",
               "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "todos": {
+      "help": "Query update-plan items",
+      "usage_instructions": "Use todos commands to inspect `update_plan` items captured in Codex sessions. This is useful for reconstructing work plans and task status.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific update-plan item.",
+          "usage_instructions": "Use `codex-sessions todos get <todo-id>` for one plan item. Todo ids are emitted by `todos list`.",
+          "arguments": [
+            {
+              "name": "todo_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo ID"
             }
           ],
-          "usage_instructions": "Use `codex-sessions timeline list` for timeline events across sessions. Scope with `--session-id`/`-S`, `--project`/`-p`, `--project-path`, or `--since`/`-s`; add `--errors-only`/`-e` for failed/error events."
-        },
-        "consolidated": {
-          "help": "Show all activity for a single session in chronological order.",
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List update-plan items captured in Codex transcripts.",
+          "usage_instructions": "Use `codex-sessions todos list` to list plan items. Scope by `--session-id`/`-S`, project, path, or age; filter statuses with `--filter`/`-f 'status:eq:completed'`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project folder path"
+            },
             {
               "name": "--session-id",
               "type": "TEXT",
-              "required": true,
-              "help": "Session UUID",
+              "required": false,
+              "help": "Filter to session",
               "short": "-S"
             },
             {
@@ -857,9 +1154,16 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum entries",
+              "help": "Maximum results",
               "short": "-l",
-              "default": "500"
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
             },
             {
               "name": "--filter",
@@ -872,27 +1176,40 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
+              "help": "Comma-separated fields"
             },
             {
-              "name": "--show-agent-tools",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "--hide-agent-tools             Accepted for CLI parity",
-              "default": "show-agent-tools"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions timeline consolidated --session-id <id>` to show all parsed events for one session. Use `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, and `--table`/`-t` for output shaping."
-        },
+          ]
+        }
+      }
+    },
+    "tool-calls": {
+      "help": "Query tool call history",
+      "usage_instructions": "Use tool-calls commands to inspect Codex tool invocations, arguments, outputs, cwd, status, and exit codes. This is the main group for command/tool auditing.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
-          "help": "Get timeline events for a specific session.",
+          "help": "Get a specific tool call.",
+          "usage_instructions": "Use `codex-sessions tool-calls get <tool-call-id>` for one tool call's arguments and output. Add `--properties`/`-p` or `--table`/`-t` to shape output.",
           "arguments": [
             {
-              "name": "session_id",
+              "name": "tool_call_id",
               "type": "TEXT",
               "required": true,
-              "help": "Session UUID"
+              "help": "Tool call ID"
             }
           ],
           "options": [
@@ -904,12 +1221,66 @@
               "short": "-t"
             },
             {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List tool calls recorded in Codex transcripts.",
+          "usage_instructions": "Use `codex-sessions tool-calls list` to inspect tool usage. Scope with `--session-id`/`-S`, `--project`/`-p`, or `--since`/`-s`; use `--filter`/`-f 'name:eq:exec_command'` for a tool name.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project folder path"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to session",
+              "short": "-S"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum entries",
+              "help": "Maximum results",
               "short": "-l",
-              "default": "500"
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
             },
             {
               "name": "--filter",
@@ -922,14 +1293,24 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
+              "help": "Comma-separated fields"
+            },
+            {
+              "name": "--include-subagents",
+              "type": "bool",
+              "required": false,
+              "help": "Accepted for CLI parity",
+              "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `codex-sessions timeline get <session-id>` when a positional session id is more convenient than `timeline consolidated --session-id`. Add `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, or `--table`/`-t` as needed."
+          ]
         }
-      },
-      "usage_instructions": "Use timeline commands to reconstruct chronological activity from Codex records. Prefer `timeline consolidated --session-id <id>` for one session."
+      }
     }
   },
   "usage_instructions": "Use codex-sessions for local Codex transcript inspection: projects, sessions, transcript search, tool calls, subagents, update-plan todos, skill mentions, and chronological timelines. Commands use `codex-sessions <group> <action>`; list commands support `--table`/`-t`, `--limit`/`-l`, `--filter`/`-f` with `field:op:value`, and `--properties` for field projection."

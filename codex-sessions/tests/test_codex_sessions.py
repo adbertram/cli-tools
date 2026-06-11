@@ -541,6 +541,29 @@ class CodexSessionsCliTests(unittest.TestCase):
             self.assertEqual(get_result.exit_code, 0, get_result.output)
             self.assertEqual(json.loads(get_result.output)["id"], event_id)
 
+    def test_session_name_resolution_and_matching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+
+            # Write session_index.jsonl
+            codex_home.mkdir(parents=True, exist_ok=True)
+            index_path = codex_home / "session_index.jsonl"
+            index_path.write_text(json.dumps({"id": SESSION_ID, "thread_name": "Test Handoff Task"}) + "\n")
+
+            client = CodexSessionsClient(codex_home=codex_home)
+            self.assertEqual(client._resolve_session_id("Test Handoff Task"), SESSION_ID)
+            self.assertEqual(client._resolve_session_id("test handoff task"), SESSION_ID)
+
+            sessions = client.list_sessions()
+            self.assertEqual(sessions[0].name, "Test Handoff Task")
+
+            # Search by session name
+            found = client.search_sessions("Handoff")
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0].id, SESSION_ID)
+
 
 if __name__ == "__main__":
     unittest.main()
