@@ -1,8 +1,8 @@
 {
   "tool": "descript",
   "description": "CLI interface for Descript API",
-  "discovered_at": "2026-05-20T16:12:14.960096+00:00",
-  "total_commands": 20,
+  "discovered_at": "2026-06-12T00:04:55Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Descript authentication",
+      "usage_instructions": "Authentication management. Extracts JWT token from the running Descript desktop app. The Descript app must be open for login to work.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Authenticate by extracting JWT from the running Descript app. The Descript desktop app must be open. Use --force/-F to clear the token cache and re-authenticate.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Authenticate by extracting JWT from the running Descript app. The Descript desktop app must be open. Use --force/-F to clear the token cache and re-authenticate."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Run `descript auth logout --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,144 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `descript auth logout --help` for exact arguments and options."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `descript auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `descript auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `descript auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `descript auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `descript auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `descript auth profiles remove --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "usage_instructions": "Run `descript auth profiles select --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Check if a valid JWT token is available. Shows whether token is cached or needs refresh from the running app.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,11 +211,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check if a valid JWT token is available. Shows whether token is cached or needs refresh from the running app."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `descript auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -106,142 +239,47 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `descript auth test --help` for exact arguments and options."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `descript auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `descript auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `descript auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `descript auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `descript auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `descript auth profiles --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management. Extracts JWT token from the running Descript desktop app. The Descript app must be open for login to work."
+      }
     },
     "cache": {
       "help": "Manage CLI cache",
+      "usage_instructions": "Run `descript cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `descript cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `descript cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `descript cache --help` for exact arguments and options."
+      }
     },
     "compositions": {
       "help": "Manage project compositions",
+      "usage_instructions": "Manage compositions within Descript projects. List compositions, get details, list video assets, and export videos. PROJECT_ID (UUID) is required for all operations. Use full IDs from JSON output for follow-up commands, not shortened table cells.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List compositions in a project. Example: descript compositions list <project-id> descript compositions list <project-id> --table descript compositions list <project-id> --filter \"name:m1c1\"",
-          "arguments": [
-            {
-              "name": "project_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project ID (UUID)"
-            }
-          ],
+        "active": {
+          "help": "Show compositions currently visible in the Descript desktop app.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--project-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only include active pages for this project UUID"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -250,44 +288,22 @@
               "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "List all compositions in a project. PROJECT_ID is a required positional argument (UUID). Use --filter/-f to search by name (e.g., 'name:contains:m1c1'). Default limit is 100."
+          ]
         },
-        "get": {
-          "help": "Get a specific composition from a project. Example: descript compositions get <project-id> <composition-id>",
+        "assets": {
+          "help": "List video assets in a project for export. Shows the raw video recordings available in the project. Use the asset ID with 'descript compositions export' to download. Example: descript compositions assets <project-id> descript compositions assets <project-id> --table",
+          "usage_instructions": "List raw video recording assets in a project. Use the asset ID from JSON output with `compositions export` to download raw recordings. PROJECT_ID is a required positional argument copied from JSON project output. Treat --table as display-only because long UUIDs can be shortened by the terminal renderer.",
           "arguments": [
             {
               "name": "project_id",
               "type": "TEXT",
               "required": true,
               "help": "Project ID (UUID)"
-            },
-            {
-              "name": "composition_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Composition ID (UUID)"
             }
           ],
           "options": [
@@ -297,12 +313,18 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get details for a specific composition. Requires both PROJECT_ID and COMPOSITION_ID as positional arguments (UUIDs)."
+          ]
         },
         "export": {
-          "help": "Export a video asset or composition as MP4. Two export modes: 1. Asset export (raw recording via API): descript compositions export <project-id> <asset-id> 2. Composition export (full video with slides via Descript app): descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4 Composition export requires Descript to be running with the project open. It automates the app's local export to produce the full rendered video. Example: descript compositions export <project-id> <asset-id> descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160",
+          "help": "Export a video asset or composition as MP4. Two export modes: 1. Asset export (raw recording via API media segment URLs): descript compositions export <project-id> <asset-id>. Rate-limited or interrupted downloads can be resumed by rerunning the same command. 2. Composition export (full video with slides via Descript app): descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4. Composition export requires Descript to be launched with CDP on port 9222. If the target project is not open, the CLI auto-opens it via the descript://project/<project-id> deep link and waits up to 60 seconds for the project page to appear. It automates the app's local export to produce the full rendered video. Example: descript compositions export <project-id> <asset-id> descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160",
+          "usage_instructions": "Export video in two modes: (1) Asset export (raw recording via API media segment URLs) — pass PROJECT_ID and ASSET_ID as positional args. Raw asset export does not use the Descript desktop export UI. If rate limiting interrupts the download, rerun the same command; the CLI resumes from matching output.mp4.part and output.mp4.part.json state. (2) Composition export (full rendered video with slides) — pass PROJECT_ID and use --composition/-C with the composition name or ID. Composition export requires Descript launched with --remote-debugging-port=9222. The CLI auto-opens the target project via the descript://project/<project-id> deep link when it is not already open and polls CDP up to 60 seconds for the project page; it fails loudly if the page never appears. Preflight: quit Descript, wait for pgrep -x Descript to return no process, run open -na \"Descript\" --args --remote-debugging-port=9222, then verify http://127.0.0.1:9222/json/version returns HTTP 200 before export. Full composition exports wait up to 5 minutes for Descript's native save sheet, then up to 30 minutes after accepting the save dialog before timing out. Default resolution is 1920x1080 at 30fps.",
           "arguments": [
             {
               "name": "project_id",
@@ -361,12 +383,51 @@
               "required": false,
               "help": "Export format",
               "default": "mp4"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific composition from a project. Example: descript compositions get <project-id> <composition-id>",
+          "usage_instructions": "Get details for a specific composition. Requires both PROJECT_ID and COMPOSITION_ID as positional arguments (UUIDs).",
+          "arguments": [
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID (UUID)"
+            },
+            {
+              "name": "composition_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Composition ID (UUID)"
             }
           ],
-          "usage_instructions": "Export video in two modes: (1) Asset export (raw recording via API) — pass PROJECT_ID and ASSET_ID as positional args. (2) Composition export (full rendered video with slides) — pass PROJECT_ID and use --composition/-C with the composition name or ID; requires Descript app to be running with the project open. Full composition exports render through the Descript desktop app, and the CLI waits up to 30 minutes after accepting the save dialog before timing out. Default resolution is 1920x1080 at 30fps."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
-        "assets": {
-          "help": "List video assets in a project for export. Shows the raw video recordings available in the project. Use the asset ID with 'descript compositions export' to download. Example: descript compositions assets <project-id> descript compositions assets <project-id> --table",
+        "list": {
+          "help": "List compositions in a project. Example: descript compositions list <project-id> descript compositions list <project-id> --table descript compositions list <project-id> --filter \"name:m1c1\"",
+          "usage_instructions": "List all compositions in a project. PROJECT_ID is a required positional argument (UUID). Use --filter/-f to search by name (e.g., 'name:contains:m1c1'). Default limit is 100. Use default JSON output with --properties id,name when a composition ID will be copied into a follow-up command; do not copy IDs from table output that contains an ellipsis.",
           "arguments": [
             {
               "name": "project_id",
@@ -382,18 +443,56 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "List raw video recording assets in a project. Use the asset ID from this output with `compositions export` to download raw recordings. PROJECT_ID is a required positional argument."
+          ]
         }
-      },
-      "usage_instructions": "Manage compositions within Descript projects. List compositions, get details, list video assets, and export videos. PROJECT_ID (UUID) is required for all operations."
+      }
     },
     "monitor": {
       "help": "Monitor Descript network activity",
+      "usage_instructions": "Monitor and debug Descript app network activity. Captures all API calls for endpoint discovery and debugging. Logs to ~/.descript/monitor.log.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "start": {
           "help": "Start monitoring Descript network activity. Captures all API calls made by the Descript app for endpoint discovery and debugging. Writes to ~/.descript/monitor.log. Example: descript monitor start descript monitor start --foreground",
+          "usage_instructions": "Start capturing Descript app API calls in the background. Use --foreground/-F to run in foreground instead. Logs to ~/.descript/monitor.log.",
+          "arguments": [],
           "options": [
             {
               "name": "--foreground",
@@ -401,20 +500,45 @@
               "required": false,
               "help": "Run in foreground instead of background",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Start capturing Descript app API calls in the background. Use --foreground/-F to run in foreground instead. Logs to ~/.descript/monitor.log."
-        },
-        "stop": {
-          "help": "Stop the network monitor. Example: descript monitor stop",
-          "usage_instructions": "Stop the background network monitor process."
+          ]
         },
         "status": {
           "help": "Check if the monitor is running. Example: descript monitor status",
-          "usage_instructions": "Check whether the network monitor is currently running."
+          "usage_instructions": "Check whether the network monitor is currently running.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stop": {
+          "help": "Stop the network monitor. Example: descript monitor stop",
+          "usage_instructions": "Stop the background network monitor process.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "tail": {
           "help": "Show recent monitor log output. Example: descript monitor tail descript monitor tail -n 100 descript monitor tail --follow",
+          "usage_instructions": "Show recent lines from the monitor log. Default is 50 lines. Use --lines/-n to change count. Use --follow/-f for live streaming.",
+          "arguments": [],
           "options": [
             {
               "name": "--lines",
@@ -430,18 +554,61 @@
               "required": false,
               "help": "Follow log output",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Show recent lines from the monitor log. Default is 50 lines. Use --lines/-n to change count. Use --follow/-f for live streaming."
+          ]
         }
-      },
-      "usage_instructions": "Monitor and debug Descript app network activity. Captures all API calls for endpoint discovery and debugging. Logs to ~/.descript/monitor.log."
+      }
     },
     "projects": {
       "help": "Manage Descript projects",
+      "usage_instructions": "List and inspect Descript projects. Use default JSON `projects list --properties id,name` to find full project IDs needed for composition and export operations. Do not copy UUIDs from table output that contains an ellipsis.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a specific project by ID. Example: descript projects get <project-id> descript projects get <project-id> --table",
+          "usage_instructions": "Get full details for a project. PROJECT_ID is a required positional argument (UUID).",
+          "arguments": [
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID (UUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List your Descript projects. Example: descript projects list descript projects list --limit 10 descript projects list --table descript projects list --filter \"name:contains:Cursor\" descript projects list -p \"name,composition_count\" descript projects list -p \"name,owner.email\"",
+          "usage_instructions": "List all Descript projects. Default limit is 50. Use --filter/-f to search by name (e.g., 'name:contains:Cursor'). Use --properties/-p with dot notation for nested fields (e.g., 'name,owner.email'). Use default JSON output with --properties id,name when a project ID will be copied into a follow-up command; do not copy IDs from table output that contains an ellipsis.",
+          "arguments": [],
           "options": [
             {
               "name": "--limit",
@@ -471,34 +638,17 @@
               "required": false,
               "help": "Comma-separated fields to display (supports dot notation: owner.email)",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List all Descript projects. Default limit is 50. Use --filter/-f to search by name (e.g., 'name:contains:Cursor'). Use --properties/-p with dot notation for nested fields (e.g., 'name,owner.email')."
-        },
-        "get": {
-          "help": "Get a specific project by ID. Example: descript projects get <project-id> descript projects get <project-id> --table",
-          "arguments": [
+            },
             {
-              "name": "project_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Project ID (UUID)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get full details for a project. PROJECT_ID is a required positional argument (UUID)."
+          ]
         }
-      },
-      "usage_instructions": "List and inspect Descript projects. Use `projects list` to find project IDs needed for composition and export operations."
+      }
     }
   },
-  "usage_instructions": "Use for managing Descript projects, compositions, and video exports. Commands follow `descript <group> <action>` pattern. Auth requires the Descript desktop app to be running. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+  "usage_instructions": "Use for managing Descript projects, compositions, and video exports. Commands follow `descript <group> <action>` pattern. Auth requires the Descript desktop app to be running. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Use JSON output, not --table, whenever IDs will be copied into follow-up commands."
 }

@@ -66,6 +66,9 @@ descript projects list --filter "name:Cursor"
 # Select specific fields
 descript projects list -p "name,composition_count"
 
+# Get full project IDs for follow-up commands
+descript projects list --filter "name:contains:BrickBuddy" --properties id,name
+
 # Pipe to jq
 descript projects list | jq '.[].name'
 ```
@@ -83,6 +86,10 @@ descript compositions get <project-id> <composition-id>
 # Filter compositions
 descript compositions list <project-id> --filter "name:m1c1"
 
+# Show full IDs for compositions currently visible in Descript
+descript compositions active
+descript compositions active --project-id <project-id>
+
 # List video assets (raw recordings) for export
 descript compositions assets <project-id>
 descript compositions assets <project-id> --table
@@ -93,7 +100,11 @@ descript compositions export <project-id> <asset-id> -o ./output.mp4
 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160
 
 # Export a full composition through the Descript desktop app
-# Local composition renders can take awhile; the CLI waits up to 30 minutes.
+# If the project is not open, the CLI auto-opens it via the
+# descript://project/<project-id> deep link and waits up to 60 seconds
+# for the project page before proceeding.
+# Local composition renders can take awhile; the CLI waits up to 30 minutes
+# and verifies the exported file is nontrivial and stable before success.
 descript compositions export <project-id> --composition "Catalog Page" -o ./catalog-page.mp4
 ```
 
@@ -123,6 +134,10 @@ descript monitor stop
 All list/get commands support:
 - **JSON** (default): `descript projects list`
 - **Table**: `descript projects list --table`
+
+Use JSON output when copying IDs into follow-up commands. Table output is for
+visual inspection and can shorten long UUID cells when several columns are
+shown.
 
 ## Options Reference
 

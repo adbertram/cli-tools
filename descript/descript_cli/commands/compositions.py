@@ -102,6 +102,75 @@ def get_composition(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("active")
+def active_compositions(
+    project_id: Optional[str] = typer.Option(None, "--project-id", help="Only include active pages for this project UUID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Show compositions currently visible in the Descript desktop app.
+
+    Example:
+        descript compositions active
+        descript compositions active --project-id <project-id>
+    """
+    try:
+        from ..app_export import get_visible_compositions
+
+        client = get_client()
+        records = get_visible_compositions()
+        if project_id:
+            records = [record for record in records if record.get("project_id") == project_id]
+
+        output_data = []
+        for record in records:
+            compositions = client.list_compositions(record["project_id"])
+            matches = [
+                composition for composition in compositions
+                if composition.id.startswith(record["composition_prefix"])
+            ]
+            if not matches:
+                raise ClientError(
+                    "Active Descript page did not match any composition from the API: "
+                    f'{record["project_id"]}/{record["composition_prefix"]}'
+                )
+            if len(matches) > 1:
+                names = [composition.name for composition in matches]
+                raise ClientError(
+                    "Active Descript page matched multiple API compositions: "
+                    f"{', '.join(names)}"
+                )
+            composition = matches[0]
+            output_data.append({
+                **record,
+                "composition_id": composition.id,
+                "composition_name": composition.name,
+                "duration": composition.duration,
+            })
+
+        if table:
+            if output_data:
+                headers = [
+                    "project_id",
+                    "composition_id",
+                    "composition_name",
+                    "visible_name",
+                    "duration",
+                ]
+                display_headers = [h.replace("_", " ").title() for h in headers]
+                print_table(output_data, headers, display_headers)
+            else:
+                print_error("No active Descript composition pages found")
+        else:
+            print_json(output_data)
+
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 def _resolve_composition(client, project_id: str, composition: str):
     """Resolve a composition name or ID to a (id, name) tuple."""
     compositions = client.list_compositions(project_id)
@@ -133,13 +202,16 @@ def export_composition(
 
     Two export modes:
 
-    1. Asset export (raw recording via API):
+    1. Asset export (raw recording via API media segment URLs):
        descript compositions export <project-id> <asset-id>
+       Rate-limited or interrupted downloads can be resumed by rerunning the same command.
 
     2. Composition export (full video with slides via Descript app):
        descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4
 
-    Composition export requires Descript to be running with the project open.
+    Composition export requires Descript to be launched with CDP on port 9222.
+    If the target project is not open, the CLI auto-opens it via the
+    descript://project/<project-id> deep link and waits for the project page.
     It automates the app's local export to produce the full rendered video.
 
     Example:
@@ -248,6 +320,9 @@ def list_assets(
 
 
 COMMAND_CREDENTIALS = {
+    "active": [
+        "custom"
+    ],
     "assets": [
         "custom"
     ],
