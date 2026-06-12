@@ -59,6 +59,8 @@ Composition export needs TWO distinct macOS privacy grants for the RESPONSIBLE H
 2. **Full Disk Access** (System Settings > Privacy & Security > Full Disk Access) — required for the calling app.
 
 Preflight consumers (e.g. the youtube-manager workflow) must ensure the host app has both grants before starting an export.
+
+**Claude desktop gotcha:** the Accessibility list shows TWO Claude entries. Capital-C **Claude** is the desktop shell at /Applications/Claude.app; lowercase **claude** is the embedded Claude Code runtime bundle (~/Library/Application Support/Claude/claude-code/&lt;version&gt;/claude.app) that actually runs shell commands. TCC attributes the CLI's osascript calls to the lowercase **claude** bundle — granting only the capital-C Claude is not enough. Enable the lowercase **claude** entry (observed 2026-06-11: exports failed with -25211 while capital-C Claude was granted).
 </principle>
 
 <principle name="Composition Export Wait">

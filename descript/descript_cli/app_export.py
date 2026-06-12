@@ -255,8 +255,11 @@ def _assert_assistive_access() -> None:
             "which composition export needs to drive Descript's native save dialog.\n"
             "Grant access in System Settings > Privacy & Security > Accessibility to the "
             "responsible host app — TCC attributes the grant to the app that launched this "
-            "process (e.g. /Applications/Claude.app when run from Claude, or Terminal/iTerm "
-            "for shells) — then retry the export.\n"
+            "process. When run from Claude desktop that is the embedded Claude Code runtime "
+            "bundle (~/Library/Application Support/Claude/claude-code/<version>/claude.app), "
+            "shown as lowercase 'claude' in the Accessibility list — distinct from the "
+            "capital-C 'Claude' desktop app entry. For shells it is Terminal/iTerm. "
+            "Then retry the export.\n"
             f"Probe error: {exc}"
         ) from exc
 

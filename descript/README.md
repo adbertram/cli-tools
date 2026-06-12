@@ -101,7 +101,10 @@ descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --hei
 
 # Export a full composition through the Descript desktop app
 # Requires two macOS privacy grants for the responsible host app of the
-# calling process (e.g. /Applications/Claude.app or Terminal):
+# calling process. From Claude desktop that is the embedded Claude Code runtime
+# bundle (~/Library/Application Support/Claude/claude-code/<version>/claude.app),
+# listed as lowercase "claude" — distinct from the capital-C "Claude" entry.
+# From shells it is Terminal/iTerm. The grants:
 # Accessibility (probed by the CLI, which fails fast before triggering the
 # export) and Full Disk Access — both under System Settings > Privacy & Security.
 # If the project is not open, the CLI auto-opens it via the
