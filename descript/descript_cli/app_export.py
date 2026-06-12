@@ -170,9 +170,11 @@ def _run_applescript(script: str) -> str:
     return result.stdout.strip()
 
 
-def _describe_descript_dialog_state() -> str:
-    """Describe native Descript sheets for timeout diagnostics."""
-    return _run_applescript('''
+# AppleScript source for save-dialog diagnostics. Must contain no
+# backslash-escaped quotes: intermediate quoting layers (shells, SSH) can
+# strip the backslashes and turn the script into a -2741 syntax error.
+# Use the AppleScript `quote` constant for embedded quotes instead.
+_DIALOG_STATE_SCRIPT = '''
         on joinList(theList, delimiter)
             set AppleScript's text item delimiters to delimiter
             set joinedText to theList as text
@@ -216,7 +218,7 @@ def _describe_descript_dialog_state() -> str:
                             set end of sheetSummaries to "sheet " & sheetIndex & " text fields [" & my joinList(textFieldNames, ", ") & "] buttons [" & my joinList(buttonNames, ", ") & "]"
                         end repeat
                         set windowName to name of candidateWindow as text
-                        set end of windowSummaries to "window " & windowIndex & " \"" & windowName & "\": " & my joinList(sheetSummaries, "; ")
+                        set end of windowSummaries to "window " & windowIndex & " " & quote & windowName & quote & ": " & my joinList(sheetSummaries, "; ")
                     end if
                 end repeat
                 if (count of windowSummaries) = 0 then
@@ -225,7 +227,38 @@ def _describe_descript_dialog_state() -> str:
                 return my joinList(windowSummaries, " | ")
             end tell
         end tell
-    ''')
+    '''
+
+
+def _describe_descript_dialog_state() -> str:
+    """Describe native Descript sheets for timeout diagnostics."""
+    return _run_applescript(_DIALOG_STATE_SCRIPT)
+
+
+def _assert_assistive_access() -> None:
+    """Fail fast when the calling process lacks macOS assistive access.
+
+    Counting windows of the Descript process is a UI-element query that
+    System Events rejects with -25211 when the responsible host app has no
+    Accessibility grant. Run this only after Descript is proven running
+    (CDP reachable), so a probe failure means missing assistive access,
+    not a missing process. This prevents triggering an export that would
+    otherwise spin for the full save-dialog timeout before failing.
+    """
+    try:
+        _run_applescript(
+            'tell application "System Events" to count windows of process "Descript"'
+        )
+    except ClientError as exc:
+        raise ClientError(
+            "The process running this CLI lacks macOS assistive (Accessibility) access, "
+            "which composition export needs to drive Descript's native save dialog.\n"
+            "Grant access in System Settings > Privacy & Security > Accessibility to the "
+            "responsible host app — TCC attributes the grant to the app that launched this "
+            "process (e.g. /Applications/Claude.app when run from Claude, or Terminal/iTerm "
+            "for shells) — then retry the export.\n"
+            f"Probe error: {exc}"
+        ) from exc
 
 
 def _find_save_dialog_window_index(timeout: int = SAVE_DIALOG_TIMEOUT_SECONDS) -> int:
@@ -592,6 +625,9 @@ def export_composition_local(
 
     print_info(f"Navigating to composition '{composition_name}'...")
     navigate_to_composition(project_id, composition_id)
+
+    print_info("Verifying macOS assistive access...")
+    _assert_assistive_access()
 
     # Connect to the page
     ws_url = _get_project_page_ws(project_id)

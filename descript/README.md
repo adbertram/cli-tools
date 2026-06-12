@@ -100,6 +100,10 @@ descript compositions export <project-id> <asset-id> -o ./output.mp4
 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160
 
 # Export a full composition through the Descript desktop app
+# Requires two macOS privacy grants for the responsible host app of the
+# calling process (e.g. /Applications/Claude.app or Terminal):
+# Accessibility (probed by the CLI, which fails fast before triggering the
+# export) and Full Disk Access — both under System Settings > Privacy & Security.
 # If the project is not open, the CLI auto-opens it via the
 # descript://project/<project-id> deep link and waits up to 60 seconds
 # for the project page before proceeding.

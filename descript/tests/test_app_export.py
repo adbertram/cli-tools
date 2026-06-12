@@ -1,6 +1,7 @@
 """Regression tests for Descript composition export CDP connections."""
 
 import json
+import subprocess
 
 import pytest
 
@@ -45,6 +46,89 @@ def test_get_cdp_targets_error_includes_deterministic_preflight(monkeypatch):
         "Then rerun the export; the CLI auto-opens the target project via its descript:// deep link."
         in message
     )
+
+
+def test_dialog_state_script_has_no_backslash_escaped_quotes():
+    # Intermediate quoting layers can strip backslashes, turning escaped
+    # quotes into a -2741 AppleScript syntax error. Embedded quotes must use
+    # the AppleScript `quote` constant instead.
+    assert '\\"' not in app_export._DIALOG_STATE_SCRIPT
+
+
+def test_dialog_state_script_compiles(tmp_path):
+    result = subprocess.run(
+        [
+            "osacompile",
+            "-o", str(tmp_path / "dialog_state.scpt"),
+            "-e", app_export._DIALOG_STATE_SCRIPT,
+        ],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_assert_assistive_access_passes_when_probe_succeeds(monkeypatch):
+    captured = {}
+
+    def fake_run_applescript(script):
+        captured["script"] = script
+        return "1"
+
+    monkeypatch.setattr(app_export, "_run_applescript", fake_run_applescript)
+
+    app_export._assert_assistive_access()
+
+    assert captured["script"] == (
+        'tell application "System Events" to count windows of process "Descript"'
+    )
+
+
+def test_assert_assistive_access_fails_fast_with_grant_guidance(monkeypatch):
+    def deny(_script):
+        raise ClientError(
+            "AppleScript error: System Events got an error: "
+            "osascript is not allowed assistive access. (-25211)"
+        )
+
+    monkeypatch.setattr(app_export, "_run_applescript", deny)
+
+    with pytest.raises(ClientError) as error:
+        app_export._assert_assistive_access()
+
+    message = str(error.value)
+    assert "assistive (Accessibility) access" in message
+    assert "Privacy & Security > Accessibility" in message
+    assert "responsible host app" in message
+    assert "-25211" in message
+
+
+def test_export_checks_assistive_access_before_triggering_export(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setattr(
+        app_export, "navigate_to_composition",
+        lambda _project_id, _composition_id: calls.append("navigate"),
+    )
+
+    def deny():
+        calls.append("probe")
+        raise ClientError("no assistive access")
+
+    monkeypatch.setattr(app_export, "_assert_assistive_access", deny)
+    monkeypatch.setattr(
+        app_export, "_trigger_local_export",
+        lambda _project_id: calls.append("trigger"),
+    )
+
+    with pytest.raises(ClientError, match="no assistive access"):
+        app_export.export_composition_local(
+            "704a7924-a66e-4e47-b115-b43d0bc24875",
+            "51be1848-ce29-47f0-bc21-9427fc0f1308",
+            "Inventory Page",
+            tmp_path / "inventory-page.mp4",
+        )
+
+    assert calls == ["navigate", "probe"]
 
 
 def test_ensure_project_open_returns_ws_without_deep_link(monkeypatch):

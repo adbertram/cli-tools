@@ -52,6 +52,15 @@ Use default JSON output when an ID will be copied into a follow-up command. Do n
 Composition export requires Descript running with CDP on port 9222, but the target project does NOT need to be open. When the project page is not visible, the CLI auto-opens it via the `descript://project/<project-id>` deep link and polls CDP up to 60 seconds for the project page, failing loudly if it never appears. Do not manually open projects before exporting.
 </principle>
 
+<principle name="Composition Export macOS Privacy Grants">
+Composition export needs TWO distinct macOS privacy grants for the RESPONSIBLE HOST APP of the calling process (TCC attributes grants to the app that launched the process — e.g. /Applications/Claude.app when run from Claude, or Terminal/iTerm for shells):
+
+1. **Accessibility** (System Settings > Privacy & Security > Accessibility) — required for the System Events UI scripting that drives Descript's native save dialog. The CLI probes this before triggering the export and fails fast with grant guidance when missing (instead of spinning for the 300s save-dialog timeout).
+2. **Full Disk Access** (System Settings > Privacy & Security > Full Disk Access) — required for the calling app.
+
+Preflight consumers (e.g. the youtube-manager workflow) must ensure the host app has both grants before starting an export.
+</principle>
+
 <principle name="Composition Export Wait">
 Full composition exports render through the Descript desktop app and can take awhile. The CLI waits up to 30 minutes after the save dialog is accepted before timing out, then verifies the exported file is nontrivial and stable before reporting success.
 </principle>
