@@ -343,6 +343,7 @@ def test_trigger_local_export_uses_cdp_mouse_dispatch(monkeypatch):
         {"result": {}},
     ]
     ws = FakeWebSocket(responses)
+    monkeypatch.setattr(app_export, "_run_applescript", lambda _script: "")
     monkeypatch.setattr(app_export, "_get_project_page_ws", lambda _project_id: "ws://example")
     monkeypatch.setattr(app_export, "_connect_cdp", lambda _url, timeout: ws)
     monkeypatch.setattr(app_export.time, "sleep", lambda _seconds: None)
@@ -360,6 +361,72 @@ def test_trigger_local_export_uses_cdp_mouse_dispatch(monkeypatch):
         "mousePressed",
         "mouseReleased",
     ]
+
+
+def _trigger_export_responses():
+    return [
+        {"result": {}},
+        {"result": {}},
+        {"result": {}},
+        {
+            "result": {
+                "result": {
+                    "value": {
+                        "x": 12,
+                        "y": 34,
+                        "disabled": False,
+                        "text": "Export",
+                    }
+                }
+            }
+        },
+        {"result": {}},
+        {"result": {}},
+        {"result": {}},
+    ]
+
+
+def test_trigger_local_export_activates_descript_before_cdp_clicks(monkeypatch):
+    calls = []
+    ws = FakeWebSocket(_trigger_export_responses())
+
+    def fake_run_applescript(script):
+        calls.append(("applescript", script))
+        return ""
+
+    def fake_connect_cdp(_url, timeout):
+        calls.append(("connect", _url))
+        return ws
+
+    monkeypatch.setattr(app_export, "_run_applescript", fake_run_applescript)
+    monkeypatch.setattr(app_export, "_get_project_page_ws", lambda _project_id: "ws://example")
+    monkeypatch.setattr(app_export, "_connect_cdp", fake_connect_cdp)
+    monkeypatch.setattr(app_export.time, "sleep", lambda _seconds: None)
+
+    app_export._trigger_local_export("704a7924-a66e-4e47-b115-b43d0bc24875")
+
+    assert calls[0] == ("applescript", 'tell application "Descript" to activate')
+    assert calls[1][0] == "connect"
+
+
+def test_trigger_local_export_panel_open_is_idempotent(monkeypatch):
+    ws = FakeWebSocket(_trigger_export_responses())
+    monkeypatch.setattr(app_export, "_run_applescript", lambda _script: "")
+    monkeypatch.setattr(app_export, "_get_project_page_ws", lambda _project_id: "ws://example")
+    monkeypatch.setattr(app_export, "_connect_cdp", lambda _url, timeout: ws)
+    monkeypatch.setattr(app_export.time, "sleep", lambda _seconds: None)
+
+    app_export._trigger_local_export("704a7924-a66e-4e47-b115-b43d0bc24875")
+
+    panel_open = ws.sent[0]
+    assert panel_open["method"] == "Runtime.evaluate"
+    expression = panel_open["params"]["expression"]
+    # Must check for an already-open panel BEFORE clicking the trigger,
+    # otherwise the click toggles an open panel closed.
+    button_guard = expression.index('[data-testid="export-button"]')
+    trigger_click = expression.index('[data-testid="export-popover-trigger"]')
+    assert button_guard < trigger_click
+    assert "return 'already-open'" in expression
 
 
 def test_wait_for_stable_export_file_rejects_tiny_file(monkeypatch, tmp_path):

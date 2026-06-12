@@ -394,12 +394,19 @@ def navigate_to_composition(project_id: str, composition_id: str) -> None:
 
 
 def _trigger_local_export(project_id: str) -> None:
-    """Trigger local export via AppleScript menu + CDP button click.
+    """Trigger local export via CDP automation.
 
-    1. Activates Descript
-    2. File > Export (Local) to open panel
-    3. CDP click on the Export button
+    1. Activates Descript first — the CDP Input.dispatchMouseEvent click on
+       the Export button only produces the native save sheet when Descript
+       is the frontmost app.
+    2. Opens the export panel (idempotent: skipped when already open)
+    3. Sets Local export destination
+    4. CDP click on the Export button
     """
+    print_info("Activating Descript...")
+    _run_applescript('tell application "Descript" to activate')
+    time.sleep(1)
+
     ws_url = _get_project_page_ws(project_id)
     if not ws_url:
         raise ClientError("Lost connection to Descript")
@@ -410,10 +417,17 @@ def _trigger_local_export(project_id: str) -> None:
         # in this Electron context. So: click once, wait, click export.
         msg_id = int(time.time() * 1000) % 100000
 
-        # Step 1: Open export panel (click trigger once)
+        # Step 1: Open export panel. Idempotent — clicking the trigger while
+        # the panel is already open from a previous attempt would toggle it
+        # closed, so only click when the Export button is not present.
         print_info("Opening export panel...")
         _send_cdp_message(ws, msg_id, "Runtime.evaluate", {
-            "expression": '(function(){ var el = document.querySelector(\'[data-testid="export-popover-trigger"]\'); if(el) el.click(); })()',
+            "expression": """(function(){
+                    if (document.querySelector('[data-testid="export-button"]')) return 'already-open';
+                    var el = document.querySelector('[data-testid="export-popover-trigger"]');
+                    if (el) el.click();
+                    return 'clicked';
+                })()""",
         })
         time.sleep(3)
 

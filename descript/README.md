@@ -107,6 +107,8 @@ descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --hei
 # From shells it is Terminal/iTerm. The grants:
 # Accessibility (probed by the CLI, which fails fast before triggering the
 # export) and Full Disk Access — both under System Settings > Privacy & Security.
+# The CLI brings Descript frontmost before clicking Export (the native save
+# sheet only appears when Descript is the frontmost app).
 # If the project is not open, the CLI auto-opens it via the
 # descript://project/<project-id> deep link and waits up to 60 seconds
 # for the project page before proceeding.

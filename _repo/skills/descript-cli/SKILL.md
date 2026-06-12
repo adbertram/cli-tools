@@ -63,6 +63,10 @@ Preflight consumers (e.g. the youtube-manager workflow) must ensure the host app
 **Claude desktop gotcha:** the Accessibility list shows TWO Claude entries. Capital-C **Claude** is the desktop shell at /Applications/Claude.app; lowercase **claude** is the embedded Claude Code runtime bundle (~/Library/Application Support/Claude/claude-code/&lt;version&gt;/claude.app) that actually runs shell commands. TCC attributes the CLI's osascript calls to the lowercase **claude** bundle — granting only the capital-C Claude is not enough. Enable the lowercase **claude** entry (observed 2026-06-11: exports failed with -25211 while capital-C Claude was granted).
 </principle>
 
+<principle name="Composition Export Foreground">
+The CLI activates Descript (brings it frontmost) before clicking Export — the native save sheet only appears when Descript is the frontmost app. Expect focus to move to Descript during an export; do not run other foreground UI automation concurrently.
+</principle>
+
 <principle name="Composition Export Wait">
 Full composition exports render through the Descript desktop app and can take awhile. The CLI waits up to 30 minutes after the save dialog is accepted before timing out, then verifies the exported file is nontrivial and stable before reporting success.
 </principle>
