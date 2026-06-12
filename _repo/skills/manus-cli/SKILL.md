@@ -41,6 +41,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **task** -- Manage Manus API v2 tasks (create, send, continue alias, get, wait, list, messages, update, stop, delete, confirm)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
+
+<principle name="Wait Semantics">
+`task create`, `task send`, and `task wait` with `--wait` (the default) poll until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id`, for example `messageAskUser`). A `waiting` status without a confirmation event (queued task that has not started running) is non-terminal; the CLI keeps polling. Do not add manual `task get` polling loops around `--wait`. On `--timeout` expiry the command exits non-zero with a timeout error.
+</principle>
 </essential_principles>
 
 <reference_index>

@@ -30,7 +30,7 @@ manus auth logout
 
 ### Create
 
-Create a new task. By default the CLI waits for a terminal `task.listMessages` status update and returns the task plus recent messages.
+Create a new task. By default the CLI polls `task.listMessages` until the task stops, errors, or pauses for a confirmable user action, then returns the task plus recent messages. A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues until `--timeout` expires.
 
 ```bash
 manus task create "Write a Python function for Fibonacci sequence"
@@ -73,7 +73,7 @@ manus task get <task-id> --table
 
 ### Wait
 
-Poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`.
+Poll `task.listMessages` until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id` / `waiting_for_event_type`, for example `messageAskUser`). A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues. On timeout the command exits non-zero.
 
 ```bash
 manus task wait <task-id>

@@ -209,6 +209,91 @@ def test_wait_for_task_raises_error_details_from_messages(monkeypatch):
         raise AssertionError("Expected ClientError")
 
 
+def test_wait_for_task_keeps_polling_through_queued_waiting(monkeypatch):
+    client = make_client(monkeypatch)
+    monkeypatch.setattr(client, "get_task", lambda task_id: {"id": task_id, "status": "waiting"})
+
+    message_batches = [
+        {"messages": []},
+        {
+            "messages": [
+                {
+                    "id": "status-1",
+                    "type": "status_update",
+                    "status_update": {"agent_status": "waiting", "brief": "Queued"},
+                }
+            ]
+        },
+        {
+            "messages": [
+                {
+                    "id": "status-2",
+                    "type": "status_update",
+                    "status_update": {"agent_status": "stopped", "brief": "Finished"},
+                }
+            ]
+        },
+    ]
+    calls = {"count": 0}
+
+    def fake_list_messages(**kwargs):
+        batch = message_batches[min(calls["count"], len(message_batches) - 1)]
+        calls["count"] += 1
+        return batch
+
+    monkeypatch.setattr(client, "list_messages", fake_list_messages)
+
+    result = client.wait_for_task("task-1", poll_interval=0.01, max_wait=1.0)
+
+    assert calls["count"] == 3
+    assert result["latest_status"]["status_update"]["agent_status"] == "stopped"
+    assert result["task"] == {"id": "task-1", "status": "waiting"}
+
+
+def test_wait_for_task_returns_on_waiting_with_confirmable_event(monkeypatch):
+    client = make_client(monkeypatch)
+    monkeypatch.setattr(client, "get_task", lambda task_id: {"id": task_id, "status": "waiting"})
+    monkeypatch.setattr(
+        client,
+        "list_messages",
+        lambda **kwargs: {
+            "messages": [
+                {
+                    "id": "status-1",
+                    "type": "status_update",
+                    "status_update": {
+                        "agent_status": "waiting",
+                        "brief": "Needs confirmation",
+                        "status_detail": {
+                            "waiting_for_event_id": "evt-1",
+                            "waiting_for_event_type": "messageAskUser",
+                        },
+                    },
+                }
+            ]
+        },
+    )
+
+    result = client.wait_for_task("task-1", poll_interval=0.01, max_wait=1.0)
+
+    detail = result["latest_status"]["status_update"]["status_detail"]
+    assert detail["waiting_for_event_id"] == "evt-1"
+    assert detail["waiting_for_event_type"] == "messageAskUser"
+
+
+def test_wait_for_task_times_out_on_queued_waiting_status(monkeypatch):
+    client = make_client(monkeypatch)
+    monkeypatch.setattr(client, "get_task", lambda task_id: {"id": task_id, "status": "waiting"})
+    monkeypatch.setattr(client, "list_messages", lambda **kwargs: {"messages": []})
+
+    try:
+        client.wait_for_task("task-1", poll_interval=0.01, max_wait=0.05)
+    except client_module.ClientError as exc:
+        assert "timed out after 0.05 seconds" in str(exc)
+    else:  # pragma: no cover - defensive failure
+        raise AssertionError("Expected ClientError")
+
+
 def test_config_test_connection_uses_v2_auth_header(monkeypatch, tmp_path):
     calls = []
 

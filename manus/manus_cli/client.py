@@ -243,6 +243,24 @@ class ManusClient:
     def _is_not_found_error(error: ClientError) -> bool:
         return "(404)" in str(error) or " 404" in str(error)
 
+    @staticmethod
+    def _waiting_event_detail(latest_status: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        """Return the confirmable-event detail when the agent is paused for user action.
+
+        A genuine pause is a status_update with agent_status "waiting" whose
+        status_detail identifies the event to respond to (waiting_for_event_id /
+        waiting_for_event_type). A task that reports "waiting" without such an
+        event (for example while queued before the agent starts running) is not
+        actionable and must keep polling.
+        """
+        status_update = (latest_status or {}).get("status_update") or {}
+        if status_update.get("agent_status") != "waiting":
+            return None
+        status_detail = status_update.get("status_detail") or {}
+        if status_detail.get("waiting_for_event_id") or status_detail.get("waiting_for_event_type"):
+            return status_detail
+        return None
+
     def wait_for_task(
         self,
         task_id: str,
@@ -251,7 +269,7 @@ class ManusClient:
         status_callback: Optional[Callable[[str, float, Optional[dict[str, Any]]], None]] = None,
         verbose_messages: bool = False,
     ) -> dict[str, Any]:
-        """Wait until a task stops, waits for input, or errors."""
+        """Wait until a task stops, errors, or pauses for a confirmable user action."""
         start_time = time.time()
 
         while True:
@@ -290,16 +308,13 @@ class ManusClient:
             if status_callback:
                 status_callback(status, elapsed, latest_status)
 
-            if status == "stopped":
-                if task is None:
-                    task = self.get_task(task_id)
-                return {
-                    "task": task,
-                    "messages": messages,
-                    "latest_status": latest_status,
-                }
+            # "waiting" is non-terminal unless the agent emitted a confirmable
+            # event (interactive question or action confirmation). Newly created
+            # tasks can report "waiting" before the agent starts running; that
+            # state resolves on its own and must not end the wait.
+            paused_for_user = status == "waiting" and self._waiting_event_detail(latest_status) is not None
 
-            if status == "waiting":
+            if status == "stopped" or paused_for_user:
                 if task is None:
                     task = self.get_task(task_id)
                 return {

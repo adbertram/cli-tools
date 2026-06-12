@@ -1,7 +1,7 @@
 {
   "tool": "manus",
   "description": "CLI interface for Manus API v2",
-  "discovered_at": "2026-05-28T14:39:45.978007+00:00",
+  "discovered_at": "2026-06-12T19:34:33Z",
   "total_commands": 22,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage API authentication",
+      "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p. Always check `auth status` before running task operations.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to set up Manus API credentials. Use --profile/-p to save to a specific profile. Use --force/-F to clear and re-authenticate. Use --credential-type/-c to authenticate only a specific credential type (e.g., 'oauth', 'browser_session').",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -39,11 +44,12 @@
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
             }
-          ],
-          "usage_instructions": "Use to set up Manus API credentials. Use --profile/-p to save to a specific profile. Use --force/-F to clear and re-authenticate. Use --credential-type/-c to authenticate only a specific credential type (e.g., 'oauth', 'browser_session')."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use to clear stored API credentials. Use --profile/-p to clear credentials for a specific profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -52,61 +58,73 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to clear stored API credentials. Use --profile/-p to clear credentials for a specific profile."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to verify credentials are configured. Use --profile/-p to check a specific profile. Use --table/-t for formatted output."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to verify that stored credentials actually work against the API. Use --verbose/-v for detailed checks. Use --profile/-p to test a specific profile."
+          ]
         },
         "profiles": {
           "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management -- list, get, create, select, and delete configuration profiles. Profiles allow multiple environments (e.g., staging, production) with separate credentials.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a new profile. NAME is positional and required (e.g., 'staging', 'production'). Creates from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to view full details of a profile by NAME. Use --table/-t for formatted output.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "Use to browse all profiles. Use --filter/-f to find specific profiles (e.g., active:eq:True). Use --table/-t for formatted output.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -136,44 +154,32 @@
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 }
-              ],
-              "usage_instructions": "Use to browse all profiles. Use --filter/-f to find specific profiles (e.g., active:eq:True). Use --table/-t for formatted output."
+              ]
             },
-            "get": {
-              "help": "Get details for a specific profile.",
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to get details for"
+                  "help": "Profile name to delete"
                 }
               ],
               "options": [
                 {
-                  "name": "--table",
+                  "name": "--force",
                   "type": "bool",
                   "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
+                  "help": "Skip confirmation",
+                  "short": "-F"
                 }
-              ],
-              "usage_instructions": "Use to view full details of a profile by NAME. Use --table/-t for formatted output."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a new profile. NAME is positional and required (e.g., 'staging', 'production'). Creates from .env.example template."
+              ]
             },
             "select": {
               "help": "Activate a profile within its auth type.",
+              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged.",
               "arguments": [
                 {
                   "name": "name",
@@ -182,58 +188,79 @@
                   "help": "Profile name to activate within its auth type"
                 }
               ],
-              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt."
-            },
-            "remove": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to permanently delete a profile. NAME is positional and required. Use --force/-F to skip the confirmation prompt."
+              "options": []
             }
-          },
-          "usage_instructions": "Profile management -- list, get, create, select, and delete configuration profiles. Profiles allow multiple environments (e.g., staging, production) with separate credentials."
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use to verify credentials are configured. Use --profile/-p to check a specific profile. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to verify that stored credentials actually work against the API. Use --verbose/-v for detailed checks. Use --profile/-p to test a specific profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p. Always check `auth status` before running task operations."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `manus cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `manus cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
+        }
+      }
     },
     "task": {
       "help": "Manage AI tasks",
+      "usage_instructions": "Manage Manus API v2 tasks. `create` starts a task, `send`/`continue` sends follow-up messages, `get` reads metadata, `messages` reads event history, `wait` polls `task.listMessages`, and `update`/`stop`/`delete`/`confirm` mutate task state. The injected task-group `--profile` option selects a saved auth profile; task `--agent-profile` selects Manus model capability.",
+      "arguments": [],
       "options": [
         {
           "name": "--profile",
@@ -243,8 +270,153 @@
         }
       ],
       "commands": {
+        "confirm": {
+          "help": "Confirm a pending action so a waiting task can resume.",
+          "usage_instructions": "Use to confirm a waiting action through `task.confirmAction`. Pass the TASK_ID and the waiting EVENT_ID from `task messages`. Use `--input` or `--input-file` when the waiting event requires structured confirmation data.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID with the pending action"
+            },
+            {
+              "name": "event_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Waiting event ID from task messages"
+            }
+          ],
+          "options": [
+            {
+              "name": "--input",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional JSON input for the confirmation"
+            },
+            {
+              "name": "--input-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read optional confirmation JSON input from a file"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "continue": {
+          "help": "Hidden compatibility alias for task send.",
+          "usage_instructions": "Compatibility alias for `manus task send`. Use the same arguments and options, including `--agent-profile/-a` for the Manus agent profile override.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to continue"
+            },
+            {
+              "name": "prompt",
+              "type": "PROMPT",
+              "required": false,
+              "help": "Follow-up prompt text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read prompt text from a file",
+              "short": "-f"
+            },
+            {
+              "name": "--content-part",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional message content part as JSON object or array of objects",
+              "short": "-c"
+            },
+            {
+              "name": "--agent-profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional Manus agent profile override",
+              "short": "-a"
+            },
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait           Wait until the task stops, errors, or pauses for confirmation",
+              "short": "-w",
+              "default": "wait"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Max seconds to wait for completion",
+              "default": "900.0"
+            },
+            {
+              "name": "--poll",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds between status checks",
+              "default": "2.0"
+            },
+            {
+              "name": "--connector",
+              "type": "TEXT",
+              "required": false,
+              "help": "Connector ID to enable for this turn"
+            },
+            {
+              "name": "--enable-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID to enable for this turn"
+            },
+            {
+              "name": "--force-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID the agent must invoke"
+            },
+            {
+              "name": "--structured-output-schema",
+              "type": "TEXT",
+              "required": false,
+              "help": "Structured output JSON schema"
+            },
+            {
+              "name": "--structured-output-schema-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read structured output JSON schema from a file"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress status messages",
+              "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "create": {
           "help": "Create a new Manus AI task using the v2 API.",
+          "usage_instructions": "Create a Manus API v2 task. PROMPT is optional when using `--prompt-file` or `--content-part`. Use `--agent-profile/-a` for manus-1.6, manus-1.6-lite, or manus-1.6-max. By default waits for a terminal status update; use `--no-wait` for async creation.",
           "arguments": [
             {
               "name": "prompt",
@@ -293,7 +465,7 @@
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait                  Wait for a terminal status update",
+              "help": "--no-wait                  Wait until the task stops, errors, or pauses for confirmation",
               "short": "-w",
               "default": "wait"
             },
@@ -380,223 +552,31 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Create a Manus API v2 task. PROMPT is optional when using `--prompt-file` or `--content-part`. Use `--agent-profile/-a` for manus-1.6, manus-1.6-lite, or manus-1.6-max. By default waits for a terminal status update; use `--no-wait` for async creation."
+          ]
         },
-        "send": {
-          "help": "Send a follow-up message to an existing task.",
+        "delete": {
+          "help": "Delete a task.",
+          "usage_instructions": "Use to permanently delete a task through `task.delete`. TASK_ID is required. Delete is separate from stop; stop a running task first if necessary.",
           "arguments": [
             {
               "name": "task_id",
               "type": "TEXT",
               "required": true,
-              "help": "Task ID to send the message to"
-            },
-            {
-              "name": "prompt",
-              "type": "PROMPT",
-              "required": false,
-              "help": "Follow-up prompt text"
+              "help": "Task ID to delete"
             }
           ],
           "options": [
-            {
-              "name": "--prompt-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Read prompt text from a file",
-              "short": "-f"
-            },
-            {
-              "name": "--content-part",
-              "type": "TEXT",
-              "required": false,
-              "help": "Additional message content part as JSON object or array of objects",
-              "short": "-c"
-            },
-            {
-              "name": "--agent-profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Optional Manus agent profile override for this turn",
-              "short": "-a"
-            },
-            {
-              "name": "--wait",
-              "type": "bool",
-              "required": false,
-              "help": "--no-wait           Wait for a terminal status update",
-              "short": "-w",
-              "default": "wait"
-            },
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Max seconds to wait for completion",
-              "default": "900.0"
-            },
-            {
-              "name": "--poll",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Seconds between status checks",
-              "default": "2.0"
-            },
-            {
-              "name": "--connector",
-              "type": "TEXT",
-              "required": false,
-              "help": "Connector ID to enable for this turn"
-            },
-            {
-              "name": "--enable-skill",
-              "type": "TEXT",
-              "required": false,
-              "help": "Skill ID to enable for this turn"
-            },
-            {
-              "name": "--force-skill",
-              "type": "TEXT",
-              "required": false,
-              "help": "Skill ID the agent must invoke during this turn"
-            },
-            {
-              "name": "--structured-output-schema",
-              "type": "TEXT",
-              "required": false,
-              "help": "Structured output JSON schema"
-            },
-            {
-              "name": "--structured-output-schema-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Read structured output JSON schema from a file"
-            },
-            {
-              "name": "--quiet",
-              "type": "bool",
-              "required": false,
-              "help": "Suppress status messages",
-              "short": "-q"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Send a follow-up message to an existing task through `task.sendMessage`. Use `--agent-profile/-a` only to override the task agent profile for this turn. By default waits for a terminal status update; use `--no-wait` for async sends."
-        },
-        "continue": {
-          "help": "Hidden compatibility alias for task send.",
-          "arguments": [
-            {
-              "name": "task_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Task ID to continue"
-            },
-            {
-              "name": "prompt",
-              "type": "PROMPT",
-              "required": false,
-              "help": "Follow-up prompt text"
-            }
-          ],
-          "options": [
-            {
-              "name": "--prompt-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Read prompt text from a file",
-              "short": "-f"
-            },
-            {
-              "name": "--content-part",
-              "type": "TEXT",
-              "required": false,
-              "help": "Additional message content part as JSON object or array of objects",
-              "short": "-c"
-            },
-            {
-              "name": "--agent-profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Optional Manus agent profile override",
-              "short": "-a"
-            },
-            {
-              "name": "--wait",
-              "type": "bool",
-              "required": false,
-              "help": "--no-wait           Wait for a terminal status update",
-              "short": "-w",
-              "default": "wait"
-            },
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Max seconds to wait for completion",
-              "default": "900.0"
-            },
-            {
-              "name": "--poll",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Seconds between status checks",
-              "default": "2.0"
-            },
-            {
-              "name": "--connector",
-              "type": "TEXT",
-              "required": false,
-              "help": "Connector ID to enable for this turn"
-            },
-            {
-              "name": "--enable-skill",
-              "type": "TEXT",
-              "required": false,
-              "help": "Skill ID to enable for this turn"
-            },
-            {
-              "name": "--force-skill",
-              "type": "TEXT",
-              "required": false,
-              "help": "Skill ID the agent must invoke"
-            },
-            {
-              "name": "--structured-output-schema",
-              "type": "TEXT",
-              "required": false,
-              "help": "Structured output JSON schema"
-            },
-            {
-              "name": "--structured-output-schema-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Read structured output JSON schema from a file"
-            },
-            {
-              "name": "--quiet",
-              "type": "bool",
-              "required": false,
-              "help": "Suppress status messages",
-              "short": "-q"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "usage_instructions": "Compatibility alias for `manus task send`. Use the same arguments and options, including `--agent-profile/-a` for the Manus agent profile override."
+          ]
         },
         "get": {
           "help": "Get task metadata and current status.",
+          "usage_instructions": "Use to retrieve the current task object from `task.detail` by TASK_ID. This returns task metadata and status, not the full event history. Use `task messages` for conversation output and status events. Use `--table/-t` for formatted output.",
           "arguments": [
             {
               "name": "task_id",
@@ -619,58 +599,12 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to retrieve the current task object from `task.detail` by TASK_ID. This returns task metadata and status, not the full event history. Use `task messages` for conversation output and status events. Use `--table/-t` for formatted output."
-        },
-        "wait": {
-          "help": "Wait for a task to stop or pause for confirmation.",
-          "arguments": [
-            {
-              "name": "task_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Task ID to wait for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Max seconds to wait",
-              "default": "900.0"
-            },
-            {
-              "name": "--poll",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Seconds between status checks",
-              "default": "2.0"
-            },
-            {
-              "name": "--verbose-messages",
-              "type": "bool",
-              "required": false,
-              "help": "Include verbose message events while polling"
-            },
-            {
-              "name": "--quiet",
-              "type": "bool",
-              "required": false,
-              "help": "Suppress status messages",
-              "short": "-q"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "usage_instructions": "Use to poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`. Returns the task object plus recent messages. Use `--verbose-messages` to include tool, plan, and explanation events while polling."
+          ]
         },
         "list": {
           "help": "List tasks from the Manus v2 API.",
+          "usage_instructions": "Use to list tasks from `task.list`. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus cursor/order/scope filters such as `--cursor`, `--order`, `--scope`, `--agent-id`, and `--project-id`.",
+          "arguments": [],
           "options": [
             {
               "name": "--limit",
@@ -738,11 +672,11 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to list tasks from `task.list`. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus cursor/order/scope filters such as `--cursor`, `--order`, `--scope`, `--agent-id`, and `--project-id`."
+          ]
         },
         "messages": {
           "help": "List task event messages from the Manus v2 API.",
+          "usage_instructions": "Use to list task event messages from `task.listMessages`. TASK_ID is required. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus pagination and verbosity flags such as `--cursor`, `--order`, `--verbose`, and `--slides-format`. Use `--download-files` to download message attachments.",
           "arguments": [
             {
               "name": "task_id",
@@ -826,11 +760,137 @@
               "required": false,
               "help": "Auth profile name"
             }
+          ]
+        },
+        "send": {
+          "help": "Send a follow-up message to an existing task.",
+          "usage_instructions": "Send a follow-up message to an existing task through `task.sendMessage`. Use `--agent-profile/-a` only to override the task agent profile for this turn. By default waits for a terminal status update; use `--no-wait` for async sends.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to send the message to"
+            },
+            {
+              "name": "prompt",
+              "type": "PROMPT",
+              "required": false,
+              "help": "Follow-up prompt text"
+            }
           ],
-          "usage_instructions": "Use to list task event messages from `task.listMessages`. TASK_ID is required. Supports the standard `--limit/-l`, `--filter/-f`, `--properties/-p`, and `--table/-t` options, plus Manus pagination and verbosity flags such as `--cursor`, `--order`, `--verbose`, and `--slides-format`. Use `--download-files` to download message attachments."
+          "options": [
+            {
+              "name": "--prompt-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read prompt text from a file",
+              "short": "-f"
+            },
+            {
+              "name": "--content-part",
+              "type": "TEXT",
+              "required": false,
+              "help": "Additional message content part as JSON object or array of objects",
+              "short": "-c"
+            },
+            {
+              "name": "--agent-profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional Manus agent profile override for this turn",
+              "short": "-a"
+            },
+            {
+              "name": "--wait",
+              "type": "bool",
+              "required": false,
+              "help": "--no-wait           Wait until the task stops, errors, or pauses for confirmation",
+              "short": "-w",
+              "default": "wait"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Max seconds to wait for completion",
+              "default": "900.0"
+            },
+            {
+              "name": "--poll",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds between status checks",
+              "default": "2.0"
+            },
+            {
+              "name": "--connector",
+              "type": "TEXT",
+              "required": false,
+              "help": "Connector ID to enable for this turn"
+            },
+            {
+              "name": "--enable-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID to enable for this turn"
+            },
+            {
+              "name": "--force-skill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Skill ID the agent must invoke during this turn"
+            },
+            {
+              "name": "--structured-output-schema",
+              "type": "TEXT",
+              "required": false,
+              "help": "Structured output JSON schema"
+            },
+            {
+              "name": "--structured-output-schema-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read structured output JSON schema from a file"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress status messages",
+              "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stop": {
+          "help": "Stop a running task.",
+          "usage_instructions": "Use to stop a running task through `task.stop`. TASK_ID is required. The API response is a lightweight acknowledgement; use `task wait` or `task get` afterward if you need the resulting task state.",
+          "arguments": [
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task ID to stop"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update task metadata.",
+          "usage_instructions": "Use to update task metadata through `task.update`. TASK_ID is required and you must pass at least one mutation flag: `--title`, `--share-visibility`, `--visible-in-task-list`, or `--hidden-in-task-list`.",
           "arguments": [
             {
               "name": "task_id",
@@ -870,77 +930,46 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to update task metadata through `task.update`. TASK_ID is required and you must pass at least one mutation flag: `--title`, `--share-visibility`, `--visible-in-task-list`, or `--hidden-in-task-list`."
+          ]
         },
-        "stop": {
-          "help": "Stop a running task.",
+        "wait": {
+          "help": "Wait for a task to stop or pause for confirmation.",
+          "usage_instructions": "Use to poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`. Returns the task object plus recent messages. Use `--verbose-messages` to include tool, plan, and explanation events while polling.",
           "arguments": [
             {
               "name": "task_id",
               "type": "TEXT",
               "required": true,
-              "help": "Task ID to stop"
+              "help": "Task ID to wait for"
             }
           ],
           "options": [
             {
-              "name": "--profile",
-              "type": "TEXT",
+              "name": "--timeout",
+              "type": "FLOAT",
               "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "usage_instructions": "Use to stop a running task through `task.stop`. TASK_ID is required. The API response is a lightweight acknowledgement; use `task wait` or `task get` afterward if you need the resulting task state."
-        },
-        "delete": {
-          "help": "Delete a task.",
-          "arguments": [
-            {
-              "name": "task_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Task ID to delete"
-            }
-          ],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "usage_instructions": "Use to permanently delete a task through `task.delete`. TASK_ID is required. Delete is separate from stop; stop a running task first if necessary."
-        },
-        "confirm": {
-          "help": "Confirm a pending action so a waiting task can resume.",
-          "arguments": [
-            {
-              "name": "task_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Task ID with the pending action"
+              "help": "Max seconds to wait",
+              "default": "900.0"
             },
             {
-              "name": "event_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Waiting event ID from task messages"
-            }
-          ],
-          "options": [
-            {
-              "name": "--input",
-              "type": "TEXT",
+              "name": "--poll",
+              "type": "FLOAT",
               "required": false,
-              "help": "Optional JSON input for the confirmation"
+              "help": "Seconds between status checks",
+              "default": "2.0"
             },
             {
-              "name": "--input-file",
-              "type": "TEXT",
+              "name": "--verbose-messages",
+              "type": "bool",
               "required": false,
-              "help": "Read optional confirmation JSON input from a file"
+              "help": "Include verbose message events while polling"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress status messages",
+              "short": "-q"
             },
             {
               "name": "--profile",
@@ -948,21 +977,9 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to confirm a waiting action through `task.confirmAction`. Pass the TASK_ID and the waiting EVENT_ID from `task messages`. Use `--input` or `--input-file` when the waiting event requires structured confirmation data."
+          ]
         }
-      },
-      "usage_instructions": "Manage Manus API v2 tasks. `create` starts a task, `send`/`continue` sends follow-up messages, `get` reads metadata, `messages` reads event history, `wait` polls `task.listMessages`, and `update`/`stop`/`delete`/`confirm` mutate task state. The injected task-group `--profile` option selects a saved auth profile; task `--agent-profile` selects Manus model capability."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `manus cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `manus cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use `manus <command-group> <action> [arguments] [options]`. JSON is the default output. Use auth/profile `--profile` options for saved credential profiles; use task `--agent-profile` for Manus model selection. Consult command entries before executing."
