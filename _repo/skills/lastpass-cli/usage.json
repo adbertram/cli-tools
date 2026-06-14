@@ -268,7 +268,7 @@
               "name": "--category",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by LastPass category/note type (e.g., 'Credit Card' or 'Payment Cards')",
+              "help": "Filter narrowed entries by LastPass category/note type",
               "short": "-c"
             },
             {
@@ -290,7 +290,7 @@
             "lastpass items list",
             "lastpass items list --table",
             "lastpass items list Work --table",
-            "lastpass items list --category \"Payment Cards\" --table",
+            "lastpass items list --filter \"name:like:%hsa%\" --category \"Payment Cards\" --table",
             "lastpass items list --filter \"name:like:%github%\""
           ],
           "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below."

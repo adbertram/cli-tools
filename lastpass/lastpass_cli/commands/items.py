@@ -44,7 +44,7 @@ def vault_list(
     group: Optional[str] = typer.Argument(None, help="Folder/group to list (e.g., 'Work' or 'Work/Servers')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of entries to return"),
-    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter by LastPass category/note type (e.g., 'Credit Card' or 'Payment Cards')"),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter narrowed entries by LastPass category/note type"),
     filters: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of properties to include (supports dot notation)"),
 ):
@@ -55,7 +55,7 @@ def vault_list(
         lastpass items list
         lastpass items list --table
         lastpass items list Work --table
-        lastpass items list --category "Payment Cards" --table
+        lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table
         lastpass items list --filter "name:like:%github%"
     """
     try:
@@ -69,7 +69,7 @@ def vault_list(
                 raise typer.Exit(1)
 
         client = get_client()
-        items = client.list_items(group=group, category=category)
+        items = client.list_items(group=group)
 
         # Apply client-side filters
         if filters and isinstance(items, list):
@@ -77,6 +77,9 @@ def vault_list(
 
         # Filter out folder entries for cleaner output
         items = [item for item in items if not item.get("is_folder")]
+
+        if category:
+            items = client.filter_items_by_category(items, category)
 
         # Apply limit after filtering
         if limit and len(items) > limit:

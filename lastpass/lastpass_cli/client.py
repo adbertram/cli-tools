@@ -1,7 +1,9 @@
 """Lastpass wrapper client using subprocess to call underlying CLI."""
+import json
 import logging
 import os
 import random
+import re
 import signal
 import subprocess
 import sys
@@ -33,11 +35,57 @@ CRASH_EXIT_CODES = {-6, -10, -11, 134, 138, 139}
 LPASS_DIR = os.path.expanduser("~/.lpass")
 AGENT_SOCK_PATH = os.path.join(LPASS_DIR, "agent.sock")
 PLAINTEXT_KEY_PATH = os.path.join(LPASS_DIR, "plaintext_key")
+MASKED_SECRET_VALUE = "********"
+SENSITIVE_ITEM_DETAIL_KEY_MARKERS = (
+    "password",
+    "passphrase",
+    "secret",
+    "token",
+    "apikey",
+    "privatekey",
+    "email",
+)
+CATEGORY_SCAN_LIMIT = 50
 
 
 class ClientError(Exception):
     """Custom exception for Lastpass wrapper errors."""
     pass
+
+
+def _is_sensitive_item_detail_key(key: str) -> bool:
+    """Return True for item detail fields that should be hidden by default."""
+    normalized = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+    return any(marker in normalized for marker in SENSITIVE_ITEM_DETAIL_KEY_MARKERS)
+
+
+def _mask_json_string_secrets(value: str) -> str:
+    """Mask sensitive fields inside a JSON-encoded string value."""
+    stripped = value.strip()
+    if not stripped or stripped[0] not in "[{":
+        return value
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+    masked = _mask_item_detail_secrets(decoded)
+    return json.dumps(masked, separators=(",", ":"))
+
+
+def _mask_item_detail_secrets(value: Any) -> Any:
+    """Mask sensitive item detail fields recursively."""
+    if isinstance(value, dict):
+        return {
+            key: MASKED_SECRET_VALUE
+            if _is_sensitive_item_detail_key(key)
+            else _mask_item_detail_secrets(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_item_detail_secrets(item) for item in value]
+    if isinstance(value, str):
+        return _mask_json_string_secrets(value)
+    return value
 
 
 class LastpassClient:
@@ -423,18 +471,35 @@ class LastpassClient:
         error_msg = result.stderr.strip() or result.stdout.strip() or "Command failed"
         raise ClientError(f"{self.config.cli_command} error: {error_msg}")
 
-    def _filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
+    def filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
         """Filter entries by LastPass category/note type."""
         expected = self._normalize_category(category)
+        candidates = [item for item in items if not item.get("is_folder")]
+        if len(candidates) > CATEGORY_SCAN_LIMIT:
+            activity.warning(
+                "Refusing category scan category=%s candidate_count=%d limit=%d",
+                category,
+                len(candidates),
+                CATEGORY_SCAN_LIMIT,
+            )
+            raise ClientError(
+                "LastPass category filtering requires inspecting each candidate "
+                "with 'lpass show --field=NoteType'. "
+                f"Refusing to scan {len(candidates)} entries. Narrow the list "
+                f"with a group or --filter first (limit {CATEGORY_SCAN_LIMIT})."
+            )
+
         matches = []
-        for item in items:
-            if item.get("is_folder"):
-                continue
+        for item in candidates:
             actual = self._get_item_category(item["id"])
             if self._normalize_category(actual) == expected:
                 item["category"] = actual
                 matches.append(item)
         return matches
+
+    def _filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
+        """Backward-compatible wrapper for category filtering."""
+        return self.filter_items_by_category(items, category)
 
     def get_item(self, item_id: str, show_password: bool = False) -> Dict:
         """
@@ -453,9 +518,8 @@ class LastpassClient:
         result = self._run_command(args)
         parsed = self._parse_lpass_show(result.stdout)
 
-        # Optionally mask password
-        if not show_password and "Password" in parsed:
-            parsed["Password"] = "********"
+        if not show_password:
+            parsed = _mask_item_detail_secrets(parsed)
 
         return parsed
 

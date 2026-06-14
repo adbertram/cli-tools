@@ -22,7 +22,7 @@ lastpass <command-group> <action> [arguments] [options]
 | Check auth status | `lastpass auth status` |
 | List vault entries | `lastpass items list --table` |
 | List entries in folder | `lastpass items list Work --table` |
-| List payment cards | `lastpass items list --category "Payment Cards" --table` |
+| List payment cards | `lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table` |
 | Search entries | `lastpass items list --filter "name:like:%github%"` |
 | Get entry details | `lastpass items get <id-or-name>` |
 | Get password only | `lastpass items password <id-or-name>` |

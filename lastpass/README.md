@@ -75,9 +75,9 @@ lastpass items list "Work/Servers"
 # Filter entries
 lastpass items list --filter "name:like:%github%"
 
-# Filter by LastPass category/note type
-lastpass items list --category "Payment Cards" --table
-lastpass items list --category "Credit Card" --table
+# Filter narrowed entries by LastPass category/note type
+lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table
+lastpass items list Work --category "Credit Card" --table
 
 # Get entry details (password masked by default)
 lastpass items get github.com
@@ -126,8 +126,9 @@ lastpass items list > vault_backup.json
 # Find entries with "github" in name
 lastpass items list --filter "name:ilike:%github%"
 
-# Find saved payment cards without printing card numbers
-lastpass items list --category "Payment Cards" --table
+# Find saved payment cards without printing card numbers.
+# Narrow first; category filtering refuses broad vault scans.
+lastpass items list --filter "name:ilike:%hsa%" --category "Payment Cards" --table
 ```
 
 ### Profiles
