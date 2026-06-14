@@ -15,9 +15,12 @@ Updated location: cli-tools/wordpress/wordpress_cli/utils/docx.py
 from __future__ import annotations
 
 import uuid
+import posixpath
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Tuple
+from xml.etree import ElementTree as ET
 
 import mammoth
 from bs4 import BeautifulSoup
@@ -28,6 +31,9 @@ from .blocks import convert_html_to_blocks
 
 class DocxConversionError(RuntimeError):
     pass
+
+
+RELATIONSHIP_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
 def extract_post_from_docx(
@@ -69,6 +75,7 @@ def _convert_docx_to_html(
     buffer = BytesIO()
     document.save(buffer)
     buffer.seek(0)
+    buffer = _normalize_docx_relationship_targets(buffer)
 
     style_map = _get_style_map()
 
@@ -90,6 +97,62 @@ def _convert_docx_to_html(
     html = _add_link_attributes(html)
     html = convert_html_to_blocks(html)
     return html
+
+
+def _normalize_docx_relationship_targets(buffer: BytesIO) -> BytesIO:
+    """Normalize parent-relative document relationships for Mammoth image reads."""
+    ET.register_namespace("", RELATIONSHIP_NAMESPACE)
+    output = BytesIO()
+    changed = False
+
+    with zipfile.ZipFile(buffer, "r") as source:
+        with zipfile.ZipFile(output, "w") as target_zip:
+            for item in source.infolist():
+                data = source.read(item.filename)
+
+                if item.filename == "word/_rels/document.xml.rels":
+                    normalized_data, file_changed = _normalize_document_relationships(
+                        data
+                    )
+                    if file_changed:
+                        data = normalized_data
+                        changed = True
+
+                target_zip.writestr(item, data)
+
+    if not changed:
+        buffer.seek(0)
+        return buffer
+
+    output.seek(0)
+    return output
+
+
+def _normalize_document_relationships(data: bytes) -> tuple[bytes, bool]:
+    root = ET.fromstring(data)
+    changed = False
+
+    for relationship in root.findall(f"{{{RELATIONSHIP_NAMESPACE}}}Relationship"):
+        if relationship.attrib.get("TargetMode") == "External":
+            continue
+
+        target = relationship.attrib.get("Target", "")
+        if not target.startswith("../"):
+            continue
+
+        normalized = posixpath.normpath(posixpath.join("word", target))
+        if normalized.startswith("../"):
+            raise DocxConversionError(
+                f"DOCX relationship target escapes package root: {target}"
+            )
+
+        relationship.set("Target", f"/{normalized}")
+        changed = True
+
+    if not changed:
+        return data, False
+
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True), True
 
 
 def _get_style_map() -> str:

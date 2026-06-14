@@ -15,6 +15,16 @@ pip install -e .
 
 After installation, the `wordpress` command will be available in your terminal.
 
+## Testing
+
+Run focused WordPress CLI tests through the tool's uv project and inject pytest into that run environment:
+
+```bash
+uv run --project /Users/adam/Dropbox/GitRepos/cli-tools/wordpress --with pytest python -m pytest /Users/adam/Dropbox/GitRepos/cli-tools/wordpress/tests
+```
+
+Do not use a local `.venv/bin/python -m pytest` unless that environment was explicitly installed with the development dependencies.
+
 ## Quick Start
 
 ### 1. Configure Your Environment
