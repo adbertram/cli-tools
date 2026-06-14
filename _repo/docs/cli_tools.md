@@ -3,6 +3,7 @@
 | CLI | Description |
 |---|---|
 | `airtable` | CLI interface for the Airtable API: CRUD on records, field schema operations (list/get/create/update; deletion unsupported by Airtable's public API), attachment upload, advanced filtering, sorting, and pagination. |
+| `amazon` | Amazon order evidence lookup through a saved browser session. |
 | `ata-blog` | Wrapper for ATA Blog operations across Notion, WordPress, Raptive, schema, earnings, and sponsored shoutouts. |
 | `codex-sessions` | Query and analyze OpenAI Codex session transcripts from ~/.codex |
 | `coursecraft` | Manage CourseCraft Airtable records for courses, modules, clips, demos, slides, slide templates, voice recordings, and Descript exports. |
