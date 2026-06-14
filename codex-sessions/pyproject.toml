@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-codex-sessions = "codex_sessions_cli.main:app"
+codex-sessions = "codex_sessions_cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

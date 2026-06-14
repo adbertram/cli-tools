@@ -13,6 +13,7 @@ from codex_sessions_cli.parsers import load_rollout_index
 
 
 SESSION_ID = "019db111-1111-7111-8111-111111111111"
+SKILL_SESSION_ID = "019db222-2222-7222-8222-222222222222"
 
 
 def write_rollout(codex_home: Path, cwd: str, source="cli") -> Path:
@@ -210,6 +211,36 @@ def write_minimal_current_rollout(codex_home: Path, cwd: str) -> Path:
     return rollout_path
 
 
+def write_skill_rollout(codex_home: Path, cwd: str) -> Path:
+    session_dir = codex_home / "sessions" / "2026" / "04" / "24"
+    session_dir.mkdir(parents=True)
+    rollout_path = session_dir / f"rollout-2026-04-24T10-00-00-{SKILL_SESSION_ID}.jsonl"
+    records = [
+        {
+            "timestamp": "2026-04-24T15:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": SKILL_SESSION_ID,
+                "timestamp": "2026-04-24T15:00:00.000Z",
+                "cwd": cwd,
+            },
+        },
+        {
+            "timestamp": "2026-04-24T15:00:01.000Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "$project-manager review this",
+                "images": [],
+                "local_images": [],
+                "text_elements": [],
+            },
+        },
+    ]
+    rollout_path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return rollout_path
+
+
 class CodexSessionsClientTests(unittest.TestCase):
     def test_lists_project_and_session_summaries_from_rollout_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -260,6 +291,40 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertIn("tool_call", [event.event_type for event in timeline])
             self.assertEqual(timeline[-1].event_type, "message")
 
+    def test_todo_get_uses_encoded_session_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_load_rollouts",
+                side_effect=AssertionError("todo get must load the encoded session directly"),
+            ):
+                todo = client.get_todo(f"{SESSION_ID}:call-plan:1")
+
+            self.assertEqual(todo.content, "Write parser tests")
+
+    def test_skill_get_uses_encoded_session_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_load_rollouts",
+                side_effect=AssertionError("skill get must load the encoded session directly"),
+            ):
+                skill = client.get_skill(f"{SKILL_SESSION_ID}:2:project-manager")
+
+            self.assertEqual(skill.name, "project-manager")
+
     def test_subagent_activity_scan_does_not_materialize_all_tool_calls(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -279,6 +344,31 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(subagents[0].id, "call-subagent")
             self.assertEqual(subagent.id, "call-subagent")
 
+    def test_subagent_activity_get_loads_only_rollout_containing_call_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            matching_path = write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+            loaded_paths = []
+
+            from codex_sessions_cli.client import load_rollout as real_load_rollout
+
+            def record_load(path):
+                loaded_paths.append(path)
+                return real_load_rollout(path)
+
+            with patch.object(
+                client,
+                "_load_rollout_indexes",
+                side_effect=AssertionError("subagent get must not build the full rollout index"),
+            ), patch("codex_sessions_cli.client.load_rollout", side_effect=record_load):
+                subagent = client.get_subagent_activity("call-subagent")
+
+            self.assertEqual(subagent.id, "call-subagent")
+            self.assertEqual(loaded_paths, [matching_path])
+
     def test_tool_call_scan_stops_without_full_materialization(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -297,6 +387,27 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(len(tool_calls), 1)
             self.assertEqual(tool_calls[0].id, "call-subagent")
             self.assertEqual(tool_call.id, "call-subagent")
+
+    def test_tool_call_get_loads_only_rollout_containing_call_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            matching_path = write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+            loaded_paths = []
+
+            from codex_sessions_cli.client import load_rollout as real_load_rollout
+
+            def record_load(path):
+                loaded_paths.append(path)
+                return real_load_rollout(path)
+
+            with patch("codex_sessions_cli.client.load_rollout", side_effect=record_load):
+                tool_call = client.get_tool_call("call-subagent")
+
+            self.assertEqual(tool_call.id, "call-subagent")
+            self.assertEqual(loaded_paths, [matching_path])
 
     def test_parses_legacy_top_level_rollout_records(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -441,6 +552,14 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(timeline[-1].event_type, "session")
 
 class CodexSessionsCliTests(unittest.TestCase):
+    def test_console_script_uses_error_handling_entrypoint(self):
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+
+        self.assertIn(
+            'codex-sessions = "codex_sessions_cli.main:main"',
+            pyproject.read_text(),
+        )
+
     def test_auth_status_uses_shared_profiles_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"

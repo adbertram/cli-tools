@@ -242,7 +242,8 @@ class CodexSessionsClient:
         return self._apply_limit(calls, limit)
 
     def get_tool_call(self, tool_call_id: str) -> ToolCall:
-        for parsed in self._load_rollouts():
+        parsed = self._load_rollout_containing_tool_call(tool_call_id)
+        if parsed is not None:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
@@ -307,7 +308,8 @@ class CodexSessionsClient:
         return self._apply_limit(activities, limit)
 
     def get_subagent_activity(self, activity_id: str) -> SubagentActivity:
-        for parsed in self._load_rollouts():
+        parsed = self._load_rollout_containing_tool_call(activity_id, {"spawn_agent", "Task"})
+        if parsed is not None:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
@@ -332,6 +334,52 @@ class CodexSessionsClient:
                     }
                 )
         raise ClientError(f"Subagent activity not found: {activity_id}")
+
+    def _load_rollout_containing_tool_call(
+        self,
+        call_id: str,
+        tool_names: Optional[set[str]] = None,
+    ) -> Optional[ParsedRollout]:
+        self.load_errors = []
+        if not self.codex_home.exists():
+            return None
+        for path in self._rollout_paths_by_mtime_desc():
+            try:
+                if not self._rollout_path_contains_text(path, call_id):
+                    continue
+                parsed = load_rollout(path)
+            except FileNotFoundError:
+                self.load_errors.append(f"{path}: file not found")
+                continue
+            except ValueError as error:
+                self.load_errors.append(str(error))
+                continue
+            if any(self._matches_tool_call(record, call_id, tool_names) for record in tool_call_records(parsed)):
+                return parsed
+        return None
+
+    def _matches_tool_call(self, record, call_id: str, tool_names: Optional[set[str]]) -> bool:
+        if record.payload["call_id"] != call_id:
+            return False
+        return tool_names is None or record.payload["name"] in tool_names
+
+    def _rollout_paths_by_mtime_desc(self) -> List[Path]:
+        paths: List[Path] = []
+        for subdir in SESSION_SUBDIRS:
+            root = self.codex_home / subdir
+            if root.exists():
+                paths.extend(root.rglob(f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"))
+        return sorted(paths, key=self._path_mtime, reverse=True)
+
+    def _path_mtime(self, path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+
+    def _rollout_path_contains_text(self, path: Path, text: str) -> bool:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            return any(text in line for line in handle)
 
     def list_todos(
         self,
@@ -368,28 +416,34 @@ class CodexSessionsClient:
         return self._apply_limit(todos, limit)
 
     def get_todo(self, todo_id: str) -> TodoItem:
-        for parsed in self._load_rollouts():
-            for record in tool_call_records(parsed):
-                payload = record.payload
-                if payload["name"] != "update_plan":
+        session_id, call_id, item_index_text = self._parse_todo_id(todo_id)
+        parsed = self._get_rollout(session_id)
+        for record in tool_call_records(parsed):
+            payload = record.payload
+            if payload["name"] != "update_plan" or payload["call_id"] != call_id:
+                continue
+            args = parse_arguments(payload["arguments"])
+            for index, item in enumerate(args["plan"], start=1):
+                if str(index) != item_index_text:
                     continue
-                args = parse_arguments(payload["arguments"])
-                for index, item in enumerate(args["plan"], start=1):
-                    current_id = f"{parsed.meta['id']}:{payload['call_id']}:{index}"
-                    if current_id != todo_id:
-                        continue
-                    return create_todo_item(
-                        {
-                            "id": current_id,
-                            "session_id": parsed.meta["id"],
-                            "conversation_id": conversation_id_for_record(parsed.records, record),
-                            "time": record.timestamp,
-                            "content": item["step"],
-                            "status": item["status"],
-                            "source_call_id": payload["call_id"],
-                        }
-                    )
+                return create_todo_item(
+                    {
+                        "id": todo_id,
+                        "session_id": parsed.meta["id"],
+                        "conversation_id": conversation_id_for_record(parsed.records, record),
+                        "time": record.timestamp,
+                        "content": item["step"],
+                        "status": item["status"],
+                        "source_call_id": payload["call_id"],
+                    }
+                )
         raise ClientError(f"Todo not found: {todo_id}")
+
+    def _parse_todo_id(self, todo_id: str) -> Tuple[str, str, str]:
+        parts = todo_id.split(":")
+        if len(parts) != 3 or not all(parts):
+            raise ClientError("Todo ID must use session_id:call_id:item_index")
+        return parts[0], parts[1], parts[2]
 
     def list_skills(
         self,
@@ -422,25 +476,32 @@ class CodexSessionsClient:
         return self._apply_limit(skills, limit)
 
     def get_skill(self, skill_id: str) -> SkillInvocation:
-        for parsed in self._load_rollouts():
-            for record in event_messages(parsed, "user_message"):
-                text = str(record.payload["message"])
-                for name in extract_skill_mentions(text):
-                    current_id = f"{parsed.meta['id']}:{record.line_number}:{name}"
-                    if current_id != skill_id:
-                        continue
-                    return create_skill_invocation(
-                        {
-                            "id": current_id,
-                            "session_id": parsed.meta["id"],
-                            "conversation_id": conversation_id_for_record(parsed.records, record),
-                            "time": record.timestamp,
-                            "name": name,
-                            "source": "user_message",
-                            "text": text,
-                        }
-                    )
+        session_id, line_number_text, skill_name = self._parse_skill_id(skill_id)
+        parsed = self._get_rollout(session_id)
+        for record in event_messages(parsed, "user_message"):
+            if str(record.line_number) != line_number_text:
+                continue
+            text = str(record.payload["message"])
+            if skill_name not in extract_skill_mentions(text):
+                continue
+            return create_skill_invocation(
+                {
+                    "id": skill_id,
+                    "session_id": parsed.meta["id"],
+                    "conversation_id": conversation_id_for_record(parsed.records, record),
+                    "time": record.timestamp,
+                    "name": skill_name,
+                    "source": "user_message",
+                    "text": text,
+                }
+            )
         raise ClientError(f"Skill invocation not found: {skill_id}")
+
+    def _parse_skill_id(self, skill_id: str) -> Tuple[str, str, str]:
+        parts = skill_id.split(":", 2)
+        if len(parts) != 3 or not all(parts):
+            raise ClientError("Skill invocation ID must use session_id:line_number:skill_name")
+        return parts[0], parts[1], parts[2]
 
     def list_timeline(
         self,
