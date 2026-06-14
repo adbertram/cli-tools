@@ -36,11 +36,15 @@ SUPPORTED_TYPES = [
 ]
 
 
+RELATION_TYPES = ("dual_property", "single_property")
+
+
 def build_property_schema(
     prop_type: str,
     options: Optional[List[str]] = None,
     formula_expression: Optional[str] = None,
-    relation_database_id: Optional[str] = None,
+    relation_data_source_id: Optional[str] = None,
+    relation_type: str = "dual_property",
     number_format: Optional[str] = None,
 ) -> dict:
     """
@@ -50,7 +54,10 @@ def build_property_schema(
         prop_type: The property type
         options: Options for select/multi_select/status types
         formula_expression: Expression for formula type
-        relation_database_id: Database ID for relation type
+        relation_data_source_id: The TARGET's data_source ID for relation type
+            (API 2025-09-03 requires relation.data_source_id, not database_id)
+        relation_type: Relation type for relation properties
+            (dual_property or single_property)
         number_format: Format for number type
 
     Returns:
@@ -112,12 +119,20 @@ def build_property_schema(
         schema["formula"] = {"expression": formula_expression}
 
     elif prop_type == "relation":
-        if not relation_database_id:
-            raise ValueError("Relation type requires --relation-database")
+        if not relation_data_source_id:
+            raise ValueError(
+                "Relation type requires --relation-database "
+                "(the target's database container ID or data_source ID)"
+            )
+        if relation_type not in RELATION_TYPES:
+            raise ValueError(
+                f"--relation-type must be one of {', '.join(RELATION_TYPES)}"
+            )
+        # API 2025-09-03 requires relation.data_source_id (NOT database_id).
         schema["relation"] = {
-            "database_id": relation_database_id,
-            "type": "single_property",
-            "single_property": {},
+            "data_source_id": relation_data_source_id,
+            "type": relation_type,
+            relation_type: {},
         }
 
     else:
@@ -357,7 +372,15 @@ def field_add(
     relation_database: Optional[str] = typer.Option(
         None,
         "--relation-database",
-        help="Database ID for relation type",
+        "--relation-data-source",
+        help="For relation type: the TARGET's database container ID OR "
+        "data_source ID. Resolved to the target's data_source_id "
+        "(API 2025-09-03).",
+    ),
+    relation_type: str = typer.Option(
+        "dual_property",
+        "--relation-type",
+        help="Relation type for relation fields (dual_property or single_property)",
     ),
     number_format: Optional[str] = typer.Option(
         None,
@@ -389,13 +412,27 @@ def field_add(
         if options:
             options_list = [o.strip() for o in options.split(",")]
 
+        # Resolve the relation target to its data_source ID. The user may pass
+        # either a database container ID or a data_source ID; the API needs the
+        # target's data_source_id.
+        relation_data_source_id = None
+        if prop_type == "relation":
+            if not relation_database:
+                print_warning(
+                    "Relation type requires --relation-database "
+                    "(the target's database container ID or data_source ID)"
+                )
+                raise typer.Exit(1)
+            relation_data_source_id = client.get_data_source_id(relation_database)
+
         # Build property schema
         try:
             schema = build_property_schema(
                 prop_type=prop_type,
                 options=options_list,
                 formula_expression=formula_expression,
-                relation_database_id=relation_database,
+                relation_data_source_id=relation_data_source_id,
+                relation_type=relation_type,
                 number_format=number_format,
             )
         except ValueError as e:
@@ -628,6 +665,19 @@ def field_update(
         "--formula-expression",
         help="Expression for formula type",
     ),
+    relation_database: Optional[str] = typer.Option(
+        None,
+        "--relation-database",
+        "--relation-data-source",
+        help="For relation fields: the TARGET's database container ID OR "
+        "data_source ID. Resolved to the target's data_source_id "
+        "(API 2025-09-03).",
+    ),
+    relation_type: Optional[str] = typer.Option(
+        None,
+        "--relation-type",
+        help="Relation type for relation fields (dual_property or single_property)",
+    ),
 ):
     """
     Update a field's configuration.
@@ -636,6 +686,7 @@ def field_update(
         notion field update DB_ID "Priority" --name "Urgency"
         notion field update DB_ID "Score" --number-format percent
         notion field update DB_ID "Status" --options "Todo,In Progress,Done"
+        notion field update DB_ID "Project" --relation-database TARGET_DB_ID
     """
     try:
         client = get_client()
@@ -675,8 +726,46 @@ def field_update(
                 raise typer.Exit(1)
             update["formula"] = {"expression": formula_expression}
 
+        if relation_database or relation_type:
+            if field_type != "relation":
+                print_warning(
+                    "--relation-database/--relation-type only apply to relation fields."
+                )
+                raise typer.Exit(1)
+            # Default to the existing relation type when only the target changes.
+            resolved_type = relation_type or field_def.get("relation", {}).get(
+                "type", "dual_property"
+            )
+            if resolved_type not in RELATION_TYPES:
+                print_warning(
+                    f"--relation-type must be one of {', '.join(RELATION_TYPES)}"
+                )
+                raise typer.Exit(1)
+            # Default to the existing target when only the type changes.
+            if relation_database:
+                relation_data_source_id = client.get_data_source_id(relation_database)
+            else:
+                relation_data_source_id = field_def.get("relation", {}).get(
+                    "data_source_id"
+                )
+                if not relation_data_source_id:
+                    print_warning(
+                        "Cannot resolve the current relation target. "
+                        "Pass --relation-database to set it explicitly."
+                    )
+                    raise typer.Exit(1)
+            # API 2025-09-03 requires relation.data_source_id (NOT database_id).
+            update["relation"] = {
+                "data_source_id": relation_data_source_id,
+                "type": resolved_type,
+                resolved_type: {},
+            }
+
         if not update:
-            print_warning("No updates specified. Use --name, --options, --number-format, or --formula-expression.")
+            print_warning(
+                "No updates specified. Use --name, --options, --number-format, "
+                "--formula-expression, or --relation-database."
+            )
             raise typer.Exit(1)
 
         # Apply update

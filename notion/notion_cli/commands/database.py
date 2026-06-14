@@ -335,6 +335,285 @@ def database_schema(
         raise typer.Exit(exit_code)
 
 
+# Property types supported by the `database create` convenience flags.
+# Each maps a flag-supplied property to its Notion schema object under
+# initial_data_source.properties.
+CREATE_SIMPLE_TYPES = [
+    "rich_text",
+    "number",
+    "select",
+    "multi_select",
+    "status",
+    "date",
+    "people",
+    "files",
+    "checkbox",
+    "url",
+    "email",
+    "phone_number",
+]
+
+
+def build_create_property_schema(
+    prop_type: str,
+    options: Optional[List[str]] = None,
+) -> dict:
+    """
+    Build a single Notion property schema object for `database create`.
+
+    Used for the simple convenience flags (everything except title and
+    relation, which the command builds directly because they need extra
+    inputs). Mirrors the schema shapes accepted under
+    initial_data_source.properties.
+
+    Args:
+        prop_type: One of CREATE_SIMPLE_TYPES.
+        options: Option names for select/multi_select/status types.
+
+    Returns:
+        Property schema object (e.g. {"select": {"options": [...]}}).
+    """
+    if prop_type not in CREATE_SIMPLE_TYPES:
+        raise ValueError(f"Unsupported property type: {prop_type}")
+
+    if prop_type in ("select", "multi_select", "status"):
+        config: dict = {}
+        if options:
+            config["options"] = [{"name": opt} for opt in options]
+        return {prop_type: config}
+
+    # All remaining simple types take an empty config object.
+    return {prop_type: {}}
+
+
+def _parse_name_value(raw: str, flag: str) -> tuple:
+    """Split a 'Name:value' flag argument into (name, value)."""
+    parts = raw.split(":", 1)
+    if len(parts) != 2 or not parts[0].strip():
+        raise ValueError(f"{flag} requires 'Name:value' format")
+    return parts[0].strip(), parts[1].strip()
+
+
+@app.command("create")
+def database_create(
+    parent_page_id: str = typer.Argument(
+        ...,
+        help="The parent page ID the new database is created under",
+    ),
+    title: str = typer.Option(
+        ...,
+        "--title",
+        "-t",
+        help="The database title",
+    ),
+    title_property: str = typer.Option(
+        "Name",
+        "--title-property",
+        help="Name of the title property to create (Notion requires exactly one)",
+    ),
+    inline: bool = typer.Option(
+        False,
+        "--inline/--no-inline",
+        help="Create the database inline in the parent page",
+    ),
+    properties_json: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Raw JSON for initial_data_source.properties (Notion API format). "
+        "Merged with convenience flags; a title property is added if none is present.",
+    ),
+    text_props: Optional[List[str]] = typer.Option(
+        None,
+        "--text",
+        help="Add a rich_text property (format: 'Name'). Repeatable.",
+    ),
+    number_props: Optional[List[str]] = typer.Option(
+        None,
+        "--number",
+        help="Add a number property (format: 'Name'). Repeatable.",
+    ),
+    select_props: Optional[List[str]] = typer.Option(
+        None,
+        "--select",
+        help="Add a select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    multi_select_props: Optional[List[str]] = typer.Option(
+        None,
+        "--multi-select",
+        help="Add a multi_select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    status_props: Optional[List[str]] = typer.Option(
+        None,
+        "--status",
+        help="Add a status property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    date_props: Optional[List[str]] = typer.Option(
+        None,
+        "--date",
+        help="Add a date property (format: 'Name'). Repeatable.",
+    ),
+    checkbox_props: Optional[List[str]] = typer.Option(
+        None,
+        "--checkbox",
+        help="Add a checkbox property (format: 'Name'). Repeatable.",
+    ),
+    url_props: Optional[List[str]] = typer.Option(
+        None,
+        "--url",
+        help="Add a url property (format: 'Name'). Repeatable.",
+    ),
+    email_props: Optional[List[str]] = typer.Option(
+        None,
+        "--email",
+        help="Add an email property (format: 'Name'). Repeatable.",
+    ),
+    phone_props: Optional[List[str]] = typer.Option(
+        None,
+        "--phone",
+        help="Add a phone_number property (format: 'Name'). Repeatable.",
+    ),
+    people_props: Optional[List[str]] = typer.Option(
+        None,
+        "--people",
+        help="Add a people property (format: 'Name'). Repeatable.",
+    ),
+    files_props: Optional[List[str]] = typer.Option(
+        None,
+        "--files",
+        help="Add a files property (format: 'Name'). Repeatable.",
+    ),
+    relation_props: Optional[List[str]] = typer.Option(
+        None,
+        "--relation",
+        help="Add a relation property (format: 'Name:target_data_source_id'). "
+        "Uses the TARGET's data_source_id. Repeatable.",
+    ),
+    relation_type: str = typer.Option(
+        "dual_property",
+        "--relation-type",
+        help="Relation type for --relation properties (dual_property or single_property)",
+    ),
+):
+    """
+    Create a new database under a parent page.
+
+    The schema is supplied via raw JSON (--properties, the Notion
+    initial_data_source.properties object) and/or convenience flags. A title
+    property is always present: if --properties does not define one, a title
+    property named by --title-property (default "Name") is added.
+
+    Relation properties use the TARGET's data_source ID (not a database
+    container ID), per Notion API 2025-09-03.
+
+    Examples:
+        notion database create PARENT_PAGE_ID --title "Tasks"
+        notion database create PARENT_PAGE_ID --title "Tasks" \\
+            --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due"
+        notion database create PARENT_PAGE_ID --title "Tasks" --inline \\
+            --relation "Project:TARGET_DATA_SOURCE_ID"
+        notion database create PARENT_PAGE_ID --title "Tasks" \\
+            --properties '{"Name": {"title": {}}, "Notes": {"rich_text": {}}}'
+    """
+    try:
+        client = get_client()
+
+        properties: Dict[str, dict] = {}
+
+        # Raw JSON properties (Notion initial_data_source.properties format)
+        if properties_json:
+            try:
+                parsed = json.loads(properties_json)
+            except json.JSONDecodeError as e:
+                print_warning(f"Invalid JSON in --properties: {e}")
+                raise typer.Exit(1)
+            if not isinstance(parsed, dict):
+                print_warning("--properties must be a JSON object of property definitions")
+                raise typer.Exit(1)
+            properties.update(parsed)
+
+        # Map each repeatable simple flag to its property type.
+        simple_flag_specs = [
+            (text_props, "rich_text", "--text"),
+            (number_props, "number", "--number"),
+            (select_props, "select", "--select"),
+            (multi_select_props, "multi_select", "--multi-select"),
+            (status_props, "status", "--status"),
+            (date_props, "date", "--date"),
+            (checkbox_props, "checkbox", "--checkbox"),
+            (url_props, "url", "--url"),
+            (email_props, "email", "--email"),
+            (phone_props, "phone_number", "--phone"),
+            (people_props, "people", "--people"),
+            (files_props, "files", "--files"),
+        ]
+
+        try:
+            for values, prop_type, flag in simple_flag_specs:
+                for raw in values or []:
+                    # Optional 'Name:Opt1|Opt2' for choice types; plain 'Name' otherwise.
+                    if ":" in raw and prop_type in ("select", "multi_select", "status"):
+                        name, options_str = raw.split(":", 1)
+                        name = name.strip()
+                        options = [o.strip() for o in options_str.split("|") if o.strip()]
+                    else:
+                        name = raw.strip()
+                        options = None
+                    if not name:
+                        raise ValueError(f"{flag} requires a property name")
+                    properties[name] = build_create_property_schema(prop_type, options)
+
+            # Relation properties: 'Name:target_data_source_id'
+            if relation_type not in ("dual_property", "single_property"):
+                print_warning("--relation-type must be 'dual_property' or 'single_property'")
+                raise typer.Exit(1)
+            for raw in relation_props or []:
+                name, target_ds_id = _parse_name_value(raw, "--relation")
+                relation_config = {
+                    "data_source_id": target_ds_id,
+                    "type": relation_type,
+                    relation_type: {},
+                }
+                properties[name] = {"relation": relation_config}
+        except ValueError as e:
+            print_warning(str(e))
+            raise typer.Exit(1)
+
+        # Ensure exactly one title property exists. If --properties already
+        # defined one, keep it; otherwise add the --title-property column.
+        has_title = any(
+            isinstance(schema, dict) and "title" in schema
+            for schema in properties.values()
+        )
+        if not has_title:
+            properties[title_property] = {"title": {}}
+
+        db = client.create_database(
+            parent_page_id=parent_page_id,
+            title=title,
+            properties=properties,
+            inline=inline,
+        )
+
+        data_sources = db.get("data_sources", [])
+        result = {
+            "id": db.get("id", ""),
+            "title": title,
+            "url": db.get("url", ""),
+            "is_inline": db.get("is_inline", inline),
+            "parent_page_id": parent_page_id,
+            "data_sources": data_sources,
+            "data_source_ids": [ds.get("id", "") for ds in data_sources],
+        }
+
+        print_json(result)
+        print_success(f"Database '{title}' created: {result['id']}")
+
+    except Exception as e:
+        exit_code = handle_error(e)
+        raise typer.Exit(exit_code)
+
+
 def format_database_for_list(db: dict) -> dict:
     """
     Format a database search result for list display.
@@ -1581,6 +1860,9 @@ def template_get(
 
 
 COMMAND_CREDENTIALS = {
+    "create": [
+        "custom"
+    ],
     "get": [
         "custom"
     ],

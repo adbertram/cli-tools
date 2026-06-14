@@ -274,6 +274,7 @@ notion field add <database-id> "Priority" --type select --options "High,Medium,L
 notion field add <database-id> "Notes" --type rich_text
 notion field add <database-id> "Due Date" --type date
 notion field add <database-id> "Score" --type number --number-format percent
+notion field add <database-id> "Imports" --type relation --relation-database <target-id>
 ```
 
 **Options:**
@@ -282,7 +283,8 @@ notion field add <database-id> "Score" --type number --number-format percent
 | `-t, --type` | **(Required)** Field type (rich_text, number, select, multi_select, status, date, etc.) |
 | `-o, --options` | Comma-separated options for select/multi_select/status types |
 | `--formula-expression` | Expression for formula type |
-| `--relation-database` | Database ID for relation type |
+| `--relation-database` / `--relation-data-source` | For relation type: the TARGET's database container ID OR data_source ID. Resolved to the target's `data_source_id` (API 2025-09-03). |
+| `--relation-type` | `dual_property` (default) or `single_property` for relation fields |
 | `--number-format` | Format for number type |
 
 ### Rename Field
@@ -297,6 +299,7 @@ notion field rename <database-id> "Old Name" "New Name"
 notion field update <database-id> "Priority" --name "Urgency"
 notion field update <database-id> "Score" --number-format percent
 notion field update <database-id> "Status" --options "Todo,In Progress,Done"
+notion field update <database-id> "Imports" --relation-database <new-target-id>
 ```
 
 **Options:**
@@ -306,6 +309,8 @@ notion field update <database-id> "Status" --options "Todo,In Progress,Done"
 | `-o, --options` | Replace options for select/multi_select/status |
 | `--number-format` | Format for number type |
 | `--formula-expression` | Expression for formula type |
+| `--relation-database` / `--relation-data-source` | For relation fields: repoint to the TARGET's container/data_source ID (resolved to `data_source_id`) |
+| `--relation-type` | Change a relation field's type (`dual_property` or `single_property`) |
 
 ### Add Option to Field
 

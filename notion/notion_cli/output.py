@@ -24,6 +24,8 @@ from cli_tools_shared.output import (  # noqa: F401
 from typing import Any, Dict, List, Optional
 import re
 
+from .code_languages import normalize_code_language
+
 
 # --- CLI-specific helpers ---
 
@@ -706,11 +708,6 @@ def text_to_blocks(
         if re.match(r'^\d+\.\s+', stripped):
             return True
         return False
-
-    def normalize_code_language(language: str) -> str:
-        if language.lower() == "text":
-            return "plain text"
-        return language
 
     def create_code_block(language: str, code_content: str) -> Dict:
         code_chunks = _chunk_code_content(code_content)

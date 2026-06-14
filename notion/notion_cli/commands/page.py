@@ -1521,6 +1521,29 @@ def content_replace_section(
             print_warning("No valid content blocks generated from input")
             raise typer.Exit(1)
 
+        # Transform and validate the ENTIRE new payload BEFORE any mutation.
+        #
+        # replace-section is NOT atomic: it inserts the new blocks and then
+        # deletes the old ones. If the Notion API rejected a new block mid-insert
+        # (e.g. an unsupported code-fence language such as ```kql, or a rich_text
+        # value over the 2000-char limit), the section was left half-written AND
+        # the old section was never deleted -- producing a duplicate heading and
+        # a partial section. enforce_block_limits reshapes oversize content and
+        # normalizes unsupported code languages to "plain text"; the validator
+        # then confirms nothing is left that the API would reject. Doing this
+        # before touching the page means a pre-checkable failure can never
+        # corrupt the section: if the payload cannot be made valid, we exit
+        # before deleting or inserting anything.
+        new_blocks = enforce_block_limits(new_blocks)
+        invalid = _find_oversize_rich_text(new_blocks)
+        if invalid is not None:
+            print_warning(
+                "Refusing to modify section: a block exceeds Notion's "
+                f"2000-character rich_text limit and could not be split ({invalid}). "
+                "The page's existing content was left untouched."
+            )
+            raise typer.Exit(1)
+
         # Fetch all top-level child blocks of the page (non-recursive, we only need top-level)
         typer.echo("Fetching page blocks...", err=True)
         all_blocks = client.get_block_children_all(page_id, recursive=False)
@@ -1608,14 +1631,31 @@ def content_replace_section(
         block_ids_to_delete = list(section_block_ids)
 
         # Step 1: Insert replacement while the anchor block still exists.
+        #
+        # The payload was already normalized + validated above, so the API will
+        # not reject these blocks for block-limit or code-language reasons. A
+        # failure here can only come from a transport-level fault (network drop,
+        # timeout). Surface it loudly with the exact recovery path instead of
+        # leaving a silently duplicated section: the old section still exists
+        # (it is deleted in Step 2), so a partial insert here would create the
+        # duplicate-heading state. Re-running with the same input restores it.
         typer.echo(f"Inserting {len(new_blocks)} new block(s)...", err=True)
 
         def nesting_progress_cb(stage, message):
             typer.echo(f"  [{stage}] {message}", err=True)
 
-        created_count, _ = client._upload_blocks_with_nesting(
-            page_id, new_blocks, progress_callback=nesting_progress_cb, after=after_block_id
-        )
+        try:
+            created_count, _ = client._upload_blocks_with_nesting(
+                page_id, new_blocks, progress_callback=nesting_progress_cb, after=after_block_id
+            )
+        except Exception as insert_error:
+            print_warning(
+                f"Insert failed while replacing section '{target_text}': {insert_error}. "
+                f"The old section was NOT deleted, so page {page_id} may now show a "
+                "partial duplicate of this section. Re-run the same "
+                "'notion pages content replace-section' command to restore it."
+            )
+            raise typer.Exit(1)
 
         # Step 2: Delete old section blocks (parallel for speed)
         typer.echo(f"Deleting {len(block_ids_to_delete)} old block(s)...", err=True)

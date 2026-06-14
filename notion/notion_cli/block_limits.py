@@ -35,6 +35,7 @@ from __future__ import annotations
 import copy
 from typing import Dict, List, Optional
 
+from .code_languages import normalize_code_language
 from .output import chunk_text_on_boundaries
 
 # Notion API hard limits.
@@ -186,6 +187,24 @@ def _children_holder(block: Dict) -> Optional[Dict]:
     return None
 
 
+def _normalize_code_block_language(block: Dict) -> None:
+    """Normalize a code block's ``language`` to a Notion-accepted value in place.
+
+    Notion rejects any ``code`` block whose ``language`` is not in its supported
+    set (e.g. ``kql``). Forwarding an unsupported language 400s the request, and
+    on the non-atomic ``replace-section`` path that rejection corrupted the page.
+    Normalizing here -- at the universal pre-upload enforcement chokepoint --
+    covers every path, including raw-block paths (``--json-file``, ``duplicate``)
+    that never run through markdown conversion. No-op for non-code blocks.
+    """
+    if block.get("type") != "code":
+        return
+    code_body = block.get("code")
+    if not isinstance(code_body, dict):
+        return
+    code_body["language"] = normalize_code_language(code_body.get("language"))
+
+
 def _normalize_table_cells(block: Dict, max_length: int) -> None:
     """Split oversize text inside table_row cells in place.
 
@@ -290,10 +309,14 @@ def enforce_block_limits(
                     block_body[rt_key], max_length
                 )
 
-        # 2. Normalize table_row cells.
+        # 2. Normalize an unsupported code-block language to "plain text" so the
+        #    block is uploadable instead of 400ing the request.
+        _normalize_code_block_language(block)
+
+        # 3. Normalize table_row cells.
         _normalize_table_cells(block, max_length)
 
-        # 3. Recurse into children before splitting on the element cap, so
+        # 4. Recurse into children before splitting on the element cap, so
         #    children are normalized exactly once and stay with their block.
         holder = _children_holder(block)
         if holder is not None:
@@ -301,7 +324,7 @@ def enforce_block_limits(
                 holder["children"], max_length, max_elements
             )
 
-        # 4. Split this block on the 100-element rich_text cap if needed.
+        # 5. Split this block on the 100-element rich_text cap if needed.
         result.extend(_split_block_on_element_limit(block, max_elements))
 
     return result

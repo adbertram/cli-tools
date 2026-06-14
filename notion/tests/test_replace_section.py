@@ -1,5 +1,7 @@
 import copy
 
+import pytest
+
 from notion_cli.client import NotionClient
 from notion_cli.commands import page
 
@@ -215,6 +217,109 @@ def test_replace_section_dry_run_does_not_upload_local_images(monkeypatch, tmp_p
 
     assert processed_images == []
     assert client.uploads == []
+
+
+class OrderRecordingClient(FakeClient):
+    """FakeClient that records the relative order of insert vs. delete calls.
+
+    replace-section is not atomic (it inserts the new section, then deletes the
+    old one). These tests prove the full new payload is transformed + validated
+    BEFORE any mutating call, so a pre-checkable failure can never leave the
+    section half-written with a duplicate heading.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def delete_block(self, block_id):
+        self.events.append(("delete", block_id))
+        super().delete_block(block_id)
+
+    def _upload_blocks_with_nesting(self, parent_id, blocks, progress_callback=None, after=None):
+        self.events.append(("insert", parent_id))
+        return super()._upload_blocks_with_nesting(
+            parent_id, blocks, progress_callback=progress_callback, after=after
+        )
+
+
+def test_replace_section_does_not_mutate_when_block_cannot_be_made_valid(monkeypatch):
+    """An unfixable oversize block aborts BEFORE any insert or delete.
+
+    enforce_block_limits handles real markdown, so -- mirroring test_block_limits
+    -- we force the post-transform validator to report an unfixable block and
+    assert the section is left completely untouched (no insert, no delete).
+    """
+    client = OrderRecordingClient()
+    warnings = []
+
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(
+        page, "text_to_blocks", lambda content, image_uploads=None: [heading("h", "First")]
+    )
+    monkeypatch.setattr(page, "print_warning", warnings.append)
+    # Force the pre-mutation validator to report an unfixable oversize block.
+    monkeypatch.setattr(
+        page,
+        "_find_oversize_rich_text",
+        lambda blocks: "blocks[0].paragraph.rich_text[0].text.content is 9999 chars (limit 2000)",
+    )
+
+    with pytest.raises(page.typer.Exit) as exc:
+        page.content_replace_section(
+            "parent-block",
+            heading="## First",
+            text="## First\n\nnew",
+            file=None,
+            dry_run=False,
+        )
+
+    assert exc.value.exit_code == 1
+    # CRITICAL: neither the delete nor the insert ran -- the section is intact.
+    assert client.events == []
+    assert client.deleted == []
+    assert client.uploads == []
+    # The page was never even fetched for mutation -- validation gated everything.
+    assert client.children_calls == []
+    assert any("left untouched" in w for w in warnings)
+
+
+def test_replace_section_normalizes_unsupported_code_language_before_any_delete(monkeypatch):
+    """A ```kql block in the new content is normalized to "plain text".
+
+    This exercises the REAL transform path (text_to_blocks + enforce_block_limits)
+    -- text_to_blocks is not stubbed -- so it proves BUG 1 (unsupported language)
+    and BUG 2 (atomic validation) together: the payload Notion receives is valid,
+    and the new payload is fully normalized before the first delete runs.
+    """
+    client = OrderRecordingClient()
+    printed_json = []
+
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(page, "print_success", lambda message: None)
+    monkeypatch.setattr(page, "print_json", printed_json.append)
+
+    page.content_replace_section(
+        "parent-block",
+        heading="## First",
+        text="## First\n\n```kql\nStormEvents | take 10\n```",
+        file=None,
+        dry_run=False,
+    )
+
+    # The inserted payload carries a normalized, Notion-accepted code language.
+    assert len(client.uploads) == 1
+    code_blocks = [b for b in client.uploads[0]["blocks"] if b.get("type") == "code"]
+    assert code_blocks, "expected a code block in the replacement payload"
+    assert code_blocks[0]["code"]["language"] == "plain text"
+
+    # Insert ran before any delete (documented order), and both ran exactly once
+    # set -- proving the section was replaced cleanly with no leftover duplicate.
+    insert_idx = client.events.index(("insert", "parent-block"))
+    delete_indexes = [i for i, e in enumerate(client.events) if e[0] == "delete"]
+    assert delete_indexes, "old section blocks should have been deleted"
+    assert insert_idx < min(delete_indexes)
+    assert sorted(client.deleted) == ["first-body", "first-heading"]
 
 
 def test_clean_block_for_creation_strips_type_icon_from_non_tab_blocks():
