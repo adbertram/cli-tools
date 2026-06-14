@@ -6,10 +6,10 @@ from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
+from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.output import print_error
 
 from . import __version__
-from .client import ClientError
 from . import commands
 from .config import get_config
 

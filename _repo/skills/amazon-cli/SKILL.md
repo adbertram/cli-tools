@@ -37,6 +37,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 Evidence commands require a saved browser session. If authentication is missing, run `amazon auth login` and complete the visible login flow. Do not invent order, purchase, receipt, or subscription details.
 </principle>
 
+<principle name="Evidence Auth Precheck">
+Before running any `amazon orders ...` evidence command, run `amazon auth status` in JSON mode and parse the browser-session status. If no profile has `credential_types.browser_session.authenticated` set to `true`, stop cleanly, report `AUTH_BLOCKED: amazon browser session is not authenticated`, and do not run the `orders` command.
+</principle>
+
 <principle name="Command Groups">
 - `auth`: Authentication commands for Amazon browser-session login, status, testing, logout, and profiles.
 - `orders`: Order evidence commands for visible order-history lines and transaction evidence matching.
