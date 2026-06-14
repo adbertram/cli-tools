@@ -206,6 +206,8 @@ google gmail list --label INBOX
 # Search messages
 google gmail search "from:boss@example.com"
 google gmail search "is:unread"
+google gmail search "is:unread" --properties id,from,subject,labelIds
+# Zero-result searches return [].
 
 # Get message metadata (includes attachment metadata if present)
 google gmail get <message-id>

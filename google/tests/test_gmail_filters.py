@@ -1,3 +1,4 @@
+import base64
 import json
 
 from typer.testing import CliRunner
@@ -41,9 +42,26 @@ class FakeFiltersResource:
         return FakeExecute({})
 
 
+class FakeMessagesResource:
+    def __init__(self, list_payload=None, get_payloads=None):
+        self.list_payload = list_payload
+        self.get_payloads = get_payloads or {}
+        self.list_calls = []
+        self.get_calls = []
+
+    def list(self, **kwargs):
+        self.list_calls.append(kwargs)
+        return FakeExecute(self.list_payload)
+
+    def get(self, **kwargs):
+        self.get_calls.append(kwargs)
+        return FakeExecute(self.get_payloads[kwargs["id"]])
+
+
 class FakeGmailService:
-    def __init__(self, filters_resource):
+    def __init__(self, filters_resource=None, messages_resource=None):
         self.filters_resource = filters_resource
+        self.messages_resource = messages_resource
 
     def users(self):
         return self
@@ -53,6 +71,9 @@ class FakeGmailService:
 
     def filters(self):
         return self.filters_resource
+
+    def messages(self):
+        return self.messages_resource
 
 
 class FakeClient:
@@ -76,6 +97,18 @@ def _patch_client(monkeypatch, filters_resource):
         gmail_commands, "get_client", lambda profile=None: FakeClient(service)
     )
     return filters_resource
+
+
+def _patch_message_client(monkeypatch, messages_resource):
+    service = FakeGmailService(messages_resource=messages_resource)
+    monkeypatch.setattr(
+        gmail_commands, "get_client", lambda profile=None: FakeClient(service)
+    )
+    return messages_resource
+
+
+def _encoded_body(text):
+    return base64.urlsafe_b64encode(text.encode("utf-8")).decode("ascii")
 
 
 def test_gmail_filters_list_outputs_flattened_records(monkeypatch):
@@ -208,3 +241,178 @@ def test_gmail_filters_delete_with_confirm_flag(monkeypatch):
         "deleted": True,
     }
     assert resource.delete_calls == [{"userId": "me", "id": "ANe1Bmj_filter1"}]
+
+
+def test_gmail_search_outputs_empty_json_array_for_no_results(monkeypatch):
+    resource = _patch_message_client(
+        monkeypatch, FakeMessagesResource(list_payload={})
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "search", "in:inbox subject:missing", "--limit", "20"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert resource.list_calls == [
+        {"userId": "me", "q": "in:inbox subject:missing", "maxResults": 20}
+    ]
+    assert resource.get_calls == []
+
+
+def test_gmail_search_supports_comma_separated_properties(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["INBOX"],
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "alerts@example.com"},
+                {"name": "Subject", "value": "Balance Alert"},
+                {"name": "Date", "value": "Fri, 12 Jun 2026 10:00:00 -0500"},
+            ]
+        },
+    }
+    resource = _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(
+            list_payload={"messages": [{"id": "msg-1"}]},
+            get_payloads={"msg-1": message},
+        ),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "gmail",
+            "search",
+            "subject:Balance Alert",
+            "--properties",
+            "id,from,subject,labelIds",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [
+        {
+            "id": "msg-1",
+            "from": "alerts@example.com",
+            "subject": "Balance Alert",
+            "labelIds": ["INBOX"],
+        }
+    ]
+    assert resource.get_calls == [
+        {"userId": "me", "id": "msg-1", "format": "full"}
+    ]
+
+
+def test_gmail_search_rejects_invalid_properties(monkeypatch):
+    _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(list_payload={"messages": [{"id": "msg-1"}]}),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "search", "subject:Balance", "--properties", "sender"],
+    )
+
+    assert result.exit_code == 1
+    assert "Unsupported Gmail message properties: sender" in result.stderr
+
+
+def test_gmail_list_include_body_adds_decoded_body(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["INBOX"],
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "alerts@example.com"},
+                {"name": "Subject", "value": "Balance Alert"},
+                {"name": "Date", "value": "Fri, 12 Jun 2026 10:00:00 -0500"},
+            ],
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": _encoded_body("Full inbox body")},
+                }
+            ],
+        },
+    }
+    resource = _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(
+            list_payload={"messages": [{"id": "msg-1"}]},
+            get_payloads={"msg-1": message},
+        ),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "gmail",
+            "list",
+            "--label",
+            "INBOX",
+            "--limit",
+            "1",
+            "--properties",
+            "id,subject",
+            "--include-body",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == [
+        {
+            "id": "msg-1",
+            "subject": "Balance Alert",
+            "body": "Full inbox body",
+        }
+    ]
+    assert resource.list_calls == [
+        {"userId": "me", "maxResults": 1, "labelIds": ["INBOX"]}
+    ]
+    assert resource.get_calls == [
+        {"userId": "me", "id": "msg-1", "format": "full"}
+    ]
+
+
+def test_gmail_get_include_body_outputs_decoded_body(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["INBOX"],
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "alerts@example.com"},
+                {"name": "To", "value": "adam@example.com"},
+                {"name": "Subject", "value": "Balance Alert"},
+                {"name": "Date", "value": "Fri, 12 Jun 2026 10:00:00 -0500"},
+            ],
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {"data": _encoded_body("Single message body")},
+                }
+            ],
+        },
+    }
+    resource = _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(get_payloads={"msg-1": message}),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "get", "msg-1", "--include-body"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    record = json.loads(result.stdout)
+    assert record["body"] == "Single message body"
+    assert resource.get_calls == [
+        {"userId": "me", "id": "msg-1", "format": "full"}
+    ]

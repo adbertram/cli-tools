@@ -72,6 +72,44 @@ app.add_typer(labels_app, name="labels")
 filters_app = typer.Typer(help="Manage Gmail filters")
 app.add_typer(filters_app, name="filters")
 
+GMAIL_MESSAGE_PROPERTIES = {
+    'id',
+    'from',
+    'to',
+    'subject',
+    'date',
+    'threadId',
+    'labelIds',
+    'attachments',
+}
+
+
+def resolve_gmail_message_properties(properties: Optional[List[str]], include_body: bool = False) -> List[str]:
+    if not properties:
+        return ['id', 'from', 'subject', 'date']
+
+    supported_properties = set(GMAIL_MESSAGE_PROPERTIES)
+    if include_body:
+        supported_properties.add('body')
+
+    parsed_properties = [
+        item.strip()
+        for value in properties
+        for item in value.split(',')
+        if item.strip()
+    ]
+    invalid_properties = [
+        item for item in parsed_properties if item not in supported_properties
+    ]
+    if invalid_properties:
+        supported = ', '.join(sorted(supported_properties))
+        raise ValueError(
+            f"Unsupported Gmail message properties: {', '.join(invalid_properties)}. "
+            f"Supported properties: {supported}"
+        )
+
+    return parsed_properties
+
 
 def normalize_filename(name: str) -> str:
     """Normalize a filename for comparison.
@@ -214,11 +252,13 @@ def gmail_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     label: Optional[str] = typer.Option(None, "--label", help="Filter by label (e.g., INBOX, SENT)"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
-    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments, body with --include-body"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded message body text in each result"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """List Gmail messages."""
     try:
+        props_to_include = resolve_gmail_message_properties(properties, include_body=include_body)
         client = get_client(profile=profile)
         service = client.get_gmail_service()
 
@@ -238,12 +278,8 @@ def gmail_list(
         messages = results.get('messages', [])
 
         if not messages:
-            # No messages - exit silently with success
+            print_json([])
             return
-
-        # Default properties
-        default_props = ['id', 'from', 'subject', 'date']
-        props_to_include = properties if properties else default_props
 
         # Get details for each message
         detailed_messages = []
@@ -274,14 +310,22 @@ def gmail_list(
             if attachments:
                 full_msg['attachments'] = attachments
 
+            if include_body:
+                full_msg['body'] = decode_body_from_payload(payload)
+
             # Filter to requested properties
             if properties:
-                full_msg = {k: v for k, v in full_msg.items() if k in props_to_include}
+                allowed_properties = set(props_to_include)
+                if include_body:
+                    allowed_properties.add('body')
+                full_msg = {k: v for k, v in full_msg.items() if k in allowed_properties}
 
             detailed_messages.append(full_msg)
 
         if table:
             table_cols = [p for p in ['subject', 'from', 'date'] if p in props_to_include or not properties]
+            if include_body:
+                table_cols.append('body')
             table_headers = [p.title() for p in table_cols]
             print_table(detailed_messages, table_cols, table_headers)
         else:
@@ -298,6 +342,7 @@ def gmail_get(
     message_id: str = typer.Argument(..., help="Message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Return raw API response without processing"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded message body text in the result"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Get a specific message."""
@@ -331,7 +376,13 @@ def gmail_get(
                 'subject': headers.get('Subject', ''),
                 'date': headers.get('Date', ''),
             }]
-            print_table(data, ['subject', 'from', 'date'], ['Subject', 'From', 'Date'])
+            table_cols = ['subject', 'from', 'date']
+            table_headers = ['Subject', 'From', 'Date']
+            if include_body:
+                data[0]['body'] = body
+                table_cols.append('body')
+                table_headers.append('Body')
+            print_table(data, table_cols, table_headers)
         else:
             result = {
                 'id': message['id'],
@@ -402,11 +453,12 @@ def gmail_search(
     query: str = typer.Argument(..., help="Search query (Gmail search syntax)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Search Gmail messages."""
     try:
+        props_to_include = resolve_gmail_message_properties(properties)
         client = get_client(profile=profile)
         service = client.get_gmail_service()
 
@@ -419,12 +471,8 @@ def gmail_search(
         messages = results.get('messages', [])
 
         if not messages:
-            # No messages - exit silently with success
+            print_json([])
             return
-
-        # Default properties
-        default_props = ['id', 'from', 'subject', 'date']
-        props_to_include = properties if properties else default_props
 
         # Get details for each message
         detailed_messages = []

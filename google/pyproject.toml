@@ -17,6 +17,11 @@ dependencies = [
     "pillow>=11.3.0",
 ]
 
+[dependency-groups]
+dev = [
+    "playwright>=1.40.0",
+]
+
 [project.scripts]
 google = "google_cli.main:app"
 

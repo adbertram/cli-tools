@@ -13,7 +13,12 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.CUSTOM, CredentialType.BROWSER_SESSION]
     CUSTOM_REQUIRED_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
-    CUSTOM_ALL_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
+    CUSTOM_ALL_FIELDS = [
+        "CLIENT_ID",
+        "CLIENT_SECRET",
+        "GOOGLE_SEARCHCONSOLE_SITE",
+        "GOOGLE_ANALYTICS_PROPERTY_ID",
+    ]
     LOGIN_INSTRUCTIONS = (
         "Create OAuth credentials at: https://console.cloud.google.com/apis/credentials\n"
         "  Click 'Create Credentials' > 'OAuth client ID' > type: 'Desktop app'\n"
