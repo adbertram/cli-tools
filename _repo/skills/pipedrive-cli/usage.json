@@ -1,0 +1,393 @@
+{
+  "tool": "pipedrive",
+  "description": "CLI interface for Pipedrive (browser automation)",
+  "discovered_at": "2026-05-20T16:13:34.866126+00:00",
+  "total_commands": 14,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "search": {
+      "help": "Search pipedrive",
+      "commands": {
+        "query": {
+          "help": "Search for items on Pipedrive. Example: pipedrive search query \"my search term\" --limit 20 --table pipedrive search query \"keyword\" --filter \"price:lt:100\" pipedrive search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Search Pipedrive items using a free-text query. Pass the required query text, `--limit/-l` to cap results, `--filter/-f` for client-side filtering, `--table/-t` for tabular output, and `--properties/-p` to select fields."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: pipedrive search item abc123 --table pipedrive search item \"https://example.com/item/abc123\" pipedrive search item abc123 --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Get one Pipedrive item by ID or URL. Pass the required item identifier, add `--table/-t` for a key-value table, and use `--properties/-p` to limit the returned fields."
+        },
+        "list": {
+          "help": "List items from Pipedrive. Example: pipedrive search list --limit 100 --table pipedrive search list --filter \"status:active\" pipedrive search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List Pipedrive items from the scaffolded browser source. Use `--limit/-l` to cap items, `--filter/-f` for client-side filtering, `--table/-t` for tabular output, and `--properties/-p` to select fields."
+        },
+        "wildcard": {
+          "help": "Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports * wildcards)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to search"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "pipedrive search wildcard \"*test*\"",
+            "pipedrive search wildcard \"prefix*\"",
+            "pipedrive search wildcard \"*pending*\" --fields \"status,notes\"",
+            "pipedrive search wildcard \"*error*\" --properties \"id,name,status\" --table"
+          ],
+          "usage_instructions": "Run client-side wildcard matching against scaffolded Pipedrive items. Pass a required wildcard query, use `--fields` to scope matching, `--limit/-l` to cap the scan, `--table/-t` for tabular output, and `--properties/-p` to select fields."
+        }
+      },
+      "usage_instructions": "Generic scaffold search surface for Pipedrive. Use these commands to query, list, inspect, or wildcard-match items once the browser parser and client methods are implemented for the target site."
+    },
+    "auth": {
+      "help": "Manage pipedrive authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Open or refresh the saved browser session for Pipedrive. Use `--profile/-p` for a named profile, `--force/-F` to clear and re-authenticate, and `--credential-type/-c` only when you need to target one credential type."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear saved `pipedrive` credentials and browser session data. Use `--profile/-p` to remove one profile instead of all saved sessions."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check whether saved Pipedrive credentials are present and authenticated. Use `--profile/-p` to inspect one profile or `--table/-t` for a compact multi-profile view."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Verify that the saved browser session for Pipedrive is still usable. Use `--profile/-p` to scope the check, `--table/-t` for summary output, and `--verbose/-v` for per-check details."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "List saved `pipedrive` authentication profiles. Use `--table/-t` for tabular output, `--limit/-l` to cap the result set, `--filter/-f` to narrow profiles, and `--properties/-p` to select fields."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Show details for one saved `pipedrive` profile. Pass the profile name as the required argument and add `--table/-t` for a key-value table view."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Create a named `pipedrive` profile from the template config. Use when you need a separate saved session for another Pipedrive account or environment."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Mark one `pipedrive` profile as the default profile. Use when future auth and data commands should use that profile unless `--profile/-p` is passed explicitly."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Delete a named `pipedrive` profile and its stored data. Use when a saved session is no longer needed or must be recreated cleanly."
+            }
+          },
+          "usage_instructions": "Manage named authentication profiles for `pipedrive`. Use these commands when you need separate saved sessions for different Pipedrive accounts or environments."
+        }
+      },
+      "usage_instructions": "Manage browser-session authentication for Pipedrive. Use `auth login` to create or refresh a session, `auth status` or `auth test` to verify it, and `auth profiles ...` to manage named saved sessions."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Delete cached `pipedrive` responses for the active profile. Use this when you need fresh results instead of cached browser-authenticated reads."
+        }
+      },
+      "usage_instructions": "Inspect or clear cached `pipedrive` responses. Use cache commands when you need to confirm cache state or force fresh browser-authenticated reads."
+    }
+  },
+  "usage_instructions": "Use for browser-based Pipedrive operations through the `pipedrive` CLI. Commands follow `pipedrive <group> <action>`; run `pipedrive auth login` first, use `auth status` or `auth test` to verify the saved session, and use `search` commands after the site-specific parser is implemented. Pass `--no-cache` when you need an uncached browser-authenticated read."
+}

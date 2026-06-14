@@ -1,0 +1,408 @@
+{
+  "tool": "cc-connect-slack-manager",
+  "description": "Manage the always-on Cody Slack cc-connect bridge",
+  "discovered_at": "2026-05-07T02:17:20.871766+00:00",
+  "total_commands": 20,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "checks": {
+      "help": "Run Cody bridge health checks",
+      "commands": {
+        "list": {
+          "help": "List Cody bridge health checks.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of checks",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "List all Cody bridge health checks. Use --table/-t for readable output, --limit/-l to cap rows, --filter/-f with field:op:value such as ok:eq:true, and --properties/-p to select fields."
+        },
+        "get": {
+          "help": "Get a single Cody bridge health check by ID.",
+          "arguments": [
+            {
+              "name": "check_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Health check ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Get one health check by required CHECK_ID, such as service-running or old-user-deactivated. Use --table/-t for a single-row table."
+        }
+      },
+      "usage_instructions": "Run health checks across the LaunchAgent, config files, Keychain token presence, and Slack identity state. Use checks list for all results and checks get CHECK_ID for one check."
+    },
+    "config": {
+      "help": "Show Cody bridge configuration",
+      "commands": {
+        "show": {
+          "help": "Show configured Cody bridge paths and identifiers.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show configured paths and IDs for the Cody bridge. Use --table/-t for a compact summary of app ID, bot user, DM channel, and config path."
+        }
+      },
+      "usage_instructions": "Show static Cody bridge paths and Slack identifiers. Use this before editing LaunchAgent, wrapper, or cc-connect config files."
+    },
+    "service": {
+      "help": "Manage Cody bridge service",
+      "commands": {
+        "status": {
+          "help": "Show LaunchAgent status.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show LaunchAgent load and runtime state. Use --table/-t for a compact label, loaded, running, PID, and state view."
+        },
+        "start": {
+          "help": "Bootstrap the Cody cc-connect LaunchAgent.",
+          "usage_instructions": "Bootstrap the Cody cc-connect LaunchAgent from its plist. Use when the service is not loaded; use service restart for an already loaded service."
+        },
+        "stop": {
+          "help": "Boot out the Cody cc-connect LaunchAgent.",
+          "usage_instructions": "Boot out the Cody cc-connect LaunchAgent. This stops the always-on Slack bridge until service start is run again."
+        },
+        "restart": {
+          "help": "Restart the Cody cc-connect LaunchAgent.",
+          "usage_instructions": "Restart the loaded Cody cc-connect LaunchAgent with launchctl kickstart -k. Use after changing config, wrapper, or token state."
+        },
+        "logs": {
+          "help": "Show recent Cody cc-connect logs.",
+          "options": [
+            {
+              "name": "--stream",
+              "type": "TEXT",
+              "required": false,
+              "help": "stdout or stderr",
+              "short": "-s",
+              "default": "stdout"
+            },
+            {
+              "name": "--lines",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of lines",
+              "short": "-l",
+              "default": "80"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show recent Cody bridge logs. Use --stream/-s stdout or stderr and --lines/-l to choose line count; default stream is stdout and default lines is 80."
+        }
+      },
+      "usage_instructions": "Manage the macOS LaunchAgent for the Cody cc-connect bridge. Use status before start, stop, or restart so the current service state is explicit."
+    },
+    "app": {
+      "help": "Verify and test the Cody Slack app",
+      "commands": {
+        "verify": {
+          "help": "Verify the new Cody bot and old Cody member state.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Verify the active Cody bot and old Cody user through the Slack CLI default profile. Use --table/-t to confirm the new bot is not deleted and the old user is deleted."
+        },
+        "send-test": {
+          "help": "Send a test message from the Cody app into Adam's Cody DM.",
+          "arguments": [
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message text to send to Adam's Cody app DM"
+            }
+          ],
+          "usage_instructions": "Send a required TEXT argument from the Cody Slack app into Adam Cody app DM. The command uses the bot token from Keychain and does not print the token."
+        }
+      },
+      "usage_instructions": "Verify and test the Cody Slack app identity. Use app verify to confirm the new bot and old user state, and app send-test to send a bot-authored smoke message to Adam Cody DM."
+    },
+    "tokens": {
+      "help": "Check Keychain token status",
+      "commands": {
+        "status": {
+          "help": "Show whether required Slack tokens exist in Keychain.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Show whether CODY_SLACK_BOT_TOKEN and CODY_SLACK_APP_TOKEN exist in Keychain. Use --table/-t for service, account, and present columns."
+        }
+      },
+      "usage_instructions": "Check required Keychain token presence for the Slack app bridge. This group reports whether token services exist and never prints token values."
+    },
+    "auth": {
+      "help": "Manage local bridge authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `cc-connect-slack-manager auth login` to configure local bridge authentication."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cc-connect-slack-manager auth logout` to clear stored credentials."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `cc-connect-slack-manager auth status` to verify local bridge authentication."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `cc-connect-slack-manager auth test` to run live bridge authentication checks."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `cc-connect-slack-manager auth profiles list` to list saved profiles."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `cc-connect-slack-manager auth profiles get` to inspect one profile."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `cc-connect-slack-manager auth profiles create` to create a new profile."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `cc-connect-slack-manager auth profiles set-default` to select the default profile."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `cc-connect-slack-manager auth profiles delete` to remove a profile."
+            }
+          },
+          "usage_instructions": "Use `cc-connect-slack-manager auth profiles` to manage named profiles."
+        }
+      },
+      "usage_instructions": "Use `cc-connect-slack-manager auth` to manage bridge authentication and profiles."
+    }
+  },
+  "usage_instructions": "Use cc-connect-slack-manager to inspect and manage the always-on Cody Slack app bridge in ATA Learning. Commands follow cc-connect-slack-manager <group> <action>; JSON is the default and --table/-t is available on status-style commands. Never use this tool to reveal Slack token values; token commands only report presence."
+}

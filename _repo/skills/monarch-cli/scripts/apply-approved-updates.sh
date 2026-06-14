@@ -194,11 +194,14 @@ def main() -> int:
             overall_ok = False
             continue
         argv = ["monarch", "transactions", "update", row["transaction_id"], "--category", cat_id]
+        if not args.no_clear_needs_review:
+            argv.append("--no-needs-review")
         rc, stdout, stderr = run_capture(argv, args.dry_run)
         result = {
             "row": row_num,
             "transaction_id": row["transaction_id"],
             "category_id": cat_id,
+            "clear_needs_review": not args.no_clear_needs_review,
             "status": "ok" if rc == 0 else "failed",
             "stderr": stderr if rc != 0 else None,
         }

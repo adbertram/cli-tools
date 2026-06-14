@@ -1,0 +1,678 @@
+{
+  "tool": "n8n-node",
+  "description": "Manage n8n community node packages - convert CLI tools, generate, and inspect",
+  "discovered_at": "2026-05-20T16:13:15.923658+00:00",
+  "total_commands": 20,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "convert-cli-tool": {
+      "help": "Convert a CLI tool into an n8n community node package. Parses the CLI tool's commands, parameters, and credentials, then generates a complete n8n node package with TypeScript source, credentials, README, and a bundled copy of the CLI tool source (under cli/). The CLI venv is created on the server during deploy. Example: n8n-node convert-cli-tool brickowl n8n-node convert-cli-tool shippo --output-dir ./output n8n-node convert-cli-tool brickowl --force",
+      "arguments": [
+        {
+          "name": "cli_name",
+          "type": "TEXT",
+          "required": true,
+          "help": "CLI tool name to convert"
+        }
+      ],
+      "options": [
+        {
+          "name": "--output-dir",
+          "type": "TEXT",
+          "required": false,
+          "help": "Override output directory",
+          "short": "-o"
+        },
+        {
+          "name": "--force",
+          "type": "bool",
+          "required": false,
+          "help": "Overwrite existing package",
+          "short": "-F"
+        }
+      ],
+      "usage_instructions": "Use to generate a complete n8n node package from a CLI tool. CLI_NAME is positional and required. Generates TypeScript source, credentials, README, and bundled CLI source. Use --output-dir/-o to override output. Use --force/-F to overwrite existing."
+    },
+    "test": {
+      "help": "Test an n8n node by creating a temporary workflow and executing it. Creates a workflow with a Webhook trigger connected to the specified node, activates it, triggers via webhook, polls for completion, and verifies success. Requires: - The n8n node must already be installed on the n8n server - n8n API credentials in /Users/adam/Dropbox/GitRepos/Agents/skills/n8n/.env Example: n8n-node test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n-node test brickowl --resource order --operation list --timeout 120",
+      "arguments": [
+        {
+          "name": "node_name",
+          "type": "TEXT",
+          "required": true,
+          "help": "Name of the n8n node to test (e.g., claudecode)"
+        }
+      ],
+      "options": [
+        {
+          "name": "--resource",
+          "type": "TEXT",
+          "required": false,
+          "help": "Resource to test (e.g., order)",
+          "short": "-r"
+        },
+        {
+          "name": "--operation",
+          "type": "TEXT",
+          "required": false,
+          "help": "Operation to test (e.g., list)",
+          "short": "-o"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Execution timeout in seconds",
+          "short": "-t",
+          "default": "60"
+        },
+        {
+          "name": "--no-cleanup",
+          "type": "bool",
+          "required": false,
+          "help": "Keep workflow after test (don't delete)"
+        },
+        {
+          "name": "--params",
+          "type": "TEXT",
+          "required": false,
+          "help": "Extra node parameters as JSON string",
+          "short": "-p"
+        },
+        {
+          "name": "--credentials",
+          "type": "TEXT",
+          "required": false,
+          "help": "Node credentials as JSON string, e.g. '{\"claudeCodeApi\":{\"id\":\"abc\",\"name\":\"My Cred\"}}'",
+          "short": "-c"
+        },
+        {
+          "name": "--node-type",
+          "type": "TEXT",
+          "required": false,
+          "help": "Override full node type (e.g., n8n-nodes-claudecode.claudeCode)"
+        }
+      ],
+      "usage_instructions": "Use to test an installed n8n node. Creates a webhook-triggered workflow, executes it, and verifies success. NODE_NAME is positional. Use --resource/-r and --operation/-o to specify what to test. Use --params/-p for JSON parameters. Use --credentials/-c for JSON credentials. Default timeout is 60s. Use --no-cleanup to keep the test workflow."
+    },
+    "deploy": {
+      "help": "Deploy an n8n node package to the n8n server (adam-server). Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n-node deploy brickowl n8n-node deploy brickowl --skip-build",
+      "arguments": [
+        {
+          "name": "node_name",
+          "type": "TEXT",
+          "required": true,
+          "help": "Node name to deploy (e.g., brickowl)"
+        }
+      ],
+      "options": [
+        {
+          "name": "--skip-build",
+          "type": "bool",
+          "required": false,
+          "help": "Skip npm install and build"
+        },
+        {
+          "name": "--skip-restart",
+          "type": "bool",
+          "required": false,
+          "help": "Skip n8n server restart"
+        },
+        {
+          "name": "--skip-verify",
+          "type": "bool",
+          "required": false,
+          "help": "Skip node verification"
+        }
+      ],
+      "usage_instructions": "Use to deploy a generated node package to adam-server. Builds TypeScript, rsyncs to server, npm installs, creates CLI venv, creates n8n credentials from CLI .env, restarts n8n, and verifies. NODE_NAME is positional. Use --skip-build, --skip-restart, or --skip-verify to skip specific steps."
+    },
+    "tools": {
+      "help": "List and inspect available CLI tools",
+      "commands": {
+        "list": {
+          "help": "List available CLI tools that can be converted to n8n nodes. Example: n8n-node tools list n8n-node tools list --table n8n-node tools list --limit 10",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse available CLI tools. Default limit is 100. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Inspect a CLI tool's metadata (command groups, commands, parameters, credentials). Example: n8n-node tools get brickowl n8n-node tools get shippo --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "CLI tool name to inspect"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to inspect a CLI tool's commands, parameters, and credentials before conversion. NAME is positional."
+        }
+      },
+      "usage_instructions": "Tool inspection -- list and inspect CLI tools before conversion."
+    },
+    "nodes": {
+      "help": "List and inspect generated n8n node packages",
+      "commands": {
+        "list": {
+          "help": "List n8n node packages. Without --type, lists locally generated packages (from convert-cli-tool). With --type, queries the n8n server for installed nodes. Example: n8n-node nodes list                    # locally generated packages n8n-node nodes list --type default     # built-in nodes on server n8n-node nodes list --type community   # community nodes on server n8n-node nodes list --type community --table",
+          "options": [
+            {
+              "name": "--type",
+              "type": "bool",
+              "required": false,
+              "help": "[default|community]  Node source: 'default' (built-in) or 'community' (installed packages)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use without --type for locally generated packages. Use --type default for built-in nodes on server, --type community for installed community nodes. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get details for a specific generated n8n node package. Example: n8n-node nodes get brickowl n8n-node nodes get brickowl --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name or CLI tool name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to view package details by NAME. Use --table/-t for formatted output."
+        }
+      },
+      "usage_instructions": "Node package inspection -- list local or server-installed packages and get details."
+    },
+    "credentials": {
+      "help": "Manage n8n credentials on the server",
+      "commands": {
+        "list": {
+          "help": "List all credentials on the n8n server. Example: n8n-node credentials list n8n-node credentials list --table",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use to browse all credentials on the server. Use --table/-t for formatted output."
+        },
+        "get": {
+          "help": "Get a credential summary by ID. Example: n8n-node credentials get qe03iDk3T8FNbNTg n8n-node credentials get qe03iDk3T8FNbNTg --table",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID to inspect"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `n8n-node credentials get --help` for exact arguments and options."
+        },
+        "create": {
+          "help": "Create a credential on the n8n server. The credential type must match a type defined by an installed node. Use 'n8n-node credentials schema <type>' to see required fields. Example: n8n-node credentials create brickowlApi '{\"apiKey\": \"abc123\"}' n8n-node credentials create brickowlApi '{\"apiKey\": \"abc\"}' --name \"Brickowl Prod\"",
+          "arguments": [
+            {
+              "name": "cred_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential type name (e.g., brickowlApi)"
+            },
+            {
+              "name": "data",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential data as JSON string"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Display name (defaults to credential type)",
+              "short": "-n"
+            }
+          ],
+          "usage_instructions": "Use to create a new credential. CRED_TYPE is the credential type name (must match an installed node type). DATA is a JSON string with credential fields. Use --name/-n to set a display name. Use `credentials schema` first to see required fields."
+        },
+        "delete": {
+          "help": "Delete a credential from the n8n server. Example: n8n-node credentials delete qe03iDk3T8FNbNTg",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID to delete"
+            }
+          ],
+          "usage_instructions": "Use to remove a credential by CREDENTIAL_ID."
+        },
+        "schema": {
+          "help": "Show the JSON schema for a credential type (required fields and properties). Example: n8n-node credentials schema brickowlApi n8n-node credentials schema brickfreedomApi",
+          "arguments": [
+            {
+              "name": "cred_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential type name (e.g., brickowlApi)"
+            }
+          ],
+          "usage_instructions": "Use to view required fields before creating a credential. CRED_TYPE is the credential type name."
+        }
+      },
+      "usage_instructions": "Server credential management -- list, create, delete, and view schemas for n8n credentials on adam-server."
+    },
+    "logs": {
+      "help": "Query n8n logs, events, and execution history",
+      "commands": {
+        "executions": {
+          "help": "Query execution history by timeframe via the n8n API. Paginates through all executions and filters by date client-side (the API has no date filter parameter).",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today",
+              "short": "-f"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End datetime. Default: now",
+              "short": "-t"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (error, success, running, canceled, waiting)",
+              "short": "-s"
+            },
+            {
+              "name": "--workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by workflow ID",
+              "short": "-w"
+            },
+            {
+              "name": "--include-data",
+              "type": "bool",
+              "required": false,
+              "help": "Include full execution data (large output)",
+              "short": "-d"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            }
+          ],
+          "examples": [
+            "n8n-node logs executions --from 2026-02-12 --status error",
+            "n8n-node logs executions --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\" --table",
+            "n8n-node logs executions --workflow-id 17VB4GJjjp0ijgjJ"
+          ],
+          "usage_instructions": "Use to query workflow executions. Filter by date with --from/-f and --to/-t (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Filter by --status/-s (error, success, running, canceled, waiting) or --workflow-id/-w. Default limit is 100. Use --include-data/-d for full execution data. Use --table for formatted output."
+        },
+        "events": {
+          "help": "Query event log files (EventBus) by timeframe via SSH. Parses n8nEventLog*.log JSON files for audit events, workflow events, and node events.",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today",
+              "short": "-f"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End datetime. Default: now",
+              "short": "-t"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by type: audit, workflow, node"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by event name (substring match, e.g. 'login', 'failed')",
+              "short": "-n"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table"
+            },
+            {
+              "name": "--data-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "n8n data directory on server",
+              "default": "/var/root/.n8n"
+            }
+          ],
+          "examples": [
+            "n8n-node logs events --from 2026-02-12 --type audit --table",
+            "n8n-node logs events --from \"2026-02-12T08:00\" --name failed",
+            "n8n-node logs events --type workflow --table"
+          ],
+          "usage_instructions": "Use to query audit, workflow, and node events from EventBus logs. Filter by --type (audit, workflow, node) or --name/-n (substring match). Date range via --from/-f and --to/-t. Use --table for formatted output."
+        },
+        "app": {
+          "help": "View application logs from the n8n server via SSH.",
+          "options": [
+            {
+              "name": "--lines",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of lines to show",
+              "short": "-n",
+              "default": "50"
+            },
+            {
+              "name": "--log-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Log file path on server",
+              "default": "/var/log/n8n.log"
+            }
+          ],
+          "examples": [
+            "n8n-node logs app",
+            "n8n-node logs app --lines 200"
+          ],
+          "usage_instructions": "Use to view recent n8n application logs. Default shows 50 lines; change with --lines/-n."
+        },
+        "errors": {
+          "help": "View error logs from the n8n server via SSH.",
+          "options": [
+            {
+              "name": "--lines",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of lines to show",
+              "short": "-n",
+              "default": "50"
+            },
+            {
+              "name": "--log-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Error log file path on server",
+              "default": "/var/log/n8n.error.log"
+            }
+          ],
+          "examples": [
+            "n8n-node logs errors",
+            "n8n-node logs errors --lines 100"
+          ],
+          "usage_instructions": "Use to view recent n8n error logs. Default shows 50 lines; change with --lines/-n."
+        },
+        "all": {
+          "help": "Combined troubleshooting dump: executions + events + app logs + error logs. Collects from all 4 data sources for the given timeframe and outputs a structured JSON report.",
+          "options": [
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start datetime. Default: start of today",
+              "short": "-f"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End datetime. Default: now",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results per source",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--data-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "n8n data directory on server",
+              "default": "/var/root/.n8n"
+            }
+          ],
+          "examples": [
+            "n8n-node logs all --from 2026-02-12",
+            "n8n-node logs all --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\""
+          ],
+          "usage_instructions": "Use for comprehensive troubleshooting. Collects from all 4 log sources for the given timeframe and outputs structured JSON. Date range via --from/-f and --to/-t. Default limit is 50 per source."
+        },
+        "config": {
+          "help": "Show current logging configuration from the n8n LaunchDaemon plist. Displays environment variables related to logging and their current values. Example: n8n-node logs config",
+          "options": [
+            {
+              "name": "--plist",
+              "type": "TEXT",
+              "required": false,
+              "help": "LaunchDaemon plist path on server",
+              "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+            }
+          ],
+          "usage_instructions": "Use to view current log level, format, and output settings."
+        },
+        "set-level": {
+          "help": "Set n8n log level and optionally other logging settings. Modifies the LaunchDaemon plist on the server and restarts n8n.",
+          "arguments": [
+            {
+              "name": "level",
+              "type": "TEXT",
+              "required": true,
+              "help": "Log level: silent, error, warn, info, debug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Log format: text, json"
+            },
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Log output: console, file, console,file"
+            },
+            {
+              "name": "--db-logging",
+              "type": "bool",
+              "required": false,
+              "help": "Enable/disable database query logging"
+            },
+            {
+              "name": "--restart",
+              "type": "bool",
+              "required": false,
+              "help": "--no-restart          Restart n8n after changing config",
+              "default": "restart"
+            },
+            {
+              "name": "--plist",
+              "type": "TEXT",
+              "required": false,
+              "help": "LaunchDaemon plist path on server",
+              "default": "/Library/LaunchDaemons/com.n8n.server.plist"
+            }
+          ],
+          "examples": [
+            "n8n-node logs set-level debug",
+            "n8n-node logs set-level debug --format json --output console,file",
+            "n8n-node logs set-level info --no-restart",
+            "n8n-node logs set-level error --db-logging"
+          ],
+          "usage_instructions": "Use to change the n8n log level. LEVEL is positional (silent, error, warn, info, debug). Optionally set --format (text, json), --output (console, file, console,file), and --db-logging. Restarts n8n by default; use --no-restart to skip."
+        }
+      },
+      "usage_instructions": "Log and execution management -- query executions, events, app logs, error logs, view config, and set log level. All on adam-server via SSH/API."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `n8n-node cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `n8n-node cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for converting CLI tools into n8n community node packages, deploying them to adam-server, testing nodes, managing credentials, and querying logs. Top-level commands: convert-cli-tool, test, deploy. Groups: auth, tools, nodes, credentials, logs."
+}

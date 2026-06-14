@@ -1,8 +1,8 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-05-20T16:21:54.631770+00:00",
-  "total_commands": 23,
+  "discovered_at": "2026-06-12T05:00:19Z",
+  "total_commands": 24,
   "global_options": [
     {
       "name": "--version",
@@ -19,11 +19,302 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Manage Facebook authentication",
+      "usage_instructions": "Use to manage browser session authentication. Must run `facebook auth login` before using any other commands. Uses headed browser for login.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to authenticate with Facebook. Opens a headed browser for manual login. Use --force/-F to re-authenticate. Use --profile/-p for named profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Use to close browser session and clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use to manage multiple Facebook accounts via named profiles.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a new named profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to permanently delete a profile. Use --force/-F to skip confirmation.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to see details for a specific profile by NAME.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use to see all configured profiles with default status.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Use to check if a browser session is active. Exit code 0 if authenticated, 2 if not.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to verify browser session is active. Use --verbose/-v for detailed output. Exit code 0 if working, 2 if not.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use to manage cached responses. Clear cache when data seems stale.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use to clear all cached data. Use when getting stale results.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
     "groups": {
       "help": "Manage Facebook Groups",
+      "usage_instructions": "Use to read and extract posts from Facebook Groups. Requires group ID or slug name. Posts are extracted via browser DOM traversal with automatic scrolling for pagination.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a specific Facebook Group by ID.",
+          "examples": [
+            "facebook groups get 123456789",
+            "facebook groups get 123456789 --table"
+          ],
+          "usage_instructions": "Use to get details of a single group post. POST_URL is required — accepts full Facebook URL or shorthand path like '123/posts/456'. Returns post content, author, timestamp, reactions, and comments.",
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Group ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List Facebook Groups the logged-in user has joined.",
+          "examples": [
+            "facebook groups list",
+            "facebook groups list --table --limit 50",
+            "facebook groups list --filter \"name:contains:Python\""
+          ],
+          "usage_instructions": "Use to read posts from a specific Facebook Group. GROUP_ID is required — accepts numeric ID or group slug/name. Default limit is 20 posts. Use --filter/-f to filter by author, text, or other fields. Returns post_id, author, text, timestamp, url, reactions, comments.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -53,100 +344,91 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "facebook groups list",
-            "facebook groups list --table --limit 50",
-            "facebook groups list --filter \"name:contains:Python\""
-          ],
-          "usage_instructions": "Use to read posts from a specific Facebook Group. GROUP_ID is required \u2014 accepts numeric ID or group slug/name. Default limit is 20 posts. Use --filter/-f to filter by author, text, or other fields. Returns post_id, author, text, timestamp, url, reactions, comments."
-        },
-        "get": {
-          "help": "Get a specific Facebook Group by ID.",
-          "arguments": [
-            {
-              "name": "group_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Group ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "facebook groups get 123456789",
-            "facebook groups get 123456789 --table"
-          ],
-          "usage_instructions": "Use to get details of a single group post. POST_URL is required \u2014 accepts full Facebook URL or shorthand path like '123/posts/456'. Returns post content, author, timestamp, reactions, and comments."
+          ]
         },
         "posts": {
           "help": "Manage posts in Facebook Groups",
+          "usage_instructions": "Run `facebook groups posts --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
           "commands": {
-            "list": {
-              "help": "List posts from a Facebook Group.",
+            "comment": {
+              "help": "Comment on a Facebook Group post.",
+              "examples": [
+                "facebook groups posts comment https://www.facebook.com/groups/123/posts/456 --text \"Great post!\"",
+                "facebook groups posts comment 123/posts/456 -m \"Thanks for sharing\""
+              ],
+              "usage_instructions": "Run `facebook groups posts comment --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "post_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post URL or 'group_id/posts/post_id'"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text",
+                  "short": "-m"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "create": {
+              "help": "Create a new post in a Facebook Group.",
+              "examples": [
+                "facebook groups posts create 123456789 --text \"Hello everyone!\"",
+                "facebook groups posts create 123456789 -m \"Looking for advice on shipping\""
+              ],
+              "usage_instructions": "Run `facebook groups posts create --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "group_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Group ID or name/slug"
+                  "help": "Group ID"
                 }
               ],
               "options": [
                 {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post content text",
+                  "short": "-m"
                 },
                 {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "RANGE [1<=x<=20]  Maximum number of results",
-                  "short": "-l",
-                  "default": "20"
-                },
-                {
-                  "name": "--filter",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated fields to include",
-                  "short": "-p"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "facebook groups posts list 123456789",
-                "facebook groups posts list my-group-name --table --limit 10",
-                "facebook groups posts list 123456789 --filter \"author:contains:John\""
-              ],
-              "usage_instructions": "Run `facebook groups posts list --help` for exact arguments and options."
+              ]
             },
             "get": {
               "help": "Get a specific post from a Facebook Group. Accepts a full post URL or a path like 'group_id/posts/post_id'.",
+              "examples": [
+                "facebook groups posts get https://www.facebook.com/groups/123/posts/456",
+                "facebook groups posts get 123/posts/456",
+                "facebook groups posts get 123/posts/456 --table"
+              ],
+              "usage_instructions": "Run `facebook groups posts get --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "post_url",
@@ -169,67 +451,82 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "facebook groups posts get https://www.facebook.com/groups/123/posts/456",
-                "facebook groups posts get 123/posts/456",
-                "facebook groups posts get 123/posts/456 --table"
-              ],
-              "usage_instructions": "Run `facebook groups posts get --help` for exact arguments and options."
+              ]
             },
-            "create": {
-              "help": "Create a new post in a Facebook Group.",
+            "list": {
+              "help": "List posts from a Facebook Group.",
+              "examples": [
+                "facebook groups posts list 123456789",
+                "facebook groups posts list my-group-name --table --limit 10",
+                "facebook groups posts list 123456789 --filter \"author:contains:John\""
+              ],
+              "usage_instructions": "Run `facebook groups posts list --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "group_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Group ID"
+                  "help": "Group ID or name/slug"
                 }
               ],
               "options": [
                 {
-                  "name": "--text",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Post content text",
-                  "short": "-m"
-                }
-              ],
-              "examples": [
-                "facebook groups posts create 123456789 --text \"Hello everyone!\"",
-                "facebook groups posts create 123456789 -m \"Looking for advice on shipping\""
-              ],
-              "usage_instructions": "Run `facebook groups posts create --help` for exact arguments and options."
-            },
-            "comment": {
-              "help": "Comment on a Facebook Group post.",
-              "arguments": [
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
                 {
-                  "name": "post_url",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Post URL or 'group_id/posts/post_id'"
-                }
-              ],
-              "options": [
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "RANGE [1<=x<=25]  Maximum number of results",
+                  "short": "-l",
+                  "default": "20"
+                },
                 {
-                  "name": "--text",
+                  "name": "--full-threads",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Fetch full thread metadata for each returned post"
+                },
+                {
+                  "name": "--filter",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "Comment text",
-                  "short": "-m"
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "facebook groups posts comment https://www.facebook.com/groups/123/posts/456 --text \"Great post!\"",
-                "facebook groups posts comment 123/posts/456 -m \"Thanks for sharing\""
-              ],
-              "usage_instructions": "Run `facebook groups posts comment --help` for exact arguments and options."
+              ]
             },
             "reply": {
               "help": "Reply to a comment on a Facebook Group post.",
+              "examples": [
+                "facebook groups posts reply https://www.facebook.com/groups/123/posts/456 --comment-index 1 --text \"Good point!\"",
+                "facebook groups posts reply 123/posts/456 -c 2 -m \"I agree\""
+              ],
+              "usage_instructions": "Run `facebook groups posts reply --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "post_url",
@@ -252,25 +549,91 @@
                   "required": true,
                   "help": "1-based index of the comment to reply to",
                   "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "facebook groups posts reply https://www.facebook.com/groups/123/posts/456 --comment-index 1 --text \"Good point!\"",
-                "facebook groups posts reply 123/posts/456 -c 2 -m \"I agree\""
-              ],
-              "usage_instructions": "Run `facebook groups posts reply --help` for exact arguments and options."
+              ]
             }
-          },
-          "usage_instructions": "Run `facebook groups posts --help` for exact arguments and options."
+          }
         }
-      },
-      "usage_instructions": "Use to read and extract posts from Facebook Groups. Requires group ID or slug name. Posts are extracted via browser DOM traversal with automatic scrolling for pagination."
+      }
     },
     "marketplace": {
       "help": "Search and browse Facebook Marketplace",
+      "usage_instructions": "Use to search and browse Facebook Marketplace listings. Supports keyword search, price filtering, location, and image downloading. Default location is 'evansville'.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific Facebook Marketplace listing.",
+          "examples": [
+            "facebook marketplace get 123456789",
+            "facebook marketplace get 123456789 --table",
+            "facebook marketplace get 123456789 --properties title,price,location",
+            "facebook marketplace get 123456789 --download-images"
+          ],
+          "usage_instructions": "Use to get full details of a single Marketplace listing by ITEM_ID. Use --download-images to save photos locally. Returns title, price, location, description, and URL.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace listing item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--download-images",
+              "type": "bool",
+              "required": false,
+              "help": "Download listing images to local cache"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List Facebook Marketplace listings. Without --query, browses \"Today's picks\" for the location. With --query, searches by keyword. Scrolls automatically to load enough listings to satisfy --limit.",
+          "examples": [
+            "facebook marketplace list",
+            "facebook marketplace list --query \"LEGO\"",
+            "facebook marketplace list --query \"couch\" --min-price 50 --max-price 500",
+            "facebook marketplace list --location chicago --table --limit 20",
+            "facebook marketplace list --query \"LEGO\" --include-detail",
+            "facebook marketplace list --query \"LEGO\" --download-images",
+            "facebook marketplace list --query \"LEGO\" --limit 75"
+          ],
+          "usage_instructions": "Use to browse or search Marketplace. Without --query/-q, shows 'Today's picks'. With --query/-q, searches by keyword. Location defaults to 'evansville'; change with --location/-L. Use --min-price/--max-price for price range. Use --include-detail to fetch full descriptions. Use --download-images to save listing photos locally. Default limit is 50.",
+          "arguments": [],
           "options": [
             {
               "name": "--query",
@@ -339,27 +702,44 @@
               "type": "bool",
               "required": false,
               "help": "Download listing images to local cache (implies --include-detail)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "facebook marketplace list",
-            "facebook marketplace list --query \"LEGO\"",
-            "facebook marketplace list --query \"couch\" --min-price 50 --max-price 500",
-            "facebook marketplace list --location chicago --table --limit 20",
-            "facebook marketplace list --query \"LEGO\" --include-detail",
-            "facebook marketplace list --query \"LEGO\" --download-images",
-            "facebook marketplace list --query \"LEGO\" --limit 75"
-          ],
-          "usage_instructions": "Use to browse or search Marketplace. Without --query/-q, shows 'Today's picks'. With --query/-q, searches by keyword. Location defaults to 'evansville'; change with --location/-L. Use --min-price/--max-price for price range. Use --include-detail to fetch full descriptions. Use --download-images to save listing photos locally. Default limit is 50."
-        },
+          ]
+        }
+      }
+    },
+    "messenger": {
+      "help": "Facebook Messenger conversations and messages",
+      "usage_instructions": "Use to read Messenger conversations, view messages, send messages, and check message requests. Conversation IDs are required for get/send commands.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
-          "help": "Get details for a specific Facebook Marketplace listing.",
+          "help": "Get a conversation with its messages.",
+          "examples": [
+            "facebook messenger get 123456789",
+            "facebook messenger get 123456789 --table",
+            "facebook messenger get 123456789 --limit 20"
+          ],
+          "usage_instructions": "Use to read messages from a specific conversation. CONVERSATION_ID is required. Default limit is 50 messages.",
           "arguments": [
             {
-              "name": "item_id",
+              "name": "conversation_id",
               "type": "TEXT",
               "required": true,
-              "help": "Marketplace listing item ID"
+              "help": "Conversation/thread ID"
             }
           ],
           "options": [
@@ -371,35 +751,31 @@
               "short": "-t"
             },
             {
-              "name": "--properties",
-              "type": "TEXT",
+              "name": "--limit",
+              "type": "INTEGER",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Maximum number of messages",
+              "short": "-l",
+              "default": "50"
             },
             {
-              "name": "--download-images",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Download listing images to local cache"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "facebook marketplace get 123456789",
-            "facebook marketplace get 123456789 --table",
-            "facebook marketplace get 123456789 --properties title,price,location",
-            "facebook marketplace get 123456789 --download-images"
-          ],
-          "usage_instructions": "Use to get full details of a single Marketplace listing by ITEM_ID. Use --download-images to save photos locally. Returns title, price, location, description, and URL."
-        }
-      },
-      "usage_instructions": "Use to search and browse Facebook Marketplace listings. Supports keyword search, price filtering, location, and image downloading. Default location is 'evansville'."
-    },
-    "messenger": {
-      "help": "Facebook Messenger conversations and messages",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List Messenger conversations.",
+          "examples": [
+            "facebook messenger list",
+            "facebook messenger list --table --limit 10",
+            "facebook messenger list --filter \"name:contains:John\"",
+            "facebook messenger list --properties id,name"
+          ],
+          "usage_instructions": "Use to list recent Messenger conversations. Default limit is 20. Use --filter/-f to search by name (e.g., --filter \"name:contains:John\"). Returns id, name, and snippet.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -429,77 +805,24 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "facebook messenger list",
-            "facebook messenger list --table --limit 10",
-            "facebook messenger list --filter \"name:contains:John\"",
-            "facebook messenger list --properties id,name"
-          ],
-          "usage_instructions": "Use to list recent Messenger conversations. Default limit is 20. Use --filter/-f to search by name (e.g., --filter \"name:contains:John\"). Returns id, name, and snippet."
-        },
-        "get": {
-          "help": "Get a conversation with its messages.",
-          "arguments": [
-            {
-              "name": "conversation_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Conversation/thread ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Maximum number of messages",
-              "short": "-l",
-              "default": "50"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "facebook messenger get 123456789",
-            "facebook messenger get 123456789 --table",
-            "facebook messenger get 123456789 --limit 20"
-          ],
-          "usage_instructions": "Use to read messages from a specific conversation. CONVERSATION_ID is required. Default limit is 50 messages."
-        },
-        "send": {
-          "help": "Send a message to a conversation.",
-          "arguments": [
-            {
-              "name": "conversation_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Conversation/thread ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--text",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message text to send",
-              "short": "-m"
-            }
-          ],
-          "examples": [
-            "facebook messenger send 123456789 --text \"Hello!\"",
-            "facebook messenger send 123456789 -m \"Thanks for your message\""
-          ],
-          "usage_instructions": "Use to send a text message to a Messenger conversation. Both CONVERSATION_ID and --text/-m are required."
+          ]
         },
         "requests": {
           "help": "List message requests.",
+          "examples": [
+            "facebook messenger requests",
+            "facebook messenger requests --table",
+            "facebook messenger requests --limit 10"
+          ],
+          "usage_instructions": "Use to view pending message requests (messages from non-friends). Default limit is 20.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -529,227 +852,48 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "send": {
+          "help": "Send a message to a conversation.",
           "examples": [
-            "facebook messenger requests",
-            "facebook messenger requests --table",
-            "facebook messenger requests --limit 10"
+            "facebook messenger send 123456789 --text \"Hello!\"",
+            "facebook messenger send 123456789 -m \"Thanks for your message\""
           ],
-          "usage_instructions": "Use to view pending message requests (messages from non-friends). Default limit is 20."
+          "usage_instructions": "Use to send a text message to a Messenger conversation. Both CONVERSATION_ID and --text/-m are required.",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation/thread ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message text to send",
+              "short": "-m"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use to read Messenger conversations, view messages, send messages, and check message requests. Conversation IDs are required for get/send commands."
-    },
-    "auth": {
-      "help": "Manage Facebook authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Use to authenticate with Facebook. Opens a headed browser for manual login. Use --force/-F to re-authenticate. Use --profile/-p for named profiles."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to close browser session and clear stored credentials."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to check if a browser session is active. Exit code 0 if authenticated, 2 if not."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to verify browser session is active. Use --verbose/-v for detailed output. Exit code 0 if working, 2 if not."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use to see all configured profiles with default status."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use to see details for a specific profile by NAME."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a new named profile. NAME is required."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use to change which profile is used by default."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to permanently delete a profile. Use --force/-F to skip confirmation."
-            }
-          },
-          "usage_instructions": "Use to manage multiple Facebook accounts via named profiles."
-        }
-      },
-      "usage_instructions": "Use to manage browser session authentication. Must run `facebook auth login` before using any other commands. Uses headed browser for login."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use to clear all cached data. Use when getting stale results."
-        }
-      },
-      "usage_instructions": "Use to manage cached responses. Clear cache when data seems stale."
+      }
     }
   },
-  "usage_instructions": "Use for Facebook browser automation \u2014 searching Marketplace listings, managing Messenger conversations, and reading Group posts. Commands follow `facebook <group> <action>` pattern. Requires browser session auth via `facebook auth login`. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+  "usage_instructions": "Use for Facebook browser automation — searching Marketplace listings, managing Messenger conversations, and reading Group posts. Commands follow `facebook <group> <action>` pattern. Requires browser session auth via `facebook auth login`. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
 }

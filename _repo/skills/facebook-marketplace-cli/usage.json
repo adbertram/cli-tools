@@ -1,0 +1,211 @@
+{
+  "tool": "facebook_marketplace",
+  "description": "Search Facebook Marketplace via browser automation",
+  "discovered_at": "2026-03-07T17:24:37.751766+00:00",
+  "total_commands": 6,
+  "usage_instructions": "Use for searching and browsing Facebook Marketplace listings via browser automation. Commands follow `facebook_marketplace <group> <action>` pattern. This is a dedicated Marketplace-only tool — for Messenger or other Facebook features, use the `facebook` CLI instead.",
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage Facebook Marketplace authentication",
+      "usage_instructions": "Authentication via browser automation. Login opens a headed browser window for manual Facebook login. Session persists across commands.",
+      "commands": {
+        "login": {
+          "help": "Login to Facebook Marketplace via browser. Opens a headed browser window for you to log in. Idempotent - skips if already logged in (use --force to re-authenticate).",
+          "usage_instructions": "Login via headed browser window. Idempotent — skips if already logged in. Use --force/-F to close existing session and re-authenticate.",
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Close existing session and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status. Returns exit code 0 if authenticated, 2 if not.",
+          "usage_instructions": "Check if authentication is active. Exit code 0 = authenticated, 2 = not authenticated.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test if authentication works against a real browser session.",
+          "usage_instructions": "Verify authentication works by testing against a real browser session. Use --verbose/-v for detailed checks.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Close browser session and clear authentication.",
+          "usage_instructions": "Close the browser session and clear stored auth. Use --force/-F to skip confirmation.",
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            }
+          ]
+        }
+      }
+    },
+    "listings": {
+      "help": "Search and browse Facebook Marketplace listings",
+      "usage_instructions": "Search and browse Marketplace listings. Use `listings list` to browse or search, and `listings get` for individual listing details. Supports location, price filtering, and image downloading.",
+      "commands": {
+        "list": {
+          "help": "List Facebook Marketplace listings. Without --query, browses \"Today's picks\" for the location. With --query, searches by keyword.",
+          "usage_instructions": "List Marketplace listings. Without --query/-q, shows Today's picks. With --query/-q, searches by keyword. Default location is 'evansville'; change with --location/-L. Use --min-price/--max-price for price filtering. Use --include-detail for full descriptions. Use --download-images to save listing images locally. Default limit is 50.",
+          "options": [
+            {
+              "name": "--query",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search query (e.g., 'LEGO', 'couch')",
+              "short": "-q"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Location slug (e.g., 'evansville', 'chicago')",
+              "short": "-L",
+              "default": "evansville"
+            },
+            {
+              "name": "--min-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum price"
+            },
+            {
+              "name": "--max-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum price"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of listings",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--include-detail",
+              "type": "bool",
+              "required": false,
+              "help": "Navigate to each listing for description and full details"
+            },
+            {
+              "name": "--download-images",
+              "type": "bool",
+              "required": false,
+              "help": "Download listing images to local cache (implies --include-detail)"
+            }
+          ],
+          "examples": [
+            "facebook_marketplace listings list",
+            "facebook_marketplace listings list --query \"LEGO\"",
+            "facebook_marketplace listings list --query \"couch\" --min-price 50 --max-price 500",
+            "facebook_marketplace listings list --location chicago --table --limit 20",
+            "facebook_marketplace listings list --query \"LEGO\" --include-detail",
+            "facebook_marketplace listings list --query \"LEGO\" --download-images"
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific Facebook Marketplace listing.",
+          "usage_instructions": "Get full details for a specific listing. ITEM_ID is a required positional argument. Use --download-images to save images locally. Use --properties/-p to select specific fields.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace listing item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--download-images",
+              "type": "bool",
+              "required": false,
+              "help": "Download listing images to local cache"
+            }
+          ],
+          "examples": [
+            "facebook_marketplace listings get 123456789",
+            "facebook_marketplace listings get 123456789 --table",
+            "facebook_marketplace listings get 123456789 --properties title,price,location",
+            "facebook_marketplace listings get 123456789 --download-images"
+          ]
+        }
+      }
+    }
+  }
+}

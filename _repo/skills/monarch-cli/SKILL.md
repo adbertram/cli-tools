@@ -45,7 +45,7 @@ The subagent prompt must be complete and self-contained, must not use `fork_cont
 <principle name="Review Rules Memory">
 **MANDATORY: Read `rules.md` at the start of EVERY review — before listing categories or transactions.** It is the persistent memory of Adam's preferences (categorization defaults, rule-recommendation policy, evidence thresholds, skip lists). Apply every rule there as the baseline policy for the run.
 
-**WRITE ON FEEDBACK.** Whenever Adam gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `/Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/rules.md` BEFORE ending the review. The Claude and Codex runtime roots are symlinks to the central skill folder, so do not create separate runtime copies. Mention each rule added or changed in the work summary.
+**WRITE ON FEEDBACK.** Whenever Adam gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/rules.md` BEFORE ending the review. The repo-owned cli-tools skill bundle is the source of truth for Monarch reviewer scripts and policy. Do not create or edit runtime-projected Monarch skill copies for reviewer policy. Mention each rule added or changed in the work summary.
 
 Do not invent rules from a single category change. Only persist what Adam has explicitly stated or unmistakably framed as a durable preference.
 </principle>

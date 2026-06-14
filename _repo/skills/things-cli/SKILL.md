@@ -31,6 +31,67 @@ things <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Usage JSON Shape">
+Things `usage.json` is a root object whose `.commands` field is an object.
+Each command group, such as `todos`, is also an object with a nested `commands`
+object. Do not inspect it with `.commands[0]`, `.commands | map(.name)`, or
+`.commands.<group>.subcommands`.
+
+Use this schema-safe probe before selecting a command leaf:
+```bash
+jq '
+  .commands
+  | if type != "object" then error("expected .commands object")
+    else to_entries | map({
+      group: .key,
+      group_keys: (if (.value | type) == "object" then (.value | keys) else [] end),
+      commands_type: (if (.value | type) == "object" then (.value.commands | type) else null end),
+      command_names: (
+        if (.value | type) == "object" and (.value.commands | type) == "object"
+        then (.value.commands | keys)
+        else []
+        end
+      )
+    })
+    end
+' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/things-cli/usage.json
+```
+
+After the probe identifies the group and action, select leaves through
+`.commands.<group>.commands.<action>`.
+
+When checking command options, do not assume a leaf's `options` field is an
+object. Current Things `usage.json` uses option lists for some leaves. Normalize
+both shapes before testing for a flag:
+```bash
+jq --arg group todos --arg action list '
+  def option_names:
+    if . == null then []
+    elif type == "object" then keys
+    elif type == "array" then map(.name // .long // .option // empty)
+    else error("expected options object, array, or null")
+    end;
+
+  .commands[$group].commands[$action]
+  | if type != "object" then error("expected command leaf object")
+    else {
+      leaf_keys: keys,
+      options_type: (.options | type),
+      option_names: (.options | option_names)
+    }
+    end
+' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/things-cli/usage.json
+```
+</principle>
+
+<principle name="Read Projection Flags">
+`--properties`/`-p` is a read projection flag. Use it only on read commands
+whose `usage.json` entry exposes that option, such as `list`, `get`, or
+`search`. Do not append `--properties` or `-p` to write commands such as
+`things todos create`; create the record first, then verify with a separate
+read command if a narrow readback is needed.
+</principle>
+
 <principle name="Command Groups">
 - **todos** -- Manage todos (list, get, create, complete, uncomplete, delete, update, search)
 - **projects** -- Manage projects (list, get, create, complete, delete, update, search)
@@ -45,6 +106,7 @@ Exclude WF-tagged items by default when listing todos: pipe output through `jq '
 
 <reference_index>
 **`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
+**`references/macos-tcc-things-readback.md`** -- Diagnosing Things CLI/SQLite readback failures caused by macOS TCC Full Disk Access blocking the Python process.
 </reference_index>
 
 <success_criteria>
@@ -65,7 +127,8 @@ Exclude WF-tagged items by default when listing todos: pipe output through `jq '
 
 **Fix:** Patched `/Users/adam/Dropbox/GitRepos/cli-tools/things/things_cli/client.py`:
 - `create_project` now resolves the area first and passes it inside the `make new project` property bag (`{name:..., notes:..., area:theArea}`), so creation + area assignment is one atomic AppleScript operation. No more orphaned projects on hang.
-- `_run_applescript` now accepts `timeout=` (default 30s) and raises a `ClientError` with actionable next steps when `osascript` exceeds it.
+- `_run_applescript` now accepts `timeout=` (default 30s) and raises a typed `AppleScriptTimeoutError` with actionable next steps when `osascript` exceeds it.
+- `create_project` now catches create-timeout failures and performs SQLite read-back by requested title, notes, and area. If exactly one matching incomplete project exists, the CLI returns that durable project instead of forcing a duplicate-prone retry. If no match or multiple matches are found, the error explicitly says whether retry is safe. If `--when someday` was requested and the create committed before the follow-up move, the error reports the existing project UUID and says not to retry creation.
 
 Reinstall after editing the editable source:
 ```bash
@@ -79,9 +142,11 @@ time things projects create "smoke test" --area <AREA_UUID> -n "test notes"
 things projects delete <returned-uuid> --yes
 ```
 
-**Recurrence Prevention:** Atomic property-bag creation removes the orphan-project failure mode entirely. The subprocess timeout converts any remaining Things3 hang (e.g., a future first-launch scenario, Things Cloud auth modal, or revoked Automation permission) into an immediate, actionable error instead of a 60s+ block. If the timeout fires, the error message itself directs the user to: foreground Things3, dismiss any modal dialogs, and verify Automation permission in System Settings > Privacy & Security > Automation.
+**Recurrence Prevention:** Atomic property-bag creation removes the orphan-project failure mode. The subprocess timeout converts Things3 hangs (e.g., first-launch scenario, Things Cloud auth modal, or revoked Automation permission) into bounded errors. Project creation also performs post-timeout read-back, so a timeout after commit returns the unique durable project or tells the caller not to blindly retry when state is absent, ambiguous, or only partially moved.
 
 **General rule:** When a CLI wraps an external GUI app via AppleScript, every `subprocess.run(['osascript', ...])` call must have a bounded `timeout=`, and multi-step writes that mutate one record must be expressed as a single AppleScript invocation so a hang cannot leave partially-committed state.
+
+**Agent diagnostic rule:** When probing Things3 directly with `osascript` for a suspected hang (for example `tell application "Things3" to count of to dos`), do not rely only on the Hermes/Codex terminal timeout. Wrap `osascript` in an inner watchdog (for example Python `subprocess.run(..., timeout=20)`) and set the terminal timeout higher than that inner timeout. Catch the inner timeout, print an explicit marker such as `APPLESCRIPT_HANG_TIMEOUT_AFTER_20S`, and exit 0 for the expected diagnostic result. A terminal-level `[Command timed out after 40s]` / exit 124 means the diagnostic command was shaped incorrectly and should not be surfaced as the Things finding.
 
 ### 2. `things projects delete` requires `--yes` for non-interactive use
 
@@ -147,3 +212,53 @@ things todos update <todo-uuid> --project X --area Y  # should exit 2 with "Pass
 **Recurrence Prevention:** Feature now exists in the editable install. If the editable mapping is ever broken or someone reinstalls from PyPI/origin without this patch, the symptom will be the same `No such option: --project` error and the same fix applies. If/when the upstream things-cli repo accepts a PR with this change, this Known Issue can be downgraded to a Domain Knowledge entry documenting the flags.
 
 **General rule:** When a CLI command requires moving a record across containers (project ↔ project, area ↔ area, project ↔ area), expose those moves on the `update` command rather than a separate `move` command. The single-update surface keeps the mental model "every property of a record is mutable via update" and avoids the cliff where some properties have flags and others require a different verb.
+
+### 5. `things todos update` / `uncomplete` AppleScript timeout can hide partial writes
+
+**Symptom:** A multi-field `things todos update <uuid> --title ... --notes ... --area ...` timed out with `AppleScript timed out after 30s`. SQLite read-back showed the todo had unexpectedly become completed (`status: 3`) while the requested title/notes/area fields were unchanged. A follow-up `things todos uncomplete <uuid>` also timed out and read-back still showed `status: 3`.
+
+**Cause:** AppleScript writes go through the GUI app. If `osascript` is killed by the subprocess timeout while Things3 is unresponsive/syncing/modal-blocked, the AppleEvent may already have partially committed or Things3 may commit a side effect before the CLI receives an error. A generic timeout error is insufficient because it does not tell the caller whether the task changed.
+
+**Fix:** Patched `/Users/adam/Dropbox/GitRepos/cli-tools/things/things_cli/client.py`:
+- `_run_applescript` now raises `AppleScriptTimeoutError`, a typed subclass of `ClientError`, for subprocess timeouts.
+- `complete_todo` and `uncomplete_todo` perform immediate SQLite read-back on AppleScript timeout. If the intended status is already durable, the command returns success; otherwise the error includes the durable status observed after the timeout.
+- `update_todo` captures a pre-write snapshot and, on AppleScript timeout, reads the task again and reports a field-level before/after diff. If status changed unexpectedly, the error explicitly says not to blindly retry the same update and to use the smallest status-only recovery command only after confirming current read-back.
+
+**Verification:** Unit coverage in `things/tests/test_completion_readback.py` exercises committed completion after timeout, failed uncomplete timeout read-back, and update timeout partial-status reporting.
+
+**Recurrence Prevention:** Any future timeout during todo update/status writes now carries durable read-back evidence instead of a generic GUI-state error. This does not make Things3 AppleScript atomic; it prevents hidden partial writes and gives agents a safe recovery decision point.
+
+### 6. Things readback fails with macOS TCC / Full Disk Access error
+
+**Symptom:** Things writes may dispatch via URL or AppleScript, but readback commands fail before emitting JSON. The observed Progress-project command:
+```bash
+things projects search "Progress" --properties uuid,title,notes,tags,area_uuid,status,deadline,start_date
+```
+exited 1 with:
+```text
+Error: Timed out while accessing the Things database container. macOS privacy/TCC is blocking filesystem access to Things data. Grant Full Disk Access to the Python binary running this CLI (/Users/adam/.local/share/uv/tools/things-cli/bin/python), then retry.
+```
+
+**Cause:** Things read commands discover and open the SQLite database under `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/...`, which is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable in the `things` launcher shebang, macOS can block filesystem traversal. The CLI hardening in `client.py` converts the old silent hang into the explicit timeout error above.
+
+**Fix:** This cannot be completed autonomously from an agent shell. A user/admin must grant Full Disk Access to the exact Python named in the error. For the current install, that is:
+```text
+/Users/adam/.local/share/uv/tools/things-cli/bin/python
+```
+If System Settings shows that path as a greyed-out alias/symlink, grant Full Disk Access to the Homebrew Python app bundle instead:
+```text
+/opt/homebrew/Frameworks/Python.framework/Versions/3.14/Resources/Python.app
+```
+Do not grant `pip3` as a substitute. `pip3` may be selectable because it is a script with a shebang into the same Python install, but the Things CLI runs as Python, not pip.
+Open the pane with:
+```bash
+open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+```
+Add/enable the Python binary or Python.app bundle, then rerun a readback smoke test:
+```bash
+things todos list --limit 1 --exclude-tag WF
+```
+
+**Agent rule:** Do not retry the write or create duplicate Things tasks when this error appears. Treat it as a local readback permission blocker, report the Full Disk Access action, and resume verification after the permission is granted.
+
+**Reference:** See `references/macos-tcc-things-readback.md` for diagnostics and the CLI hardening pattern.

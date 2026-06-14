@@ -1,0 +1,344 @@
+{
+  "tool": "tenweb",
+  "description": "CLI interface for the 10Web API",
+  "discovered_at": "2026-05-20T16:19:36.901531+00:00",
+  "total_commands": 13,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "websites": {
+      "help": "Manage 10Web websites",
+      "commands": {
+        "list": {
+          "help": "List websites for the current 10Web account.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of websites to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "tenweb websites list",
+            "tenweb websites list --table",
+            "tenweb websites list --filter \"type:eq:live\"",
+            "tenweb websites list --properties \"id,name,site_url,type\""
+          ],
+          "usage_instructions": "Use `tenweb websites list` with the documented arguments and options shown below."
+        },
+        "get": {
+          "help": "Get instance details for a single website.",
+          "arguments": [
+            {
+              "name": "website_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "10Web website ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "tenweb websites get 15354",
+            "tenweb websites get 15354 --table",
+            "tenweb websites get 15354 --properties \"website_id,status,region\""
+          ],
+          "usage_instructions": "Use `tenweb websites get` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `tenweb websites` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "subdomains": {
+      "help": "Check 10Web subdomain availability",
+      "commands": {
+        "check": {
+          "help": "Check whether a 10Web subdomain is available.",
+          "arguments": [
+            {
+              "name": "subdomain",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subdomain to check, without .10web.club"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "tenweb subdomains check my-site",
+            "tenweb subdomains check my-site --table"
+          ],
+          "usage_instructions": "Use `tenweb subdomains check` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `tenweb subdomains` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "auth": {
+      "help": "Manage tenweb authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'api_key')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `tenweb auth login` with the documented arguments and options shown below."
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `tenweb auth logout` with the documented arguments and options shown below."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `tenweb auth status` with the documented arguments and options shown below."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `tenweb auth test` with the documented arguments and options shown below."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `tenweb auth profiles list` with the documented arguments and options shown below."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `tenweb auth profiles get` with the documented arguments and options shown below."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `tenweb auth profiles create` with the documented arguments and options shown below."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `tenweb auth profiles set-default` with the documented arguments and options shown below."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `tenweb auth profiles delete` with the documented arguments and options shown below."
+            }
+          },
+          "usage_instructions": "Use `tenweb auth profiles` to access this command group. Run `--help` on a subcommand for details."
+        }
+      },
+      "usage_instructions": "Use `tenweb auth` to access this command group. Run `--help` on a subcommand for details."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `tenweb cache clear` with the documented arguments and options shown below."
+        }
+      },
+      "usage_instructions": "Use `tenweb cache` to access this command group. Run `--help` on a subcommand for details."
+    }
+  },
+  "usage_instructions": "Use `tenweb` to access this CLI. Run `--help` on a command for details."
+}

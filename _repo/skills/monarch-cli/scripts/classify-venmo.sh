@@ -30,7 +30,8 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-DEFAULT_RULES = Path("_repo/skills/monarch-cli/data/venmo-classification-rules.json")
+SKILL_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_RULES = SKILL_DIR / "data/venmo-classification-rules.json"
 
 
 def load_json_arg(path: str) -> Any:

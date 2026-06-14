@@ -1,0 +1,1415 @@
+{
+  "tool": "scrunch",
+  "description": "CLI interface for Scrunch AI API",
+  "discovered_at": "2026-05-06T15:21:16.377060+00:00",
+  "total_commands": 36,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "brands": {
+      "help": "Manage brands",
+      "commands": {
+        "list": {
+          "help": "List all brands.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch brands list",
+            "scrunch brands list --table",
+            "scrunch brands list --limit 10",
+            "scrunch brands list --filter \"status:eq:active\"",
+            "scrunch brands list --properties \"id,name,website\""
+          ],
+          "usage_instructions": "List all brands. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+        },
+        "get": {
+          "help": "Get details for a specific brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch brands get 123",
+            "scrunch brands get 123 --table",
+            "scrunch brands get 123 --properties \"id,name,website\""
+          ],
+          "usage_instructions": "Get brand details. Required arguments: brand_id. Notable options: --table/-t, --properties/-p."
+        },
+        "create": {
+          "help": "Create a new brand.",
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brand name",
+              "short": "-n"
+            },
+            {
+              "name": "--website",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brand website URL",
+              "short": "-w"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brand description",
+              "short": "-d"
+            },
+            {
+              "name": "--alt-names",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated alternative names"
+            },
+            {
+              "name": "--alt-websites",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated alternative websites"
+            },
+            {
+              "name": "--key-topics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated key topics"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand status"
+            }
+          ],
+          "examples": [
+            "scrunch brands create --name \"My Brand\" --website \"https://example.com\" --description \"A brand\"",
+            "scrunch brands create --name \"My Brand\" --website \"https://example.com\" --description \"A brand\" --key-topics \"ai,ml\""
+          ],
+          "usage_instructions": "Create a new brand. Notable options: --name, --website, --description."
+        },
+        "update": {
+          "help": "Update an existing brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand name",
+              "short": "-n"
+            },
+            {
+              "name": "--website",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand website URL",
+              "short": "-w"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand description",
+              "short": "-d"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand status"
+            }
+          ],
+          "examples": [
+            "scrunch brands update 123 --name \"New Name\"",
+            "scrunch brands update 123 --status \"active\""
+          ],
+          "usage_instructions": "Update a brand. Required arguments: brand_id. Notable options: --name, --website, --description."
+        },
+        "delete": {
+          "help": "Archive (delete) a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "examples": [
+            "scrunch brands delete 123"
+          ],
+          "usage_instructions": "Archive a brand. Required arguments: brand_id."
+        }
+      },
+      "usage_instructions": "Manage brands. Commands: list, get, create, update, delete."
+    },
+    "competitors": {
+      "help": "Manage brand competitors",
+      "commands": {
+        "list": {
+          "help": "List competitors for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch competitors list 123",
+            "scrunch competitors list 123 --table",
+            "scrunch competitors list 123 --limit 10",
+            "scrunch competitors list 123 --filter \"name:contains:acme\""
+          ],
+          "usage_instructions": "List competitors for a brand. Required arguments: brand_id. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+        },
+        "get": {
+          "help": "Get details for a specific competitor.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "competitor_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Competitor ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch competitors get 123 456",
+            "scrunch competitors get 123 456 --table"
+          ],
+          "usage_instructions": "Get competitor details. Required arguments: brand_id, competitor_id. Notable options: --table/-t, --properties/-p."
+        },
+        "create": {
+          "help": "Create a new competitor for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Competitor name",
+              "short": "-n"
+            },
+            {
+              "name": "--alt-names",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated alternative names"
+            },
+            {
+              "name": "--websites",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated website URLs",
+              "short": "-w"
+            }
+          ],
+          "examples": [
+            "scrunch competitors create 123 --name \"Competitor Inc\"",
+            "scrunch competitors create 123 --name \"Competitor Inc\" --websites \"https://competitor.com\""
+          ],
+          "usage_instructions": "Create a competitor. Required arguments: brand_id. Notable options: --name."
+        },
+        "update": {
+          "help": "Update a competitor.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "competitor_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Competitor ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Competitor name",
+              "short": "-n"
+            },
+            {
+              "name": "--alt-names",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated alternative names"
+            },
+            {
+              "name": "--websites",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated website URLs",
+              "short": "-w"
+            }
+          ],
+          "examples": [
+            "scrunch competitors update 123 456 --name \"New Name\""
+          ],
+          "usage_instructions": "Update a competitor. Required arguments: brand_id, competitor_id. Notable options: --name."
+        },
+        "delete": {
+          "help": "Archive (delete) a competitor.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "competitor_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Competitor ID"
+            }
+          ],
+          "examples": [
+            "scrunch competitors delete 123 456"
+          ],
+          "usage_instructions": "Archive a competitor. Required arguments: brand_id, competitor_id."
+        }
+      },
+      "usage_instructions": "Manage brand competitors. Commands: list, get, create, update, delete."
+    },
+    "personas": {
+      "help": "Manage brand personas",
+      "commands": {
+        "list": {
+          "help": "List personas for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch personas list 123",
+            "scrunch personas list 123 --table",
+            "scrunch personas list 123 --limit 10"
+          ],
+          "usage_instructions": "List personas for a brand. Required arguments: brand_id. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+        },
+        "get": {
+          "help": "Get details for a specific persona.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "persona_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Persona ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch personas get 123 456",
+            "scrunch personas get 123 456 --table"
+          ],
+          "usage_instructions": "Get persona details. Required arguments: brand_id, persona_id. Notable options: --table/-t, --properties/-p."
+        },
+        "create": {
+          "help": "Create a new persona for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Persona name",
+              "short": "-n"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": true,
+              "help": "Persona description",
+              "short": "-d"
+            }
+          ],
+          "examples": [
+            "scrunch personas create 123 --name \"Developer\" --description \"Software developer persona\""
+          ],
+          "usage_instructions": "Create a persona. Required arguments: brand_id. Notable options: --name, --description."
+        },
+        "update": {
+          "help": "Update a persona.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "persona_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Persona ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Persona name",
+              "short": "-n"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Persona description",
+              "short": "-d"
+            }
+          ],
+          "examples": [
+            "scrunch personas update 123 456 --name \"New Name\""
+          ],
+          "usage_instructions": "Update a persona. Required arguments: brand_id, persona_id. Notable options: --name, --description."
+        },
+        "delete": {
+          "help": "Archive (delete) a persona.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "persona_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Persona ID"
+            }
+          ],
+          "examples": [
+            "scrunch personas delete 123 456"
+          ],
+          "usage_instructions": "Archive a persona. Required arguments: brand_id, persona_id."
+        }
+      },
+      "usage_instructions": "Manage brand personas. Commands: list, get, create, update, delete."
+    },
+    "prompts": {
+      "help": "Manage brand prompts",
+      "commands": {
+        "list": {
+          "help": "List prompts for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Pagination offset",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch prompts list 123",
+            "scrunch prompts list 123 --table",
+            "scrunch prompts list 123 --limit 50 --offset 100",
+            "scrunch prompts list 123 --filter \"stage:eq:Awareness\""
+          ],
+          "usage_instructions": "List prompts for a brand. Required arguments: brand_id. Notable options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+        },
+        "get": {
+          "help": "Get details for a specific prompt.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "prompt_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Prompt ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch prompts get 123 456",
+            "scrunch prompts get 123 456 --table"
+          ],
+          "usage_instructions": "Get prompt details. Required arguments: brand_id, prompt_id. Notable options: --table/-t, --properties/-p."
+        },
+        "create": {
+          "help": "Create a new prompt for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Prompt text"
+            },
+            {
+              "name": "--stage",
+              "type": "bool",
+              "required": true,
+              "help": "[Advice|Awareness|Evaluation|Comparison|Other]  Prompt stage (Advice, Awareness, Evaluation, Comparison, Other)",
+              "short": "-s"
+            },
+            {
+              "name": "--persona-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Persona ID to associate"
+            },
+            {
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated tags"
+            },
+            {
+              "name": "--key-topics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated key topics"
+            },
+            {
+              "name": "--platforms",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated platforms (chatgpt, claude, perplexity, etc.)"
+            }
+          ],
+          "examples": [
+            "scrunch prompts create 123 --text \"What is the best AI tool?\" --stage Awareness",
+            "scrunch prompts create 123 --text \"Compare AI tools\" --stage Comparison --platforms \"chatgpt,claude\""
+          ],
+          "usage_instructions": "Create a prompt. Required arguments: brand_id. Notable options: --text, --stage, --platforms."
+        },
+        "delete": {
+          "help": "Archive (delete) a prompt.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "prompt_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Prompt ID"
+            }
+          ],
+          "examples": [
+            "scrunch prompts delete 123 456"
+          ],
+          "usage_instructions": "Archive a prompt. Required arguments: brand_id, prompt_id."
+        }
+      },
+      "usage_instructions": "Manage brand prompts. Commands: list, get, create, delete."
+    },
+    "query": {
+      "help": "Query aggregated metrics",
+      "commands": {
+        "metrics": {
+          "help": "Query aggregated metrics for a brand. Dimensions: date, date_week, date_month, date_quarter, date_year, prompt_id, prompt, persona_id, persona_name, ai_platform, ai_platform_search_enabled, tag, source_url, source_type, competitor_id, competitor_name, branded, stage, prompt_topic, country Metrics: responses, brand_presence_percentage, brand_position_score, brand_sentiment_score, competitor_presence_percentage, competitor_position_score, competitor_sentiment_score",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated dimension/metric fields to include in query"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return (max 90000)",
+              "short": "-l",
+              "default": "1000"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Pagination offset",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch query metrics 123 --start-date 2025-01-01 --end-date 2025-03-31",
+            "scrunch query metrics 123 --fields \"date,ai_platform,brand_presence_percentage\" --table",
+            "scrunch query metrics 123 --limit 500 --offset 0"
+          ],
+          "usage_instructions": "Query metrics for a brand. Required arguments: brand_id. Notable options: --fields, --start-date, --end-date, --limit, --offset, --table/-t."
+        }
+      },
+      "usage_instructions": "Query aggregated metrics. Commands: metrics."
+    },
+    "responses": {
+      "help": "View AI responses",
+      "commands": {
+        "list": {
+          "help": "List AI responses for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Pagination offset",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--platform",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by AI platform"
+            },
+            {
+              "name": "--prompt-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by prompt ID"
+            },
+            {
+              "name": "--persona-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by persona ID"
+            },
+            {
+              "name": "--stage",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by stage"
+            },
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--has-shopping-data",
+              "type": "bool",
+              "required": false,
+              "help": "Filter by shopping data presence"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch responses list 123",
+            "scrunch responses list 123 --platform chatgpt --table",
+            "scrunch responses list 123 --start-date 2025-01-01 --end-date 2025-03-31",
+            "scrunch responses list 123 --stage Awareness --limit 50"
+          ],
+          "usage_instructions": "List AI responses. Required arguments: brand_id. Notable options: --platform, --prompt-id, --persona-id, --stage, --start-date, --end-date, --limit, --table/-t."
+        }
+      },
+      "usage_instructions": "View AI responses. Commands: list."
+    },
+    "page-audits": {
+      "help": "Manage page audits",
+      "commands": {
+        "list": {
+          "help": "List page audits for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by audit status"
+            },
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by URL"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch page-audits list 123",
+            "scrunch page-audits list 123 --table",
+            "scrunch page-audits list 123 --status completed",
+            "scrunch page-audits list 123 --url \"https://example.com/page\""
+          ],
+          "usage_instructions": "List page audits. Required arguments: brand_id. Notable options: --status, --url, --table/-t, --limit/-l, --filter/-f, --properties/-p."
+        },
+        "get": {
+          "help": "Get details for a specific page audit.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "page_audit_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Page audit ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch page-audits get 123 456",
+            "scrunch page-audits get 123 456 --table"
+          ],
+          "usage_instructions": "Get audit details. Required arguments: brand_id, audit_id. Notable options: --table/-t, --properties/-p."
+        },
+        "create": {
+          "help": "Create a new page audit for a brand.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "URL to audit",
+              "short": "-u"
+            }
+          ],
+          "examples": [
+            "scrunch page-audits create 123 --url \"https://example.com/page\""
+          ],
+          "usage_instructions": "Create page audit. Required arguments: brand_id. Notable options: --urls."
+        }
+      },
+      "usage_instructions": "Manage page audits. Commands: list, get, create."
+    },
+    "agent-traffic": {
+      "help": "View agent traffic data",
+      "commands": {
+        "get": {
+          "help": "Get agent traffic data for a brand's site. Both brand_id and site_id are required positional arguments. start_date and end_date are required options.",
+          "arguments": [
+            {
+              "name": "brand_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Brand ID"
+            },
+            {
+              "name": "site_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Site ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Start date (YYYY-MM-DD, required)"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "End date (YYYY-MM-DD, required)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Pagination offset",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to request"
+            },
+            {
+              "name": "--time-bucket",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time bucket for aggregation"
+            },
+            {
+              "name": "--path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by URL path"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include in output",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31",
+            "scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31 --table",
+            "scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31 --time-bucket day",
+            "scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31 --path \"/blog\""
+          ],
+          "usage_instructions": "Get agent traffic. Required arguments: brand_id, site_id. Notable options: --start-date, --end-date, --fields, --time-bucket, --table/-t, --limit, --offset."
+        }
+      },
+      "usage_instructions": "View agent traffic data. Commands: get."
+    },
+    "auth": {
+      "help": "Manage scrunch authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Configure API key."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Clear credentials."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Check auth status."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Refresh OAuth token."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Test API connection."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `scrunch auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `scrunch auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `scrunch auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `scrunch auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `scrunch auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `scrunch auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Manage authentication. Commands: login, status, test, logout, refresh."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `scrunch cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `scrunch cache --help` for exact arguments and options."
+    }
+  },
+  "usage_instructions": "Use for cLI interface for Scrunch AI API - brand visibility, AI search analytics, competitors, personas, prompts, and agent traffic. Commands follow `scrunch <group> <action>` patterns. Consult this file before running commands so flags and positional arguments match the CLI."
+}

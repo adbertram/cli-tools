@@ -1,0 +1,235 @@
+{
+  "tool": "weather",
+  "description": "Get current temperature, humidity, and forecasts for US ZIP codes",
+  "total_commands": 5,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "conditions": {
+      "help": "Get weather conditions by ZIP code",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get current temperature and humidity for a ZIP code.",
+          "arguments": [
+            {
+              "name": "zip_code",
+              "type": "ZIP_CODE",
+              "required": false,
+              "help": "US ZIP code"
+            }
+          ],
+          "options": [
+            {
+              "name": "--unit",
+              "type": "bool",
+              "required": false,
+              "help": "[fahrenheit|celsius]  Temperature unit",
+              "short": "-u",
+              "default": "fahrenheit"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List current temperature and humidity for one or more ZIP codes.",
+          "arguments": [
+            {
+              "name": "zip_codes",
+              "type": "TEXT",
+              "required": false,
+              "help": "[ZIP_CODES]...  US ZIP codes"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of ZIP codes to process",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--unit",
+              "type": "bool",
+              "required": false,
+              "help": "[fahrenheit|celsius]  Temperature unit",
+              "short": "-u",
+              "default": "fahrenheit"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "forecast": {
+      "help": "Get weather forecasts by ZIP code",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get a daily forecast for a ZIP code.",
+          "arguments": [
+            {
+              "name": "zip_code",
+              "type": "ZIP_CODE",
+              "required": false,
+              "help": "US ZIP code"
+            }
+          ],
+          "options": [
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Forecast days, 1-16",
+              "short": "-d",
+              "default": "7"
+            },
+            {
+              "name": "--unit",
+              "type": "bool",
+              "required": false,
+              "help": "[fahrenheit|celsius]  Temperature unit",
+              "short": "-u",
+              "default": "fahrenheit"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List daily forecasts for one or more ZIP codes.",
+          "arguments": [
+            {
+              "name": "zip_codes",
+              "type": "TEXT",
+              "required": false,
+              "help": "[ZIP_CODES]...  US ZIP codes"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of ZIP codes to process",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Forecast days, 1-16",
+              "short": "-d",
+              "default": "7"
+            },
+            {
+              "name": "--unit",
+              "type": "bool",
+              "required": false,
+              "help": "[fahrenheit|celsius]  Temperature unit",
+              "short": "-u",
+              "default": "fahrenheit"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "discovered_at": "2026-06-08T20:36:15Z"
+}

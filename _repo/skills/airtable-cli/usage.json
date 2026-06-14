@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when needed.",
-  "discovered_at": "2026-06-09T19:45:01Z",
-  "total_commands": 25,
+  "discovered_at": "2026-06-13T17:49:51Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -368,6 +368,12 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -828,6 +834,50 @@
               "type": "bool",
               "required": false,
               "help": "Replace entire record (PUT) instead of updating (PATCH)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "upload-attachment": {
+          "help": "FILE_PATH",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The record ID to attach the file to"
+            },
+            {
+              "name": "field_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Attachment field ID or name"
+            },
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the local file to upload"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--content-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "MIME type override (auto-detected from filename when omitted)"
             },
             {
               "name": "--profile",

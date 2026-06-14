@@ -1,7 +1,7 @@
 {
   "tool": "doordash",
   "description": "CLI interface for Doordash (browser automation)",
-  "discovered_at": "2026-05-16T16:43:24.726328+00:00",
+  "discovered_at": "2026-06-14T17:32:57Z",
   "total_commands": 16,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage doordash authentication",
+      "usage_instructions": "Browser-based authentication for DoorDash. Login opens a browser window for manual login. Session is saved for subsequent commands.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Login via browser. Idempotent -- skips if already logged in. Use --force/-F to clear existing session and re-authenticate.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Login via browser. Idempotent -- skips if already logged in. Use --force/-F to clear existing session and re-authenticate."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `doordash auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `doordash auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `doordash auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `doordash auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `doordash auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Check if authenticated. Exit code 0 = authenticated, 2 = not authenticated.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check if authenticated. Exit code 0 = authenticated, 2 = not authenticated."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `doordash auth refresh --help` for exact arguments and options."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Validate the saved session by launching a browser and checking auth state. Use --verbose/-v for detailed checks. Exit code 0 = OK, 2 = not authenticated.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,133 +237,75 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Validate the saved session by launching a browser and checking auth state. Use --verbose/-v for detailed checks. Exit code 0 = OK, 2 = not authenticated."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `doordash auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `doordash auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `doordash auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `doordash auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `doordash auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `doordash auth profiles --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Browser-based authentication for DoorDash. Login opens a browser window for manual login. Session is saved for subsequent commands."
+      }
     },
     "cache": {
       "help": "Manage response cache",
+      "usage_instructions": "Run `doordash cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `doordash cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `doordash cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `doordash cache --help` for exact arguments and options."
+      }
     },
     "orders": {
       "help": "Manage DoorDash orders",
+      "usage_instructions": "View and inspect DoorDash orders, and re-place prior orders. List recent orders with filtering, get details for a specific order by ID, or reorder a past order via browser automation.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific order.",
+          "usage_instructions": "Get full details for a single order by ORDER_ID (positional argument).",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID or UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated properties",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List recent orders.",
+          "usage_instructions": "List recent DoorDash orders. Use --filter/-f for field:op:value filtering (e.g. current_status:eq:delivered, store_name:contains:Pizza). Use --properties/-p to select fields. Default limit is 100.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -282,40 +335,18 @@
               "required": false,
               "help": "Comma-separated properties",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List recent DoorDash orders. Use --filter/-f for field:op:value filtering (e.g. current_status:eq:delivered, store_name:contains:Pizza). Use --properties/-p to select fields. Default limit is 100."
-        },
-        "get": {
-          "help": "Get details for a specific order.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID or UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated properties",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get full details for a single order by ORDER_ID (positional argument)."
+          ]
         },
         "reorder": {
           "help": "Reorder a previous DoorDash order. Default is dry-run (no charge).",
+          "usage_instructions": "Re-place a previous DoorDash order. Default behavior is a safe dry run that calls the `reorderOrder` GraphQL mutation server-side to build a cart, then prints the cart UUID, store, items, and item subtotal -- no browser is launched. Pass --confirm to additionally open a browser, navigate to /checkout?orderCartId=<cart>, and click Place Order (this charges the saved payment method). --confirm and --dry-run cannot be combined. The order argument accepts either a merchant order id (e.g. 3000010020128114) or the canonical order UUID; numeric ids are resolved against history (up to 1000 past orders). The mutation is idempotent: calling it twice for the same order returns the same cart UUID rather than creating duplicates.",
           "arguments": [
             {
               "name": "order_id",
@@ -343,18 +374,68 @@
               "required": false,
               "help": "Display result as a table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Re-place a previous DoorDash order. Default behavior is a safe dry run that calls the `reorderOrder` GraphQL mutation server-side to build a cart, then prints the cart UUID, store, items, and item subtotal -- no browser is launched. Pass --confirm to additionally open a browser, navigate to /checkout?orderCartId=<cart>, and click Place Order (this charges the saved payment method). --confirm and --dry-run cannot be combined. The order argument accepts either a merchant order id (e.g. 3000010020128114) or the canonical order UUID; numeric ids are resolved against history (up to 1000 past orders). The mutation is idempotent: calling it twice for the same order returns the same cart UUID rather than creating duplicates."
+          ]
         }
-      },
-      "usage_instructions": "View and inspect DoorDash orders, and re-place prior orders. List recent orders with filtering, get details for a specific order by ID, or reorder a past order via browser automation."
+      }
     },
     "stores": {
       "help": "Browse available stores/restaurants",
+      "usage_instructions": "Browse restaurants and stores available for delivery near the saved address.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a store from the current store feed by ID.",
+          "usage_instructions": "Run `doordash stores get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "store_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Store ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated properties",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List available stores/restaurants near your saved delivery address.",
+          "usage_instructions": "List restaurants near your saved delivery address. Use --filter/-f for filtering (e.g. is_open:eq:true, rating:gte:4). Default limit is 50.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -384,40 +465,16 @@
               "required": false,
               "help": "Comma-separated properties",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List restaurants near your saved delivery address. Use --filter/-f for filtering (e.g. is_open:eq:true, rating:gte:4). Default limit is 50."
-        },
-        "get": {
-          "help": "Get a store from the current store feed by ID.",
-          "arguments": [
-            {
-              "name": "store_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Store ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated properties",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `doordash stores get --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Browse restaurants and stores available for delivery near the saved address."
+      }
     }
   },
   "usage_instructions": "Use for interacting with DoorDash via browser automation. Commands follow `doordash <group> <action>` pattern. Use --no-cache to bypass response cache. Requires browser auth via `doordash auth login` first. To re-place a prior order use `doordash orders reorder <ORDER_ID>` (dry run by default; pass --confirm to actually charge the saved payment method)."

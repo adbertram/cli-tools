@@ -1,0 +1,393 @@
+{
+  "tool": "gearup",
+  "description": "CLI interface for Gearup (browser automation)",
+  "discovered_at": "2026-05-20T16:22:22.920379+00:00",
+  "total_commands": 14,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "search": {
+      "help": "Search gearup",
+      "commands": {
+        "query": {
+          "help": "Search for items on Gearup. Example: gearup search query \"my search term\" --limit 20 --table gearup search query \"keyword\" --filter \"price:lt:100\" gearup search query \"keyword\" --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `gearup search query` when you need to search for items on gearup. example: gearup search query \"my search term\" --limit 20 --table gearup search query \"keyword\" --filter \"price:lt:100\" gearup search query \"keyword\" --properties \"title,price\". Key options: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "item": {
+          "help": "Get details for a specific item. Example: gearup search item abc123 --table gearup search item \"https://example.com/item/abc123\" gearup search item abc123 --properties \"title,price\"",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `gearup search item` when you need to get details for a specific item. example: gearup search item abc123 --table gearup search item \"https://example.com/item/abc123\" gearup search item abc123 --properties \"title,price\". Key options: --table/-t, --properties/-p."
+        },
+        "list": {
+          "help": "List items from Gearup. Example: gearup search list --limit 100 --table gearup search list --filter \"status:active\" gearup search list --properties \"id,name,status\"",
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `gearup search list` when you need to list items from gearup. example: gearup search list --limit 100 --table gearup search list --filter \"status:active\" gearup search list --properties \"id,name,status\". Key options: --limit/-l, --filter/-f, --table/-t, --properties/-p."
+        },
+        "wildcard": {
+          "help": "Search items with wildcard pattern matching. Supports * wildcards for pattern matching across all string fields. Browser CLIs use client-side search.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (supports * wildcards)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to search"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "gearup search wildcard \"*test*\"",
+            "gearup search wildcard \"prefix*\"",
+            "gearup search wildcard \"*pending*\" --fields \"status,notes\"",
+            "gearup search wildcard \"*error*\" --properties \"id,name,status\" --table"
+          ],
+          "usage_instructions": "Use `gearup search wildcard` when you need to search items with wildcard pattern matching. supports * wildcards for pattern matching across all string fields. browser clis use client-side search. Key options: --table/-t, --limit/-l, --fields, --properties/-p."
+        }
+      },
+      "usage_instructions": "Use `gearup search` for search gearup. Consult the leaf commands in this group for the exact action."
+    },
+    "auth": {
+      "help": "Manage gearup authentication",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Use `gearup auth login` when you need to configure authentication credentials. prompts for required credentials based on the tool's authentication type. for oauth authorization code flows, opens a browser for user consent. Key options: --profile/-p, --force/-F, --credential-type/-c."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `gearup auth logout` when you need to clear stored credentials and browser sessions. Key options: --profile/-p."
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use `gearup auth status` when you need to check authentication status across profiles. performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (api/oauth) or via the live browser check (browser_session). Key options: --profile/-p, --table/-t."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Use `gearup auth test` when you need to test authentication by verifying credentials work across profiles. Key options: --table/-t, --verbose/-v, --profile/-p."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Use `gearup auth profiles list` when you need to list all profiles and show which is the default. Key options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Use `gearup auth profiles get` when you need to get details for a specific profile. Key options: --table/-t."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Use `gearup auth profiles create` when you need to create a new profile from .env.example template."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Use `gearup auth profiles set-default` when you need to set a profile as the default (is_default_profile=1)."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Use `gearup auth profiles delete` when you need to delete a profile and its data. Key options: --force/-F."
+            }
+          },
+          "usage_instructions": "Use `gearup auth profiles` for manage authentication profiles. Consult the leaf commands in this group for the exact action."
+        }
+      },
+      "usage_instructions": "Use `gearup auth` for manage gearup authentication. Consult the leaf commands in this group for the exact action."
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `gearup cache clear` when you need to remove all cached responses. deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
+        }
+      },
+      "usage_instructions": "Use `gearup cache` for manage response cache. Consult the leaf commands in this group for the exact action."
+    }
+  },
+  "usage_instructions": "Use `gearup` when you need to work with cli interface for gearup (browser automation). Check the command groups below for the exact operation and required flags."
+}

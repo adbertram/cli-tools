@@ -1,0 +1,591 @@
+{
+  "tool": "azlogs",
+  "description": "Download, parse, and analyze Azure Web App logs via Kudu API",
+  "discovered_at": "2026-05-06T15:13:20.419185+00:00",
+  "total_commands": 20,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    },
+    {
+      "name": "--app",
+      "type": "TEXT",
+      "required": false,
+      "help": "Azure Web App name",
+      "short": "-a"
+    },
+    {
+      "name": "--resource-group",
+      "type": "TEXT",
+      "required": false,
+      "help": "Azure Resource Group",
+      "short": "-g"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Check Azure CLI authentication status",
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ],
+          "usage_instructions": "Run `azlogs auth login --help` for exact arguments and options."
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `azlogs auth logout --help` for exact arguments and options."
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Use to verify Azure CLI is authenticated before running download commands. Use --table/-t for formatted output."
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "usage_instructions": "Run `azlogs auth refresh --help` for exact arguments and options."
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ],
+          "usage_instructions": "Run `azlogs auth test --help` for exact arguments and options."
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "commands": {
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ],
+              "usage_instructions": "Run `azlogs auth profiles list --help` for exact arguments and options."
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ],
+              "usage_instructions": "Run `azlogs auth profiles get --help` for exact arguments and options."
+            },
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "usage_instructions": "Run `azlogs auth profiles create --help` for exact arguments and options."
+            },
+            "set-default": {
+              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to set as default"
+                }
+              ],
+              "usage_instructions": "Run `azlogs auth profiles set-default --help` for exact arguments and options."
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ],
+              "usage_instructions": "Run `azlogs auth profiles delete --help` for exact arguments and options."
+            }
+          },
+          "usage_instructions": "Run `azlogs auth profiles --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Authentication management. Use to verify Azure CLI login status before downloading logs."
+    },
+    "cache": {
+      "help": "Manage CLI cache",
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `azlogs cache clear --help` for exact arguments and options."
+        }
+      },
+      "usage_instructions": "Run `azlogs cache --help` for exact arguments and options."
+    },
+    "packages": {
+      "help": "Manage downloaded log packages",
+      "commands": {
+        "list": {
+          "help": "List downloaded log packages.",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum packages to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "azlogs packages list",
+            "azlogs packages list --table",
+            "azlogs packages list --limit 5",
+            "azlogs packages list --filter \"has_merged:true\"",
+            "azlogs packages list --properties \"name,entry_count,created\""
+          ],
+          "usage_instructions": "List all locally downloaded log packages. Use --table/-t for formatted output. Use --filter/-f to narrow results (e.g. --filter \"has_merged:true\"). Use --properties/-p to select specific fields. Default limit is 100."
+        },
+        "get": {
+          "help": "Get details of a specific log package.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name (directory name)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "azlogs packages get 2026-02-10_09-40-16",
+            "azlogs packages get 2026-02-10_09-40-16 --table"
+          ],
+          "usage_instructions": "Get metadata and details for a single log package by name. The NAME argument is the package directory name (timestamp format like 2026-02-10_09-40-16)."
+        },
+        "download": {
+          "help": "Download fresh logs from Azure Web App. Downloads via Kudu API, then auto-parses into JSONL and generates HTML report. Requires 'azlogs auth login' to be configured first. By default, only entries from the last 24 hours are included in the merged output. Use --since to change the window (e.g. --since 3d, --since all). The Kudu dump already includes trace logs. Use --include-kudu-trace to re-download them via a separate API call (overwrites with a fresh snapshot).",
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--include-kudu-trace",
+              "type": "bool",
+              "required": false,
+              "help": "Download Kudu trace logs separately (already included in dump)"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only include entries from this time window (e.g. 24h, 3d, 1w, all)",
+              "short": "-s",
+              "default": "24h"
+            }
+          ],
+          "examples": [
+            "azlogs packages download",
+            "azlogs packages download --table",
+            "azlogs packages download --since 3d",
+            "azlogs packages download --since all",
+            "azlogs packages download --include-kudu-trace"
+          ],
+          "usage_instructions": "Download fresh logs from an Azure Web App via Kudu API. Auto-parses into JSONL and generates an HTML report. Use --since/-s to control the time window (default 24h; accepts 3d, 1w, all). Use --include-kudu-trace only if you need to re-download trace logs separately (they are already in the dump)."
+        },
+        "parse": {
+          "help": "Re-parse an existing log package. Regenerates merged output and HTML report from raw log files. Use --since to filter to a time window (default: all entries).",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name to re-parse"
+            }
+          ],
+          "options": [
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output format: jsonl or csv",
+              "default": "jsonl"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only include entries from this time window (e.g. 12h, 3d, 1w, all)",
+              "short": "-s",
+              "default": "all"
+            }
+          ],
+          "examples": [
+            "azlogs packages parse 2026-02-10_09-40-16",
+            "azlogs packages parse 2026-02-10_09-40-16 --since 12h",
+            "azlogs packages parse 2026-02-10_09-40-16 --format csv"
+          ],
+          "usage_instructions": "Re-parse an existing package to regenerate merged JSONL and HTML report from raw log files. Use --since/-s to filter entries (default: all). Use --format to choose jsonl or csv output. The NAME argument is the package directory name."
+        },
+        "validate": {
+          "help": "Validate that merged.jsonl covers every raw log line.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name to validate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "azlogs packages validate 2026-02-10_09-40-16",
+            "azlogs packages validate 2026-02-10_09-40-16 --table"
+          ],
+          "usage_instructions": "Validate that the merged JSONL output accounts for every raw log line in the package. Use after parsing to ensure no log entries were missed."
+        },
+        "delete": {
+          "help": "Delete a downloaded log package.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ],
+          "examples": [
+            "azlogs packages delete 2026-02-10_09-40-16",
+            "azlogs packages delete 2026-02-10_09-40-16 --yes"
+          ],
+          "usage_instructions": "Delete a local log package by name. Use --yes/-y to skip the confirmation prompt."
+        }
+      },
+      "usage_instructions": "Log package lifecycle -- downloading fresh logs from Azure, listing/inspecting local packages, re-parsing, validating, and deleting. Each download creates a timestamped package directory containing raw logs, merged JSONL, and an HTML report."
+    },
+    "entries": {
+      "help": "Query parsed log entries",
+      "commands": {
+        "list": {
+          "help": "List log entries from a package. All filtering is client-side on local JSONL data.",
+          "arguments": [
+            {
+              "name": "package",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name to query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., level:eq:ERROR, entity:eq:app_log)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ],
+          "examples": [
+            "azlogs entries list 2026-02-10_09-40-16",
+            "azlogs entries list 2026-02-10_09-40-16 --table --limit 20",
+            "azlogs entries list 2026-02-10_09-40-16 --filter \"level:eq:ERROR\"",
+            "azlogs entries list 2026-02-10_09-40-16 --filter \"entity:eq:app_log\"",
+            "azlogs entries list 2026-02-10_09-40-16 --filter \"service:ilike:%automation%\"",
+            "azlogs entries list 2026-02-10_09-40-16 --filter \"level:eq:ERROR\" --filter \"level:eq:WARNING\"",
+            "azlogs entries list 2026-02-10_09-40-16 --properties \"timestamp,level,service,message\""
+          ],
+          "usage_instructions": "List log entries from a package with client-side filtering. Use --filter/-f for field:op:value filters (e.g. level:eq:ERROR, entity:eq:app_log, service:ilike:%automation%). Multiple --filter flags combine as OR for the same field. Use --properties/-p to select specific columns. Default limit is 100."
+        },
+        "get": {
+          "help": "Get a specific log entry by source file and line number.",
+          "arguments": [
+            {
+              "name": "package",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name"
+            },
+            {
+              "name": "source_file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Source file path within package"
+            },
+            {
+              "name": "line_number",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Line number in source file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ],
+          "examples": [
+            "azlogs entries get 2026-02-10_09-40-16 \"LogFiles/ciem.log\" 42",
+            "azlogs entries get 2026-02-10_09-40-16 \"LogFiles/ciem.log\" 42 --table"
+          ],
+          "usage_instructions": "Retrieve a single log entry by its source file path and line number within a package. Use to drill into a specific entry found via entries list."
+        }
+      },
+      "usage_instructions": "Query and inspect parsed log entries from a downloaded package. Use to search, filter, and drill into specific log lines from the merged JSONL data."
+    },
+    "report": {
+      "help": "Generate log analysis reports",
+      "commands": {
+        "generate": {
+          "help": "Generate or regenerate an HTML report for a log package. Creates report.html alongside the merged output with: - Summary metrics (entry count, error count, time span) - Issues section (grouped errors and warnings) - Entity and level breakdowns - Hourly activity histogram - Top services with error/warning badges",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Package name to generate report for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--open",
+              "type": "bool",
+              "required": false,
+              "help": "Open report in browser",
+              "short": "-o"
+            }
+          ],
+          "examples": [
+            "azlogs report generate 2026-02-10_09-40-16",
+            "azlogs report generate 2026-02-10_09-40-16 --open"
+          ],
+          "usage_instructions": "Generate or regenerate an HTML report for a log package. Use --open/-o to automatically open the report in the browser after generation. The report includes summary metrics, issues, entity breakdowns, hourly histograms, and service badges."
+        }
+      },
+      "usage_instructions": "HTML report generation for log packages. Reports include summary metrics, grouped errors/warnings, entity and level breakdowns, hourly activity histograms, and top services with badges."
+    }
+  },
+  "usage_instructions": "Use for downloading and analyzing Azure Web App logs via the Kudu API. Commands follow `azlogs <group> <action>` pattern. Specify the app with --app/-a and resource group with --resource-group/-g as global options. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."
+}

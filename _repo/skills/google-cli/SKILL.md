@@ -47,6 +47,13 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **searchconsole** -- Search Console (index, sites, urls)
 - **sheets** -- Google Sheets (list, get, read, create, append, update)
 </principle>
+
+<principle name="Gmail Search Output Contract">
+`google gmail search` returns JSON array output by default, including `[]` for
+zero results. `--properties` accepts comma-separated or repeated fields from:
+`id`, `from`, `to`, `subject`, `date`, `threadId`, `labelIds`, `attachments`.
+Invalid fields fail clearly instead of returning blank objects.
+</principle>
 </essential_principles>
 
 <reference_index>

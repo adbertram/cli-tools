@@ -9,7 +9,7 @@ Persistent memory of Adam's preferences for transaction reviews. The `monarch-tr
 - **CONFLICT RESOLUTION.** If a new instruction contradicts an existing rule, replace the old rule — do not append duplicates. Note the change inline so the history is visible (`Updated YYYY-MM-DD: ...`).
 - **FORMAT.** Each rule is a single bullet under the right section, stated as an imperative, unambiguous, and self-contained (a future reviewer reading only this file must understand the rule without the original conversation).
 - **NEVER INVENT.** Only write rules Adam has explicitly stated or unmistakably implied. Do not extrapolate from a single category change into a general rule unless Adam frames it generally.
-- **CENTRAL SOURCE.** This file lives at `/Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/rules.md`. The Claude and Codex runtime roots are symlinks to the central skill folder, so every edit should be made here once.
+- **CENTRAL SOURCE.** This file lives at `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/rules.md`. The repo-owned cli-tools skill bundle is the source of truth for Monarch reviewer scripts and policy.
 
 ## Categorization Rules
 
@@ -27,8 +27,8 @@ _(none yet)_
 
 Rules about when to fetch external evidence — Amazon order lookup, Apple receipt lookup, Venmo memo lookup. Use this section to capture amount thresholds, merchant exceptions, or "don't bother" cases that save round-trips.
 
-- **Updated 2026-05-17: Amazon vendor evidence is mandatory.** For any Monarch transaction whose merchant/vendor contains `Amazon`, always invoke the `amazon-browser` agent before final categorization or approval. Pass the transaction merchant/vendor, original statement or memo if present, amount, date, account/card context if present, and ask for visible Amazon order details: order date, order number, order total, item names, and item-level prices when shown. Use the returned evidence to categorize the row. If multiple Amazon orders match, no order matches, or Amazon blocks the lookup with OTP/CAPTCHA/passkey/account recovery, mark the row as needing input instead of guessing.
-- **Updated 2026-05-30: Venmo classification is deterministic.** For any Monarch transaction whose merchant/vendor contains `Venmo`, run `/Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/scripts/classify-venmo.sh` before final categorization or approval. If the classifier returns `needs_account_user`, ask Adam which Venmo account/auth profile should be used before running any Venmo transaction lookup. Do not query every Venmo auth profile to find a match. The classifier may suggest a category only when exactly one Venmo payment matches and exactly one explicit rule in `data/venmo-classification-rules.json` matches the payment evidence.
+- **Updated 2026-06-14: Amazon vendor evidence is mandatory through the Amazon CLI.** For any Monarch transaction whose merchant/vendor contains `Amazon`, run the repo-owned Amazon CLI evidence path before final categorization or approval. Use `amazon orders match --amount {amount} --date {date} --query {query} --limit 10` and `amazon orders get <line-id>` when needed. Use the returned evidence to categorize the row. If multiple Amazon orders match, no order matches, or Amazon blocks the lookup with OTP/CAPTCHA/passkey/account recovery, mark the row as needing input instead of guessing.
+- **Updated 2026-06-14: Venmo classification is deterministic.** For any Monarch transaction whose merchant/vendor contains `Venmo`, run `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/scripts/classify-venmo.sh` before final categorization or approval. If the classifier returns `needs_account_user`, ask Adam which Venmo account/auth profile should be used before running any Venmo transaction lookup. Do not query every Venmo auth profile to find a match. The classifier may suggest a category only when exactly one Venmo payment matches and exactly one explicit rule in `data/venmo-classification-rules.json` matches the payment evidence.
 
 ## Approval Rules
 
@@ -56,12 +56,12 @@ The reviewer must ASK before running inspection except for Amazon rows, which ar
 - Amazon
   - command: amazon orders match --amount {amount} --date {date} --query {query} --limit 10
   - evidence: order item names, order total, order date, shipping address if available
-  - notes: marker only; use the mandatory amazon-browser agent workflow instead of this CLI command
+  - notes: mandatory evidence workflow; use this Amazon CLI command before final categorization or approval
 - Apple
   - command: apple purchases match --amount {amount} --date {date} --query {query} --limit 10
   - evidence: purchase/subscription name, receipt date, service vs. app vs. subscription
   - notes: $33.15 Family Checking matches Apple One subscription without inspection
 - Venmo
-  - command: /Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/scripts/classify-venmo.sh --transaction-json {transaction_json}
+  - command: /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/scripts/classify-venmo.sh --transaction-json {transaction_json}
   - evidence: payment note, counterparty, amount, completion date, resolved auth profile, deterministic category rule if one matches
   - notes: mandatory classifier workflow; if account user/profile is unknown with multiple profiles, ask Adam before any Venmo transaction lookup

@@ -1,0 +1,491 @@
+{
+  "tool": "playwright-cli",
+  "description": "CLI wrapper for Playwright browser automation (npm package @playwright/cli)",
+  "version": "0.1.0",
+  "binary": "/opt/homebrew/bin/playwright-cli",
+  "source": "@playwright/cli",
+  "total_commands": 67,
+  "syntax": "playwright-cli [-s=<session>] <command> [arguments] [options]",
+  "notes": [
+    "All commands are flat (single-word or hyphenated). The binary does NOT use grouped subcommands like 'browser open' or 'page snapshot'.",
+    "The category field below mirrors the sections shown in 'playwright-cli --help' and is reference-only — it is NOT a command prefix."
+  ],
+  "global_options": [
+    {"name": "--help", "type": "TEXT", "required": false, "help": "Print help; optionally pass a command name for command-specific help"},
+    {"name": "--version", "type": "bool", "required": false, "help": "Print version"},
+    {"name": "--session", "short": "-s", "type": "TEXT", "required": false, "help": "Target a specific browser session (usage: -s=<session>)"}
+  ],
+  "commands": {
+    "open": {
+      "category": "Core",
+      "help": "Open the browser, optionally navigating to a URL.",
+      "arguments": [
+        {"name": "url", "type": "TEXT", "required": false, "help": "URL to navigate to"}
+      ],
+      "options": [
+        {"name": "--browser", "type": "TEXT", "required": false, "help": "Browser or chrome channel: chrome, firefox, webkit, msedge"},
+        {"name": "--config", "type": "TEXT", "required": false, "help": "Path to configuration file (defaults to .playwright/cli.config.json)"},
+        {"name": "--extension", "type": "bool", "required": false, "help": "Connect to browser extension"},
+        {"name": "--headed", "type": "bool", "required": false, "help": "Run browser in headed mode"},
+        {"name": "--persistent", "type": "bool", "required": false, "help": "Use persistent browser profile"},
+        {"name": "--profile", "type": "TEXT", "required": false, "help": "Store persistent profile in specified directory"}
+      ]
+    },
+    "close": {
+      "category": "Core",
+      "help": "Close the browser."
+    },
+    "goto": {
+      "category": "Core",
+      "help": "Navigate to a URL.",
+      "arguments": [
+        {"name": "url", "type": "TEXT", "required": true, "help": "URL to navigate to"}
+      ]
+    },
+    "type": {
+      "category": "Core",
+      "help": "Type text into editable element (takes only text — focus the field first with click).",
+      "arguments": [
+        {"name": "text", "type": "TEXT", "required": true, "help": "Text to type into the element"}
+      ],
+      "options": [
+        {"name": "--submit", "type": "bool", "required": false, "help": "Submit entered text by pressing Enter after typing"}
+      ]
+    },
+    "click": {
+      "category": "Core",
+      "help": "Perform click on a web page element.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"},
+        {"name": "button", "type": "TEXT", "required": false, "help": "Button to click, defaults to left"}
+      ],
+      "options": [
+        {"name": "--modifiers", "type": "TEXT", "required": false, "help": "Modifier keys to press"}
+      ]
+    },
+    "dblclick": {
+      "category": "Core",
+      "help": "Perform double click on a web page element.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"},
+        {"name": "button", "type": "TEXT", "required": false, "help": "Button to click, defaults to left"}
+      ],
+      "options": [
+        {"name": "--modifiers", "type": "TEXT", "required": false, "help": "Modifier keys to press"}
+      ]
+    },
+    "fill": {
+      "category": "Core",
+      "help": "Fill text into editable element (replaces existing content instantly).",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"},
+        {"name": "text", "type": "TEXT", "required": true, "help": "Text to fill into the element"}
+      ],
+      "options": [
+        {"name": "--submit", "type": "bool", "required": false, "help": "Whether to submit entered text by pressing Enter after filling"}
+      ]
+    },
+    "drag": {
+      "category": "Core",
+      "help": "Perform drag and drop between two elements.",
+      "arguments": [
+        {"name": "startRef", "type": "TEXT", "required": true, "help": "Exact source element reference from the page snapshot"},
+        {"name": "endRef", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"}
+      ]
+    },
+    "hover": {
+      "category": "Core",
+      "help": "Hover over element on page.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"}
+      ]
+    },
+    "select": {
+      "category": "Core",
+      "help": "Select an option in a dropdown.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"},
+        {"name": "val", "type": "TEXT", "required": true, "help": "Value to select in the dropdown"}
+      ]
+    },
+    "upload": {
+      "category": "Core",
+      "help": "Upload one or multiple files.",
+      "arguments": [
+        {"name": "file", "type": "TEXT", "required": true, "help": "Absolute paths to the files to upload"}
+      ]
+    },
+    "check": {
+      "category": "Core",
+      "help": "Check a checkbox or radio button.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"}
+      ]
+    },
+    "uncheck": {
+      "category": "Core",
+      "help": "Uncheck a checkbox or radio button.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": true, "help": "Exact target element reference from the page snapshot"}
+      ]
+    },
+    "snapshot": {
+      "category": "Core",
+      "help": "Capture page snapshot to obtain element refs.",
+      "options": [
+        {"name": "--filename", "type": "TEXT", "required": false, "help": "Save snapshot to markdown file instead of returning it in the response"}
+      ]
+    },
+    "eval": {
+      "category": "Core",
+      "help": "Evaluate JavaScript expression on page or element.",
+      "arguments": [
+        {"name": "func", "type": "TEXT", "required": true, "help": "() => { /* code */ } or (element) => { /* code */ } when element is provided"},
+        {"name": "ref", "type": "TEXT", "required": false, "help": "Exact target element reference from the page snapshot"}
+      ]
+    },
+    "dialog-accept": {
+      "category": "Core",
+      "help": "Accept a dialog.",
+      "arguments": [
+        {"name": "prompt", "type": "TEXT", "required": false, "help": "Text of the prompt in case of a prompt dialog"}
+      ]
+    },
+    "dialog-dismiss": {
+      "category": "Core",
+      "help": "Dismiss a dialog."
+    },
+    "resize": {
+      "category": "Core",
+      "help": "Resize the browser window.",
+      "arguments": [
+        {"name": "w", "type": "INTEGER", "required": true, "help": "Width of the browser window"},
+        {"name": "h", "type": "INTEGER", "required": true, "help": "Height of the browser window"}
+      ]
+    },
+    "delete-data": {
+      "category": "Core",
+      "help": "Delete session data."
+    },
+    "go-back": {
+      "category": "Navigation",
+      "help": "Go back to the previous page."
+    },
+    "go-forward": {
+      "category": "Navigation",
+      "help": "Go forward to the next page."
+    },
+    "reload": {
+      "category": "Navigation",
+      "help": "Reload the current page."
+    },
+    "press": {
+      "category": "Keyboard",
+      "help": "Press a key on the keyboard (e.g. `a`, `ArrowLeft`).",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Name of the key to press or a character to generate"}
+      ]
+    },
+    "keydown": {
+      "category": "Keyboard",
+      "help": "Press a key down on the keyboard.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Name of the key to press or a character to generate"}
+      ]
+    },
+    "keyup": {
+      "category": "Keyboard",
+      "help": "Release a key on the keyboard.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Name of the key to release or a character"}
+      ]
+    },
+    "mousemove": {
+      "category": "Mouse",
+      "help": "Move mouse to a given position.",
+      "arguments": [
+        {"name": "x", "type": "INTEGER", "required": true, "help": "X coordinate"},
+        {"name": "y", "type": "INTEGER", "required": true, "help": "Y coordinate"}
+      ]
+    },
+    "mousedown": {
+      "category": "Mouse",
+      "help": "Press mouse down.",
+      "arguments": [
+        {"name": "button", "type": "TEXT", "required": false, "help": "Button to press, defaults to left"}
+      ]
+    },
+    "mouseup": {
+      "category": "Mouse",
+      "help": "Release mouse.",
+      "arguments": [
+        {"name": "button", "type": "TEXT", "required": false, "help": "Button to release, defaults to left"}
+      ]
+    },
+    "mousewheel": {
+      "category": "Mouse",
+      "help": "Scroll mouse wheel.",
+      "arguments": [
+        {"name": "dx", "type": "INTEGER", "required": true, "help": "X delta"},
+        {"name": "dy", "type": "INTEGER", "required": true, "help": "Y delta"}
+      ]
+    },
+    "screenshot": {
+      "category": "Save as",
+      "help": "Screenshot of the current page or element.",
+      "arguments": [
+        {"name": "ref", "type": "TEXT", "required": false, "help": "Exact target element reference from the page snapshot"}
+      ],
+      "options": [
+        {"name": "--filename", "type": "TEXT", "required": false, "help": "File name to save the screenshot to (defaults to page-{timestamp}.{png|jpeg})"},
+        {"name": "--full-page", "type": "bool", "required": false, "help": "Take a screenshot of the full scrollable page instead of the currently visible viewport"}
+      ]
+    },
+    "pdf": {
+      "category": "Save as",
+      "help": "Save page as PDF.",
+      "options": [
+        {"name": "--filename", "type": "TEXT", "required": false, "help": "File name to save the pdf to (defaults to page-{timestamp}.pdf)"}
+      ]
+    },
+    "tab-list": {
+      "category": "Tabs",
+      "help": "List all tabs."
+    },
+    "tab-new": {
+      "category": "Tabs",
+      "help": "Create a new tab.",
+      "arguments": [
+        {"name": "url", "type": "TEXT", "required": false, "help": "URL to navigate to in the new tab. If omitted, the new tab will be blank."}
+      ]
+    },
+    "tab-close": {
+      "category": "Tabs",
+      "help": "Close a browser tab.",
+      "arguments": [
+        {"name": "index", "type": "INTEGER", "required": false, "help": "Tab index. If omitted, current tab is closed."}
+      ]
+    },
+    "tab-select": {
+      "category": "Tabs",
+      "help": "Select a browser tab.",
+      "arguments": [
+        {"name": "index", "type": "INTEGER", "required": true, "help": "Tab index"}
+      ]
+    },
+    "state-load": {
+      "category": "Storage",
+      "help": "Load browser storage (authentication) state from a file.",
+      "arguments": [
+        {"name": "filename", "type": "TEXT", "required": true, "help": "File name to load the storage state from"}
+      ]
+    },
+    "state-save": {
+      "category": "Storage",
+      "help": "Save the current storage (authentication) state to a file.",
+      "arguments": [
+        {"name": "filename", "type": "TEXT", "required": false, "help": "File name to save the storage state to"}
+      ]
+    },
+    "cookie-list": {
+      "category": "Storage",
+      "help": "List all cookies (optionally filtered by domain/path).",
+      "options": [
+        {"name": "--domain", "type": "TEXT", "required": false, "help": "Filter cookies by domain"},
+        {"name": "--path", "type": "TEXT", "required": false, "help": "Filter cookies by path"}
+      ]
+    },
+    "cookie-get": {
+      "category": "Storage",
+      "help": "Get a specific cookie by name.",
+      "arguments": [
+        {"name": "name", "type": "TEXT", "required": true, "help": "Cookie name"}
+      ]
+    },
+    "cookie-set": {
+      "category": "Storage",
+      "help": "Set a cookie with optional flags.",
+      "arguments": [
+        {"name": "name", "type": "TEXT", "required": true, "help": "Cookie name"},
+        {"name": "value", "type": "TEXT", "required": true, "help": "Cookie value"}
+      ],
+      "options": [
+        {"name": "--domain", "type": "TEXT", "required": false, "help": "Cookie domain"},
+        {"name": "--path", "type": "TEXT", "required": false, "help": "Cookie path"},
+        {"name": "--expires", "type": "INTEGER", "required": false, "help": "Cookie expiration as unix timestamp"},
+        {"name": "--httpOnly", "type": "bool", "required": false, "help": "Whether the cookie is http only"},
+        {"name": "--secure", "type": "bool", "required": false, "help": "Whether the cookie is secure"},
+        {"name": "--sameSite", "type": "TEXT", "required": false, "help": "Cookie sameSite attribute"}
+      ]
+    },
+    "cookie-delete": {
+      "category": "Storage",
+      "help": "Delete a specific cookie.",
+      "arguments": [
+        {"name": "name", "type": "TEXT", "required": true, "help": "Cookie name"}
+      ]
+    },
+    "cookie-clear": {
+      "category": "Storage",
+      "help": "Clear all cookies."
+    },
+    "localstorage-list": {
+      "category": "Storage",
+      "help": "List all localStorage key-value pairs."
+    },
+    "localstorage-get": {
+      "category": "Storage",
+      "help": "Get a localStorage item by key.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to get"}
+      ]
+    },
+    "localstorage-set": {
+      "category": "Storage",
+      "help": "Set a localStorage item.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to set"},
+        {"name": "value", "type": "TEXT", "required": true, "help": "Value to set"}
+      ]
+    },
+    "localstorage-delete": {
+      "category": "Storage",
+      "help": "Delete a localStorage item.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to delete"}
+      ]
+    },
+    "localstorage-clear": {
+      "category": "Storage",
+      "help": "Clear all localStorage."
+    },
+    "sessionstorage-list": {
+      "category": "Storage",
+      "help": "List all sessionStorage key-value pairs."
+    },
+    "sessionstorage-get": {
+      "category": "Storage",
+      "help": "Get a sessionStorage item by key.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to get"}
+      ]
+    },
+    "sessionstorage-set": {
+      "category": "Storage",
+      "help": "Set a sessionStorage item.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to set"},
+        {"name": "value", "type": "TEXT", "required": true, "help": "Value to set"}
+      ]
+    },
+    "sessionstorage-delete": {
+      "category": "Storage",
+      "help": "Delete a sessionStorage item.",
+      "arguments": [
+        {"name": "key", "type": "TEXT", "required": true, "help": "Key to delete"}
+      ]
+    },
+    "sessionstorage-clear": {
+      "category": "Storage",
+      "help": "Clear all sessionStorage."
+    },
+    "route": {
+      "category": "Network",
+      "help": "Mock network requests matching a URL pattern.",
+      "arguments": [
+        {"name": "pattern", "type": "TEXT", "required": true, "help": "URL pattern to match (e.g., \"**/api/users\")"}
+      ],
+      "options": [
+        {"name": "--status", "type": "INTEGER", "required": false, "default": 200, "help": "HTTP status code"},
+        {"name": "--body", "type": "TEXT", "required": false, "help": "Response body (text or json string)"},
+        {"name": "--content-type", "type": "TEXT", "required": false, "help": "Content-Type header"},
+        {"name": "--header", "type": "TEXT", "required": false, "help": "Header to add in \"name: value\" format (repeatable)"},
+        {"name": "--remove-header", "type": "TEXT", "required": false, "help": "Comma-separated header names to remove"}
+      ]
+    },
+    "route-list": {
+      "category": "Network",
+      "help": "List all active network routes."
+    },
+    "unroute": {
+      "category": "Network",
+      "help": "Remove routes matching a pattern (or all routes).",
+      "arguments": [
+        {"name": "pattern", "type": "TEXT", "required": false, "help": "URL pattern to unroute (omit to remove all)"}
+      ]
+    },
+    "console": {
+      "category": "DevTools",
+      "help": "List console messages.",
+      "arguments": [
+        {"name": "min-level", "type": "TEXT", "required": false, "default": "info", "help": "Level of console messages to return; each level includes messages of more severe levels"}
+      ],
+      "options": [
+        {"name": "--clear", "type": "bool", "required": false, "help": "Clear the console list"}
+      ]
+    },
+    "run-code": {
+      "category": "DevTools",
+      "help": "Run Playwright code snippet.",
+      "arguments": [
+        {"name": "code", "type": "TEXT", "required": true, "help": "JavaScript function containing Playwright code to execute; invoked with a single argument `page`"}
+      ]
+    },
+    "network": {
+      "category": "DevTools",
+      "help": "List all network requests since loading the page.",
+      "options": [
+        {"name": "--static", "type": "bool", "required": false, "help": "Include successful static resources like images, fonts, scripts, etc. (default false)"},
+        {"name": "--clear", "type": "bool", "required": false, "help": "Clear the network list"}
+      ]
+    },
+    "tracing-start": {
+      "category": "DevTools",
+      "help": "Start trace recording."
+    },
+    "tracing-stop": {
+      "category": "DevTools",
+      "help": "Stop trace recording."
+    },
+    "video-start": {
+      "category": "DevTools",
+      "help": "Start video recording."
+    },
+    "video-stop": {
+      "category": "DevTools",
+      "help": "Stop video recording.",
+      "options": [
+        {"name": "--filename", "type": "TEXT", "required": false, "help": "Filename to save the video"}
+      ]
+    },
+    "install": {
+      "category": "Install",
+      "help": "Initialize workspace.",
+      "options": [
+        {"name": "--skills", "type": "bool", "required": false, "help": "Install skills for Claude / GitHub Copilot"}
+      ]
+    },
+    "install-browser": {
+      "category": "Install",
+      "help": "Install browser.",
+      "options": [
+        {"name": "--browser", "type": "TEXT", "required": false, "help": "Browser or chrome channel: chrome, firefox, webkit, msedge"}
+      ]
+    },
+    "list": {
+      "category": "Browser sessions",
+      "help": "List browser sessions.",
+      "options": [
+        {"name": "--all", "type": "bool", "required": false, "help": "List all browser sessions across all workspaces"}
+      ]
+    },
+    "close-all": {
+      "category": "Browser sessions",
+      "help": "Close all browser sessions."
+    },
+    "kill-all": {
+      "category": "Browser sessions",
+      "help": "Forcefully kill all browser sessions (for stale/zombie processes)."
+    }
+  }
+}

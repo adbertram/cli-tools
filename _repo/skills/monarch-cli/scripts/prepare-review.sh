@@ -32,7 +32,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-RULES_MD = Path("_repo/skills/monarch-cli/rules.md")
+SKILL_DIR = Path(__file__).resolve().parent.parent
+RULES_MD = SKILL_DIR / "rules.md"
 
 
 def run_monarch(args: list[str]) -> list:

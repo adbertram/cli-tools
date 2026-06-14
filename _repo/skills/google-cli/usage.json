@@ -1,7 +1,7 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-06-11T23:17:21Z",
+  "discovered_at": "2026-06-13T12:47:31Z",
   "total_commands": 99,
   "global_options": [
     {
@@ -2235,6 +2235,12 @@
               "short": "-r"
             },
             {
+              "name": "--include-body",
+              "type": "bool",
+              "required": false,
+              "help": "Include decoded message body text in the result"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -2417,8 +2423,14 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Properties to include in output",
+              "help": "Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments, body with --include-body",
               "short": "-p"
+            },
+            {
+              "name": "--include-body",
+              "type": "bool",
+              "required": false,
+              "help": "Include decoded message body text in each result"
             },
             {
               "name": "--profile",
@@ -2583,7 +2595,7 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Properties to include in output",
+              "help": "Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments",
               "short": "-p"
             },
             {

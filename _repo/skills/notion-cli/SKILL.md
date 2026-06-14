@@ -27,6 +27,7 @@ notion <command-group> <action> [arguments] [options]
 | Export page to markdown | `notion pages export PAGE_ID -o file.md -f md` |
 | Replace a section | `notion pages content replace-section PAGE_ID -h "## Heading" -f updated.md` |
 | Get database schema | `notion database schema DB_ID --table` |
+| Add a relation field | `notion field add DB_ID "Imports" --type relation --relation-database TARGET_ID` |
 | Create a database | `notion database create PARENT_PAGE_ID -t "Tasks" --status "Phase:Todo\|Done" --date "Due"` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
@@ -73,6 +74,31 @@ an oversize block can no longer empty the page mid-upload. You do NOT need to
 pre-split long paragraphs or write the input as one >2000-char block in multiple
 chunks — pass the content as-is. (Historical note: a prior version cleared first and
 failed on >2000-char paragraphs, leaving the page blank. That hazard is fixed.)
+</principle>
+
+<principle name="Unsupported Code-Fence Languages Are Normalized">
+Notion's API only accepts code-block languages from a fixed set (~90 languages:
+`bash`, `python`, `json`, `sql`, `yaml`, `powershell`, `javascript`, `markdown`,
+`plain text`, … — but NOT `kql`). The CLI normalizes any unsupported fence
+language to `plain text` on every upload path (`content set`, `content append`,
+`import`, `replace-section`, `duplicate`, `database page create --content-file` /
+`--blocks-file`), for both Markdown input (` ```kql ` fences) and raw Notion JSON
+(`--json-file`). Known languages and the Markdown `text` alias (→ `plain text`)
+are preserved. You do NOT need to scrub fence languages before pushing — pass the
+content as-is. (Historical note: a prior version forwarded the language verbatim,
+which 400'd the request. That hazard is fixed.)
+</principle>
+
+<principle name="replace-section Validates the Full Payload Before Mutating">
+`pages content replace-section` is now safe against mid-upload API rejections. It
+transforms + validates the ENTIRE new payload (block-size limits AND code-fence
+language normalization) BEFORE deleting or inserting any block. A pre-checkable
+problem (oversize rich_text, unsupported code language) aborts before the page is
+touched, so the section can no longer be left half-written with a duplicate
+heading. (Historical note: a prior version inserted new blocks first, then
+deleted old ones; an API rejection partway — e.g. a ` ```kql ` fence — left a
+partial new section AND the original undeleted section, producing a duplicate
+heading. That hazard is fixed.)
 </principle>
 
 <principle name="Markdown Round-Trip: Intraword Underscores Are Literal">
@@ -133,6 +159,35 @@ notion database create PARENT_PAGE_ID -t "Tasks" \
   --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due" \
   --relation "Project:TARGET_DATA_SOURCE_ID"
 ```
+</principle>
+
+<principle name="Adding a Relation Field to an EXISTING Database">
+`notion field add DB_ID "Name" --type relation --relation-database TARGET_ID`
+adds a relation property to an existing database. Under API 2025-09-03 the
+relation schema requires `relation.data_source_id` (the legacy
+`relation.database_id` is rejected with a 400:
+`body.properties.<Name>.relation.data_source_id should be defined`).
+
+- `--relation-database` accepts EITHER the target's database container ID OR its
+  data_source ID. The CLI resolves it to the target's data_source_id before
+  sending (same resolution as every other database command). `--relation-data-source`
+  is an accepted alias.
+- `--relation-type` is `dual_property` (default) or `single_property`.
+- `field update DB_ID "Name" --relation-database TARGET_ID [--relation-type ...]`
+  repoints or retypes an existing relation field; passing only `--relation-type`
+  keeps the current target, passing only `--relation-database` keeps the current type.
+
+```bash
+notion field add DB_ID "Imports" --type relation --relation-database TARGET_DB_OR_DS_ID
+notion field add DB_ID "Imports" --type relation --relation-database TARGET_ID --relation-type single_property
+notion field update DB_ID "Imports" --relation-database NEW_TARGET_ID
+```
+
+Note: `field list` reports a relation's target as `relation_database`, which is
+the target's database CONTAINER id (Notion echoes it in `relation.database_id`);
+the underlying schema still stores the resolved `relation.data_source_id`.
+(Historical note: a prior version emitted `relation.database_id` for `field add`,
+which 400'd on existing databases. That hazard is fixed.)
 </principle>
 
 <principle name="Toggle Blocks (Collapsible Headings)">

@@ -1,7 +1,7 @@
 {
   "tool": "things",
   "description": "CLI interface for Things 3 task management",
-  "discovered_at": "2026-05-06T15:21:48.962280+00:00",
+  "discovered_at": "2026-06-13T12:46:39Z",
   "total_commands": 24,
   "global_options": [
     {
@@ -13,11 +13,745 @@
     }
   ],
   "commands": {
+    "areas": {
+      "help": "Manage areas",
+      "usage_instructions": "CRUD operations on Things areas. Areas are top-level groupings that contain projects and standalone todos. Title is positional for create. UUID is positional for get/delete/update.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a new area.",
+          "examples": [
+            "things areas create \"Work\"",
+            "things areas create \"Personal\""
+          ],
+          "usage_instructions": "Create an area. TITLE is a required positional argument.",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Area title"
+            }
+          ],
+          "options": []
+        },
+        "delete": {
+          "help": "Delete an area.",
+          "examples": [
+            "things areas delete UUID"
+          ],
+          "usage_instructions": "Delete an area. UUID is a required positional argument.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The area UUID"
+            }
+          ],
+          "options": []
+        },
+        "get": {
+          "help": "Get a specific area by UUID.",
+          "examples": [
+            "things areas get UUID",
+            "things areas get UUID --table"
+          ],
+          "usage_instructions": "Retrieve a single area by its UUID (positional argument). Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The area UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List areas.",
+          "examples": [
+            "things areas list",
+            "things areas list --table",
+            "things areas list --properties \"uuid,title\""
+          ],
+          "usage_instructions": "List all areas. Use --table/-t for formatted output, --properties/-p to select fields, --limit/-l to cap results (default 100).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search areas by title.",
+          "examples": [
+            "things areas search \"work\"",
+            "things areas search \"personal\" --table"
+          ],
+          "usage_instructions": "Search areas by title text. QUERY is a required positional argument.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (matches title)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an area.",
+          "examples": [
+            "things areas update UUID --title \"New Title\""
+          ],
+          "usage_instructions": "Update an area's title. UUID is a required positional argument. Use --title to set the new title.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The area UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New title"
+            }
+          ]
+        }
+      }
+    },
+    "projects": {
+      "help": "Manage projects",
+      "usage_instructions": "CRUD operations on Things projects. Use list with --area to filter by area, --status for completion state. Title is positional for create. UUID is positional for get/complete/delete/update.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "complete": {
+          "help": "Mark a project as completed. Example: things projects complete UUID",
+          "usage_instructions": "Mark a project as completed. UUID is a required positional argument.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The project UUID"
+            }
+          ],
+          "options": []
+        },
+        "create": {
+          "help": "Create a new project.",
+          "examples": [
+            "things projects create \"Home Renovation\"",
+            "things projects create \"Q1 Goals\" --area AREA_UUID",
+            "things projects create \"Backlog Project\" --when someday"
+          ],
+          "usage_instructions": "Create a project. TITLE is a required positional argument. Use --notes/-n for notes, --area for an area UUID, --when/-w (anytime, someday).",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project title"
+            }
+          ],
+          "options": [
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project notes",
+              "short": "-n"
+            },
+            {
+              "name": "--area",
+              "type": "TEXT",
+              "required": false,
+              "help": "Area UUID"
+            },
+            {
+              "name": "--when",
+              "type": "TEXT",
+              "required": false,
+              "help": "When: anytime, someday",
+              "short": "-w"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a project (move to trash). Example: things projects delete UUID things projects delete UUID --yes",
+          "usage_instructions": "Move a project to trash. UUID is a required positional argument. Use --yes/-y to skip confirmation.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The project UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific project by UUID.",
+          "examples": [
+            "things projects get UUID",
+            "things projects get UUID --table",
+            "things projects get UUID --properties \"title,notes\""
+          ],
+          "usage_instructions": "Retrieve a single project by its UUID (positional argument). Use --properties/-p to select specific fields.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The project UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--include-tasks",
+              "type": "bool",
+              "required": false,
+              "help": "Include tasks inside the project under a tasks key"
+            }
+          ]
+        },
+        "list": {
+          "help": "List projects.",
+          "examples": [
+            "things projects list",
+            "things projects list --area AREA_UUID",
+            "things projects list --status incomplete",
+            "things projects list --properties \"uuid,title,status\"",
+            "things projects list --table",
+            "things projects list --exclude-tag WF",
+            "things projects list --exclude-tag WF --exclude-tag SomeOther"
+          ],
+          "usage_instructions": "List projects with optional filtering. Use --area to filter by area UUID, --status/-s for completion state (incomplete, completed), --exclude-tag to drop projects tagged with the given tag (case-sensitive, repeatable for union exclusion). Default limit is 100. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--area",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by area UUID"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status: incomplete, completed",
+              "short": "-s"
+            },
+            {
+              "name": "--exclude-tag",
+              "type": "TEXT",
+              "required": false,
+              "help": "Drop projects tagged with this tag (case-sensitive, repeatable; union exclusion)"
+            },
+            {
+              "name": "--include-tasks",
+              "type": "bool",
+              "required": false,
+              "help": "Include tasks inside each project under a tasks key"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search projects by title.",
+          "examples": [
+            "things projects search \"home\"",
+            "things projects search \"work\" --table"
+          ],
+          "usage_instructions": "Search projects by title text. QUERY is a required positional argument. Use --limit/-l to cap results (default 100).",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (matches title)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update a project.",
+          "examples": [
+            "things projects update UUID --title \"New title\"",
+            "things projects update UUID --notes \"Updated notes\"",
+            "things projects update UUID --area AREA_UUID",
+            "things projects update UUID --area \"\"  # Remove from area",
+            "things projects update UUID --when someday",
+            "things projects update UUID --deadline 2024-12-31",
+            "things projects update UUID --tags \"work,Q1\""
+          ],
+          "usage_instructions": "Update an existing project. UUID is a required positional argument. Use --title, --notes/-n, --area (UUID or empty string to remove), --when/-w (anytime, someday), --deadline/-d (ISO date or empty string to clear), --tags (comma-separated, replaces existing).",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The project UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New title"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "New notes",
+              "short": "-n"
+            },
+            {
+              "name": "--area",
+              "type": "TEXT",
+              "required": false,
+              "help": "Area UUID, or empty string to remove from area"
+            },
+            {
+              "name": "--when",
+              "type": "TEXT",
+              "required": false,
+              "help": "When: anytime, someday",
+              "short": "-w"
+            },
+            {
+              "name": "--deadline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Deadline (ISO date), or empty string to clear",
+              "short": "-d"
+            },
+            {
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated tag titles (replaces existing)"
+            }
+          ]
+        }
+      }
+    },
+    "tags": {
+      "help": "Manage tags",
+      "usage_instructions": "Read-only operations on Things tags. Tags can be listed, retrieved by UUID, and searched by title. Tags are created and managed in the Things app itself.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get a specific tag by UUID.",
+          "examples": [
+            "things tags get UUID",
+            "things tags get UUID --table"
+          ],
+          "usage_instructions": "Retrieve a single tag by its UUID (positional argument).",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The tag UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List tags.",
+          "examples": [
+            "things tags list",
+            "things tags list --table",
+            "things tags list --properties \"uuid,title,shortcut\""
+          ],
+          "usage_instructions": "List all tags. Use --table/-t for formatted output, --properties/-p to select fields (uuid, title, shortcut), --limit/-l to cap results (default 100).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of items",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search tags by title.",
+          "examples": [
+            "things tags search \"work\"",
+            "things tags search \"urgent\" --table"
+          ],
+          "usage_instructions": "Search tags by title text. QUERY is a required positional argument.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (matches title)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "todos": {
       "help": "Manage todos",
+      "usage_instructions": "CRUD operations on Things todos. Use list with --when to filter by inbox/today/anytime/someday/upcoming. Use --next-actions/-n to get only actionable todos. Title is positional for create. UUID is positional for get/complete/uncomplete/delete/update.",
+      "arguments": [],
+      "options": [],
       "commands": {
+        "complete": {
+          "help": "Mark a todo as completed. Example: things todos complete UUID",
+          "usage_instructions": "Mark a todo as completed. UUID is a required positional argument.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The todo UUID"
+            }
+          ],
+          "options": []
+        },
+        "create": {
+          "help": "Create a new todo.",
+          "examples": [
+            "things todos create \"Buy groceries\"",
+            "things todos create \"Review document\" --when today",
+            "things todos create \"Call John\" --deadline 2024-12-31",
+            "things todos create \"Task\" --project PROJECT_UUID --tags \"work,urgent\"",
+            "things todos create \"Some task\" --area AREA_UUID --tags \"WF\""
+          ],
+          "usage_instructions": "Create a todo. TITLE is a required positional argument. Use --notes/-n for notes, --when/-w for scheduling (inbox, anytime, someday, or ISO date), --deadline/-d for a deadline (ISO date), --tags for comma-separated tag titles, --project for a project UUID.",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo title"
+            }
+          ],
+          "options": [
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Todo notes",
+              "short": "-n"
+            },
+            {
+              "name": "--when",
+              "type": "TEXT",
+              "required": false,
+              "help": "When: inbox, anytime, someday, or ISO date",
+              "short": "-w"
+            },
+            {
+              "name": "--deadline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Deadline (ISO date)",
+              "short": "-d"
+            },
+            {
+              "name": "--tags",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated tag titles"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project UUID"
+            },
+            {
+              "name": "--area",
+              "type": "TEXT",
+              "required": false,
+              "help": "Area UUID (places todo directly in an area, without a project)"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a todo (move to trash). Example: things todos delete UUID things todos delete UUID --yes",
+          "usage_instructions": "Move a todo to trash. UUID is a required positional argument. Use --yes/-y to skip confirmation prompt.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The todo UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific todo by UUID.",
+          "examples": [
+            "things todos get UUID",
+            "things todos get UUID --table",
+            "things todos get UUID --properties \"title,notes,deadline\""
+          ],
+          "usage_instructions": "Retrieve a single todo by its UUID (positional argument). Use --properties/-p to select specific fields. Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "uuid",
+              "type": "TEXT",
+              "required": true,
+              "help": "The todo UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            }
+          ]
+        },
         "list": {
           "help": "List todos.",
+          "examples": [
+            "things todos list",
+            "things todos list --when today",
+            "things todos list --when anytime --limit 10",
+            "things todos list --status completed",
+            "things todos list --project PROJECT_UUID",
+            "things todos list --properties \"uuid,title,status\"",
+            "things todos list --table",
+            "things todos list --exclude-tag WF",
+            "things todos list --exclude-tag WF --exclude-tag SomeOther",
+            "things todos list --tag work --exclude-tag WF"
+          ],
+          "usage_instructions": "List todos with filtering. Use --when/-w for time-based filters (inbox, anytime, someday, today, upcoming). Use --status/-s for completion state (incomplete, completed). Use --tag to filter by tag title, --exclude-tag to drop todos tagged with the given tag (case-sensitive, repeatable for union exclusion of multiple tags, e.g. --exclude-tag WF --exclude-tag Archive), --area/--project to filter by UUID. Use --next-actions/-n for only actionable items. Default limit is 100.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -99,29 +833,21 @@
               "required": false,
               "help": "Include todos from trashed projects"
             }
-          ],
-          "examples": [
-            "things todos list",
-            "things todos list --when today",
-            "things todos list --when anytime --limit 10",
-            "things todos list --status completed",
-            "things todos list --project PROJECT_UUID",
-            "things todos list --properties \"uuid,title,status\"",
-            "things todos list --table",
-            "things todos list --exclude-tag WF",
-            "things todos list --exclude-tag WF --exclude-tag SomeOther",
-            "things todos list --tag work --exclude-tag WF"
-          ],
-          "usage_instructions": "List todos with filtering. Use --when/-w for time-based filters (inbox, anytime, someday, today, upcoming). Use --status/-s for completion state (incomplete, completed). Use --tag to filter by tag title, --exclude-tag to drop todos tagged with the given tag (case-sensitive, repeatable for union exclusion of multiple tags, e.g. --exclude-tag WF --exclude-tag Archive), --area/--project to filter by UUID. Use --next-actions/-n for only actionable items. Default limit is 100."
+          ]
         },
-        "get": {
-          "help": "Get a specific todo by UUID.",
+        "search": {
+          "help": "Search todos by title.",
+          "examples": [
+            "things todos search \"groceries\"",
+            "things todos search \"meeting\" --table"
+          ],
+          "usage_instructions": "Search todos by title text. QUERY is a required positional argument. Use --limit/-l to cap results (default 100). Use --table/-t for formatted output.",
           "arguments": [
             {
-              "name": "uuid",
+              "name": "query",
               "type": "TEXT",
               "required": true,
-              "help": "The todo UUID"
+              "help": "Search query (matches title)"
             }
           ],
           "options": [
@@ -133,94 +859,25 @@
               "short": "-t"
             },
             {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
               "name": "--properties",
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields",
               "short": "-p"
             }
-          ],
-          "examples": [
-            "things todos get UUID",
-            "things todos get UUID --table",
-            "things todos get UUID --properties \"title,notes,deadline\""
-          ],
-          "usage_instructions": "Retrieve a single todo by its UUID (positional argument). Use --properties/-p to select specific fields. Use --table/-t for formatted output."
-        },
-        "create": {
-          "help": "Create a new todo.",
-          "arguments": [
-            {
-              "name": "title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Todo title"
-            }
-          ],
-          "options": [
-            {
-              "name": "--notes",
-              "type": "TEXT",
-              "required": false,
-              "help": "Todo notes",
-              "short": "-n"
-            },
-            {
-              "name": "--when",
-              "type": "TEXT",
-              "required": false,
-              "help": "When: inbox, anytime, someday, or ISO date",
-              "short": "-w"
-            },
-            {
-              "name": "--deadline",
-              "type": "TEXT",
-              "required": false,
-              "help": "Deadline (ISO date)",
-              "short": "-d"
-            },
-            {
-              "name": "--tags",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated tag titles"
-            },
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project UUID"
-            },
-            {
-              "name": "--area",
-              "type": "TEXT",
-              "required": false,
-              "help": "Area UUID (places todo directly in an area, without a project)"
-            }
-          ],
-          "examples": [
-            "things todos create \"Buy groceries\"",
-            "things todos create \"Review document\" --when today",
-            "things todos create \"Call John\" --deadline 2024-12-31",
-            "things todos create \"Task\" --project PROJECT_UUID --tags \"work,urgent\"",
-            "things todos create \"Some task\" --area AREA_UUID --tags \"WF\""
-          ],
-          "usage_instructions": "Create a todo. TITLE is a required positional argument. Use --notes/-n for notes, --when/-w for scheduling (inbox, anytime, someday, or ISO date), --deadline/-d for a deadline (ISO date), --tags for comma-separated tag titles, --project for a project UUID."
-        },
-        "complete": {
-          "help": "Mark a todo as completed. Example: things todos complete UUID",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The todo UUID"
-            }
-          ],
-          "usage_instructions": "Mark a todo as completed. UUID is a required positional argument."
+          ]
         },
         "uncomplete": {
           "help": "Mark a completed todo as incomplete. Example: things todos uncomplete UUID",
+          "usage_instructions": "Reopen a completed todo. UUID is a required positional argument.",
           "arguments": [
             {
               "name": "uuid",
@@ -229,31 +886,21 @@
               "help": "The todo UUID"
             }
           ],
-          "usage_instructions": "Reopen a completed todo. UUID is a required positional argument."
-        },
-        "delete": {
-          "help": "Delete a todo (move to trash). Example: things todos delete UUID things todos delete UUID --yes",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The todo UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--yes",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation",
-              "short": "-y"
-            }
-          ],
-          "usage_instructions": "Move a todo to trash. UUID is a required positional argument. Use --yes/-y to skip confirmation prompt."
+          "options": []
         },
         "update": {
           "help": "Update a todo.",
+          "examples": [
+            "things todos update UUID --title \"New title\"",
+            "things todos update UUID --notes \"Updated notes\"",
+            "things todos update UUID --when today",
+            "things todos update UUID --deadline 2024-12-31",
+            "things todos update UUID --deadline \"\"  # Clear deadline",
+            "things todos update UUID --tags \"work,urgent\"",
+            "things todos update UUID --project PROJECT_UUID",
+            "things todos update UUID --area AREA_UUID"
+          ],
+          "usage_instructions": "Update an existing todo. UUID is a required positional argument. Use --title, --notes/-n, --when/-w (inbox, today, tomorrow, evening, anytime, someday, or ISO date), --deadline/-d (ISO date or empty string to clear), --tags (comma-separated, replaces existing), --project to move to a project UUID, and --area to move to an area UUID. Pass only one of --project or --area.",
           "arguments": [
             {
               "name": "uuid",
@@ -295,626 +942,22 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated tag titles (replaces existing)"
-            }
-          ],
-          "examples": [
-            "things todos update UUID --title \"New title\"",
-            "things todos update UUID --notes \"Updated notes\"",
-            "things todos update UUID --when today",
-            "things todos update UUID --deadline 2024-12-31",
-            "things todos update UUID --deadline \"\"  # Clear deadline",
-            "things todos update UUID --tags \"work,urgent\""
-          ],
-          "usage_instructions": "Update an existing todo. UUID is a required positional argument. Use --title, --notes/-n, --when/-w (inbox, today, tomorrow, evening, anytime, someday, or ISO date), --deadline/-d (ISO date or empty string to clear), --tags (comma-separated, replaces existing)."
-        },
-        "search": {
-          "help": "Search todos by title.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query (matches title)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--properties",
+              "name": "--project",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things todos search \"groceries\"",
-            "things todos search \"meeting\" --table"
-          ],
-          "usage_instructions": "Search todos by title text. QUERY is a required positional argument. Use --limit/-l to cap results (default 100). Use --table/-t for formatted output."
-        }
-      },
-      "usage_instructions": "CRUD operations on Things todos. Use list with --when to filter by inbox/today/anytime/someday/upcoming. Use --next-actions/-n to get only actionable todos. Title is positional for create. UUID is positional for get/complete/uncomplete/delete/update."
-    },
-    "projects": {
-      "help": "Manage projects",
-      "commands": {
-        "list": {
-          "help": "List projects.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of items",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
+              "help": "Move todo to project UUID. Mutually exclusive with --area"
             },
             {
               "name": "--area",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by area UUID"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by status: incomplete, completed",
-              "short": "-s"
-            },
-            {
-              "name": "--exclude-tag",
-              "type": "TEXT",
-              "required": false,
-              "help": "Drop projects tagged with this tag (case-sensitive, repeatable; union exclusion)"
+              "help": "Move todo to area UUID (detaches from any project). Mutually exclusive with --project"
             }
-          ],
-          "examples": [
-            "things projects list",
-            "things projects list --area AREA_UUID",
-            "things projects list --status incomplete",
-            "things projects list --properties \"uuid,title,status\"",
-            "things projects list --table",
-            "things projects list --exclude-tag WF",
-            "things projects list --exclude-tag WF --exclude-tag SomeOther"
-          ],
-          "usage_instructions": "List projects with optional filtering. Use --area to filter by area UUID, --status/-s for completion state (incomplete, completed), --exclude-tag to drop projects tagged with the given tag (case-sensitive, repeatable for union exclusion). Default limit is 100. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get a specific project by UUID.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The project UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things projects get UUID",
-            "things projects get UUID --table",
-            "things projects get UUID --properties \"title,notes\""
-          ],
-          "usage_instructions": "Retrieve a single project by its UUID (positional argument). Use --properties/-p to select specific fields."
-        },
-        "create": {
-          "help": "Create a new project.",
-          "arguments": [
-            {
-              "name": "title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project title"
-            }
-          ],
-          "options": [
-            {
-              "name": "--notes",
-              "type": "TEXT",
-              "required": false,
-              "help": "Project notes",
-              "short": "-n"
-            },
-            {
-              "name": "--area",
-              "type": "TEXT",
-              "required": false,
-              "help": "Area UUID"
-            },
-            {
-              "name": "--when",
-              "type": "TEXT",
-              "required": false,
-              "help": "When: anytime, someday",
-              "short": "-w"
-            }
-          ],
-          "examples": [
-            "things projects create \"Home Renovation\"",
-            "things projects create \"Q1 Goals\" --area AREA_UUID",
-            "things projects create \"Backlog Project\" --when someday"
-          ],
-          "usage_instructions": "Create a project. TITLE is a required positional argument. Use --notes/-n for notes, --area for an area UUID, --when/-w (anytime, someday)."
-        },
-        "complete": {
-          "help": "Mark a project as completed. Example: things projects complete UUID",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The project UUID"
-            }
-          ],
-          "usage_instructions": "Mark a project as completed. UUID is a required positional argument."
-        },
-        "delete": {
-          "help": "Delete a project (move to trash). Example: things projects delete UUID things projects delete UUID --yes",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The project UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--yes",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation",
-              "short": "-y"
-            }
-          ],
-          "usage_instructions": "Move a project to trash. UUID is a required positional argument. Use --yes/-y to skip confirmation."
-        },
-        "update": {
-          "help": "Update a project.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The project UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "New title"
-            },
-            {
-              "name": "--notes",
-              "type": "TEXT",
-              "required": false,
-              "help": "New notes",
-              "short": "-n"
-            },
-            {
-              "name": "--area",
-              "type": "TEXT",
-              "required": false,
-              "help": "Area UUID, or empty string to remove from area"
-            },
-            {
-              "name": "--when",
-              "type": "TEXT",
-              "required": false,
-              "help": "When: anytime, someday",
-              "short": "-w"
-            },
-            {
-              "name": "--deadline",
-              "type": "TEXT",
-              "required": false,
-              "help": "Deadline (ISO date), or empty string to clear",
-              "short": "-d"
-            },
-            {
-              "name": "--tags",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated tag titles (replaces existing)"
-            }
-          ],
-          "examples": [
-            "things projects update UUID --title \"New title\"",
-            "things projects update UUID --notes \"Updated notes\"",
-            "things projects update UUID --area AREA_UUID",
-            "things projects update UUID --area \"\"  # Remove from area",
-            "things projects update UUID --when someday",
-            "things projects update UUID --deadline 2024-12-31",
-            "things projects update UUID --tags \"work,Q1\""
-          ],
-          "usage_instructions": "Update an existing project. UUID is a required positional argument. Use --title, --notes/-n, --area (UUID or empty string to remove), --when/-w (anytime, someday), --deadline/-d (ISO date or empty string to clear), --tags (comma-separated, replaces existing)."
-        },
-        "search": {
-          "help": "Search projects by title.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query (matches title)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things projects search \"home\"",
-            "things projects search \"work\" --table"
-          ],
-          "usage_instructions": "Search projects by title text. QUERY is a required positional argument. Use --limit/-l to cap results (default 100)."
+          ]
         }
-      },
-      "usage_instructions": "CRUD operations on Things projects. Use list with --area to filter by area, --status for completion state. Title is positional for create. UUID is positional for get/complete/delete/update."
-    },
-    "areas": {
-      "help": "Manage areas",
-      "commands": {
-        "list": {
-          "help": "List areas.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of items",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things areas list",
-            "things areas list --table",
-            "things areas list --properties \"uuid,title\""
-          ],
-          "usage_instructions": "List all areas. Use --table/-t for formatted output, --properties/-p to select fields, --limit/-l to cap results (default 100)."
-        },
-        "get": {
-          "help": "Get a specific area by UUID.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The area UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things areas get UUID",
-            "things areas get UUID --table"
-          ],
-          "usage_instructions": "Retrieve a single area by its UUID (positional argument). Use --table/-t for formatted output."
-        },
-        "create": {
-          "help": "Create a new area.",
-          "arguments": [
-            {
-              "name": "title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Area title"
-            }
-          ],
-          "examples": [
-            "things areas create \"Work\"",
-            "things areas create \"Personal\""
-          ],
-          "usage_instructions": "Create an area. TITLE is a required positional argument."
-        },
-        "delete": {
-          "help": "Delete an area.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The area UUID"
-            }
-          ],
-          "examples": [
-            "things areas delete UUID"
-          ],
-          "usage_instructions": "Delete an area. UUID is a required positional argument."
-        },
-        "update": {
-          "help": "Update an area.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The area UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "New title"
-            }
-          ],
-          "examples": [
-            "things areas update UUID --title \"New Title\""
-          ],
-          "usage_instructions": "Update an area's title. UUID is a required positional argument. Use --title to set the new title."
-        },
-        "search": {
-          "help": "Search areas by title.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query (matches title)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things areas search \"work\"",
-            "things areas search \"personal\" --table"
-          ],
-          "usage_instructions": "Search areas by title text. QUERY is a required positional argument."
-        }
-      },
-      "usage_instructions": "CRUD operations on Things areas. Areas are top-level groupings that contain projects and standalone todos. Title is positional for create. UUID is positional for get/delete/update."
-    },
-    "tags": {
-      "help": "Manage tags",
-      "commands": {
-        "list": {
-          "help": "List tags.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of items",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things tags list",
-            "things tags list --table",
-            "things tags list --properties \"uuid,title,shortcut\""
-          ],
-          "usage_instructions": "List all tags. Use --table/-t for formatted output, --properties/-p to select fields (uuid, title, shortcut), --limit/-l to cap results (default 100)."
-        },
-        "get": {
-          "help": "Get a specific tag by UUID.",
-          "arguments": [
-            {
-              "name": "uuid",
-              "type": "TEXT",
-              "required": true,
-              "help": "The tag UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things tags get UUID",
-            "things tags get UUID --table"
-          ],
-          "usage_instructions": "Retrieve a single tag by its UUID (positional argument)."
-        },
-        "search": {
-          "help": "Search tags by title.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query (matches title)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "things tags search \"work\"",
-            "things tags search \"urgent\" --table"
-          ],
-          "usage_instructions": "Search tags by title text. QUERY is a required positional argument."
-        }
-      },
-      "usage_instructions": "Read-only operations on Things tags. Tags can be listed, retrieved by UUID, and searched by title. Tags are created and managed in the Things app itself."
+      }
     }
   },
   "usage_instructions": "Use for managing Things 3 tasks, projects, areas, and tags. Commands follow `things <group> <action>` pattern. Reads directly from the Things SQLite database (no API key needed). Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Title is a positional argument for create commands. Exclude WF-tagged items by default when listing: pipe through jq '[.[] | select((.tags // []) | index(\"WF\") | not)]'."

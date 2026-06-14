@@ -54,6 +54,14 @@ All list commands support `--filter/-f` using `field:op:value` syntax.
 Operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `like`, `ilike`, `null`, `notnull`, `contains`, `startswith`, `endswith`.
 Examples: `--filter name:contains:sync`, `--filter active:eq:true`, `--filter created_at:gte:2026-04-11`.
 </principle>
+
+<principle name="Workflow Create Output Parsing">
+`n8n workflows create` emits the created workflow JSON on stdout. When a later
+step needs the workflow ID, save stdout to a file, verify the create command
+exited `0`, then parse `.id` from that JSON with `jq -r '.id'` or another JSON
+parser. Do not grep for labels such as `id:`; JSON uses `"id":`, and an
+unguarded no-match can make a successful create look failed.
+</principle>
 </essential_principles>
 
 <reference_index>

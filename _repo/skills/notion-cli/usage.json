@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-05-06T15:19:53.872655+00:00",
-  "total_commands": 52,
+  "discovered_at": "2026-06-14T19:30:47Z",
+  "total_commands": 53,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage authentication",
+      "usage_instructions": "Run `notion auth --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `notion auth login --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Run `notion auth login --help` for exact arguments and options."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Run `notion auth logout --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `notion auth logout --help` for exact arguments and options."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `notion auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `notion auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `notion auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `notion auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `notion auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Run `notion auth status --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Run `notion auth status --help` for exact arguments and options."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `notion auth refresh --help` for exact arguments and options."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `notion auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,123 +237,351 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `notion auth test --help` for exact arguments and options."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `notion auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `notion auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `notion auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `notion auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `notion auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `notion auth profiles --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `notion auth --help` for exact arguments and options."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `notion cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `notion cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "comments": {
+      "help": "Manage comments on pages and blocks",
+      "usage_instructions": "Run `notion comments --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a comment on a page, block, or in a discussion thread.",
+          "examples": [
+            "notion comments create \"This is my comment\" --page-id abc123",
+            "notion comments create \"Comment on this block\" --block-id def456",
+            "notion comments create \"My reply\" --discussion-id ghi789"
+          ],
+          "usage_instructions": "Run `notion comments create --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment text content"
+            }
+          ],
+          "options": [
+            {
+              "name": "--page-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page ID to add comment to",
+              "short": "-p"
+            },
+            {
+              "name": "--block-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Block ID to add comment to",
+              "short": "-b"
+            },
+            {
+              "name": "--discussion-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Discussion thread ID to reply to",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific comment by ID.",
+          "examples": [
+            "notion comments get abc123-def456"
+          ],
+          "usage_instructions": "Run `notion comments get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List comments on a page, block, or in a discussion thread.",
+          "examples": [
+            "notion comments list --page-id abc123",
+            "notion comments list --page-id abc123 --with-context",
+            "notion comments list --block-id def456",
+            "notion comments list --discussion-id ghi789"
+          ],
+          "usage_instructions": "Run `notion comments list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--page-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page ID to get comments for",
+              "short": "-p"
+            },
+            {
+              "name": "--block-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Block ID to get comments for",
+              "short": "-b"
+            },
+            {
+              "name": "--discussion-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Discussion thread ID to get comments for",
+              "short": "-d"
+            },
+            {
+              "name": "--with-context",
+              "type": "bool",
+              "required": false,
+              "help": "Include parent block text as context (only with --page-id)",
+              "short": "-c"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of comments to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--max-workers",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum concurrent block comment lookups when using --with-context",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., text:contains:bug, parent_type:eq:page_id)",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "database": {
       "help": "Query and manage databases",
+      "usage_instructions": "Run `notion database --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a new database under a parent page.",
+          "arguments": [
+            {
+              "name": "parent_page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The parent page ID the new database is created under"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database title",
+              "short": "-t"
+            },
+            {
+              "name": "--title-property",
+              "type": "TEXT",
+              "required": false,
+              "help": "Name of the title property to create (Notion requires exactly one)",
+              "default": "Name"
+            },
+            {
+              "name": "--inline",
+              "type": "bool",
+              "required": false,
+              "help": "--no-inline          Create the database inline in the parent page",
+              "default": "no-inline"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Raw JSON for initial_data_source.properties (Notion API format). Merged with convenience flags; a title property is added if none is present",
+              "short": "-p"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a rich_text property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--number",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a number property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--select",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable"
+            },
+            {
+              "name": "--multi-select",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a multi_select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a status property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a date property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--checkbox",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a checkbox property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a url property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add an email property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--phone",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a phone_number property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--people",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a people property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--files",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a files property (format: 'Name'). Repeatable"
+            },
+            {
+              "name": "--relation",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add a relation property (format: 'Name:target_data_source_id'). Uses the TARGET's data_source_id. Repeatable"
+            },
+            {
+              "name": "--relation-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Relation type for --relation properties (dual_property or single_property)",
+              "default": "dual_property"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get database metadata and information.",
+          "examples": [
+            "notion database get abc123",
+            "notion database get abc123 --table",
+            "notion database get abc123 --data-source ds_xyz"
+          ],
+          "usage_instructions": "Run `notion database get --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "database_id",
@@ -264,49 +603,26 @@
               "type": "TEXT",
               "required": false,
               "help": "Specific data_source ID to use when the database container holds multiple data sources"
-            }
-          ],
-          "examples": [
-            "notion database get abc123",
-            "notion database get abc123 --table",
-            "notion database get abc123 --data-source ds_xyz"
-          ],
-          "usage_instructions": "Run `notion database get --help` for exact arguments and options."
-        },
-        "schema": {
-          "help": "Get database schema (property definitions).",
-          "arguments": [
-            {
-              "name": "database_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The database ID to get schema for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
             },
             {
-              "name": "--data-source",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Specific data_source ID when the database container holds multiple data sources"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion database schema abc123",
-            "notion database schema abc123 --table",
-            "notion database schema abc123 --data-source ds_xyz"
-          ],
-          "usage_instructions": "Run `notion database schema --help` for exact arguments and options."
+          ]
         },
         "list": {
           "help": "List all accessible databases.",
+          "examples": [
+            "notion database list",
+            "notion database list --table",
+            "notion database list --sort desc --limit 20",
+            "notion database list --filter \"title:like:%project%\"",
+            "notion database list --properties \"title,last_edited\" --table"
+          ],
+          "usage_instructions": "Run `notion database list --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -342,22 +658,310 @@
               "required": false,
               "help": "Comma-separated fields to display (id,title,parent_type,parent_id,url,last_edited)",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion database list",
-            "notion database list --table",
-            "notion database list --sort desc --limit 20",
-            "notion database list --filter \"title:like:%project%\"",
-            "notion database list --properties \"title,last_edited\" --table"
-          ],
-          "usage_instructions": "Run `notion database list --help` for exact arguments and options."
+          ]
         },
         "page": {
           "help": "Get and update individual pages",
+          "usage_instructions": "Run `notion database page --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "content": {
+              "help": "Manage page content (blocks)",
+              "usage_instructions": "Run `notion database page content --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [],
+              "commands": {
+                "append": {
+                  "help": "Append content blocks to a page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
+                  "examples": [
+                    "notion database page content append PAGE_ID --text \"Hello world\"",
+                    "notion database page content append PAGE_ID --text \"# Heading\\n\\nParagraph text\"",
+                    "notion database page content append PAGE_ID --file content.md",
+                    "notion database page content append PAGE_ID --paragraph \"Simple paragraph\""
+                  ],
+                  "usage_instructions": "Run `notion database page content append --help` for exact arguments and options.",
+                  "arguments": [
+                    {
+                      "name": "page_id",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "The page ID to append content to"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--text",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Text/markdown content to append",
+                      "short": "-t"
+                    },
+                    {
+                      "name": "--file",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "File containing text/markdown content to append",
+                      "short": "-f"
+                    },
+                    {
+                      "name": "--paragraph",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Add a simple paragraph block",
+                      "short": "-p"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                },
+                "clear": {
+                  "help": "Clear all content from a page.",
+                  "examples": [
+                    "notion database page content clear PAGE_ID",
+                    "notion database page content clear PAGE_ID --force"
+                  ],
+                  "usage_instructions": "Run `notion database page content clear --help` for exact arguments and options.",
+                  "arguments": [
+                    {
+                      "name": "page_id",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "The page ID to clear content from"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--force",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Skip confirmation prompt",
+                      "short": "-F"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                },
+                "set": {
+                  "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
+                  "examples": [
+                    "notion database page content set PAGE_ID --text \"New content\"",
+                    "notion database page content set PAGE_ID --file content.md",
+                    "notion database page content set PAGE_ID --json-file blocks.json"
+                  ],
+                  "usage_instructions": "Run `notion database page content set --help` for exact arguments and options.",
+                  "arguments": [
+                    {
+                      "name": "page_id",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "The page ID to set content for"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--text",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Text/markdown content to set (replaces existing)",
+                      "short": "-t"
+                    },
+                    {
+                      "name": "--file",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "File containing text/markdown content to set",
+                      "short": "-f"
+                    },
+                    {
+                      "name": "--json-file",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "File containing Notion JSON blocks to set (from 'export --format notion-json')"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                }
+              }
+            },
+            "create": {
+              "help": "Create a new page in a database.",
+              "examples": [
+                "notion database page create DB_ID --title \"My Page\"",
+                "notion database page create DB_ID --title \"My Page\" --status \"In progress\"",
+                "notion database page create DB_ID --title \"My Page\" --select \"Client:Acme Corp\"",
+                "notion database page create DB_ID --title \"My Page\" --content-file content.md",
+                "notion database page create DB_ID --title \"My Page\" --blocks-file blocks.json",
+                "notion database page create DB_ID --title \"My Page\" --from-template default",
+                "notion database page create DB_ID --title \"My Page\" --from-template TEMPLATE_ID",
+                "notion database page create DB_ID --title \"My Page\" --properties '{\"Priority\": {\"select\": {\"name\": \"High\"}}}'"
+              ],
+              "usage_instructions": "Run `notion database page create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "database_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The database ID to create the page in"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Page title (auto-detects the database's title property)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Set status property (format: 'value' or 'property:value'). Repeatable",
+                  "short": "-s"
+                },
+                {
+                  "name": "--select",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Set select property (format: 'property:value'). Repeatable"
+                },
+                {
+                  "name": "--content-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "File containing markdown content for the page body",
+                  "short": "-f"
+                },
+                {
+                  "name": "--blocks-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "File containing Notion JSON blocks (from 'export --format notion-json')"
+                },
+                {
+                  "name": "--from-template",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Create page from template (use template ID or 'default' for default template)"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Raw JSON properties object (Notion API format)",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion database page update PAGE_ID --restore'.",
+              "examples": [
+                "notion database page delete abc123-def456",
+                "notion database page delete abc123-def456 --force"
+              ],
+              "usage_instructions": "Run `notion database page delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The page ID to delete (archive)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a specific page by ID.",
+              "examples": [
+                "notion database page get abc123-def456",
+                "notion database page get abc123-def456 --include-blocks",
+                "notion database page get abc123-def456 --include-blocks --markdown",
+                "notion database page get abc123-def456 --include-blocks --markdown --out-file content.md"
+              ],
+              "usage_instructions": "Run `notion database page get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The page ID to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--include-blocks",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Include page content blocks in output",
+                  "short": "-b"
+                },
+                {
+                  "name": "--markdown",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output blocks as markdown (requires --include-blocks)",
+                  "short": "-m"
+                },
+                {
+                  "name": "--out-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Write markdown content to file (requires --include-blocks --markdown)",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
               "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"Title,Status,Due Date\" notion database page list DB_ID --limit 10",
+              "usage_instructions": "Run `notion database page list --help` for exact arguments and options.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--database-id",
@@ -406,53 +1010,18 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Specific data_source ID when the database container holds multiple data sources"
-                }
-              ],
-              "usage_instructions": "Run `notion database page list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get a specific page by ID.",
-              "arguments": [
-                {
-                  "name": "page_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The page ID to retrieve"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--include-blocks",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Include page content blocks in output",
-                  "short": "-b"
                 },
                 {
-                  "name": "--markdown",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Output blocks as markdown (requires --include-blocks)",
-                  "short": "-m"
-                },
-                {
-                  "name": "--out-file",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Write markdown content to file (requires --include-blocks --markdown)",
-                  "short": "-o"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion database page get abc123-def456",
-                "notion database page get abc123-def456 --include-blocks",
-                "notion database page get abc123-def456 --include-blocks --markdown",
-                "notion database page get abc123-def456 --include-blocks --markdown --out-file content.md"
-              ],
-              "usage_instructions": "Run `notion database page get --help` for exact arguments and options."
+              ]
             },
             "update": {
               "help": "Update a page's properties. Property Examples: notion database page update PAGE_ID --status \"Done\" notion database page update PAGE_ID --status \"Status:In progress\" notion database page update PAGE_ID --select \"Priority:High\" notion database page update PAGE_ID --select \"Client:Acme\" --select \"Contact:Jane Doe\" notion database page update PAGE_ID --text \"Notes:Updated content\" notion database page update PAGE_ID --checkbox \"Complete:true\" notion database page update PAGE_ID --number \"Score:95\" Archive/Restore: notion database page update PAGE_ID --archive notion database page update PAGE_ID --restore Raw JSON (for complex updates): notion database page update PAGE_ID --properties '{\"Status\": {\"status\": {\"name\": \"Done\"}}}'",
+              "usage_instructions": "Run `notion database page update --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "page_id",
@@ -511,224 +1080,99 @@
                   "type": "bool",
                   "required": false,
                   "help": "--restore          Archive or restore the page"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "usage_instructions": "Run `notion database page update --help` for exact arguments and options."
+              ]
+            }
+          }
+        },
+        "schema": {
+          "help": "Get database schema (property definitions).",
+          "examples": [
+            "notion database schema abc123",
+            "notion database schema abc123 --table",
+            "notion database schema abc123 --data-source ds_xyz"
+          ],
+          "usage_instructions": "Run `notion database schema --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "database_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database ID to get schema for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
             },
-            "create": {
-              "help": "Create a new page in a database.",
+            {
+              "name": "--data-source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Specific data_source ID when the database container holds multiple data sources"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "template": {
+          "help": "Manage database page templates",
+          "usage_instructions": "Run `notion database template --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get a specific template by ID.",
+              "examples": [
+                "notion database template get DB_ID TEMPLATE_ID"
+              ],
+              "usage_instructions": "Run `notion database template get --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "database_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "The database ID to create the page in"
+                  "help": "The database ID containing the template"
+                },
+                {
+                  "name": "template_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The template ID to retrieve"
                 }
               ],
               "options": [
                 {
-                  "name": "--title",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Page title (auto-detects the database's title property)",
-                  "short": "-t"
-                },
-                {
-                  "name": "--status",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Set status property (format: 'value' or 'property:value'). Repeatable",
-                  "short": "-s"
-                },
-                {
-                  "name": "--select",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Set select property (format: 'property:value'). Repeatable"
-                },
-                {
-                  "name": "--content-file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "File containing markdown content for the page body",
-                  "short": "-f"
-                },
-                {
-                  "name": "--blocks-file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "File containing Notion JSON blocks (from 'export --format notion-json')"
-                },
-                {
-                  "name": "--from-template",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Create page from template (use template ID or 'default' for default template)"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Raw JSON properties object (Notion API format)",
-                  "short": "-p"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion database page create DB_ID --title \"My Page\"",
-                "notion database page create DB_ID --title \"My Page\" --status \"In progress\"",
-                "notion database page create DB_ID --title \"My Page\" --select \"Client:Acme Corp\"",
-                "notion database page create DB_ID --title \"My Page\" --content-file content.md",
-                "notion database page create DB_ID --title \"My Page\" --blocks-file blocks.json",
-                "notion database page create DB_ID --title \"My Page\" --from-template default",
-                "notion database page create DB_ID --title \"My Page\" --from-template TEMPLATE_ID",
-                "notion database page create DB_ID --title \"My Page\" --properties '{\"Priority\": {\"select\": {\"name\": \"High\"}}}'"
-              ],
-              "usage_instructions": "Run `notion database page create --help` for exact arguments and options."
+              ]
             },
-            "delete": {
-              "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion database page update PAGE_ID --restore'.",
-              "arguments": [
-                {
-                  "name": "page_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The page ID to delete (archive)"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-F"
-                }
-              ],
-              "examples": [
-                "notion database page delete abc123-def456",
-                "notion database page delete abc123-def456 --force"
-              ],
-              "usage_instructions": "Run `notion database page delete --help` for exact arguments and options."
-            },
-            "content": {
-              "help": "Manage page content (blocks)",
-              "commands": {
-                "append": {
-                  "help": "Append content blocks to a page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
-                  "arguments": [
-                    {
-                      "name": "page_id",
-                      "type": "TEXT",
-                      "required": true,
-                      "help": "The page ID to append content to"
-                    }
-                  ],
-                  "options": [
-                    {
-                      "name": "--text",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "Text/markdown content to append",
-                      "short": "-t"
-                    },
-                    {
-                      "name": "--file",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "File containing text/markdown content to append",
-                      "short": "-f"
-                    },
-                    {
-                      "name": "--paragraph",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "Add a simple paragraph block",
-                      "short": "-p"
-                    }
-                  ],
-                  "examples": [
-                    "notion database page content append PAGE_ID --text \"Hello world\"",
-                    "notion database page content append PAGE_ID --text \"# Heading\\n\\nParagraph text\"",
-                    "notion database page content append PAGE_ID --file content.md",
-                    "notion database page content append PAGE_ID --paragraph \"Simple paragraph\""
-                  ],
-                  "usage_instructions": "Run `notion database page content append --help` for exact arguments and options."
-                },
-                "set": {
-                  "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
-                  "arguments": [
-                    {
-                      "name": "page_id",
-                      "type": "TEXT",
-                      "required": true,
-                      "help": "The page ID to set content for"
-                    }
-                  ],
-                  "options": [
-                    {
-                      "name": "--text",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "Text/markdown content to set (replaces existing)",
-                      "short": "-t"
-                    },
-                    {
-                      "name": "--file",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "File containing text/markdown content to set",
-                      "short": "-f"
-                    },
-                    {
-                      "name": "--json-file",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "File containing Notion JSON blocks to set (from 'export --format notion-json')"
-                    }
-                  ],
-                  "examples": [
-                    "notion database page content set PAGE_ID --text \"New content\"",
-                    "notion database page content set PAGE_ID --file content.md",
-                    "notion database page content set PAGE_ID --json-file blocks.json"
-                  ],
-                  "usage_instructions": "Run `notion database page content set --help` for exact arguments and options."
-                },
-                "clear": {
-                  "help": "Clear all content from a page.",
-                  "arguments": [
-                    {
-                      "name": "page_id",
-                      "type": "TEXT",
-                      "required": true,
-                      "help": "The page ID to clear content from"
-                    }
-                  ],
-                  "options": [
-                    {
-                      "name": "--force",
-                      "type": "bool",
-                      "required": false,
-                      "help": "Skip confirmation prompt",
-                      "short": "-F"
-                    }
-                  ],
-                  "examples": [
-                    "notion database page content clear PAGE_ID",
-                    "notion database page content clear PAGE_ID --force"
-                  ],
-                  "usage_instructions": "Run `notion database page content clear --help` for exact arguments and options."
-                }
-              },
-              "usage_instructions": "Run `notion database page content --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `notion database page --help` for exact arguments and options."
-        },
-        "template": {
-          "help": "Manage database page templates",
-          "commands": {
             "list": {
               "help": "List available page templates for a database.",
+              "examples": [
+                "notion database template list --database-id DB_ID",
+                "notion database template list --database-id DB_ID --table",
+                "notion database template list --database-id DB_ID --name \"Bug\""
+              ],
+              "usage_instructions": "Run `notion database template list --help` for exact arguments and options.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--database-id",
@@ -772,126 +1216,43 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
-                }
-              ],
-              "examples": [
-                "notion database template list --database-id DB_ID",
-                "notion database template list --database-id DB_ID --table",
-                "notion database template list --database-id DB_ID --name \"Bug\""
-              ],
-              "usage_instructions": "Run `notion database template list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get a specific template by ID.",
-              "arguments": [
-                {
-                  "name": "database_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The database ID containing the template"
                 },
                 {
-                  "name": "template_id",
+                  "name": "--profile",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "The template ID to retrieve"
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion database template get DB_ID TEMPLATE_ID"
-              ],
-              "usage_instructions": "Run `notion database template get --help` for exact arguments and options."
+              ]
             }
-          },
-          "usage_instructions": "Run `notion database template --help` for exact arguments and options."
+          }
         }
-      },
-      "usage_instructions": "Run `notion database --help` for exact arguments and options."
+      }
     },
     "field": {
       "help": "Manage database field schemas",
+      "usage_instructions": "Run `notion field --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all fields (properties) in a database schema. Limiting: Client-side (schema endpoint returns all fields) Filtering: Client-side by field name or type",
-          "options": [
-            {
-              "name": "--database-id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The database ID to list fields for",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of fields to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, type:eq:select, name:contains:Status)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of fields to include in output (e.g., name,type)",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "notion field list --database-id abc123",
-            "notion field list --database-id abc123 --table",
-            "notion field list --database-id abc123 --filter \"type:select\"",
-            "notion field list --database-id abc123 --limit 10"
-          ],
-          "usage_instructions": "Run `notion field list --help` for exact arguments and options."
-        },
-        "get": {
-          "help": "Get a specific field (property) definition by name.",
-          "arguments": [
-            {
-              "name": "database_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The database ID"
-            },
-            {
-              "name": "name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Name of the field to retrieve"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "notion field get DB_ID \"Priority\"",
-            "notion field get DB_ID \"Status\" --table"
-          ],
-          "usage_instructions": "Run `notion field get --help` for exact arguments and options."
-        },
         "add": {
           "help": "Add a new field (property) to a database.",
+          "examples": [
+            "notion field add DB_ID \"Priority\" --type select --options \"High,Medium,Low\"",
+            "notion field add DB_ID \"Notes\" --type rich_text",
+            "notion field add DB_ID \"Due Date\" --type date",
+            "notion field add DB_ID \"Completed\" --type checkbox",
+            "notion field add DB_ID \"Score\" --type number --number-format percent",
+            "notion field add DB_ID \"Related Tasks\" --type relation --relation-database OTHER_DB_ID"
+          ],
+          "usage_instructions": "Run `notion field add --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "database_id",
@@ -928,57 +1289,33 @@
               "help": "Expression for formula type"
             },
             {
-              "name": "--relation-database",
+              "name": "--relation-type",
               "type": "TEXT",
               "required": false,
-              "help": "Database ID for relation type"
+              "help": "Relation type for relation fields (dual_property or single_property)",
+              "default": "dual_property"
             },
             {
               "name": "--number-format",
               "type": "TEXT",
               "required": false,
               "help": "Format for number type (number, number_with_commas, percent, dollar, etc.)"
-            }
-          ],
-          "examples": [
-            "notion field add DB_ID \"Priority\" --type select --options \"High,Medium,Low\"",
-            "notion field add DB_ID \"Notes\" --type rich_text",
-            "notion field add DB_ID \"Due Date\" --type date",
-            "notion field add DB_ID \"Completed\" --type checkbox",
-            "notion field add DB_ID \"Score\" --type number --number-format percent",
-            "notion field add DB_ID \"Related Tasks\" --type relation --relation-database OTHER_DB_ID"
-          ],
-          "usage_instructions": "Run `notion field add --help` for exact arguments and options."
-        },
-        "rename": {
-          "help": "Rename a field (property) in a database.",
-          "arguments": [
-            {
-              "name": "database_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The database ID"
             },
             {
-              "name": "old_name",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Current name of the field"
-            },
-            {
-              "name": "new_name",
-              "type": "TEXT",
-              "required": true,
-              "help": "New name for the field"
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion field rename DB_ID \"Old Name\" \"New Name\""
-          ],
-          "usage_instructions": "Run `notion field rename --help` for exact arguments and options."
+          ]
         },
         "delete": {
           "help": "Delete a field (property) from a database. WARNING: This will delete all data in this field across all pages!",
+          "examples": [
+            "notion field delete DB_ID \"Field Name\"",
+            "notion field delete DB_ID \"Field Name\" --force"
+          ],
+          "usage_instructions": "Run `notion field delete --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "database_id",
@@ -1000,16 +1337,201 @@
               "required": false,
               "help": "Skip confirmation prompt",
               "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific field (property) definition by name.",
+          "examples": [
+            "notion field get DB_ID \"Priority\"",
+            "notion field get DB_ID \"Status\" --table"
+          ],
+          "usage_instructions": "Run `notion field get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "database_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database ID"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the field to retrieve"
             }
           ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all fields (properties) in a database schema. Limiting: Client-side (schema endpoint returns all fields) Filtering: Client-side by field name or type",
           "examples": [
-            "notion field delete DB_ID \"Field Name\"",
-            "notion field delete DB_ID \"Field Name\" --force"
+            "notion field list --database-id abc123",
+            "notion field list --database-id abc123 --table",
+            "notion field list --database-id abc123 --filter \"type:select\"",
+            "notion field list --database-id abc123 --limit 10"
           ],
-          "usage_instructions": "Run `notion field delete --help` for exact arguments and options."
+          "usage_instructions": "Run `notion field list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--database-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database ID to list fields for",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of fields to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, type:eq:select, name:contains:Status)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output (e.g., name,type)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "option": {
+          "help": "Manage field options for select/multi_select/status fields",
+          "usage_instructions": "Run `notion field option --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add": {
+              "help": "Add an option to a select, multi_select, or status field.",
+              "examples": [
+                "notion field option add DB_ID \"Priority\" \"Critical\"",
+                "notion field option add DB_ID \"Status\" \"Blocked\" --color red"
+              ],
+              "usage_instructions": "Run `notion field option add --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "database_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The database ID"
+                },
+                {
+                  "name": "field_name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Name of the select/multi_select/status field"
+                },
+                {
+                  "name": "option",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Option value to add"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--color",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Color for the option (default, gray, brown, orange, yellow, green, blue, purple, pink, red)",
+                  "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "rename": {
+          "help": "Rename a field (property) in a database.",
+          "examples": [
+            "notion field rename DB_ID \"Old Name\" \"New Name\""
+          ],
+          "usage_instructions": "Run `notion field rename --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "database_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database ID"
+            },
+            {
+              "name": "old_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Current name of the field"
+            },
+            {
+              "name": "new_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "New name for the field"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update a field's configuration.",
+          "examples": [
+            "notion field update DB_ID \"Priority\" --name \"Urgency\"",
+            "notion field update DB_ID \"Score\" --number-format percent",
+            "notion field update DB_ID \"Status\" --options \"Todo,In Progress,Done\""
+          ],
+          "usage_instructions": "Run `notion field update --help` for exact arguments and options.",
           "arguments": [
             {
               "name": "database_id",
@@ -1050,446 +1572,58 @@
               "type": "TEXT",
               "required": false,
               "help": "Expression for formula type"
+            },
+            {
+              "name": "--relation-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Relation type for relation fields (dual_property or single_property)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion field update DB_ID \"Priority\" --name \"Urgency\"",
-            "notion field update DB_ID \"Score\" --number-format percent",
-            "notion field update DB_ID \"Status\" --options \"Todo,In Progress,Done\""
-          ],
-          "usage_instructions": "Run `notion field update --help` for exact arguments and options."
-        },
-        "option": {
-          "help": "Manage field options for select/multi_select/status fields",
-          "commands": {
-            "add": {
-              "help": "Add an option to a select, multi_select, or status field.",
-              "arguments": [
-                {
-                  "name": "database_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The database ID"
-                },
-                {
-                  "name": "field_name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Name of the select/multi_select/status field"
-                },
-                {
-                  "name": "option",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Option value to add"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--color",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Color for the option (default, gray, brown, orange, yellow, green, blue, purple, pink, red)",
-                  "short": "-c"
-                }
-              ],
-              "examples": [
-                "notion field option add DB_ID \"Priority\" \"Critical\"",
-                "notion field option add DB_ID \"Status\" \"Blocked\" --color red"
-              ],
-              "usage_instructions": "Run `notion field option add --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `notion field option --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `notion field --help` for exact arguments and options."
+      }
     },
     "pages": {
       "help": "Query and manage standalone pages",
+      "usage_instructions": "Run `notion pages --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "search": {
-          "help": "Search for pages by title.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Text to search for in page titles"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--sort",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort direction by last edited time (asc/desc)"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l",
-              "default": "100"
-            }
-          ],
-          "examples": [
-            "notion pages search \"meeting notes\"",
-            "notion pages search \"project\" --table",
-            "notion pages search \"draft\" --sort desc --limit 10"
-          ],
-          "usage_instructions": "Run `notion pages search --help` for exact arguments and options."
-        },
-        "list": {
-          "help": "List all accessible pages.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--sort",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort direction by last edited time (asc/desc)"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter using field:op:value format (e.g., title:like:%meeting%). Client-side filtering",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display (id,type,title,parent_type,parent_id,url,last_edited)",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "notion pages list",
-            "notion pages list --table",
-            "notion pages list --sort desc --limit 20",
-            "notion pages list --filter \"title:like:%meeting%\"",
-            "notion pages list --filter \"type:eq:page\" --filter \"parent_type:eq:workspace\"",
-            "notion pages list --properties \"title,last_edited\" --table"
-          ],
-          "usage_instructions": "Run `notion pages list --help` for exact arguments and options."
-        },
-        "get": {
-          "help": "Get a specific page by ID.",
-          "arguments": [
-            {
-              "name": "page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The page ID to retrieve"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as formatted table",
-              "short": "-t"
-            },
-            {
-              "name": "--include-blocks",
-              "type": "bool",
-              "required": false,
-              "help": "Include page content blocks in output",
-              "short": "-b"
-            },
-            {
-              "name": "--markdown",
-              "type": "bool",
-              "required": false,
-              "help": "Output blocks as markdown (requires --include-blocks)",
-              "short": "-m"
-            },
-            {
-              "name": "--out-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "Write markdown content to file (requires --include-blocks --markdown)",
-              "short": "-o"
-            }
-          ],
-          "examples": [
-            "notion pages get abc123-def456",
-            "notion pages get abc123-def456 --table",
-            "notion pages get abc123-def456 --include-blocks",
-            "notion pages get abc123-def456 --include-blocks --markdown",
-            "notion pages get abc123-def456 -b -m --out-file content.md"
-          ],
-          "usage_instructions": "Run `notion pages get --help` for exact arguments and options."
-        },
-        "create": {
-          "help": "Create a new page under an existing parent page.",
-          "arguments": [
-            {
-              "name": "parent_page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The parent page ID to create the page under"
-            }
-          ],
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Page title",
-              "short": "-t"
-            },
-            {
-              "name": "--content-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "File containing markdown content for the page body",
-              "short": "-f"
-            },
-            {
-              "name": "--icon",
-              "type": "TEXT",
-              "required": false,
-              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
-            },
-            {
-              "name": "--is-toggleable",
-              "type": "bool",
-              "required": false,
-              "help": "Make all heading_1/2/3 blocks generated from --content-file into toggle headings"
-            }
-          ],
-          "examples": [
-            "notion pages create PARENT_PAGE_ID --title \"My New Page\"",
-            "notion pages create PARENT_PAGE_ID -t \"Notes\" --content-file notes.md",
-            "notion pages create PARENT_PAGE_ID -t \"Project\" --icon \"emoji:rocket\"",
-            "notion pages create PARENT_PAGE_ID -t \"Outline\" --content-file outline.md --is-toggleable"
-          ],
-          "usage_instructions": "Run `notion pages create --help` for exact arguments and options."
-        },
-        "import": {
-          "help": "Import a Word document (.docx) as a new Notion page. Converts Word document content to Notion blocks: - Headings \u2192 Heading blocks - Paragraphs \u2192 Paragraph blocks with formatting (bold, italic, etc.) - Bullet lists \u2192 Bulleted list items - Numbered lists \u2192 Numbered list items - Tables \u2192 Table blocks",
-          "arguments": [
-            {
-              "name": "file_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Path to the Word document (.docx) to import"
-            }
-          ],
-          "options": [
-            {
-              "name": "--parent",
-              "type": "TEXT",
-              "required": true,
-              "help": "Parent page ID to create the new page under",
-              "short": "-p"
-            },
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "Page title (defaults to filename without extension)",
-              "short": "-t"
-            },
-            {
-              "name": "--icon",
-              "type": "TEXT",
-              "required": false,
-              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
-            }
-          ],
-          "examples": [
-            "notion pages import document.docx --parent PARENT_PAGE_ID",
-            "notion pages import report.docx -p PARENT_PAGE_ID --title \"Q4 Report\"",
-            "notion pages import notes.docx -p PARENT_PAGE_ID --icon \"emoji:\ud83d\udcc4\""
-          ],
-          "usage_instructions": "Run `notion pages import --help` for exact arguments and options."
-        },
-        "export": {
-          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
-          "arguments": [
-            {
-              "name": "page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The page ID to export"
-            }
-          ],
-          "options": [
-            {
-              "name": "--output",
-              "type": "TEXT",
-              "required": true,
-              "help": "Output file path (e.g., document.pdf)",
-              "short": "-o"
-            },
-            {
-              "name": "--format",
-              "type": "TEXT",
-              "required": false,
-              "help": "Export format: pdf, html, md, or notion-json",
-              "short": "-f",
-              "default": "pdf"
-            }
-          ],
-          "examples": [
-            "notion pages export PAGE_ID --output document.pdf",
-            "notion pages export PAGE_ID -o report.pdf",
-            "notion pages export PAGE_ID -o content.html --format html",
-            "notion pages export PAGE_ID -o content.md --format md",
-            "notion pages export PAGE_ID -o blocks.json --format notion-json"
-          ],
-          "usage_instructions": "Run `notion pages export --help` for exact arguments and options."
-        },
-        "duplicate": {
-          "help": "Duplicate a page including all blocks and rich formatting. Supports pages in databases and standalone pages (page parents). Preserves column layouts, callouts with colors, bold/italic annotations, images, and all other Notion block types. Handles arbitrary nesting depth.",
-          "arguments": [
-            {
-              "name": "page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The page ID to duplicate"
-            }
-          ],
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "New page title (defaults to 'Copy of {original}')",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Raw JSON property overrides (Notion API format)",
-              "short": "-p"
-            },
-            {
-              "name": "--to-database",
-              "type": "TEXT",
-              "required": false,
-              "help": "Target database ID (defaults to same database as source)"
-            },
-            {
-              "name": "--replace",
-              "type": "TEXT",
-              "required": false,
-              "help": "Find/replace in block text (format: 'old:new'). Can be used multiple times",
-              "short": "-r"
-            }
-          ],
-          "examples": [
-            "notion pages duplicate PAGE_ID",
-            "notion pages duplicate PAGE_ID --title \"New Copy\"",
-            "notion pages duplicate PAGE_ID --title \"2026 Contract\" --replace \"2025:2026\" --replace \"$99,400:$84,000\"",
-            "notion pages duplicate PAGE_ID --to-database TARGET_DB_ID",
-            "notion pages duplicate PAGE_ID --properties '{\"Status\": {\"status\": {\"name\": \"Draft\"}}}'"
-          ],
-          "usage_instructions": "Run `notion pages duplicate --help` for exact arguments and options."
-        },
-        "update": {
-          "help": "Update a page's title, icon, or archive status.",
-          "arguments": [
-            {
-              "name": "page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The page ID to update"
-            }
-          ],
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "New page title",
-              "short": "-t"
-            },
-            {
-              "name": "--icon",
-              "type": "TEXT",
-              "required": false,
-              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
-            },
-            {
-              "name": "--archive",
-              "type": "bool",
-              "required": false,
-              "help": "--restore          Archive or restore the page"
-            }
-          ],
-          "examples": [
-            "notion pages update PAGE_ID --title \"New Title\"",
-            "notion pages update PAGE_ID --icon \"emoji:star\"",
-            "notion pages update PAGE_ID --archive",
-            "notion pages update PAGE_ID --restore"
-          ],
-          "usage_instructions": "Run `notion pages update --help` for exact arguments and options."
-        },
-        "delete": {
-          "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion pages update PAGE_ID --restore'.",
-          "arguments": [
-            {
-              "name": "page_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The page ID to delete (archive)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-F"
-            }
-          ],
-          "examples": [
-            "notion pages delete abc123-def456",
-            "notion pages delete abc123-def456 --force"
-          ],
-          "usage_instructions": "Run `notion pages delete --help` for exact arguments and options."
-        },
-        "content": {
-          "help": "Manage page content (blocks)",
+        "blocks": {
+          "help": "Manage individual blocks",
+          "usage_instructions": "Run `notion pages blocks --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
           "commands": {
             "append": {
-              "help": "Append content blocks to a page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
+              "help": "Append child blocks to a block or page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
+              "examples": [
+                "notion pages blocks append BLOCK_ID --text \"New paragraph\"",
+                "notion pages blocks append BLOCK_ID --file content.md",
+                "notion pages blocks append BLOCK_ID --json '[{\"paragraph\":{\"rich_text\":[{\"text\":{\"content\":\"Hello\"}}]}}]'",
+                "notion pages blocks append PAGE_ID --after BLOCK_ID --text \"Inserted after specific block\"",
+                "notion pages blocks append PAGE_ID --file chapter.md --is-toggleable"
+              ],
+              "usage_instructions": "Run `notion pages blocks append --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "page_id",
+                  "name": "block_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "The page ID to append content to"
+                  "help": "The block or page ID to append children to"
                 }
               ],
               "options": [
@@ -1497,7 +1631,7 @@
                   "name": "--text",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Text/markdown content to append",
+                  "help": "Text/markdown content to append as child blocks",
                   "short": "-t"
                 },
                 {
@@ -1508,153 +1642,127 @@
                   "short": "-f"
                 },
                 {
-                  "name": "--paragraph",
+                  "name": "--json",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Add a simple paragraph block",
-                  "short": "-p"
-                },
-                {
-                  "name": "--is-toggleable",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings"
-                }
-              ],
-              "examples": [
-                "notion pages content append PAGE_ID --text \"Hello world\"",
-                "notion pages content append PAGE_ID --text \"# Heading\\n\\nParagraph text\"",
-                "notion pages content append PAGE_ID --file content.md",
-                "notion pages content append PAGE_ID --paragraph \"Simple paragraph\"",
-                "notion pages content append PAGE_ID --file chapters.md --is-toggleable"
-              ],
-              "usage_instructions": "Run `notion pages content append --help` for exact arguments and options."
-            },
-            "set": {
-              "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
-              "arguments": [
-                {
-                  "name": "page_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The page ID to set content for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--text",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Text/markdown content to set (replaces existing)",
-                  "short": "-t"
-                },
-                {
-                  "name": "--file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "File containing text/markdown content to set",
-                  "short": "-f"
+                  "help": "Raw JSON array of blocks to append (advanced)",
+                  "short": "-j"
                 },
                 {
                   "name": "--json-file",
                   "type": "TEXT",
                   "required": false,
-                  "help": "File containing Notion JSON blocks to set (from 'export --format notion-json')"
+                  "help": "File containing raw JSON array of blocks to append (advanced)"
+                },
+                {
+                  "name": "--after",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Block ID to insert after (for positioning within parent's children)",
+                  "short": "-a"
                 },
                 {
                   "name": "--is-toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json-file)"
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json/--json-file)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion pages content set PAGE_ID --text \"New content\"",
-                "notion pages content set PAGE_ID --file content.md",
-                "notion pages content set PAGE_ID --json-file blocks.json",
-                "notion pages content set PAGE_ID --file outline.md --is-toggleable"
-              ],
-              "usage_instructions": "Run `notion pages content set --help` for exact arguments and options."
+              ]
             },
-            "replace-section": {
-              "help": "Replace a specific section of a page without touching the rest. Finds the section by its heading text, then replaces all blocks from that heading to (but not including) the next heading at the same or higher level. The heading argument must include the markdown prefix to identify the heading level: '# Title' for H1, '## Title' for H2, '### Title' for H3.",
+            "delete": {
+              "help": "Delete a block. Note: Deleted blocks are moved to trash and can be recovered via Notion UI.",
+              "examples": [
+                "notion pages blocks delete BLOCK_ID",
+                "notion pages blocks delete BLOCK_ID --force",
+                "notion pages blocks delete BLOCK_ID --recursive --force"
+              ],
+              "usage_instructions": "Run `notion pages blocks delete --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "page_id",
+                  "name": "block_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "The page ID containing the section to replace"
+                  "help": "The block ID to delete"
                 }
               ],
               "options": [
                 {
-                  "name": "--heading",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Section heading to find (e.g., '## My Section Title'). Include the markdown heading prefix (# ## ###)",
-                  "short": "-h"
-                },
-                {
-                  "name": "--text",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "New markdown content to replace the section with",
-                  "short": "-t"
-                },
-                {
-                  "name": "--file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "File containing new markdown content to replace the section with",
-                  "short": "-f"
-                },
-                {
-                  "name": "--dry-run",
+                  "name": "--recursive",
                   "type": "bool",
                   "required": false,
-                  "help": "Show what would be replaced without making changes"
-                }
-              ],
-              "examples": [
-                "notion pages content replace-section PAGE_ID --heading \"## My Section\" --file updated.md",
-                "notion pages content replace-section PAGE_ID --heading \"### Subsection\" --text \"### Subsection\\n\\nNew content here\"",
-                "notion pages content replace-section PAGE_ID --heading \"## Old Title\" --file new.md --dry-run"
-              ],
-              "usage_instructions": "Run `notion pages content replace-section --help` for exact arguments and options."
-            },
-            "clear": {
-              "help": "Clear all content from a page.",
-              "arguments": [
-                {
-                  "name": "page_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The page ID to clear content from"
-                }
-              ],
-              "options": [
+                  "help": "Delete all children blocks first (in parallel)",
+                  "short": "-r"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
                   "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a specific block by ID.",
+              "examples": [
+                "notion pages blocks get BLOCK_ID",
+                "notion pages blocks get BLOCK_ID --markdown",
+                "notion pages blocks get BLOCK_ID --children"
+              ],
+              "usage_instructions": "Run `notion pages blocks get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "block_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The block ID to retrieve"
                 }
               ],
-              "examples": [
-                "notion pages content clear PAGE_ID",
-                "notion pages content clear PAGE_ID --force"
-              ],
-              "usage_instructions": "Run `notion pages content clear --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `notion pages content --help` for exact arguments and options."
-        },
-        "blocks": {
-          "help": "Manage individual blocks",
-          "commands": {
+              "options": [
+                {
+                  "name": "--markdown",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output block as markdown",
+                  "short": "-m"
+                },
+                {
+                  "name": "--children",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Include child blocks",
+                  "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
               "help": "List blocks (children) of a page or block.",
+              "examples": [
+                "notion pages blocks list --page-id PAGE_ID",
+                "notion pages blocks list --page-id PAGE_ID --table",
+                "notion pages blocks list --page-id PAGE_ID --recursive",
+                "notion pages blocks list --page-id PAGE_ID --markdown"
+              ],
+              "usage_instructions": "Run `notion pages blocks list --help` for exact arguments and options.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--page-id",
@@ -1704,51 +1812,28 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Comma-separated list of fields to include in output"
-                }
-              ],
-              "examples": [
-                "notion pages blocks list --page-id PAGE_ID",
-                "notion pages blocks list --page-id PAGE_ID --table",
-                "notion pages blocks list --page-id PAGE_ID --recursive",
-                "notion pages blocks list --page-id PAGE_ID --markdown"
-              ],
-              "usage_instructions": "Run `notion pages blocks list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get a specific block by ID.",
-              "arguments": [
-                {
-                  "name": "block_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The block ID to retrieve"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--markdown",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Output block as markdown",
-                  "short": "-m"
                 },
                 {
-                  "name": "--children",
-                  "type": "bool",
+                  "name": "--profile",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "Include child blocks",
-                  "short": "-c"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion pages blocks get BLOCK_ID",
-                "notion pages blocks get BLOCK_ID --markdown",
-                "notion pages blocks get BLOCK_ID --children"
-              ],
-              "usage_instructions": "Run `notion pages blocks get --help` for exact arguments and options."
+              ]
             },
             "update": {
               "help": "Update a block's content. For simple text updates, use --text. For complex updates, use --json or --json-file. Use --toggleable / --no-toggleable to flip the is_toggleable flag on existing heading_1/2/3 blocks. The flag can be combined with --text to rename and toggle in a single call. By default, --toggleable also re-parents the heading's section siblings (everything from the heading down to the next same/higher-level heading) so they become children of the toggle. Re-parenting recreates those blocks via the API, which means new block IDs and dropped block-scoped comments; use --no-nest to opt out and only flip the toggle flag.",
+              "examples": [
+                "notion pages blocks update BLOCK_ID --text \"Updated paragraph text\"",
+                "notion pages blocks update BLOCK_ID --checked",
+                "notion pages blocks update BLOCK_ID --toggleable",
+                "notion pages blocks update BLOCK_ID --toggleable --no-nest",
+                "notion pages blocks update BLOCK_ID --no-toggleable",
+                "notion pages blocks update BLOCK_ID --text \"New title\" --toggleable",
+                "notion pages blocks update BLOCK_ID --json '{\"paragraph\":{\"rich_text\":[{\"text\":{\"content\":\"New text\"}}]}}'",
+                "notion pages blocks update BLOCK_ID --json-file block_update.json"
+              ],
+              "usage_instructions": "Run `notion pages blocks update --help` for exact arguments and options.",
               "arguments": [
                 {
                   "name": "block_id",
@@ -1796,61 +1881,39 @@
                   "type": "bool",
                   "required": false,
                   "help": "When using --toggleable, skip auto-nesting of the heading's section siblings as children. Default behavior moves the blocks between this heading and the next same/higher-level heading into the toggle so the expanded toggle actually shows them"
-                }
-              ],
-              "examples": [
-                "notion pages blocks update BLOCK_ID --text \"Updated paragraph text\"",
-                "notion pages blocks update BLOCK_ID --checked",
-                "notion pages blocks update BLOCK_ID --toggleable",
-                "notion pages blocks update BLOCK_ID --toggleable --no-nest",
-                "notion pages blocks update BLOCK_ID --no-toggleable",
-                "notion pages blocks update BLOCK_ID --text \"New title\" --toggleable",
-                "notion pages blocks update BLOCK_ID --json '{\"paragraph\":{\"rich_text\":[{\"text\":{\"content\":\"New text\"}}]}}'",
-                "notion pages blocks update BLOCK_ID --json-file block_update.json"
-              ],
-              "usage_instructions": "Run `notion pages blocks update --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a block. Note: Deleted blocks are moved to trash and can be recovered via Notion UI.",
-              "arguments": [
-                {
-                  "name": "block_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The block ID to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--recursive",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Delete all children blocks first (in parallel)",
-                  "short": "-r"
                 },
                 {
-                  "name": "--force",
-                  "type": "bool",
+                  "name": "--profile",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-F"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "notion pages blocks delete BLOCK_ID",
-                "notion pages blocks delete BLOCK_ID --force",
-                "notion pages blocks delete BLOCK_ID --recursive --force"
-              ],
-              "usage_instructions": "Run `notion pages blocks delete --help` for exact arguments and options."
-            },
+              ]
+            }
+          }
+        },
+        "content": {
+          "help": "Manage page content (blocks)",
+          "usage_instructions": "Run `notion pages content --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
             "append": {
-              "help": "Append child blocks to a block or page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
+              "help": "Append content blocks to a page. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially.",
+              "examples": [
+                "notion pages content append PAGE_ID --text \"Hello world\"",
+                "notion pages content append PAGE_ID --text \"# Heading\\n\\nParagraph text\"",
+                "notion pages content append PAGE_ID --file content.md",
+                "notion pages content append PAGE_ID --paragraph \"Simple paragraph\"",
+                "notion pages content append PAGE_ID --file chapters.md --is-toggleable"
+              ],
+              "usage_instructions": "Run `notion pages content append --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "block_id",
+                  "name": "page_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "The block or page ID to append children to"
+                  "help": "The page ID to append content to"
                 }
               ],
               "options": [
@@ -1858,7 +1921,7 @@
                   "name": "--text",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Text/markdown content to append as child blocks",
+                  "help": "Text/markdown content to append",
                   "short": "-t"
                 },
                 {
@@ -1869,127 +1932,512 @@
                   "short": "-f"
                 },
                 {
-                  "name": "--json",
+                  "name": "--paragraph",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Raw JSON array of blocks to append (advanced)",
-                  "short": "-j"
-                },
-                {
-                  "name": "--json-file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "File containing raw JSON array of blocks to append (advanced)"
-                },
-                {
-                  "name": "--after",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Block ID to insert after (for positioning within parent's children)",
-                  "short": "-a"
+                  "help": "Add a simple paragraph block",
+                  "short": "-p"
                 },
                 {
                   "name": "--is-toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json/--json-file)"
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "clear": {
+              "help": "Clear all content from a page.",
+              "examples": [
+                "notion pages content clear PAGE_ID",
+                "notion pages content clear PAGE_ID --force"
+              ],
+              "usage_instructions": "Run `notion pages content clear --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The page ID to clear content from"
                 }
               ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "replace-section": {
+              "help": "Replace a specific section of a page without touching the rest. Finds the section by its heading text, then replaces all blocks from that heading to (but not including) the next heading at the same or higher level. The heading argument must include the markdown prefix to identify the heading level: '# Title' for H1, '## Title' for H2, '### Title' for H3.",
               "examples": [
-                "notion pages blocks append BLOCK_ID --text \"New paragraph\"",
-                "notion pages blocks append BLOCK_ID --file content.md",
-                "notion pages blocks append BLOCK_ID --json '[{\"paragraph\":{\"rich_text\":[{\"text\":{\"content\":\"Hello\"}}]}}]'",
-                "notion pages blocks append PAGE_ID --after BLOCK_ID --text \"Inserted after specific block\"",
-                "notion pages blocks append PAGE_ID --file chapter.md --is-toggleable"
+                "notion pages content replace-section PAGE_ID --heading \"## My Section\" --file updated.md",
+                "notion pages content replace-section PAGE_ID --heading \"### Subsection\" --text \"### Subsection\\n\\nNew content here\"",
+                "notion pages content replace-section PAGE_ID --heading \"## Old Title\" --file new.md --dry-run"
               ],
-              "usage_instructions": "Run `notion pages blocks append --help` for exact arguments and options."
+              "usage_instructions": "Run `notion pages content replace-section --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The page ID containing the section to replace"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--heading",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Section heading to find (e.g., '## My Section Title'). Include the markdown heading prefix (# ## ###)",
+                  "short": "-h"
+                },
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New markdown content to replace the section with",
+                  "short": "-t"
+                },
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "File containing new markdown content to replace the section with",
+                  "short": "-f"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show what would be replaced without making changes"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "set": {
+              "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
+              "examples": [
+                "notion pages content set PAGE_ID --text \"New content\"",
+                "notion pages content set PAGE_ID --file content.md",
+                "notion pages content set PAGE_ID --json-file blocks.json",
+                "notion pages content set PAGE_ID --file outline.md --is-toggleable"
+              ],
+              "usage_instructions": "Run `notion pages content set --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The page ID to set content for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Text/markdown content to set (replaces existing)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "File containing text/markdown content to set",
+                  "short": "-f"
+                },
+                {
+                  "name": "--json-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "File containing Notion JSON blocks to set (from 'export --format notion-json')"
+                },
+                {
+                  "name": "--is-toggleable",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json-file)"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             }
-          },
-          "usage_instructions": "Run `notion pages blocks --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `notion pages --help` for exact arguments and options."
-    },
-    "comments": {
-      "help": "Manage comments on pages and blocks",
-      "commands": {
-        "list": {
-          "help": "List comments on a page, block, or in a discussion thread.",
+          }
+        },
+        "create": {
+          "help": "Create a new page under an existing parent page.",
+          "examples": [
+            "notion pages create PARENT_PAGE_ID --title \"My New Page\"",
+            "notion pages create PARENT_PAGE_ID -t \"Notes\" --content-file notes.md",
+            "notion pages create PARENT_PAGE_ID -t \"Project\" --icon \"emoji:rocket\"",
+            "notion pages create PARENT_PAGE_ID -t \"Outline\" --content-file outline.md --is-toggleable"
+          ],
+          "usage_instructions": "Run `notion pages create --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "parent_page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The parent page ID to create the page under"
+            }
+          ],
           "options": [
             {
-              "name": "--page-id",
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Page title",
+              "short": "-t"
+            },
+            {
+              "name": "--content-file",
               "type": "TEXT",
               "required": false,
-              "help": "Page ID to get comments for",
+              "help": "File containing markdown content for the page body",
+              "short": "-f"
+            },
+            {
+              "name": "--icon",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
+            },
+            {
+              "name": "--is-toggleable",
+              "type": "bool",
+              "required": false,
+              "help": "Make all heading_1/2/3 blocks generated from --content-file into toggle headings"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion pages update PAGE_ID --restore'.",
+          "examples": [
+            "notion pages delete abc123-def456",
+            "notion pages delete abc123-def456 --force"
+          ],
+          "usage_instructions": "Run `notion pages delete --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The page ID to delete (archive)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "duplicate": {
+          "help": "Duplicate a page including all blocks and rich formatting. Supports pages in databases and standalone pages (page parents). Preserves column layouts, callouts with colors, bold/italic annotations, images, and all other Notion block types. Handles arbitrary nesting depth.",
+          "examples": [
+            "notion pages duplicate PAGE_ID",
+            "notion pages duplicate PAGE_ID --title \"New Copy\"",
+            "notion pages duplicate PAGE_ID --title \"2026 Contract\" --replace \"2025:2026\" --replace \"$99,400:$84,000\"",
+            "notion pages duplicate PAGE_ID --to-database TARGET_DB_ID",
+            "notion pages duplicate PAGE_ID --properties '{\"Status\": {\"status\": {\"name\": \"Draft\"}}}'"
+          ],
+          "usage_instructions": "Run `notion pages duplicate --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The page ID to duplicate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New page title (defaults to 'Copy of {original}')",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Raw JSON property overrides (Notion API format)",
               "short": "-p"
             },
             {
-              "name": "--block-id",
+              "name": "--to-database",
               "type": "TEXT",
               "required": false,
-              "help": "Block ID to get comments for",
-              "short": "-b"
+              "help": "Target database ID (defaults to same database as source)"
             },
             {
-              "name": "--discussion-id",
+              "name": "--replace",
               "type": "TEXT",
               "required": false,
-              "help": "Discussion thread ID to get comments for",
-              "short": "-d"
+              "help": "Find/replace in block text (format: 'old:new'). Can be used multiple times",
+              "short": "-r"
             },
             {
-              "name": "--with-context",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Include parent block text as context (only with --page-id)",
-              "short": "-c"
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "export": {
+          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
+          "examples": [
+            "notion pages export PAGE_ID --output document.pdf",
+            "notion pages export PAGE_ID -o report.pdf",
+            "notion pages export PAGE_ID -o content.html --format html",
+            "notion pages export PAGE_ID -o content.md --format md",
+            "notion pages export PAGE_ID -o blocks.json --format notion-json"
+          ],
+          "usage_instructions": "Run `notion pages export --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The page ID to export"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": true,
+              "help": "Output file path (e.g., document.pdf)",
+              "short": "-o"
             },
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Export format: pdf, html, md, or notion-json",
+              "short": "-f",
+              "default": "pdf"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a specific page by ID.",
+          "examples": [
+            "notion pages get abc123-def456",
+            "notion pages get abc123-def456 --table",
+            "notion pages get abc123-def456 --include-blocks",
+            "notion pages get abc123-def456 --include-blocks --markdown",
+            "notion pages get abc123-def456 -b -m --out-file content.md"
+          ],
+          "usage_instructions": "Run `notion pages get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The page ID to retrieve"
+            }
+          ],
+          "options": [
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--include-blocks",
+              "type": "bool",
+              "required": false,
+              "help": "Include page content blocks in output",
+              "short": "-b"
+            },
+            {
+              "name": "--markdown",
+              "type": "bool",
+              "required": false,
+              "help": "Output blocks as markdown (requires --include-blocks)",
+              "short": "-m"
+            },
+            {
+              "name": "--out-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Write markdown content to file (requires --include-blocks --markdown)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Import a Word document (.docx) as a new Notion page. Converts Word document content to Notion blocks: - Headings → Heading blocks - Paragraphs → Paragraph blocks with formatting (bold, italic, etc.) - Bullet lists → Bulleted list items - Numbered lists → Numbered list items - Tables → Table blocks",
+          "examples": [
+            "notion pages import document.docx --parent PARENT_PAGE_ID",
+            "notion pages import report.docx -p PARENT_PAGE_ID --title \"Q4 Report\"",
+            "notion pages import notes.docx -p PARENT_PAGE_ID --icon \"emoji:📄\""
+          ],
+          "usage_instructions": "Run `notion pages import --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the Word document (.docx) to import"
+            }
+          ],
+          "options": [
+            {
+              "name": "--parent",
+              "type": "TEXT",
+              "required": true,
+              "help": "Parent page ID to create the new page under",
+              "short": "-p"
+            },
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page title (defaults to filename without extension)",
+              "short": "-t"
+            },
+            {
+              "name": "--icon",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all accessible pages.",
+          "examples": [
+            "notion pages list",
+            "notion pages list --table",
+            "notion pages list --sort desc --limit 20",
+            "notion pages list --filter \"title:like:%meeting%\"",
+            "notion pages list --filter \"type:eq:page\" --filter \"parent_type:eq:workspace\"",
+            "notion pages list --properties \"title,last_edited\" --table"
+          ],
+          "usage_instructions": "Run `notion pages list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction by last edited time (asc/desc)"
             },
             {
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of comments to return",
+              "help": "Maximum number of results to return",
               "short": "-l",
               "default": "100"
-            },
-            {
-              "name": "--max-workers",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum concurrent block comment lookups when using --with-context",
-              "default": "25"
             },
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., text:contains:bug, parent_type:eq:page_id)",
+              "help": "Filter using field:op:value format (e.g., title:like:%meeting%). Client-side filtering",
               "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display (id,type,title,parent_type,parent_id,url,last_edited)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion comments list --page-id abc123",
-            "notion comments list --page-id abc123 --with-context",
-            "notion comments list --block-id def456",
-            "notion comments list --discussion-id ghi789"
-          ],
-          "usage_instructions": "Run `notion comments list --help` for exact arguments and options."
+          ]
         },
-        "get": {
-          "help": "Get a specific comment by ID.",
+        "search": {
+          "help": "Search for pages by title.",
+          "examples": [
+            "notion pages search \"meeting notes\"",
+            "notion pages search \"project\" --table",
+            "notion pages search \"draft\" --sort desc --limit 10"
+          ],
+          "usage_instructions": "Run `notion pages search --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "comment_id",
+              "name": "query",
               "type": "TEXT",
               "required": true,
-              "help": "Comment ID to retrieve"
+              "help": "Text to search for in page titles"
             }
           ],
           "options": [
@@ -1999,72 +2447,75 @@
               "required": false,
               "help": "Display as formatted table",
               "short": "-t"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction by last edited time (asc/desc)"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion comments get abc123-def456"
-          ],
-          "usage_instructions": "Run `notion comments get --help` for exact arguments and options."
+          ]
         },
-        "create": {
-          "help": "Create a comment on a page, block, or in a discussion thread.",
+        "update": {
+          "help": "Update a page's title, icon, or archive status.",
+          "examples": [
+            "notion pages update PAGE_ID --title \"New Title\"",
+            "notion pages update PAGE_ID --icon \"emoji:star\"",
+            "notion pages update PAGE_ID --archive",
+            "notion pages update PAGE_ID --restore"
+          ],
+          "usage_instructions": "Run `notion pages update --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "text",
+              "name": "page_id",
               "type": "TEXT",
               "required": true,
-              "help": "Comment text content"
+              "help": "The page ID to update"
             }
           ],
           "options": [
             {
-              "name": "--page-id",
+              "name": "--title",
               "type": "TEXT",
               "required": false,
-              "help": "Page ID to add comment to",
-              "short": "-p"
+              "help": "New page title",
+              "short": "-t"
             },
             {
-              "name": "--block-id",
+              "name": "--icon",
               "type": "TEXT",
               "required": false,
-              "help": "Block ID to add comment to",
-              "short": "-b"
+              "help": "Page icon (format: 'emoji:rocket' or 'url:https://...')"
             },
             {
-              "name": "--discussion-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Discussion thread ID to reply to",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
+              "name": "--archive",
               "type": "bool",
               "required": false,
-              "help": "Display result as formatted table",
-              "short": "-t"
+              "help": "--restore          Archive or restore the page"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "notion comments create \"This is my comment\" --page-id abc123",
-            "notion comments create \"Comment on this block\" --block-id def456",
-            "notion comments create \"My reply\" --discussion-id ghi789"
-          ],
-          "usage_instructions": "Run `notion comments create --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `notion comments --help` for exact arguments and options."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `notion cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `notion cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use `notion --help` to inspect current commands, arguments, and options."
