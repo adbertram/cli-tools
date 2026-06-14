@@ -47,13 +47,26 @@ class _FakeTodosClient:
 
 
 class _FakeProjectsClient:
-    def __init__(self, projects):
+    def __init__(self, projects, tasks_by_project=None):
         self._projects = projects
+        self._tasks_by_project = tasks_by_project or {}
         self.last_kwargs: Optional[dict] = None
+        self.todo_project_calls: List[str] = []
 
     def list_projects(self, **kwargs):
         self.last_kwargs = kwargs
         return list(self._projects)
+
+    def get_project(self, uuid):
+        for project in self._projects:
+            if project.uuid == uuid:
+                return project
+        raise ValueError(f"Project not found: {uuid}")
+
+    def list_todos(self, **kwargs):
+        project_uuid = kwargs.get("project")
+        self.todo_project_calls.append(project_uuid)
+        return list(self._tasks_by_project.get(project_uuid, []))
 
 
 # ---------------------------------------------------------------------------
@@ -157,8 +170,8 @@ def test_todos_list_exclude_tag_combined_with_tag_filter(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _invoke_projects(monkeypatch, projects, args):
-    fake = _FakeProjectsClient(projects)
+def _invoke_projects(monkeypatch, projects, args, tasks_by_project=None):
+    fake = _FakeProjectsClient(projects, tasks_by_project=tasks_by_project)
     monkeypatch.setattr(projects_cmd, "get_client", lambda: fake)
     result = runner.invoke(projects_cmd.app, ["list", *args])
     return result, fake
@@ -227,3 +240,103 @@ def test_projects_list_exclude_tag_combined_with_filter(monkeypatch):
     assert result.exit_code == 0, result.stdout
     titles = sorted(p["title"] for p in json.loads(result.stdout))
     assert titles == ["Keep me", "Keep me too"]
+
+
+def test_projects_list_include_tasks_embeds_child_tasks(monkeypatch):
+    projects = _make_projects([
+        ("p1", "Alpha", []),
+        ("p2", "Beta", []),
+    ])
+    tasks_by_project = {
+        "p1": [Task(uuid="t1", title="Draft reply", project_uuid="p1")],
+        "p2": [Task(uuid="t2", title="Review notes", project_uuid="p2")],
+    }
+
+    result, fake = _invoke_projects(
+        monkeypatch,
+        projects,
+        ["--include-tasks", "--properties", "uuid,title"],
+        tasks_by_project=tasks_by_project,
+    )
+
+    assert result.exit_code == 0, result.stdout
+    records = json.loads(result.stdout)
+    assert records == [
+        {
+            "uuid": "p1",
+            "title": "Alpha",
+            "tasks": [
+                {
+                    "uuid": "t1",
+                    "title": "Draft reply",
+                    "type": 0,
+                    "status": 0,
+                    "start": 1,
+                    "notes": None,
+                    "start_date": None,
+                    "deadline": None,
+                    "trashed": False,
+                    "area_uuid": None,
+                    "area": None,
+                    "project_uuid": "p1",
+                    "project": None,
+                    "heading_uuid": None,
+                    "checklist_items": [],
+                    "tags": [],
+                    "creation_date": None,
+                    "modification_date": None,
+                }
+            ],
+        },
+        {
+            "uuid": "p2",
+            "title": "Beta",
+            "tasks": [
+                {
+                    "uuid": "t2",
+                    "title": "Review notes",
+                    "type": 0,
+                    "status": 0,
+                    "start": 1,
+                    "notes": None,
+                    "start_date": None,
+                    "deadline": None,
+                    "trashed": False,
+                    "area_uuid": None,
+                    "area": None,
+                    "project_uuid": "p2",
+                    "project": None,
+                    "heading_uuid": None,
+                    "checklist_items": [],
+                    "tags": [],
+                    "creation_date": None,
+                    "modification_date": None,
+                }
+            ],
+        },
+    ]
+    assert fake.todo_project_calls == ["p1", "p2"]
+
+
+def test_projects_get_include_tasks_embeds_child_tasks(monkeypatch):
+    projects = _make_projects([
+        ("p1", "Alpha", []),
+    ])
+    tasks_by_project = {
+        "p1": [Task(uuid="t1", title="Draft reply", project_uuid="p1")],
+    }
+    fake = _FakeProjectsClient(projects, tasks_by_project=tasks_by_project)
+    monkeypatch.setattr(projects_cmd, "get_client", lambda: fake)
+
+    result = runner.invoke(
+        projects_cmd.app,
+        ["get", "p1", "--include-tasks", "--properties", "uuid,title"],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    record = json.loads(result.stdout)
+    assert record["uuid"] == "p1"
+    assert record["title"] == "Alpha"
+    assert record["tasks"][0]["uuid"] == "t1"
+    assert record["tasks"][0]["title"] == "Draft reply"
+    assert fake.todo_project_calls == ["p1"]

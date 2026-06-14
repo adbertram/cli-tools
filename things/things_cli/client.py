@@ -34,6 +34,11 @@ class ClientError(Exception):
     pass
 
 
+class AppleScriptTimeoutError(ClientError):
+    """Raised when osascript exceeds the bounded Things AppleScript timeout."""
+    pass
+
+
 def _glob_database_worker(pattern: str, queue):
     """Run protected Things database glob in a killable child process."""
     try:
@@ -712,7 +717,7 @@ class ThingsClient:
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired:
-            raise ClientError(
+            raise AppleScriptTimeoutError(
                 f"AppleScript timed out after {timeout}s. Things3 may be "
                 "unresponsive, syncing, or awaiting first-launch interaction "
                 "(accept terms / Things Cloud setup). Bring Things3 to the "
@@ -726,6 +731,120 @@ class ThingsClient:
             raise ClientError(f"AppleScript error: {error_msg}")
 
         return result.stdout.strip()
+
+    def _task_update_timeout_message(
+        self,
+        uuid: str,
+        before: Task,
+        after: Optional[Task],
+        original_error: AppleScriptTimeoutError,
+    ) -> str:
+        """Build a timeout error that reports the durable read-back state.
+
+        AppleScript writes can partially commit before osascript is killed by the
+        subprocess timeout. Returning the generic timeout hides that state and
+        encourages blind retries. Include before/after SQLite state so callers
+        know whether a field changed unexpectedly, especially status.
+        """
+        message = str(original_error)
+        if after is None:
+            return (
+                f"{message} Read-back after the timeout failed for todo {uuid}; "
+                "do not blindly retry until Things3 is responsive and the task "
+                "state is checked."
+            )
+
+        changes = []
+        for field in ("title", "notes", "area_uuid", "project_uuid", "status", "start", "deadline", "start_date", "tags"):
+            before_value = getattr(before, field)
+            after_value = getattr(after, field)
+            if before_value != after_value:
+                changes.append(f"{field}: {before_value!r} -> {after_value!r}")
+
+        if not changes:
+            return (
+                f"{message} Read-back after the timeout shows no durable changes "
+                f"for todo {uuid}."
+            )
+
+        recovery_hint = ""
+        if before.status != after.status:
+            recovery_hint = (
+                " Unexpected status change detected; do not retry the same update "
+                "until Things3 is responsive. If recovery is needed, run the "
+                "smallest status-only command after confirming current read-back."
+            )
+
+        return (
+            f"{message} Read-back after the timeout shows partial durable changes "
+            f"for todo {uuid}: " + "; ".join(changes) + "." + recovery_hint
+        )
+
+    def _recover_project_create_timeout(
+        self,
+        title: str,
+        notes: Optional[str],
+        area: Optional[str],
+        when: Optional[str],
+        original_error: AppleScriptTimeoutError,
+    ) -> Project:
+        """Read back a project create timeout and return only an unambiguous match.
+
+        A Things AppleEvent can commit the new project before osascript is killed
+        by the subprocess timeout, leaving the caller with no returned UUID. Blind
+        retries can then create duplicates. Match the intended inputs against
+        SQLite and either return the one durable project or fail with a message
+        that makes the retry safety explicit.
+        """
+        try:
+            projects = self.list_projects(
+                area=area if area else None,
+                status="incomplete",
+                limit=None,
+            )
+        except ClientError as readback_error:
+            raise ClientError(
+                f"{original_error} Read-back after the project-create timeout "
+                "failed; do not blindly retry because the project may already "
+                f"exist. Read-back error: {readback_error}"
+            ) from original_error
+
+        matches = []
+        for project in projects:
+            if project.title != title:
+                continue
+            if (project.notes or None) != (notes or None):
+                continue
+            if area and project.area_uuid != area:
+                continue
+            if not area and project.area_uuid is not None:
+                continue
+            matches.append(project)
+
+        if len(matches) == 1:
+            project = matches[0]
+            if when == "someday" and project.start != StartType.SOMEDAY:
+                raise ClientError(
+                    f"{original_error} Read-back found one durably-created "
+                    f"project ({project.uuid}) matching the requested title, "
+                    "notes, and area, but it was not moved to Someday. Do not "
+                    "retry create; update or move the existing project after "
+                    "Things3 is responsive."
+                ) from original_error
+            return project
+
+        if not matches:
+            raise ClientError(
+                f"{original_error} Read-back after the project-create timeout "
+                "found no durable project matching the requested title, notes, "
+                "and area. Retry only after Things3 is responsive."
+            ) from original_error
+
+        uuids = ", ".join(project.uuid for project in matches)
+        raise ClientError(
+            f"{original_error} Read-back after the project-create timeout found "
+            f"multiple matching projects ({uuids}); do not blindly retry create."
+        ) from original_error
 
     def _iso_to_applescript_date(self, iso_date: str) -> str:
         """Convert an ISO date (YYYY-MM-DD) to AppleScript-compatible format.
@@ -901,7 +1020,19 @@ class ThingsClient:
         end tell
         '''
 
-        self._run_applescript(script)
+        try:
+            self._run_applescript(script)
+        except AppleScriptTimeoutError as exc:
+            try:
+                todo = self.get_todo(completion_uuid)
+            except ClientError:
+                raise exc
+            if todo.status == TaskStatus.COMPLETED:
+                return todo
+            raise ClientError(
+                f"{exc} Read-back after the timeout shows todo {completion_uuid} "
+                f"is still status {int(todo.status)}, not {int(TaskStatus.COMPLETED)}."
+            ) from exc
         return self._wait_for_status(
             self.get_todo,
             completion_uuid,
@@ -929,7 +1060,19 @@ class ThingsClient:
         end tell
         '''
 
-        self._run_applescript(script)
+        try:
+            self._run_applescript(script)
+        except AppleScriptTimeoutError as exc:
+            try:
+                todo = self.get_todo(uuid)
+            except ClientError:
+                raise exc
+            if todo.status == TaskStatus.INCOMPLETE:
+                return todo
+            raise ClientError(
+                f"{exc} Read-back after the timeout shows todo {uuid} "
+                f"is still status {int(todo.status)}, not {int(TaskStatus.INCOMPLETE)}."
+            ) from exc
         return self._wait_for_status(
             self.get_todo,
             uuid,
@@ -999,8 +1142,10 @@ class ThingsClient:
         if project is not None and area is not None:
             raise ValueError("update_todo: pass only one of `project` or `area`, not both")
 
-        # Verify todo exists first
-        self.get_todo(uuid)
+        # Verify todo exists first and keep a pre-write snapshot. If osascript
+        # times out, the AppleEvent may still have committed part of the write;
+        # compare against the post-timeout SQLite state before reporting.
+        before_todo = self.get_todo(uuid)
 
         # Build property updates
         updates = []
@@ -1043,7 +1188,16 @@ class ThingsClient:
                 {updates_str}
             end tell
             '''
-            self._run_applescript(script)
+            try:
+                self._run_applescript(script)
+            except AppleScriptTimeoutError as exc:
+                try:
+                    after_todo = self.get_todo(uuid)
+                except ClientError:
+                    after_todo = None
+                raise ClientError(
+                    self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
+                ) from exc
 
         # Handle 'when' by moving to appropriate list
         if when is not None:
@@ -1067,7 +1221,16 @@ class ThingsClient:
                     set activation date of theToDo to missing value
                 end tell
                 '''
-                self._run_applescript(schedule_script)
+                try:
+                    self._run_applescript(schedule_script)
+                except AppleScriptTimeoutError as exc:
+                    try:
+                        after_todo = self.get_todo(uuid)
+                    except ClientError:
+                        after_todo = None
+                    raise ClientError(
+                        self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
+                    ) from exc
                 return self.get_todo(uuid)
             else:
                 # Assume it's a date - use schedule command
@@ -1077,7 +1240,16 @@ class ThingsClient:
                     schedule (to do id "{uuid}") for date "{as_date}"
                 end tell
                 '''
-                self._run_applescript(schedule_script)
+                try:
+                    self._run_applescript(schedule_script)
+                except AppleScriptTimeoutError as exc:
+                    try:
+                        after_todo = self.get_todo(uuid)
+                    except ClientError:
+                        after_todo = None
+                    raise ClientError(
+                        self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
+                    ) from exc
                 return self.get_todo(uuid)
 
             move_script = f'''
@@ -1086,7 +1258,16 @@ class ThingsClient:
                 move theToDo to list "{list_name}"
             end tell
             '''
-            self._run_applescript(move_script)
+            try:
+                self._run_applescript(move_script)
+            except AppleScriptTimeoutError as exc:
+                try:
+                    after_todo = self.get_todo(uuid)
+                except ClientError:
+                    after_todo = None
+                raise ClientError(
+                    self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
+                ) from exc
 
         return self.get_todo(uuid)
 
@@ -1146,7 +1327,10 @@ class ThingsClient:
             '''
 
         # Handle 'when' by moving to appropriate list after creation
-        project_id = self._run_applescript(script)
+        try:
+            project_id = self._run_applescript(script)
+        except AppleScriptTimeoutError as exc:
+            return self._recover_project_create_timeout(title, notes, area, when, exc)
 
         if when == 'someday':
             move_script = f'''
@@ -1154,7 +1338,17 @@ class ThingsClient:
                 move project id "{project_id}" to list "Someday"
             end tell
             '''
-            self._run_applescript(move_script)
+            try:
+                self._run_applescript(move_script)
+            except AppleScriptTimeoutError as exc:
+                project = self.get_project(project_id)
+                if project.start == StartType.SOMEDAY:
+                    return project
+                raise ClientError(
+                    f"{exc} Project {project_id} was created, but read-back shows "
+                    "it was not moved to Someday. Do not retry create; update or "
+                    "move the existing project after Things3 is responsive."
+                ) from exc
 
         return self.get_project(project_id)
 

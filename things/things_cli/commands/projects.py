@@ -44,6 +44,22 @@ def extract_fields(items: list, fields: list) -> list:
     return result
 
 
+def project_output(client, project, include_tasks: bool, fields: Optional[List[str]] = None):
+    """Build a project output record with optional child tasks."""
+    if fields:
+        data = extract_fields([project], fields)[0]
+    else:
+        data = model_to_dict(project)
+
+    if include_tasks:
+        data["tasks"] = [
+            model_to_dict(task)
+            for task in client.list_todos(project=model_to_dict(project)["uuid"])
+        ]
+
+    return data
+
+
 @app.command("list")
 def projects_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -53,6 +69,7 @@ def projects_list(
     area: Optional[str] = typer.Option(None, "--area", help="Filter by area UUID"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status: incomplete, completed"),
     exclude_tag: Optional[List[str]] = typer.Option(None, "--exclude-tag", help="Drop projects tagged with this tag (case-sensitive, repeatable; union exclusion)"),
+    include_tasks: bool = typer.Option(False, "--include-tasks", help="Include tasks inside each project under a tasks key"),
 ):
     """
     List projects.
@@ -84,20 +101,25 @@ def projects_list(
             projects_dicts = [model_to_dict(p) for p in projects]
             projects = apply_filters(projects_dicts, filter)
 
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            projects = extract_fields(projects, fields)
+        fields = [f.strip() for f in properties.split(",")] if properties else None
+        projects = [
+            project_output(client, project, include_tasks, fields)
+            for project in projects
+        ]
 
         if table:
             if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(projects, fields, fields)
+                table_fields = list(fields or [])
+                if include_tasks and "tasks" not in table_fields:
+                    table_fields.append("tasks")
+                print_table(projects, table_fields, table_fields)
             else:
-                print_table(
-                    projects,
-                    ["uuid", "title", "status", "start", "deadline"],
-                    ["UUID", "Title", "Status", "When", "Deadline"],
-                )
+                table_fields = ["uuid", "title", "status", "start", "deadline"]
+                table_headers = ["UUID", "Title", "Status", "When", "Deadline"]
+                if include_tasks:
+                    table_fields.append("tasks")
+                    table_headers.append("Tasks")
+                print_table(projects, table_fields, table_headers)
         else:
             print_json(projects)
 
@@ -110,6 +132,7 @@ def projects_get(
     uuid: str = typer.Argument(..., help="The project UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields"),
+    include_tasks: bool = typer.Option(False, "--include-tasks", help="Include tasks inside the project under a tasks key"),
 ):
     """
     Get a specific project by UUID.
@@ -123,14 +146,15 @@ def projects_get(
         client = get_client()
         project = client.get_project(uuid)
 
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            project = extract_fields([project], fields)[0]
+        fields = [f.strip() for f in properties.split(",")] if properties else None
+        project = project_output(client, project, include_tasks, fields)
 
         if table:
             if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([project], fields, fields)
+                table_fields = list(fields or [])
+                if include_tasks and "tasks" not in table_fields:
+                    table_fields.append("tasks")
+                print_table([project], table_fields, table_fields)
             else:
                 item_dict = model_to_dict(project)
                 rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
