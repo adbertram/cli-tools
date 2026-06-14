@@ -27,6 +27,19 @@ import re
 
 # --- CLI-specific helpers ---
 
+def _visible_url_markdown(label: str, url: str) -> str:
+    """Return a visible Markdown link for Notion URL-only blocks.
+
+    Notion embed and link_preview blocks do not have portable Markdown or HTML
+    equivalents. Exporting them as HTML comments preserves round-trip metadata,
+    but downstream publishers render comments invisibly. Use ordinary Markdown
+    links instead so the URL remains visible in HTML/WordPress output while the
+    importer can still reconstruct the original Notion block type.
+    """
+    if not url:
+        return f"[{label}: ]()"
+    return f"[{label}: {url}]({url})"
+
 
 def extract_property_value(prop: Dict) -> Any:
     """
@@ -261,7 +274,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
     elif block_type == "link_preview":
         url = block.get("link_preview", {}).get("url", "")
-        lines.append(f"{indent}<!-- notion-link_preview: {url} -->")
+        lines.append(f"{indent}{_visible_url_markdown('Link preview', url)}")
 
     elif block_type == "table":
         # Process table with its row children
@@ -300,7 +313,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
     elif block_type == "embed":
         url = block.get("embed", {}).get("url", "")
-        lines.append(f"{indent}<!-- notion-embed: {url} -->")
+        lines.append(f"{indent}{_visible_url_markdown('Embed', url)}")
 
     elif block_type == "video":
         video = block.get("video", {})
@@ -437,12 +450,21 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
 
     # Pattern to match markdown inline elements
     # Order matters: longer patterns first
+    #
+    # Underscore emphasis follows the CommonMark "intraword underscore" rule:
+    # an underscore that has an alphanumeric character on its inner-facing side
+    # cannot open or close emphasis. This keeps technical tokens such as
+    # env_prep.ps1, ai_validation_checks, and foo_bar_baz as literal text while
+    # still parsing whitespace/punctuation-flanked _emphasis_ as italic. The
+    # lookbehind/lookahead are non-capturing, so the numbered capture groups
+    # consumed below are unchanged. Asterisk emphasis intentionally allows
+    # intraword spans, matching CommonMark.
     pattern = re.compile(
         r'(\*\*\*(.+?)\*\*\*)'  # Bold italic ***text***
         r'|(\*\*(.+?)\*\*)'     # Bold **text**
         r'|(__(.+?)__)'         # Bold __text__
         r'|(\*(.+?)\*)'         # Italic *text*
-        r'|(_([^_]+)_)'         # Italic _text_
+        r'|((?<![A-Za-z0-9])_([^_]+)_(?![A-Za-z0-9]))'  # Italic _text_ (intraword-safe)
         r'|(`([^`]+)`)'         # Code `text`
         r'|(\[([^\]]+)\]\(([^)]+)\))'  # Link [text](url)
     )
@@ -513,27 +535,39 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
     return rich_text
 
 
-def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
+def chunk_text_on_boundaries(
+    content: str,
+    max_length: int = 2000,
+    boundary: str = "newline",
+) -> List[str]:
     """
-    Split code block content into chunks of at most max_length characters.
+    Split text into chunks of at most max_length characters on word boundaries.
 
-    Notion concatenates rich_text segments directly (no separator), so
-    the chunks must reconstruct the original content when joined. This
-    function splits at newline boundaries when possible, falling back to
-    hard character splits for lines that exceed max_length on their own.
+    Notion concatenates rich_text segments directly (no separator), so the chunks
+    must reconstruct the original content when joined. The split prefers a
+    boundary character within the allowed window and falls back to a hard
+    character split only when no boundary exists (a single token longer than the
+    limit). The boundary character is kept at the end of its chunk so the
+    concatenation round-trips exactly.
 
     Args:
-        content: The full code block text
+        content: The full text to split
         max_length: Maximum characters per chunk (Notion API limit is 2000)
+        boundary: "newline" to break only on '\\n' (preserves code line
+            structure), or "whitespace" to break on any whitespace char (better
+            word boundaries for prose).
 
     Returns:
         List of text chunks, each <= max_length characters, whose
-        concatenation equals the original content
+        concatenation equals the original content.
     """
     if len(content) <= max_length:
         return [content]
 
-    chunks = []
+    def is_boundary(ch: str) -> bool:
+        return ch == "\n" if boundary == "newline" else ch.isspace()
+
+    chunks: List[str] = []
     pos = 0
     total = len(content)
 
@@ -543,22 +577,33 @@ def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
             chunks.append(content[pos:])
             break
 
-        # Find the best split point within [pos, pos + max_length)
+        # Find the last boundary character within [pos, pos + max_length)
         end = pos + max_length
-
-        # Look for the last newline within the allowed window
-        split_at = content.rfind("\n", pos, end)
+        split_at = -1
+        for i in range(end - 1, pos - 1, -1):
+            if is_boundary(content[i]):
+                split_at = i
+                break
 
         if split_at > pos:
-            # Split after the newline (include it in this chunk)
+            # Split after the boundary char (include it in this chunk)
             chunks.append(content[pos:split_at + 1])
             pos = split_at + 1
         else:
-            # No newline found in window -- hard split at max_length
+            # No boundary found in window -- hard split at max_length
             chunks.append(content[pos:end])
             pos = end
 
     return chunks
+
+
+def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
+    """Split code/comment text on newline boundaries (Notion 2000-char limit).
+
+    Thin wrapper preserving the historical newline-only contract used by code
+    blocks and comment payloads. See chunk_text_on_boundaries.
+    """
+    return chunk_text_on_boundaries(content, max_length, boundary="newline")
 
 
 def text_to_blocks(
@@ -662,6 +707,11 @@ def text_to_blocks(
             return True
         return False
 
+    def normalize_code_language(language: str) -> str:
+        if language.lower() == "text":
+            return "plain text"
+        return language
+
     def create_code_block(language: str, code_content: str) -> Dict:
         code_chunks = _chunk_code_content(code_content)
         return {
@@ -672,7 +722,7 @@ def text_to_blocks(
                     {"type": "text", "text": {"content": chunk}}
                     for chunk in code_chunks
                 ],
-                "language": language,
+                "language": normalize_code_language(language),
             }
         }
 
@@ -1036,6 +1086,18 @@ def text_to_blocks(
                 "object": "block",
                 "type": "embed",
                 "embed": {"url": embed_url}
+            })
+            i += 1
+            continue
+
+        # Visible link preview pattern: [Link preview: URL](URL) — reconstruct as link_preview block
+        legacy_link_preview = re.match(r'^\[Link preview:\s*([^\]]*)\]\(([^)]+)\)$', stripped)
+        if legacy_link_preview:
+            preview_url = legacy_link_preview.group(2)
+            blocks.append({
+                "object": "block",
+                "type": "link_preview",
+                "link_preview": {"url": preview_url}
             })
             i += 1
             continue

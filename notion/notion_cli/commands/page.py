@@ -19,6 +19,7 @@ COMMAND_CREDENTIALS = {
 }
 
 from ..client import get_client
+from ..block_limits import enforce_block_limits, find_oversize_rich_text as _find_oversize_rich_text
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (
     print_json,
@@ -1360,7 +1361,27 @@ def content_set(
             print_warning("No valid content blocks generated from input")
             raise typer.Exit(1)
 
-        # Clear existing content (single API call using erase_content flag)
+        # Transform and validate the ENTIRE payload BEFORE the destructive clear.
+        #
+        # Notion rejects any rich_text text.content over 2000 chars and any
+        # rich_text array over 100 elements. enforce_block_limits reshapes the
+        # payload so every block is uploadable (splitting oversize paragraphs,
+        # headings, list items, code, etc. on word boundaries and overflowing
+        # into sibling blocks when needed). Doing this first means a pre-checkable
+        # validation failure can never empty the page: if the payload cannot be
+        # made valid, we exit before touching the page's existing content.
+        blocks = enforce_block_limits(blocks)
+        invalid = _find_oversize_rich_text(blocks)
+        if invalid is not None:
+            print_warning(
+                "Refusing to clear page: a block exceeds Notion's 2000-character "
+                f"rich_text limit and could not be split ({invalid}). "
+                "The page's existing content was left untouched."
+            )
+            raise typer.Exit(1)
+
+        # Clear existing content (single API call using erase_content flag).
+        # Only reached once the new payload is known to be uploadable.
         client.clear_page_content(page_id)
 
         # Upload blocks using nesting-aware method (handles Notion's 2-level nesting limit)
@@ -1370,9 +1391,21 @@ def content_set(
         if len(blocks) > 100:
             typer.echo(f"Uploading {len(blocks)} blocks...", err=True)
 
-        created_count, _ = client._upload_blocks_with_nesting(
-            page_id, blocks, progress_callback=nesting_progress_cb
-        )
+        try:
+            created_count, _ = client._upload_blocks_with_nesting(
+                page_id, blocks, progress_callback=nesting_progress_cb
+            )
+        except Exception as upload_error:
+            # The page was already cleared. A failure here (e.g. a network drop
+            # mid-upload) can leave the page partially populated or empty. Fail
+            # loudly with the exact recovery path instead of exiting as if
+            # nothing happened.
+            print_warning(
+                f"Upload failed AFTER the page was cleared: {upload_error}. "
+                f"Page {page_id} may now be empty or partially populated. "
+                "Re-run 'notion pages content set' with the same input to restore it."
+            )
+            raise typer.Exit(1)
 
         print_success(f"Replaced content with {created_count} block(s)")
         print_json({

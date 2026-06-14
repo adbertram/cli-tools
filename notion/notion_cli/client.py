@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
+from .block_limits import enforce_block_limits
 from .config import get_config
 
 # Retry configuration
@@ -413,6 +414,48 @@ class NotionClient:
 
         ds_id = self.get_data_source_id(database_id, data_source_id)
         return self._make_request("PATCH", f"/data_sources/{ds_id}", data=data)
+
+    def create_database(
+        self,
+        parent_page_id: str,
+        title: str,
+        properties: Dict,
+        inline: bool = False,
+    ) -> Dict:
+        """
+        Create a new database under a parent page (API 2025-09-03+).
+
+        Under API 2025-09-03 a database is created as a container that holds
+        one initial data source. The property schema is supplied via
+        ``initial_data_source.properties`` (NOT at the top level), and the
+        returned container exposes its data source(s) in a ``data_sources``
+        array of ``{"id","name"}`` objects.
+
+        The supplied ``properties`` object must contain exactly one property of
+        type ``title`` (Notion requires it); the caller is responsible for
+        including it.
+
+        Args:
+            parent_page_id: The parent page ID the database is created under.
+            title: The database title (plain text).
+            properties: The data source property schema, in Notion
+              ``initial_data_source.properties`` format (e.g.
+              ``{"Name": {"title": {}}, "Priority": {"select": {...}}}``).
+            inline: When True, create the database inline in the parent page.
+
+        Returns:
+            The created database container object, including the top-level
+            ``id`` (database container ID), a ``data_sources`` array, and
+            ``url``.
+        """
+        data: Dict[str, Any] = {
+            "parent": {"type": "page_id", "page_id": parent_page_id},
+            "title": [{"type": "text", "text": {"content": title}}],
+            "initial_data_source": {"properties": properties},
+            "is_inline": inline,
+        }
+
+        return self._make_request("POST", "/databases", data=data)
 
     def query_database(
         self,
@@ -867,7 +910,9 @@ class NotionClient:
         }
 
         if children is not None:
-            data["children"] = children
+            # Enforce Notion's per-block size limits so an oversize inline block
+            # cannot fail the create request (same protection as the append path).
+            data["children"] = enforce_block_limits(children)
         if icon is not None:
             data["icon"] = icon
         if cover is not None:
@@ -1146,7 +1191,9 @@ class NotionClient:
         }
 
         if children is not None:
-            data["children"] = children
+            # Enforce Notion's per-block size limits so an oversize inline block
+            # cannot fail the create request (same protection as the append path).
+            data["children"] = enforce_block_limits(children)
         if icon is not None:
             data["icon"] = icon
         if cover is not None:
@@ -1796,7 +1843,18 @@ class NotionClient:
         if not blocks:
             return (0, [])
 
-        blocks = copy.deepcopy(blocks)
+        # Enforce Notion's per-block size limits once, at the top of the upload
+        # tree. enforce_block_limits returns a new structure (no input mutation)
+        # whose nested children are already normalized, so deeper recursion does
+        # not need to re-run it. This guarantees no rich_text text.content > 2000
+        # chars and no rich_text array > 100 elements ever reaches the network,
+        # which is what makes the clear-then-set flow non-destructive: an oversize
+        # block is reshaped here, before any page clear, instead of failing the
+        # PATCH after the page has been emptied.
+        if _depth == 1:
+            blocks = enforce_block_limits(blocks)
+        else:
+            blocks = copy.deepcopy(blocks)
 
         # For each block, decide what to send up now and what to recurse later.
         # mode is one of:

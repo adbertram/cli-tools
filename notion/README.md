@@ -75,6 +75,40 @@ notion database schema <database-id>
 notion database schema <database-id>
 ```
 
+### Create Database
+
+Create a new database under a parent page (API 2025-09-03). The schema is
+supplied via raw JSON (`--properties`, the Notion `initial_data_source.properties`
+object) and/or convenience flags. A title property is always present: if
+`--properties` does not define one, a title column named by `--title-property`
+(default `Name`) is added.
+
+```bash
+notion database create <parent-page-id> --title "Tasks"
+notion database create <parent-page-id> --title "Tasks" \
+    --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due"
+notion database create <parent-page-id> --title "Tasks" --inline \
+    --relation "Project:TARGET_DATA_SOURCE_ID"
+notion database create <parent-page-id> --title "Tasks" \
+    --properties '{"Name": {"title": {}}, "Notes": {"rich_text": {}}}'
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-t, --title` | The database title (required) |
+| `--title-property` | Name of the title property to create (default `Name`) |
+| `--inline / --no-inline` | Create the database inline in the parent page |
+| `-p, --properties` | Raw JSON for `initial_data_source.properties` (merged with flags) |
+| `--text`, `--number`, `--date`, `--checkbox`, `--url`, `--email`, `--phone`, `--people`, `--files` | Add a simple property (format: `Name`; repeatable) |
+| `--select`, `--multi-select`, `--status` | Add a choice property (format: `Name` or `Name:Opt1\|Opt2`; repeatable) |
+| `--relation` | Add a relation property (format: `Name:target_data_source_id`; repeatable) |
+| `--relation-type` | `dual_property` (default) or `single_property` for `--relation` |
+
+Relation properties use the **target's data_source ID** (not a database container
+ID), per Notion API 2025-09-03. The command prints the new database container
+`id`, its `data_sources` (id + name), the `data_source_ids`, and the `url`.
+
 ---
 
 ## Page Commands
@@ -456,6 +490,15 @@ notion pages content set <page-id> --file content.md
 notion pages content set <page-id> --json-file blocks.json
 notion pages content set <page-id> --file outline.md --is-toggleable
 ```
+
+The new payload is transformed and validated **before** the page is cleared, so a
+rejected block can never leave the page empty. Notion limits each rich-text value
+to 2000 characters and each rich-text array to 100 elements; any oversize
+paragraph, heading, list item, quote, callout, or code block is automatically
+split on word boundaries (and overflowed into sibling blocks when needed) so the
+original text is preserved. This applies to `--text`, `--file`, and `--json-file`
+input. Content larger than Notion's 100-block-per-request limit is still chunked
+and uploaded sequentially.
 
 **Options:**
 | Option | Description |

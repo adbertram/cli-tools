@@ -27,6 +27,7 @@ notion <command-group> <action> [arguments] [options]
 | Export page to markdown | `notion pages export PAGE_ID -o file.md -f md` |
 | Replace a section | `notion pages content replace-section PAGE_ID -h "## Heading" -f updated.md` |
 | Get database schema | `notion database schema DB_ID --table` |
+| Create a database | `notion database create PARENT_PAGE_ID -t "Tasks" --status "Phase:Todo\|Done" --date "Due"` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
 | List page/block children | `notion pages blocks list --page-id PAGE_ID` |
@@ -60,6 +61,40 @@ notion pages content replace-section PAGE_ID --heading "## Section Title" --file
 Only use `pages content set` when you intend to replace the ENTIRE page content.
 </principle>
 
+<principle name="content set Is Non-Destructive on Oversize Blocks">
+`pages content set` (and `content append`, `import`, `replace-section`, `duplicate`)
+auto-handle Notion's per-block limits: any single rich_text value over 2000 chars,
+or any rich_text array over 100 elements, is split on word boundaries (overflowing
+into sibling blocks when needed) so the original text is preserved. This applies to
+`--text`, `--file`, and `--json-file` input.
+
+`content set` transforms and validates the FULL payload BEFORE clearing the page, so
+an oversize block can no longer empty the page mid-upload. You do NOT need to
+pre-split long paragraphs or write the input as one >2000-char block in multiple
+chunks — pass the content as-is. (Historical note: a prior version cleared first and
+failed on >2000-char paragraphs, leaving the page blank. That hazard is fixed.)
+</principle>
+
+<principle name="Markdown Round-Trip: Intraword Underscores Are Literal">
+The CLI's Markdown↔Notion converter follows the CommonMark "intraword
+underscore" rule: an underscore with an alphanumeric character on its
+inner-facing side cannot open or close emphasis. Technical tokens that contain
+underscores — `env_prep.ps1`, `ai_validation_checks`, `walkthrough-run.json`,
+`foo_bar_baz` — are preserved as literal text and survive a
+`pages content set --file` (or `content append` / `replace-section`) followed by
+`pages get -b -m` **byte-for-byte unchanged**.
+
+Do NOT escape underscores as `\_` in input Markdown. Escaping is unnecessary and
+produces wrong output (literal backslashes or partial emphasis). Pass tokens
+verbatim.
+
+Genuine emphasis still works: whitespace- or punctuation-flanked `_emphasis_`
+parses to italic. On export, italic is serialized with asterisks (`*emphasis*`),
+which is itself intraword-immune, so the result re-imports as the same italic
+span. Asterisk emphasis (`*text*`) intentionally still allows intraword spans,
+matching CommonMark.
+</principle>
+
 <principle name="Command Groups">
 - **auth** — Manage authentication (status, login, logout)
 - **database** — Query/manage databases, database pages, templates
@@ -82,6 +117,22 @@ The `notion` CLI handles this transparently:
 - `notion database get DB_ID` includes the resolved `data_sources` array and `resolved_data_source_id` in its output for visibility.
 
 If you see "Resource not found" against a database you know exists, the integration likely has access via a parent page rather than direct database share. Re-share the specific database (or its parent) with the integration.
+</principle>
+
+<principle name="Creating a Database">
+`notion database create PARENT_PAGE_ID -t "Title"` creates a database under a parent page (POST `/v1/databases`). The property schema is supplied via `initial_data_source.properties`, which the CLI builds from `--properties` (raw JSON) and/or convenience flags. A title property is always added (named by `--title-property`, default `Name`) unless `--properties` already defines one.
+
+- Simple flags: `--text`, `--number`, `--date`, `--checkbox`, `--url`, `--email`, `--phone`, `--people`, `--files` take `Name`.
+- Choice flags: `--select`, `--multi-select`, `--status` take `Name` or `Name:Opt1|Opt2`.
+- `--relation "Name:target_data_source_id"` uses the **target's data_source ID** (from `notion database list`), NOT a database container ID. Set `--relation-type single_property` for a one-way relation (default `dual_property`).
+- `--inline` creates the database inline in the parent page.
+- Output JSON includes the new container `id`, the `data_sources` array (id + name), `data_source_ids`, and `url`.
+
+```bash
+notion database create PARENT_PAGE_ID -t "Tasks" \
+  --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due" \
+  --relation "Project:TARGET_DATA_SOURCE_ID"
+```
 </principle>
 
 <principle name="Toggle Blocks (Collapsible Headings)">
