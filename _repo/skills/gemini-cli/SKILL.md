@@ -57,6 +57,35 @@ This file contains complete command syntax, all arguments, all options, and usag
 - Correct command and flags used (verified against usage.json)
 </success_criteria>
 
+## Deep Research (Interactions API)
+
+`gemini research start|status|resume` drives the Gemini Deep Research Agent
+through the Google GenAI **Interactions API**. As of the May 2026 breaking
+change (legacy schema removed by the API on 2026-06-08), this requires:
+
+- **`google-genai >= 2.0.0`** (the gemini CLI pins `>=2.0.0` in
+  `gemini/pyproject.toml`). SDK 1.x sends the legacy Interactions schema and the
+  API rejects it with HTTP 400: *"The legacy Interactions API schema is no
+  longer supported … adopt the new 'steps' schema."* If `research` fails with
+  that 400, the SDK is too old — reinstall with the cli-tool install script so
+  `uv` resolves `google-genai >= 2.0.0`.
+- The new **"steps" schema**: a completed `Interaction` exposes `steps`
+  (not the legacy `outputs`) and the convenience property `output_text`. The CLI
+  reads `interaction.output_text` for the final report. Streamed events use
+  `event_type` values `interaction.created`, `step.start`, `step.delta`,
+  `step.stop`, `interaction.status_update`, `interaction.completed`, `error`
+  (replacing legacy `interaction.start` / `content.delta` / `interaction.complete`).
+  `step.delta` deltas are typed by `delta.type` (`text` → `delta.text`,
+  `thought_summary` → `delta.content.text`).
+- Deep Research is **background-only** and **paid-tier-only**; a single task can
+  run 5-20+ minutes. `gemini research start` defaults to `--stream`; callers that
+  capture stdout (e.g. the ClientContentWriter `research_article.js`) use
+  `--no-stream`, which prints the synthesized report to stdout and exits 0.
+- Valid `--agent` values (SDK Literal): `deep-research-pro-preview-12-2025`
+  (default), `deep-research-preview-04-2026`, `deep-research-max-preview-04-2026`.
+
+Migration reference: https://ai.google.dev/gemini-api/docs/interactions-breaking-changes-may-2026
+
 ## Image Editing / Reference Images
 
 `gemini image generate` accepts reference images via `-i / --input-image` (repeatable) for image editing and multi-image composition. Only the Nano Banana models support this (`gemini-3-pro-image-preview`, `gemini-2.5-flash-image`); Imagen models (`imagen-4.0-*`) will error if `-i` is passed. Images are sent as inline bytes to the Gemini API.
