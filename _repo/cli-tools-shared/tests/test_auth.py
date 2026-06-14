@@ -43,6 +43,10 @@ class _HeadedAutomationBrowser(_TestBrowser):
     AUTOMATION_HEADED = True
 
 
+class _LoginUrlBrowser(_TestBrowser):
+    AUTH_URL_PATTERN = r"/login"
+
+
 class _TestConfig:
     """Minimal config double exposing both data dir and persistent-profile dir."""
 
@@ -244,6 +248,19 @@ def test_authenticate_requires_reopen_probe_to_pass_before_claiming_success(tmp_
         match="Browser session did not persist after reopening",
     ):
         browser.authenticate(force=False)
+
+
+def test_is_authenticated_reports_probe_available_when_login_page_loaded(tmp_path, monkeypatch):
+    browser = _LoginUrlBrowser(_TestConfig(tmp_path))
+    page = _Page()
+    page.url = "https://example.com/login"
+
+    monkeypatch.setattr(browser, "get_page", lambda _url=None: page)
+
+    result = browser.is_authenticated()
+
+    assert result.authenticated is False
+    assert result.available is True
 
 
 def test_prompt_enter_eof_safe_handles_eof_via_tty(tmp_path, monkeypatch):

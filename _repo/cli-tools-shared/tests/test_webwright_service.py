@@ -118,7 +118,10 @@ def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monk
     assert env.kwargs["browser_height"] == 900
     assert env.kwargs["browser_timeout_ms"] == 7000
     assert env.kwargs["browser_navigation_timeout_ms"] == 7000
-    assert env.kwargs["launch_args"] == ["--user-agent=CLI Tools"]
+    assert env.kwargs["launch_args"] == [
+        "--restore-last-session",
+        "--user-agent=CLI Tools",
+    ]
     assert env.prepared == [
         {
             "task": "Open https://example.com/dashboard",

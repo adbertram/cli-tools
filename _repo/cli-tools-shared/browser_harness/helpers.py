@@ -117,6 +117,30 @@ def _runtime_evaluate(expression, session_id=None, await_promise=False):
     return _runtime_value(r, expression)
 
 
+_JS_ARG_NOT_SET = object()
+
+
+def _is_callable_js_expression(expression):
+    code = expression.strip()
+    return (
+        code.startswith("(")
+        or code.startswith("async (")
+        or code.startswith("async(")
+        or code.startswith("function")
+        or code.startswith("async function")
+    )
+
+
+def _wrap_js_argument(expression, arg):
+    code = expression.strip()
+    if not _is_callable_js_expression(code):
+        raise RuntimeError(
+            "js(..., arg=...) requires a callable JavaScript expression, "
+            "for example js('(value) => value', arg=value)"
+        )
+    return f"({code})({json.dumps(arg)})"
+
+
 def _has_return_statement(expression):
     i = 0
     n = len(expression)
@@ -268,7 +292,10 @@ def scroll(x, y, dy=-300, dx=0):
 # --- visual ---
 def capture_screenshot(path=None, full=False, max_dim=None):
     """Save a PNG of the current viewport. Set max_dim=1800 on a 2× display to
-    keep the file under the 2000px-per-side limit some image-aware LLMs enforce."""
+    keep the file under the 2000px-per-side limit some image-aware LLMs enforce.
+
+    Returns the filesystem path string where the PNG was written, not base64 data.
+    """
     path = path or str(ipc._TMP / "shot.png")
     r = cdp("Page.captureScreenshot", format="png", captureBeyondViewport=full)
     open(path, "wb").write(base64.b64decode(r["data"]))
@@ -423,14 +450,32 @@ def wait_for_network_idle(timeout=10.0, idle_ms=500):
         time.sleep(0.1)
     return False
 
-def js(expression, target_id=None):
+def js(expression, target_id=None, *, arg=_JS_ARG_NOT_SET):
     """Run JS in the attached tab (default) or inside an iframe target (via iframe_target()).
 
     Expressions with top-level `return` are automatically wrapped in an IIFE, so both
     `document.title` and `const x = 1; return x` are valid inputs.
+
+    `target_id` selects a Chrome target. To pass data into JavaScript, use the
+    keyword-only `arg=` parameter with a callable expression, for example:
+    `js('(email) => document.body.dataset.email = email', arg=email)`.
     """
-    sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"] if target_id else None
-    if _has_return_statement(expression) and not expression.strip().startswith("("):
+    sid = None
+    if target_id:
+        try:
+            sid = cdp("Target.attachToTarget", targetId=target_id, flatten=True)["sessionId"]
+        except Exception as e:
+            if "No target with given id" in str(e):
+                raise RuntimeError(
+                    "js(...): second positional argument is target_id, not a "
+                    "JavaScript argument. Pass JavaScript data with arg=..., "
+                    "for example js('(value) => value', arg=value). target_id "
+                    "must come from iframe_target(), current_tab(), or list_tabs()."
+                ) from e
+            raise
+    if arg is not _JS_ARG_NOT_SET:
+        expression = _wrap_js_argument(expression, arg)
+    elif _has_return_statement(expression) and not expression.strip().startswith("("):
         expression = f"(function(){{{expression}}})()"
     return _runtime_evaluate(expression, session_id=sid, await_promise=True)
 

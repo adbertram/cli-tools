@@ -173,7 +173,7 @@ class WebwrightBrowserService:
         self._user_data_dir = profile_dir
 
         width_height = _parse_window_size(window_size)
-        launch_args: list[str] = []
+        launch_args: list[str] = ["--restore-last-session"]
         if user_agent:
             launch_args.append(f"--user-agent={user_agent}")
 

@@ -529,6 +529,7 @@ class BrowserHarnessService:
                 f"--user-data-dir={user_data_dir}",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--restore-last-session",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-features=AutomationControlled,Translate",
                 "--remote-allow-origins=*",

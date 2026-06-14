@@ -288,7 +288,7 @@ class AuthVerifier:
             return {"authenticated": False, "available": False, "has_session": True}
 
         authenticated = bool(live)
-        available = bool(getattr(live, "available", authenticated))
+        available = bool(getattr(live, "available", True))
         return {
             "authenticated": authenticated,
             "available": available,

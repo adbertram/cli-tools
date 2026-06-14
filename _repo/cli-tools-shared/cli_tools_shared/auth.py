@@ -233,7 +233,7 @@ class BrowserAutomation:
             if not self.AUTH_COOKIE_PATTERNS:
                 page.wait_for_timeout(2000)
             result = self._check_auth(page)
-            available = self._check_available(page) if result else False
+            available = self._check_available(page) if result else True
             logger.debug("is_authenticated: live check result=%s available=%s", result, available)
             if result:
                 self._auth_verified_at = time.time()

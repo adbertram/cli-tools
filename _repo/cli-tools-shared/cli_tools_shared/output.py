@@ -19,8 +19,61 @@ from rich import box
 
 from .exceptions import ClientError, CredentialError
 
-# Rich console for table output
-console = Console()
+
+def _stdout_is_interactive_tty() -> bool:
+    """Return True only when stdout is a real interactive terminal.
+
+    Color and terminal control sequences (including Rich's terminal
+    background/theme detection, which round-trips an OSC 11 response) must only
+    be emitted to an interactive terminal. When stdout is a pipe or file, or a
+    PTY-backed capture sets FORCE_COLOR / TTY_COMPATIBLE to fake a terminal, the
+    answer is still "not interactive" for our purposes: automation parses this
+    stream as data and any escape byte corrupts it.
+    """
+    isatty = getattr(sys.stdout, "isatty", None)
+    if isatty is None:
+        return False
+    try:
+        return bool(isatty())
+    except ValueError:
+        # isatty() can raise on a closed stream (e.g. at pytest teardown).
+        return False
+
+
+def _color_disabled_by_env() -> bool:
+    """Return True when the environment opts out of color.
+
+    Honors the https://no-color.org convention (any non-empty NO_COLOR) and the
+    conventional TERM=dumb signal for non-capable terminals.
+    """
+    if os.environ.get("NO_COLOR", "") != "":
+        return True
+    if os.environ.get("TERM", "").strip().lower() == "dumb":
+        return True
+    return False
+
+
+def _build_console() -> Console:
+    """Build the shared Rich console with deterministic color/escape gating.
+
+    stdout carries DATA. Color and any terminal control sequence are emitted
+    only when stdout is a genuine interactive TTY and the environment has not
+    opted out of color. Otherwise the console is forced into a plain,
+    no-color, non-terminal mode so it never writes ANSI styling or terminal
+    detection escapes into captured output. This is the single source of
+    color/escape policy for every CLI tool.
+    """
+    if _stdout_is_interactive_tty() and not _color_disabled_by_env():
+        return Console()
+    # force_terminal=False stops Rich from honoring FORCE_COLOR / TTY_COMPATIBLE
+    # and from running terminal background/theme detection; no_color=True
+    # guarantees no ANSI styling even if something downstream flips detection.
+    return Console(force_terminal=False, no_color=True)
+
+
+# Rich console for table output. Gated so non-TTY stdout never receives color
+# or terminal control/detection escape sequences.
+console = _build_console()
 
 
 def _supports_unicode() -> bool:

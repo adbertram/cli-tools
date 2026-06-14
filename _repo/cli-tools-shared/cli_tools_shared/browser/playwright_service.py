@@ -150,6 +150,7 @@ class PlaywrightBrowserService:
         self._user_data_dir = profile_dir
 
         launch_args = [
+            "--restore-last-session",
             "--disable-blink-features=AutomationControlled",
             "--disable-features=AutomationControlled,Translate",
         ]

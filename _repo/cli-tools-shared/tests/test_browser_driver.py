@@ -550,6 +550,7 @@ def test_browser_open_uses_persistent_profile_dir_as_chrome_user_data_dir(tmp_pa
     cmd = " ".join(captured_argv[0])
     parsed = service._command_user_data_dir(cmd)
     assert parsed == str(persistent)
+    assert "--restore-last-session" in captured_argv[0]
 
 
 def test_session_process_pids_filters_against_persistent_profile_dir(tmp_path, monkeypatch):

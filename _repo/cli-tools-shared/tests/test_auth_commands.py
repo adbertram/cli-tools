@@ -1184,6 +1184,23 @@ def _seed_profile(base_profiles_dir, name, *, active, env_body):
     (pdir / ".env").write_text(body)
 
 
+def test_auth_status_bootstrapped_profile_has_metadata(tmp_path, monkeypatch):
+    """Fresh profile roots auto-create default before status metadata is emitted."""
+    app, _get_config, _tool_dir, _base_profiles_dir = _make_auth_app_in_tmp(
+        tmp_path, monkeypatch, [CredentialType.API_KEY]
+    )
+
+    result = CliRunner().invoke(app, ["status", "--profile", "default"])
+
+    assert result.exit_code == 2, result.output
+    data = _assert_canonical_status_shape(result.stdout)
+    profile = data["profiles"][0]
+    assert profile["name"] == "default"
+    assert profile["auth_type"] == "default"
+    assert profile["active"] is True
+    assert profile["authenticated"] is False
+
+
 def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     """Single profile, no credentials saved → status emits canonical shape with
     authenticated=False and credentials_saved=False under the configured type."""
@@ -1193,7 +1210,7 @@ def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     _seed_profile(base_profiles_dir, "default", active=True, env_body="API_KEY=\n")
 
     result = CliRunner().invoke(app, ["status"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
 
     data = _assert_canonical_status_shape(result.stdout)
     assert len(data["profiles"]) == 1
@@ -1205,6 +1222,21 @@ def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     block = profile["credential_types"]["api_key"]
     assert block["credentials_saved"] is False
     assert block["authenticated"] is False
+
+
+def test_auth_status_table_no_credentials_exits_two_and_preserves_output(tmp_path, monkeypatch):
+    """Unauthenticated table status must keep table output and exit with auth failure."""
+    app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
+        tmp_path, monkeypatch, [CredentialType.API_KEY]
+    )
+    _seed_profile(base_profiles_dir, "default", active=True, env_body="API_KEY=\n")
+
+    result = CliRunner().invoke(app, ["status", "--table"])
+
+    assert result.exit_code == 2, result.output
+    assert "profiles" in result.stdout
+    assert "default" in result.stdout
+    assert "authenticated" in result.stdout
 
 
 def test_auth_status_canonical_shape_valid_credentials_pass(tmp_path, monkeypatch):
@@ -1253,7 +1285,7 @@ def test_auth_status_canonical_shape_failed_test_connection(tmp_path, monkeypatc
     )
 
     result = CliRunner().invoke(app, ["status"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 2, result.output
 
     data = _assert_canonical_status_shape(result.stdout)
     profile = data["profiles"][0]
@@ -1262,6 +1294,45 @@ def test_auth_status_canonical_shape_failed_test_connection(tmp_path, monkeypatc
     assert block["credentials_saved"] is True
     assert block["authenticated"] is False
     assert block["api_test"].startswith("failed:")
+
+
+def test_auth_test_failed_test_connection_exits_two_and_preserves_output(tmp_path, monkeypatch):
+    """auth test uses the same unauthenticated exit-code contract as auth status."""
+    app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
+        tmp_path,
+        monkeypatch,
+        [CredentialType.API_KEY],
+        test_connection_result={"api_test": "failed: unauthorized"},
+    )
+    _seed_profile(
+        base_profiles_dir,
+        "default",
+        active=True,
+        env_body="API_KEY=bogus-key-with-enough-length\n",
+    )
+
+    result = CliRunner().invoke(app, ["test"])
+
+    assert result.exit_code == 2, result.output
+    data = _assert_canonical_status_shape(result.stdout)
+    profile = data["profiles"][0]
+    assert profile["authenticated"] is False
+    assert profile["credential_types"]["api_key"]["api_test"].startswith("failed:")
+
+
+def test_auth_test_table_no_credentials_exits_two_and_preserves_output(tmp_path, monkeypatch):
+    """Unauthenticated table auth test must keep table output and exit with auth failure."""
+    app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
+        tmp_path, monkeypatch, [CredentialType.API_KEY]
+    )
+    _seed_profile(base_profiles_dir, "default", active=True, env_body="API_KEY=\n")
+
+    result = CliRunner().invoke(app, ["test", "--table"])
+
+    assert result.exit_code == 2, result.output
+    assert "profiles" in result.stdout
+    assert "default" in result.stdout
+    assert "authenticated" in result.stdout
 
 
 def test_auth_status_oauth_authorization_code_uses_live_test_connection(tmp_path, monkeypatch):

@@ -160,6 +160,7 @@ class TestVerifyOutputFields:
         assert block["credentials_saved"] is True
         # authenticated tracks the live round-trip.
         assert block["browser_session"] is False
+        assert block["browser_available"] is True
         assert block["authenticated"] is False
         assert result["authenticated"] is False
         browser.is_authenticated.assert_called_once_with()
@@ -179,6 +180,7 @@ class TestVerifyOutputFields:
         result = AuthVerifier(config).verify()
         block = result["credential_types"]["browser_session"]
         assert block["credentials_saved"] is True
+        assert block["browser_available"] is False
         assert block["authenticated"] is False
         assert result["authenticated"] is False
 

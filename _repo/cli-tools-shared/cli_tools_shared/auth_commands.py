@@ -274,10 +274,17 @@ def _collect_profile_statuses(
         result = verifier.verify()
 
         active_name = config.get_active_profile_name()
+        profile_meta = profile_map.get(active_name)
+        if profile_meta is None:
+            profile_map = {
+                entry["name"]: entry
+                for entry in list_profiles(profile_store)
+            }
+            profile_meta = profile_map.get(active_name, {})
         entry = {
             "name": active_name,
-            "auth_type": profile_map.get(active_name, {}).get("auth_type"),
-            "active": bool(profile_map.get(active_name, {}).get("active", False)),
+            "auth_type": profile_meta.get("auth_type"),
+            "active": bool(profile_meta.get("active", False)),
             "authenticated": result["authenticated"],
             "credential_types": result["credential_types"],
         }
@@ -308,6 +315,11 @@ def _collect_profile_statuses(
         profile_entries.append(entry)
 
     return {"profiles": profile_entries}
+
+
+def _exit_if_no_authenticated_profile(data: dict) -> None:
+    if not any(profile["authenticated"] for profile in data["profiles"]):
+        raise typer.Exit(2)
 
 
 def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str], tool_name: str) -> Optional[str]:
@@ -631,6 +643,7 @@ def create_auth_app(
             api_test_handler=effective_test_handler,
         )
         print_output(data, table)
+        _exit_if_no_authenticated_profile(data)
 
     # Add refresh command only if config has OAuth token URL
     # We check lazily via a probe config to avoid requiring profile at import time
@@ -672,6 +685,7 @@ def create_auth_app(
                 verbose=verbose,
             )
             print_output(data, table)
+            _exit_if_no_authenticated_profile(data)
 
     if include_profiles:
         if profiles_app is None:
