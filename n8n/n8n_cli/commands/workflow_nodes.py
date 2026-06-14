@@ -31,6 +31,12 @@ def _writable_payload(workflow: dict) -> dict:
     return payload
 
 
+def _ensure_workflow_mutable(workflow: dict, workflow_id: str):
+    if workflow.get("isArchived"):
+        print_error(f"Workflow '{workflow_id}' is archived; node changes cannot be saved.")
+        raise typer.Exit(1)
+
+
 def _find_node_by_name(nodes: list, name: str) -> Optional[dict]:
     """Find a node in a workflow's node list by display name."""
     for node in nodes:
@@ -136,6 +142,7 @@ def node_add(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
         connections = workflow.get("connections", {})
@@ -389,6 +396,7 @@ def node_update(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
 
@@ -519,6 +527,7 @@ def node_connect(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
         connections = workflow.get("connections", {})

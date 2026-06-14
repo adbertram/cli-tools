@@ -18,6 +18,52 @@ def _local_to_utc_str(dt) -> str:
     utc_dt = local_dt.astimezone(timezone.utc)
     return utc_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
+
+def _fetch_executions_in_range(client, status, workflow_id, include_data, start_utc, end_utc):
+    """Paginate /executions and keep executions whose startedAt falls in [start_utc, end_utc].
+
+    Date filtering must use startedAt: a running execution has no stoppedAt yet.
+    Pages arrive newest-first, so pagination stops once an execution older than
+    start_utc is seen.
+    """
+    results = []
+    cursor = None
+    page_size = 250  # max allowed by API
+
+    while True:
+        params = {"limit": page_size}
+        if status:
+            params["status"] = status
+        if workflow_id:
+            params["workflowId"] = workflow_id
+        if include_data:
+            params["includeData"] = "true"
+        if cursor:
+            params["cursor"] = cursor
+
+        response = client._request("GET", "/executions", params=params)
+        data = response.get("data", [])
+
+        reached_older = False
+        for ex in data:
+            started = ex.get("startedAt")
+            if not started:
+                continue
+            # API returns UTC timestamps like "2026-02-13T14:37:08.123Z"
+            ex_utc = started.replace("Z", "")[:19]
+            if ex_utc < start_utc:
+                reached_older = True
+                break
+            if ex_utc <= end_utc:
+                results.append(ex)
+
+        next_cursor = response.get("nextCursor")
+        if reached_older or not next_cursor:
+            break
+        cursor = next_cursor
+
+    return results
+
 app = typer.Typer(help="Query workflow executions and events", no_args_is_help=True)
 
 COMMAND_CREDENTIALS = {
@@ -48,8 +94,11 @@ def executions_list(
     """
     Query execution history by timeframe via the n8n API.
 
-    Paginates through all executions and filters by date client-side
-    (the API has no date filter parameter).
+    Paginates through all executions and filters by startedAt client-side
+    (the API has no date filter parameter; running executions have no
+    stoppedAt). The n8n public API omits currently-running executions
+    unless status=running is requested, so when no --status is given the
+    command also fetches running executions and merges them in.
 
     Examples:
         n8n executions list --from 2026-02-12 --status error
@@ -63,9 +112,6 @@ def executions_list(
         end = _parse_datetime(to_dt)
 
         client = get_n8n_api_client()
-        all_executions = []
-        cursor = None
-        page_size = 250  # max allowed by API
 
         # Convert local time boundaries to UTC for comparison with API timestamps
         start_utc = _local_to_utc_str(start)
@@ -73,36 +119,22 @@ def executions_list(
 
         print_info(f"Fetching executions from {from_dt} to {to_dt}...")
 
-        while True:
-            params = {"limit": page_size}
-            if status:
-                params["status"] = status
-            if workflow_id:
-                params["workflowId"] = workflow_id
-            if include_data:
-                params["includeData"] = "true"
-            if cursor:
-                params["cursor"] = cursor
+        all_executions = _fetch_executions_in_range(
+            client, status, workflow_id, include_data, start_utc, end_utc
+        )
 
-            response = client._request("GET", "/executions", params=params)
-            data = response.get("data", [])
-
-            for ex in data:
-                started = ex.get("startedAt", "")
-                if not started:
-                    continue
-                # API returns UTC timestamps like "2026-02-13T14:37:08.123Z"
-                ex_utc = started.replace("Z", "")[:19]
-                if ex_utc < start_utc:
-                    cursor = None
-                    break
-                if ex_utc <= end_utc:
-                    all_executions.append(ex)
-
-            next_cursor = response.get("nextCursor")
-            if not next_cursor or (data and data[-1].get("startedAt", "")[:19].replace("Z", "") < start_utc):
-                break
-            cursor = next_cursor
+        # The n8n public API excludes currently-active executions from
+        # GET /executions unless status=running is requested (the public-api
+        # executions handler passes excludedExecutionsIds for every other
+        # request). Without this merge, in-flight executions are silently
+        # missing from the default list.
+        if not status:
+            running = _fetch_executions_in_range(
+                client, "running", workflow_id, include_data, start_utc, end_utc
+            )
+            seen_ids = {ex["id"] for ex in all_executions}
+            all_executions.extend(ex for ex in running if ex["id"] not in seen_ids)
+            all_executions.sort(key=lambda ex: ex["startedAt"], reverse=True)
 
         if filter:
             all_executions = apply_filters(all_executions, filter)
