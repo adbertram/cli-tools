@@ -14,7 +14,6 @@ dependencies = [
     "playwright>=1.40.0",
     "pydantic>=2.0.0",
     "httpx>=0.25.0",
-    "webwright @ git+https://github.com/microsoft/Webwright.git",
 ]
 
 [project.scripts]
