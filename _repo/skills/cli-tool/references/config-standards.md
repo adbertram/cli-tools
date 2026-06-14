@@ -46,6 +46,31 @@ Each authentication profile is fully self-contained for auth-related state. The 
 
 This layout is owned by `BaseConfig.__init__` in `cli-tools-shared`. Runtime code does not migrate legacy profile or source-tree `.env` data. A cutover must place state directly in the canonical user profile tree before the tool runs: non-authentication settings in the root tool `.env`, authentication state in `authentication_profiles/<profile>/`, and reusable raw secrets in the CLI-tools secret manager. Legacy locations such as `<repo>/.env`, `<repo>/.env.<name>`, `<repo>/authentication_profiles/`, and `~/.local/share/cli-tools/<tool>/.profiles/` are not read or moved by the package.
 
+## Cross-Host Auth Profile Sync
+
+When copying authentication profiles to `adam-server`, sync the files first and apply permissions in a separate remote step. Do not use `rsync --chmod=F600,D700`: openrsync accepts literal modes or `D`/`F`-prefixed relative modes, but not `D`/`F`-prefixed octal modes.
+
+Use this shape for a single profile:
+
+```bash
+local_profile="$HOME/.local/share/cli-tools/<tool>/authentication_profiles/<profile>"
+remote_profile="/Users/adam/.local/share/cli-tools/<tool>/authentication_profiles/<profile>"
+
+ssh adam-server 'bash -s' -- "$remote_profile" <<'REMOTE'
+set -euo pipefail
+mkdir -p "$1"
+REMOTE
+
+rsync -a --human-readable --stats "$local_profile"/ "adam-server:$remote_profile"/
+
+ssh adam-server 'bash -s' -- "$remote_profile" <<'REMOTE'
+set -euo pipefail
+profile=$1
+find "$profile" -type d -exec chmod 700 {} +
+find "$profile" -type f -exec chmod 600 {} +
+REMOTE
+```
+
 ## CLI-Tools Secret Manager Boundary
 
 Reusable CLI-tool credentials are governed by `references/secrets.md`. That boundary does not replace `BaseConfig`: `auth login`, token refresh, and browser session state still write the active authentication profile's `.env` and related profile files. Agents must not instruct users to put reusable credentials into those files manually.

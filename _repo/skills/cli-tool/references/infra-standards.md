@@ -26,15 +26,33 @@ The test script outputs these as `[AI REVIEW REQUIRED]` items. When running `/te
 
 ## Warning Suppression
 
-All CLI tools **must** suppress known benign warnings to keep output clean. Add this to `__init__.py` (loads first):
+Suppress known benign warnings (e.g. the LibreSSL compatibility warning urllib3
+emits on macOS) so output stays clean. Do this at the point the noisy dependency
+is used — inside `client.py` or the command path before the first request — not by
+default in `__init__.py`:
 
 ```python
-# In __init__.py - must be before any other imports
 import warnings
 warnings.filterwarnings("ignore", module="urllib3")
 ```
 
-This suppresses the LibreSSL compatibility warning from urllib3 on macOS systems. The filter must be set before urllib3 is imported by any dependency.
+`__init__.py` must stay declarative (docstring, imports, static metadata). The
+`test_package_init_has_no_runtime_work` lean-architecture check fails any
+import-time call there. Only put setup in `__init__.py` when it **must** run
+before any submodule import on **every** entry path — Python guarantees the
+package `__init__` runs before `<pkg>.main` / `<pkg>.commands.*`, so it is the only
+hook that also protects a bare `import <pkg>.main` (used by tests, diagnostics, and
+`python -m`), which a console-script wrapper cannot cover. A warning filter that
+must precede a dependency import, or a stale-bytecode purge for an editable,
+Dropbox-synced install, qualifies. Annotate that single statement with an inline
+`# lean-cli-allow: <reason>` marker so it passes the lean check and the exception
+is self-documenting and auditable:
+
+```python
+# In __init__.py - must run before the dependency that emits the warning imports
+import warnings
+warnings.filterwarnings("ignore", module="urllib3")  # lean-cli-allow: filter must precede urllib3 import
+```
 
 ---
 

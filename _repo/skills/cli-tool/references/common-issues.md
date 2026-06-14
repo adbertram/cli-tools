@@ -109,6 +109,41 @@ Do not use Homebrew/system `pip install -e .` or
 
 ---
 
+## Metadata Probe Fails: No module named pip
+
+### Symptom
+```bash
+$ "$(head -1 "$(command -v myservice)" | sed 's/^#!//')" -m pip show myservice-cli
+/Users/adam/.local/share/uv/tools/myservice-cli/bin/python3: No module named pip
+```
+
+### Diagnosis
+CLI tools are installed with `uv tool`, and the isolated uv tool interpreter
+does not need to include `pip`. Do not use `pip show`, `pip install`, or
+`python -m pip` inside a uv-managed CLI tool environment for diagnostics.
+
+Inspect the live launcher and use the interpreter from its shebang:
+
+```bash
+launcher="$(command -v myservice)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+from importlib import metadata
+
+dist = metadata.distribution("myservice-cli")
+print(dist.version)
+PY
+```
+
+### Fix
+If package metadata or editable-source details are needed, use
+`importlib.metadata` from the launcher shebang interpreter. If install state
+needs repair, use `uv tool install -e <cli-tools-root>/myservice --force
+--refresh` or the repo-owned install script. Do not switch to system,
+Homebrew, or uv-tool-environment `pip`.
+
+---
+
 ## Authentication Fails
 
 ### Symptom

@@ -153,14 +153,25 @@ if not has_subcommand(auth_help.stdout, "status"):
     raise SystemExit(0)
 
 status_result = run_command([cli_executable, "auth", "status"])
-if status_result.returncode != 0:
+if status_result.returncode not in (0, 2):
     detail = status_result.stderr.strip() or status_result.stdout.strip()
     emit("failed", f"'{cli_name} auth status' exited {status_result.returncode}: {detail[:300]}")
     raise SystemExit(0)
 
-_, errors = parse_and_validate_stdout(status_result.stdout)
+payload, errors = parse_and_validate_stdout(
+    status_result.stdout,
+    require_authenticated=False,
+)
 if errors:
     emit("failed", "; ".join(errors))
+    raise SystemExit(0)
+
+profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+if status_result.returncode == 2 or not any(
+    isinstance(profile, dict) and profile.get("authenticated") is True
+    for profile in profiles
+):
+    emit("failed", f"'{cli_name} auth status' is not authenticated. Run '{cli_name} auth login'.")
     raise SystemExit(0)
 
 emit("passed", f"'{cli_name} auth status' matches canonical schema")

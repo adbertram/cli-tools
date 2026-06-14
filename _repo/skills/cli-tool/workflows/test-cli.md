@@ -31,6 +31,17 @@ uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest --colle
 
 This only proves the harness collects. It is not a replacement for CLI-specific validation through `test-cli-tool.sh --cli-name "$TOOL_NAME"`.
 
+**UV validation serialization:** Run `uv run`, `uv sync`, `uv lock`,
+`uv pip install`, `uv tool install`, and related environment-mutating
+validation commands sequentially for this repo unless each command uses a
+proven separate project directory, virtual environment, and `UV_CACHE_DIR`.
+Do not launch multiple `uv run --project ... --with ...` pytest validations in
+parallel from the same cli-tools checkout or shared uv cache; uv's project and
+ephemeral overlay/cache state is mutable and parallel runs can corrupt import
+paths. If a prior parallel run produced a malformed `_uv_ephemeral_overlay.pth`
+or unexpected `ModuleNotFoundError`, remove or isolate the affected uv cache and
+rerun the validations one at a time.
+
 **Targeted harness execution:** If you run a direct `pytest -k ...` selection
 against harness tests and the selection includes any CLI-dependent test, pass
 `--cli-name "$TOOL_NAME"`. Use `--force` only for batch or collect-only harness
@@ -42,6 +53,13 @@ Do not run `PYTHONPATH=. pytest`, `python -m pytest`, or another ambient
 interpreter from the tool directory; shared dependencies such as
 `cli_tools_shared` are resolved by the uv project declared in the tool's
 `pyproject.toml`.
+
+Before reading or passing a tool's test paths to `sed`, `cat`, `nl`, `wc`,
+`head`, `tail`, `grep`, `rg`, or direct `pytest`, discover the real test files
+or prove the `tests` directory exists. Do not infer conventional filenames such
+as `tests/test_<tool>.py` or `tests/test_commands.py`. If no tests directory
+exists, report `SKIP_MISSING` and use the harness script below instead of a
+guessed file path.
 
 ```bash
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests

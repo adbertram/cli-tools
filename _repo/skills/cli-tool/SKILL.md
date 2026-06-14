@@ -4,12 +4,12 @@ description: >-
   MANDATORY: CLI tool skill router for ALL cli-tools requests. Use this skill
   first for any available CLI tool, service CLI operation, CLI command
   execution, or CLI lifecycle work. DO NOT run cli-tools commands, guess
-  command syntax, or load individual <tool>-cli skills directly before this
+  command syntax, or load individual [tool]-cli skills directly before this
   router selects them. For service operations, route through
-  workflows/skill-router.md to <cli-tools-root>/_repo/skills/<tool>-cli/SKILL.md
+  workflows/skill-router.md to [cli-tools-root]/_repo/skills/[tool]-cli/SKILL.md
   and the adjacent usage.json. For lifecycle work, delegate to cli-tool-expert
   and use this skill's lifecycle workflows. Triggers: any cli tool, cli
-  command, service cli, <tool> cli, run cli, execute cli, create cli, update
+  command, service cli, [tool] cli, run cli, execute cli, create cli, update
   cli, test cli, fix cli, add command, list cli tools, cli standards.
 ---
 
@@ -73,10 +73,56 @@ This handles: directory structure, uv tool installation (isolated venv + symlink
 
 <principle name="Existing Path Operands Only">
 Before passing optional repo paths to `rg`, `grep`, `find`, `cat`, `sed`, `nl`, `wc`, `head`, `tail`, or similar commands, prove each path exists or build the operand list from discovered existing paths. Missing optional paths are command errors, not no-match results; report skipped optional paths separately instead of passing them as operands.
+
+Do not rely on a downstream pipeline stage to hide an upstream missing-operand
+error. This is unsafe:
+
+```bash
+rg --files descript _repo/skills/descript-cli tests _repo | rg -F 'descript'
+```
+
+Build the operand list from paths proven to exist, print skipped optional paths,
+then search only those operands:
+
+```bash
+paths=()
+for path in descript _repo/skills/descript-cli tests _repo; do
+  if [ -e "$path" ]; then
+    paths+=("$path")
+  else
+    printf 'SKIPPED_MISSING_PATH: %s\n' "$path" >&2
+  fi
+done
+if [ "${#paths[@]}" -eq 0 ]; then
+  printf '%s\n' 'NO_EXISTING_PATHS'
+  exit 0
+fi
+if rg -n -F -- 'descript' "${paths[@]}"; then
+  exit 0
+else
+  rc=$?
+  if [ "$rc" -eq 1 ]; then
+    printf '%s\n' 'NO_MATCH:descript'
+    exit 0
+  fi
+  exit "$rc"
+fi
+```
+
+A no-match wrapper does not make missing operands safe. Filter optional paths
+before the `rg` call, then handle `rg` status `1` only after the existing-path
+operand list has been built.
 </principle>
 
 <principle name="Shape Expected No-Match Searches">
 When exploratory `rg` or `grep` searches may legitimately find no match, wrap each search so status `1` prints an explicit no-match marker and exits `0`. An unguarded no-match status is a Tool Failure Protocol violation even when the missing text was expected. Do not use `|| true` unless the command immediately interprets and reports the expected no-match.
+</principle>
+
+<principle name="Safe printf Formats">
+When composing CLI verification or diagnostic Bash commands, do not put leading
+hyphens in the `printf` format operand unless options are terminated. Use
+`printf -- '--- label ---\n'` for a literal format, or prefer
+`printf '%s\n' '--- label ---'` so hyphens are data.
 </principle>
 
 <principle name="Shape Expected Live API Probes">
@@ -169,6 +215,24 @@ venv contains runtime dependencies, not test-only dependencies such as
 
 ```bash
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
+```
+
+Do not run `"$interpreter" -m pip ...` inside a uv tool venv for package
+metadata diagnostics. uv tool environments may not include `pip`. Use
+`importlib.metadata` from the launcher shebang interpreter instead, and read
+editable source data from `direct_url.json` through the returned package file:
+
+```bash
+"$interpreter" - <<'PY'
+import json
+from importlib import metadata
+
+dist = metadata.distribution("<distribution-name>")
+print(dist.version)
+direct_url = next((f for f in dist.files or [] if str(f).endswith("direct_url.json")), None)
+if direct_url is not None:
+    print(json.loads(direct_url.read_text())["url"])
+PY
 ```
 
 For multi-profile CLIs, direct config probes must also pass an explicit profile:

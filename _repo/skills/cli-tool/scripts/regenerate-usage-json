@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Regenerate a repo-owned CLI skill usage.json from the installed CLI help."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import tomllib
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+SKILL_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = SKILL_DIR.parents[2]
+CLI_TOOL_TESTS = SKILL_DIR / "tests"
+TEST_CONFIG = CLI_TOOL_TESTS / "cli_test_config.toml"
+
+sys.path.insert(0, str(CLI_TOOL_TESTS))
+
+from cli_test_utils import (  # noqa: E402
+    discover_nested_commands,
+    leaf_command_paths,
+    parse_help_parameters,
+    run_cli_command,
+)
+
+
+def load_config() -> dict:
+    with TEST_CONFIG.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def resolve_usage_path(cli_name: str, usage_json: Path | None) -> Path:
+    if usage_json is not None:
+        return usage_json
+    return REPO_ROOT / "_repo" / "skills" / f"{cli_name}-cli" / "usage.json"
+
+
+def resolve_cli_executable(cli_name: str, cli_executable: str | None) -> str:
+    if cli_executable:
+        return cli_executable
+    canonical_launcher = Path.home() / ".local" / "bin" / cli_name
+    if not canonical_launcher.is_file():
+        raise SystemExit(
+            f"CLI executable not found at canonical uv launcher: {canonical_launcher}. "
+            "Pass --cli-executable for non-standard test fixtures."
+        )
+    return str(canonical_launcher)
+
+
+def help_text(cli_executable: str, command_path: str, timeout: int) -> str:
+    args = command_path.split() + ["--help"] if command_path else ["--help"]
+    result = run_cli_command(cli_executable, args, timeout=timeout)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise SystemExit(
+            f"{cli_executable} {' '.join(args)} exited {result.returncode}: {detail[:500]}"
+        )
+    return result.stdout
+
+
+def extract_help_line(text: str) -> str:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if (
+            not stripped
+            or stripped.startswith("Usage:")
+            or stripped.startswith("╭")
+            or stripped.startswith("│")
+            or stripped.startswith("╰")
+            or stripped.startswith("─")
+        ):
+            continue
+        return stripped
+    return ""
+
+
+def existing_node_meta(old_usage: dict) -> dict[str, dict]:
+    meta: dict[str, dict] = {}
+
+    def walk(tree: dict | None, prefix: str) -> None:
+        for name, node in (tree or {}).items():
+            path = f"{prefix} {name}".strip()
+            entry = {
+                key: node[key]
+                for key in ("help", "examples", "usage_instructions")
+                if key in node
+            }
+            meta[path] = entry
+            walk(node.get("commands"), path)
+
+    walk(old_usage.get("commands", {}), "")
+    return meta
+
+
+def assemble_commands(
+    live_paths: list[str],
+    parameters_by_path: dict[str, dict],
+    help_by_path: dict[str, str],
+    old_meta: dict[str, dict],
+) -> dict:
+    root: dict = {}
+
+    for command_path in live_paths:
+        parts = command_path.split()
+        cursor = root
+        for index, part in enumerate(parts):
+            current_path = " ".join(parts[: index + 1])
+            node = cursor.setdefault(part, {})
+            meta = old_meta.get(current_path, {})
+            preserved_help = meta.get("help")
+            parsed_help = help_by_path.get(current_path, "")
+
+            if preserved_help:
+                node["help"] = preserved_help
+            elif parsed_help:
+                node["help"] = parsed_help
+            else:
+                node.setdefault("help", "")
+
+            if "examples" in meta:
+                node["examples"] = meta["examples"]
+            if "usage_instructions" in meta:
+                node["usage_instructions"] = meta["usage_instructions"]
+
+            if index == len(parts) - 1:
+                parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
+                node["arguments"] = parameters["arguments"]
+                node["options"] = parameters["options"]
+            else:
+                cursor = node.setdefault("commands", {})
+
+    return root
+
+
+def build_usage(
+    cli_name: str,
+    cli_executable: str,
+    usage_path: Path,
+    discovered_at: str | None = None,
+) -> tuple[dict, int]:
+    if not usage_path.is_file():
+        raise SystemExit(f"usage.json not found: {usage_path}")
+
+    old_usage = json.loads(usage_path.read_text())
+    config = load_config()
+    skip_list = config["command_discovery"]["skip_list"]
+    timeout = config["general"]["command_timeout"]
+    max_depth = config["general"]["max_nested_depth"]
+    max_depth = config.get("cli_specific", {}).get(cli_name, {}).get("max_nested_depth", max_depth)
+
+    live_paths = sorted(
+        discover_nested_commands(
+            cli_executable,
+            "",
+            depth=0,
+            max_depth=max_depth,
+            skip_list=skip_list,
+            timeout=timeout,
+        )
+    )
+    # Fetch each path's --help exactly once; both maps derive from it.
+    help_text_by_path = {
+        path: help_text(cli_executable, path, timeout)
+        for path in live_paths
+    }
+    parameters_by_path = {
+        path: parse_help_parameters(text)
+        for path, text in help_text_by_path.items()
+    }
+    help_by_path = {
+        path: extract_help_line(text)
+        for path, text in help_text_by_path.items()
+    }
+
+    new_usage = dict(old_usage)
+    new_usage["commands"] = assemble_commands(
+        live_paths,
+        parameters_by_path,
+        help_by_path,
+        existing_node_meta(old_usage),
+    )
+    new_usage["total_commands"] = len(leaf_command_paths(set(live_paths)))
+    preserved_discovered_at = discovered_at or old_usage.get("discovered_at")
+    if preserved_discovered_at is not None:
+        new_usage["discovered_at"] = preserved_discovered_at
+    else:
+        new_usage.pop("discovered_at", None)
+    return new_usage, len(live_paths)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Regenerate <cli-tools-root>/_repo/skills/<tool>-cli/usage.json."
+    )
+    parser.add_argument("cli_name", help="CLI command name, for example jira")
+    parser.add_argument("--cli-executable", help="Executable to inspect instead of ~/.local/bin/<cli>")
+    parser.add_argument("--usage-json", type=Path, help="usage.json path to update")
+    parser.add_argument("--check", action="store_true", help="Exit 1 if usage.json would change")
+    parser.add_argument("--discovered-at", help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+
+    usage_path = resolve_usage_path(args.cli_name, args.usage_json)
+    cli_executable = resolve_cli_executable(args.cli_name, args.cli_executable)
+    new_usage, command_count = build_usage(
+        args.cli_name,
+        cli_executable,
+        usage_path,
+        discovered_at=args.discovered_at,
+    )
+    old_text = usage_path.read_text()
+    new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
+    changed = new_text != old_text
+
+    if args.check:
+        print(
+            json.dumps(
+                {
+                    "cli": args.cli_name,
+                    "usage_json": str(usage_path),
+                    "commands": command_count,
+                    "changed": changed,
+                },
+                sort_keys=True,
+            )
+        )
+        return 1 if changed else 0
+
+    if changed:
+        if args.discovered_at is None:
+            new_usage["discovered_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
+        usage_path.write_text(new_text)
+    print(
+        json.dumps(
+            {
+                "cli": args.cli_name,
+                "usage_json": str(usage_path),
+                "commands": command_count,
+                "changed": changed,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -2,10 +2,11 @@
 
 import os
 import subprocess
+import sys
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 
 _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
     Tuple[str, str, int, int, Tuple[str, ...], int],
@@ -37,22 +38,41 @@ def _clean_path() -> Dict[str, str]:
     return env
 
 
+RUN_TIMEOUT_ATTEMPTS = 2
+
+
 def run_cli_command(
     cli_name: str,
     args: List[str],
     timeout: int = 30,
     check: bool = False
 ) -> subprocess.CompletedProcess:
-    """Execute CLI command with timeout and capture output."""
+    """Execute CLI command with timeout and capture output.
+
+    Retries once on timeout: CLI startup can stall for tens of seconds under
+    bursty host contention (Dropbox sync, parallel agent sessions), and a
+    single stall is not a CLI hang. A second consecutive timeout raises
+    TimeoutExpired so genuine hangs still fail loudly.
+    """
     cmd = [cli_name] + args
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=check,
-        env=_clean_path()
-    )
+    for attempt in range(1, RUN_TIMEOUT_ATTEMPTS + 1):
+        try:
+            return subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=check,
+                env=_clean_path()
+            )
+        except subprocess.TimeoutExpired:
+            if attempt == RUN_TIMEOUT_ATTEMPTS:
+                raise
+            print(
+                f"WARNING: {' '.join(cmd)} timed out after {timeout}s "
+                f"(attempt {attempt}/{RUN_TIMEOUT_ATTEMPTS}); retrying",
+                file=sys.stderr,
+            )
 
 
 def _top_level_cache_command_missing(result: subprocess.CompletedProcess) -> bool:
@@ -288,13 +308,42 @@ def parse_help_parameters(help_text: str) -> Dict[str, List[Dict]]:
     }
 
 
-def validate_json_output(stdout: str) -> Tuple[bool, Optional[Dict]]:
+def describe_json_top_level(data: Any) -> str:
+    """Return a concise description of a parsed JSON document's root shape."""
+    if isinstance(data, list):
+        return f"array[{len(data)}]"
+    if isinstance(data, dict):
+        keys = sorted(str(key) for key in data.keys())
+        preview = ", ".join(keys[:5])
+        suffix = ", ..." if len(keys) > 5 else ""
+        return f"object keys=[{preview}{suffix}]"
+    if data is None:
+        return "null"
+    return type(data).__name__
+
+
+def validate_json_output(stdout: str) -> Tuple[bool, Optional[Any]]:
     """Validate that output is valid JSON and return parsed data."""
     try:
         data = json.loads(stdout)
         return True, data
     except json.JSONDecodeError:
         return False, None
+
+
+def require_json_array_output(
+    stdout: str,
+    *,
+    command: str = "command",
+) -> Tuple[bool, Optional[List[Any]], str]:
+    """Parse stdout and require a top-level JSON array before callers slice it."""
+    valid, data = validate_json_output(stdout)
+    if not valid:
+        return False, None, f"{command} stdout is not a single valid JSON document"
+    if not isinstance(data, list):
+        shape = describe_json_top_level(data)
+        return False, None, f"{command} expected top-level JSON array before slicing, got {shape}"
+    return True, data, ""
 
 
 def filter_commands_by_group(commands: List[str], group: str) -> List[str]:

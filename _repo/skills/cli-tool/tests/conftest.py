@@ -402,7 +402,7 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
 
     result = run_cli_command(cli_executable, ["auth", "status"])
 
-    if result.returncode != 0:
+    if result.returncode not in (0, 2):
         pytest.fail(
             f"{cli_name} auth status returned exit code {result.returncode}.\n"
             f"{_auth_required_message(cli_name, auth_command)}"

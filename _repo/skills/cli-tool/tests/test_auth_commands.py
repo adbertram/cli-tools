@@ -53,6 +53,12 @@ def _skip_live_browser_auth(cli_name, is_browser_cli):
         pytest.skip(f"{cli_name} is a browser CLI; compliance tests do not run live browser auth commands")
 
 
+def _assert_auth_status_returncode(result, cli_name):
+    assert result.returncode in (0, 2), (
+        f"'{cli_name} auth status' exited {result.returncode}: {result.stderr[:300]}"
+    )
+
+
 def test_auth_subcommand_exists(cli_name, help_cache, test_config, command_filter):
     """Assertion 9: auth subcommand exists (skipped if CLI has no auth)."""
     if command_filter and command_filter != "auth":
@@ -133,7 +139,7 @@ def test_auth_status_outputs_json_with_profiles(cli_executable, cli_name, help_c
     _skip_live_browser_auth(cli_name, is_browser_cli)
 
     result = run_cli_command(cli_executable, ["auth", "status"])
-    assert result.returncode == 0, "auth status should succeed"
+    _assert_auth_status_returncode(result, cli_name)
 
     valid, data = validate_json_output(result.stdout)
     assert valid, (
@@ -165,7 +171,7 @@ def test_auth_status_has_credentials_saved(cli_executable, cli_name, cli_dir, he
         pytest.skip(f"{cli_name} declares no credential types")
 
     result = run_cli_command(cli_executable, ["auth", "status"])
-    assert result.returncode == 0, "auth status should succeed"
+    _assert_auth_status_returncode(result, cli_name)
 
     valid, data = validate_json_output(result.stdout)
     assert valid, "auth status must output valid JSON"
@@ -196,7 +202,7 @@ def test_auth_status_has_credential_types(cli_executable, cli_name, cli_dir, hel
         pytest.skip(f"{cli_name} declares no credential types")
 
     result = run_cli_command(cli_executable, ["auth", "status"])
-    assert result.returncode == 0, "auth status should succeed"
+    _assert_auth_status_returncode(result, cli_name)
 
     valid, data = validate_json_output(result.stdout)
     assert valid, "auth status must output valid JSON"
@@ -278,7 +284,7 @@ def test_auth_status_credential_types_match_config(
         pytest.skip(f"Could not determine CREDENTIAL_TYPES for {cli_name}")
 
     result = run_cli_command(cli_executable, ["auth", "status"])
-    assert result.returncode == 0, "auth status should succeed"
+    _assert_auth_status_returncode(result, cli_name)
     valid, data = validate_json_output(result.stdout)
     assert valid, "auth status must output valid JSON"
 
@@ -309,7 +315,7 @@ def test_auth_status_lists_all_profiles_by_default(
         pytest.skip(f"{cli_name} auth profiles list did not return JSON array")
 
     status_result = run_cli_command(cli_executable, ["auth", "status"])
-    assert status_result.returncode == 0, "auth status should succeed"
+    _assert_auth_status_returncode(status_result, cli_name)
     valid, data = validate_json_output(status_result.stdout)
     assert valid, "auth status must output valid JSON"
 

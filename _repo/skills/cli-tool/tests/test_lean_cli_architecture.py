@@ -77,6 +77,33 @@ def _contains_call(node: ast.AST) -> bool:
     return any(isinstance(child, ast.Call) for child in ast.walk(node))
 
 
+_LEAN_ALLOW_MARKER = "lean-cli-allow:"
+
+
+def _lean_allow_reason(source_lines: list[str], node: ast.stmt) -> str | None:
+    """Return the justification from an inline ``# lean-cli-allow: <reason>`` marker
+    on the statement's own source line(s), or ``None`` when absent.
+
+    Sanctioned, audited escape hatch for the rare package-init statement that must
+    run before any submodule import on every entry path: Python guarantees the
+    package ``__init__`` runs ahead of ``<pkg>.main`` / ``<pkg>.commands.*`` on a
+    bare ``import`` as well as the console script, so a command-path wrapper cannot
+    cover bare imports (e.g. a stale-bytecode purge for an editable, Dropbox-synced
+    install). A non-empty reason is required so the exception is self-documenting
+    and greppable in review; the rule stays strict for every unannotated statement.
+    """
+    start = node.lineno - 1
+    end = getattr(node, "end_lineno", node.lineno)
+    for line in source_lines[start:end]:
+        marker_index = line.find(_LEAN_ALLOW_MARKER)
+        if marker_index == -1:
+            continue
+        reason = line[marker_index + len(_LEAN_ALLOW_MARKER):].strip()
+        if reason:
+            return reason
+    return None
+
+
 def _is_browser_automation_base(base: ast.expr) -> bool:
     if isinstance(base, ast.Name):
         return base.id == "BrowserAutomation"
@@ -149,7 +176,15 @@ def test_command_credential_modules_are_metadata_only(cli_name, cli_dir, command
 
 
 def test_package_init_has_no_runtime_work(cli_name, cli_dir, command_filter):
-    """Package import must not run setup, warnings filters, or other side effects."""
+    """Package import must not run setup, warnings filters, or other side effects.
+
+    A single statement may opt out with an inline ``# lean-cli-allow: <reason>``
+    marker when the work genuinely must run at package-import time on every entry
+    path (Python guarantees ``__init__`` runs before any submodule import, so a
+    command-path wrapper cannot cover bare ``import <pkg>.main``). The reason is
+    required and reviewed in code review; the rule stays strict for every
+    unannotated statement.
+    """
     if command_filter:
         pytest.skip("Skipping (command filter active)")
 
@@ -157,16 +192,24 @@ def test_package_init_has_no_runtime_work(cli_name, cli_dir, command_filter):
     if not init_file.exists():
         return
 
-    tree = ast.parse(init_file.read_text())
+    source = init_file.read_text()
+    source_lines = source.splitlines()
+    tree = ast.parse(source)
     for node in tree.body:
         if _is_docstring(node) or isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and not _contains_call(node):
             continue
+        if _lean_allow_reason(source_lines, node):
+            continue
         pytest.fail(
             f"{init_file.relative_to(cli_dir)} performs runtime work at import time.\n"
             "Fix: keep package __init__.py to docstrings, imports, and static "
-            "metadata assignments. Put executable setup in the command path."
+            "metadata assignments. Put executable setup in the command path.\n"
+            "If the statement genuinely must run before any submodule import on "
+            "every entry path (e.g. a stale-bytecode purge for an editable, "
+            "Dropbox-synced install), annotate that one statement with an inline "
+            "'# lean-cli-allow: <reason>' marker."
         )
 
 

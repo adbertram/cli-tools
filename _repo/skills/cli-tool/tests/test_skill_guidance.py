@@ -61,11 +61,17 @@ def test_skill_places_usage_json_in_cli_skill_folder():
 
 def test_skill_requires_existing_path_operands_for_repo_probes():
     text = _read("SKILL.md")
+    text_words = _words(text)
 
     assert "Existing Path Operands Only" in text
     assert "prove each path exists" in text
     assert "Missing optional paths are command errors" in text
     assert "report skipped optional paths separately" in text
+    assert "Do not rely on a downstream pipeline stage" in text
+    assert "SKIPPED_MISSING_PATH" in text
+    assert "NO_EXISTING_PATHS" in text
+    assert "A no-match wrapper does not make missing operands safe" in text
+    assert "Filter optional paths before the `rg` call" in text_words
 
 
 def test_skill_requires_shaped_expected_no_match_searches():
@@ -136,11 +142,33 @@ def test_test_workflow_documents_safe_harness_collection_command():
     assert "Use `--force` only for batch or collect-only harness" in text_words
 
 
+def test_test_workflow_requires_serial_uv_validation():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "UV validation serialization" in text
+    assert "Run `uv run`, `uv sync`, `uv lock`" in text
+    assert "validation commands sequentially for this repo" in text_words
+    assert "proven separate project directory, virtual environment, and `UV_CACHE_DIR`" in text_words
+    assert "Do not launch multiple `uv run --project ... --with ...` pytest validations in parallel" in text_words
+    assert "malformed `_uv_ephemeral_overlay.pth`" in text
+
+
 def test_common_issues_uses_supported_test_cli_tool_invocation():
     text = _read("references/common-issues.md")
 
     assert "test-cli-tool.sh --cli-name myservice" in text
     assert "test-cli-tool.sh myservice" not in text
+
+
+def test_common_issues_forbids_pip_inside_uv_tool_metadata_probes():
+    text = _read("references/common-issues.md")
+    text_words = _words(text)
+
+    assert "Metadata Probe Fails: No module named pip" in text
+    assert "Do not use `pip show`, `pip install`, or `python -m pip`" in text_words
+    assert "inside a uv-managed CLI tool environment for diagnostics" in text_words
+    assert "`importlib.metadata` from the launcher shebang interpreter" in text
 
 
 def test_test_workflow_documents_harness_unit_monkeypatch_targets():

@@ -107,6 +107,12 @@ ls -la <name>_cli/
 find <name>_cli -maxdepth 2 -type f | sort
 ```
 
+When reading existing tests, discover the real test files first and pass only
+those discovered paths to `sed`, `cat`, `nl`, or similar readers. Do not infer
+conventional filenames such as `tests/test_commands.py`; if discovery returns
+multiple candidates, inspect the candidate list or narrow it with `rg --files`
+against the proven `tests` directory before reading a file.
+
 If a test or cleanup step requires flattening a single
 `<name>_cli/commands/<group>.py` package into `<name>_cli/commands.py`, move the
 real module first, update imports, and delete `<name>_cli/commands/__init__.py`.
