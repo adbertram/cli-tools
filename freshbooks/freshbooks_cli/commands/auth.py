@@ -53,11 +53,12 @@ def _login_handler(config, _force: bool):
         raise typer.Exit(1)
 
     redirect_uri = config.redirect_uri or DEFAULT_REDIRECT_URI
-    auth_url = f"{FRESHBOOKS_AUTH_URL}?{urlencode({
-        'client_id': config.client_id,
-        'response_type': 'code',
-        'redirect_uri': redirect_uri,
-    })}"
+    auth_params = {
+        "client_id": config.client_id,
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+    }
+    auth_url = f"{FRESHBOOKS_AUTH_URL}?{urlencode(auth_params)}"
 
     print_info("Opening browser for FreshBooks authentication...")
     callback_url = _get_auth_code_from_browser(auth_url, redirect_uri)
