@@ -35,6 +35,10 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
+SEGMENT_DOWNLOAD_MAX_RETRIES = 8
+SEGMENT_DOWNLOAD_BASE_DELAY = 2.0
+SEGMENT_DOWNLOAD_MAX_DELAY = 120.0
+SEGMENT_DOWNLOAD_TIMEOUT_SECONDS = 60
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -352,6 +356,22 @@ class DescriptClient:
         except Exception:
             return response.text[:500] if response.text else "Unknown error"
 
+    def _calculate_segment_retry_delay(
+        self,
+        attempt: int,
+        response: Optional[requests.Response] = None,
+    ) -> float:
+        """Calculate media segment retry delay using Retry-After or capped backoff."""
+        if response is not None:
+            retry_after = self._get_retry_after(response)
+            if retry_after is not None:
+                return min(retry_after, SEGMENT_DOWNLOAD_MAX_DELAY)
+
+        delay = SEGMENT_DOWNLOAD_BASE_DELAY * (2 ** attempt)
+        jitter_range = delay * self.jitter
+        delay += random.uniform(-jitter_range, jitter_range)
+        return min(delay, SEGMENT_DOWNLOAD_MAX_DELAY)
+
     def _make_request(
         self,
         method: str,
@@ -563,6 +583,127 @@ class DescriptClient:
         )
         return create_export_playlist(response)
 
+    def _download_playlist_key(self, playlist: ExportPlaylist) -> str:
+        """Return a stable key for resumable segment downloads."""
+        payload = {
+            "url": playlist.url,
+            "end": playlist.end,
+            "fragment_starts": playlist.fragment_starts,
+        }
+        encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _load_download_state(
+        self,
+        state_path: Path,
+        part_path: Path,
+        playlist_key: str,
+    ) -> tuple[int, int]:
+        """Load resumable download state for a matching playlist."""
+        if not state_path.exists() and not part_path.exists():
+            return 0, 0
+        if not state_path.exists() or not part_path.exists():
+            raise ClientError(
+                "Cannot resume raw asset export because the partial download "
+                f"state is incomplete. Remove {part_path} and {state_path}, then retry."
+            )
+
+        try:
+            state = json.loads(state_path.read_text())
+        except Exception as exc:
+            raise ClientError(
+                f"Cannot resume raw asset export because {state_path} is invalid JSON."
+            ) from exc
+
+        if state.get("playlist_key") != playlist_key:
+            raise ClientError(
+                "Cannot resume raw asset export because the saved partial "
+                f"download does not match this playlist. Remove {part_path} and "
+                f"{state_path}, then retry."
+            )
+
+        next_segment = state.get("next_segment")
+        downloaded_bytes = state.get("downloaded_bytes")
+        if not isinstance(next_segment, int) or not isinstance(downloaded_bytes, int):
+            raise ClientError(
+                f"Cannot resume raw asset export because {state_path} has invalid "
+                "next_segment or downloaded_bytes values."
+            )
+        actual_bytes = part_path.stat().st_size
+        if downloaded_bytes != actual_bytes:
+            raise ClientError(
+                "Cannot resume raw asset export because the partial download "
+                f"byte count does not match its state file. {part_path} has "
+                f"{actual_bytes} bytes but {state_path} records {downloaded_bytes}."
+            )
+
+        return next_segment, downloaded_bytes
+
+    def _save_download_state(
+        self,
+        state_path: Path,
+        playlist_key: str,
+        next_segment: int,
+        downloaded_bytes: int,
+    ) -> None:
+        """Persist resumable raw asset download state."""
+        state = {
+            "playlist_key": playlist_key,
+            "next_segment": next_segment,
+            "downloaded_bytes": downloaded_bytes,
+        }
+        state_path.write_text(json.dumps(state, sort_keys=True))
+
+    def _download_segment_with_retry(
+        self,
+        url: str,
+        segment_index: int,
+        total_segments: int,
+    ) -> bytes:
+        """Download one raw video segment with rate-limit backoff."""
+        last_exception: Optional[Exception] = None
+        last_response: Optional[requests.Response] = None
+
+        for attempt in range(SEGMENT_DOWNLOAD_MAX_RETRIES + 1):
+            try:
+                response = requests.get(url, timeout=SEGMENT_DOWNLOAD_TIMEOUT_SECONDS)
+                last_response = response
+
+                if (
+                    self._is_retryable(response, None)
+                    and attempt < SEGMENT_DOWNLOAD_MAX_RETRIES
+                ):
+                    delay = self._calculate_segment_retry_delay(attempt, response)
+                    time.sleep(delay)
+                    continue
+
+                if response.ok:
+                    return response.content
+                break
+
+            except requests.exceptions.RequestException as exc:
+                last_exception = exc
+                if (
+                    self._is_retryable(None, exc)
+                    and attempt < SEGMENT_DOWNLOAD_MAX_RETRIES
+                ):
+                    delay = self._calculate_segment_retry_delay(attempt)
+                    time.sleep(delay)
+                    continue
+                break
+
+        if last_response is not None:
+            detail = self._extract_error_detail(last_response)
+            raise ClientError(
+                f"Segment {segment_index}/{total_segments} failed after "
+                f"{SEGMENT_DOWNLOAD_MAX_RETRIES + 1} attempts: "
+                f"HTTP {last_response.status_code}: {detail}"
+            )
+        raise ClientError(
+            f"Segment {segment_index}/{total_segments} failed after "
+            f"{SEGMENT_DOWNLOAD_MAX_RETRIES + 1} attempts: {last_exception}"
+        )
+
     def download_export(
         self,
         playlist: ExportPlaylist,
@@ -579,26 +720,48 @@ class DescriptClient:
         Returns:
             Output file path
         """
-        from pathlib import Path
-
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
+        part_path = output.with_name(f"{output.name}.part")
+        state_path = output.with_name(f"{output.name}.part.json")
 
         segments = playlist.fragment_starts
         total = len(segments)
+        if total == 0:
+            raise ClientError("Export playlist has no media segments")
+        playlist_key = self._download_playlist_key(playlist)
+        start_segment, downloaded_bytes = self._load_download_state(
+            state_path,
+            part_path,
+            playlist_key,
+        )
 
-        with open(output, "wb") as f:
-            for i, start in enumerate(segments):
+        if progress_callback and start_segment:
+            progress_callback(downloaded_bytes, start_segment, total)
+
+        mode = "ab" if start_segment else "wb"
+        with open(part_path, mode) as f:
+            for i in range(start_segment, total):
+                start = segments[i]
                 # End is next segment start, or total duration for last segment
                 end = segments[i + 1] if i + 1 < total else playlist.end
                 url = f"{playlist.url}?{playlist.params}&start={start}&end={end}"
 
-                resp = requests.get(url, timeout=60)
-                resp.raise_for_status()
-                f.write(resp.content)
+                content = self._download_segment_with_retry(url, i + 1, total)
+                f.write(content)
+                self._save_download_state(
+                    state_path,
+                    playlist_key,
+                    i + 1,
+                    f.tell(),
+                )
 
                 if progress_callback:
                     progress_callback(f.tell(), i + 1, total)
+
+        part_path.replace(output)
+        if state_path.exists():
+            state_path.unlink()
 
         return str(output)
 
