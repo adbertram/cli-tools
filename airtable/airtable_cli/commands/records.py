@@ -14,6 +14,9 @@ COMMAND_CREDENTIALS = {
     ],
     "update": [
         "personal_access_token"
+    ],
+    "upload-attachment": [
+        "personal_access_token"
     ]
 }
 
@@ -350,6 +353,45 @@ def records_delete(
         client = get_client()
         result = client.delete_record(resolved_base_id, table_id, record_id)
         print_success(f"Record {record_id} deleted successfully")
+        print_json(result)
+
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("upload-attachment")
+def records_upload_attachment(
+    record_id: str = typer.Argument(..., help="The record ID to attach the file to"),
+    field_name: str = typer.Argument(..., help="Attachment field ID or name"),
+    file_path: str = typer.Argument(..., help="Path to the local file to upload"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    content_type: Optional[str] = typer.Option(None, "--content-type", help="MIME type override (auto-detected from filename when omitted)"),
+):
+    """
+    Upload a local file to a record's attachment field.
+
+    Uses Airtable's content-upload endpoint, which requires an existing record
+    and caps the base64 payload at 5 MB. For larger files, host the file and
+    attach it by URL via `records update <table> <record> 'Field=[{"url":"..."}]'`.
+
+    Examples:
+        # Upload a local image to the Image field of an existing record
+        airtable records upload-attachment recXXX "Image" ./diagram.png --base appXXX
+
+        # Force a specific MIME type
+        airtable records upload-attachment recXXX "Image" ./file.bin --content-type image/png --base appXXX
+    """
+    try:
+        resolved_base_id = resolve_base_id(base_id)
+        client = get_client()
+        result = client.upload_attachment(
+            base_id=resolved_base_id,
+            record_id=record_id,
+            field_name=field_name,
+            file_path=file_path,
+            content_type=content_type,
+        )
+        print_success(f"Uploaded attachment to record {record_id} field '{field_name}'")
         print_json(result)
 
     except Exception as e:

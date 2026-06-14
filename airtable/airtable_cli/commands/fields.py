@@ -6,7 +6,9 @@ COMMAND_CREDENTIALS = {
     "create": [
         "personal_access_token"
     ],
-    "delete": [],
+    "delete": [
+        "personal_access_token"
+    ],
     "list": [
         "personal_access_token"
     ],
@@ -184,6 +186,10 @@ def fields_update(
 ):
     """
     Update a field's name, description, or options.
+
+    Note: Airtable's API cannot edit a select field's choices (add/remove/
+    rename/recolor/reorder) here. Add a choice via `records update ... --typecast`;
+    remove or rename choices in the Airtable web UI.
 
     Examples:
         airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name "New Status"
