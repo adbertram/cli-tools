@@ -16,7 +16,6 @@ playwright-cli snapshot
 
 # 3. Interact using refs from snapshot
 playwright-cli fill ref="input_username" "admin@example.com"
-playwright-cli fill ref="input_password" "secret123"
 playwright-cli click ref="btn_submit"
 
 # 4. Re-snapshot after page changes (refs become stale)
@@ -28,21 +27,35 @@ playwright-cli snapshot
 ## Login and Save Auth State
 
 ```bash
-# Login manually
-playwright-cli open https://app.example.com/login
+# Login with a password from a secret source, without printing the value
+secrets_file="$(mktemp)"
+trap 'rm -f "$secrets_file"' EXIT
+APP_PASSWORD="$(lastpass items password ITEM_ID)" node - "$secrets_file" <<'NODE'
+const fs = require("fs");
+const [file] = process.argv.slice(2);
+const value = process.env.APP_PASSWORD;
+if (!value) throw new Error("APP_PASSWORD is empty");
+fs.writeFileSync(file, `APP_PASSWORD=${JSON.stringify(value)}\n`, { mode: 0o600 });
+NODE
+
+PLAYWRIGHT_MCP_SECRETS_FILE="$secrets_file" playwright-cli -s=app open https://app.example.com/login
 playwright-cli snapshot
 playwright-cli fill ref="email_input" "user@example.com"
-playwright-cli fill ref="password_input" "password"
+playwright-cli -s=app fill ref="password_input" APP_PASSWORD
 playwright-cli click ref="login_button"
 
 # Save auth state for reuse
 playwright-cli state-save auth-example.json
 
 # Later: restore auth state (skip login)
-playwright-cli open
+playwright-cli -s=app open
 playwright-cli state-load auth-example.json
 playwright-cli goto https://app.example.com/dashboard
 ```
+
+**Secret rule:** `run-code` cannot read `process.env`; its VM context only receives `page`. For secret entry, set `PLAYWRIGHT_MCP_SECRETS_FILE` when opening the session and pass the secret key name, not the secret value, to `fill` or `type`. Do not verify real password fields by returning their full `inputValue()`.
+
+**Validation pitfall:** Dummy values in `PLAYWRIGHT_MCP_SECRETS_FILE` are still secrets. If a wrapper reads a field value after filling from a dummy secret key, expect the CLI response redaction layer to return `<secret>KEY_NAME</secret>` rather than the literal dummy value. Validate that command output uses `process.env['KEY_NAME']` and does not print the raw value.
 
 ## Form Filling
 
@@ -109,6 +122,23 @@ playwright-cli screenshot --full-page --filename out.png # full scrollable page
 
 # Save as PDF
 playwright-cli pdf
+```
+
+## Render local HTML or SVG to PNG
+
+`playwright-cli` only allows the `http:`, `https:`, `about:`, and `data:` protocols, so `file://` URLs are blocked — a `goto file://…` is rejected. The failure is silent: a `screenshot` run after the blocked navigation still exits `0` but captures a blank page, so the rejection is easy to miss. To render a local HTML/SVG file, load it as a `data:` URL or serve it over a local http server instead.
+
+```bash
+# data: URL — charset=utf-8 is REQUIRED, or non-ASCII (em dashes, etc.) render as mojibake
+b64=$(base64 -i diagram.html | tr -d '\n')
+playwright-cli resize 1920 1080
+playwright-cli goto "data:text/html;charset=utf-8;base64,$b64"
+playwright-cli screenshot --filename out.png
+
+# Alternative for larger or multi-file pages: serve over http, then navigate to it
+python3 -m http.server 8765 --directory . &
+playwright-cli goto http://localhost:8765/diagram.html
+playwright-cli screenshot --filename out.png
 ```
 
 ## Network Monitoring
@@ -186,6 +216,9 @@ playwright-cli run-code "async (page) => { const title = await page.title(); ret
 
 # Do not pass top-level statements; this can print `### Error` while exiting 0:
 # playwright-cli run-code "await page.title();"
+
+# Do not use run-code for secret entry; process is unavailable in its VM:
+# playwright-cli run-code 'async (page) => page.getByRole("textbox", { name: "Password" }).fill(process.env.APP_PASSWORD)'
 ```
 
 ## Dialog Handling
