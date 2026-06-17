@@ -1,4 +1,6 @@
 """Posts commands for WordPress CLI."""
+import html
+import re
 import typer
 from typing import Optional, List
 from pathlib import Path
@@ -32,6 +34,56 @@ COMMAND_CREDENTIALS = {
 def get_client():
     from ..client import get_client as _get_client
     return _get_client()
+
+
+# A WordPress post excerpt doubles as the SEO meta description and the text shown
+# on archive/homepage cards. ATA standard: target 150-200 chars, hard maximum 300
+# (matches the Notion "Excerpt Length" threshold). An excerpt longer than this is
+# almost always article body text pasted in by mistake, which then leaks into the
+# meta description and homepage tiles.
+EXCERPT_MAX_CHARS = 300
+
+
+def _validate_excerpt(excerpt: Optional[str]) -> None:
+    """Reject an excerpt longer than the meta-description hard maximum.
+
+    Fails loudly so a bloated excerpt never reaches WordPress, rather than being
+    silently truncated or published as-is.
+    """
+    if excerpt is None:
+        return
+    length = len(excerpt.strip())
+    if length > EXCERPT_MAX_CHARS:
+        raise ValueError(
+            f"Excerpt is {length} characters; maximum is {EXCERPT_MAX_CHARS}. "
+            "The excerpt is the SEO meta description (target 150-200 chars) -- "
+            "provide a short summary, not article body text."
+        )
+
+
+def _normalize_heading_text(text: str) -> str:
+    """Collapse a heading/title to comparable plain text (tags, entities, case)."""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _strip_duplicate_title_heading(content: str, title: Optional[str]) -> str:
+    """Drop a leading <h1> whose text duplicates the post title.
+
+    WordPress renders the Title field as the page H1. DOCX/Markdown conversion
+    also emits the document's title as a leading <h1>, so the body would show the
+    title twice. Only strips when the leading heading text matches the title, so
+    a legitimate first section heading is left untouched.
+    """
+    if not content or not title:
+        return content
+    match = re.match(r"\s*<h1\b[^>]*>(.*?)</h1>\s*", content, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return content
+    if _normalize_heading_text(match.group(1)) == _normalize_heading_text(title):
+        return content[match.end():]
+    return content
 
 
 @app.command("list")
@@ -125,6 +177,7 @@ def posts_create(
 ):
     """Create a new WordPress post."""
     try:
+        _validate_excerpt(excerpt)
         client = get_client()
 
         input_count = sum([
@@ -166,6 +219,11 @@ def posts_create(
             if not title:
                 title = from_markdown.stem.replace('-', ' ').replace('_', ' ').title()
                 print_info(f"Using title from filename: {title}")
+
+        # WordPress renders the Title field as the page H1, so a body that opens
+        # with the title as <h1> shows it twice. DOCX/Markdown conversion produces
+        # exactly that leading heading -- drop it when it matches the title.
+        content = _strip_duplicate_title_heading(content, title)
 
         _is_sponsored = False
         if sponsored:
@@ -229,16 +287,23 @@ def posts_update(
     post_id: int = typer.Argument(..., help="The post ID to update"),
     title: Optional[str] = typer.Option(None, "--title", help="New post title"),
     content: Optional[str] = typer.Option(None, "--content", help="New post content"),
+    content_file: Optional[Path] = typer.Option(None, "--content-file", help="Read new post content from file"),
     status: Optional[str] = typer.Option(None, "--status", help="New post status (publish, draft, pending, private, future)"),
     slug: Optional[str] = typer.Option(None, "--slug", help="New URL slug"),
     date: Optional[str] = typer.Option(None, "--date", help="Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"),
     auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Auto-find next available slot (max 2/day, 4hr gaps, weekdays only)"),
     featured_media: Optional[int] = typer.Option(None, "--featured-media", help="Featured image media ID"),
     tags: Optional[str] = typer.Option(None, "--tags", help="Tag IDs (comma-separated)"),
+    excerpt: Optional[str] = typer.Option(None, "--excerpt", help="Post excerpt"),
     meta: Optional[List[str]] = typer.Option(None, "--meta", help="Post meta (key=value, repeatable)"),
 ):
     """Update an existing WordPress post."""
     try:
+        _validate_excerpt(excerpt)
+
+        if content is not None and content_file is not None:
+            raise ValueError("Cannot use both --content and --content-file")
+
         client = get_client()
 
         fields = {}
@@ -246,6 +311,10 @@ def posts_update(
             fields["title"] = title
         if content is not None:
             fields["content"] = content
+        if content_file is not None:
+            if not content_file.exists():
+                raise FileNotFoundError(f"Content file not found: {content_file}")
+            fields["content"] = content_file.read_text(encoding="utf-8")
         if slug is not None:
             fields["slug"] = slug
 
@@ -267,6 +336,9 @@ def posts_update(
 
         if featured_media is not None:
             fields["featured_media"] = featured_media
+
+        if excerpt is not None:
+            fields["excerpt"] = excerpt
 
         if tags:
             tag_ids = [int(x.strip()) for x in tags.split(",")]
