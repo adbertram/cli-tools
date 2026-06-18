@@ -1,8 +1,8 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-06-14T21:40:47Z",
-  "total_commands": 45,
+  "discovered_at": "2026-06-18T21:04:20Z",
+  "total_commands": 53,
   "global_options": [
     {
       "name": "--version",
@@ -272,6 +272,173 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "themes": {
+          "help": "Manage WordPress themes",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "file-push": {
+              "help": "Push a local file to a remote WordPress theme through SSH/SFTP.",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme directory name under wp-content/themes"
+                },
+                {
+                  "name": "local_file",
+                  "type": "PATH",
+                  "required": true,
+                  "help": "Local file to upload"
+                },
+                {
+                  "name": "remote_file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Relative destination path inside the theme"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--remote-root",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Absolute remote WordPress root path"
+                },
+                {
+                  "name": "--host",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SSH host"
+                },
+                {
+                  "name": "--user",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "SSH user"
+                },
+                {
+                  "name": "--port",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "SSH port",
+                  "default": "22"
+                },
+                {
+                  "name": "--identity-file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "SSH identity file"
+                },
+                {
+                  "name": "--backup",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Back up the existing remote file before overwrite"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Upload and overwrite the remote file"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show readback without uploading"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific WordPress theme.",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme stylesheet, textdomain, or exact name from themes list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List installed WordPress themes.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of themes to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status",
+                  "short": "-s"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -848,6 +1015,154 @@
         }
       }
     },
+    "menus": {
+      "help": "Manage WordPress navigation menus",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add-page": {
+          "help": "Add a WordPress page to a navigation menu.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--menu",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu ID, slug, or name"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Theme menu location"
+            },
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu item title"
+            },
+            {
+              "name": "--menu-order",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Menu item order"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "items": {
+          "help": "List items in a WordPress navigation menu.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--menu",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu ID, slug, or name"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Theme menu location"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum menu items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List WordPress navigation menus.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "locations": {
+          "help": "List WordPress navigation menu locations.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "org": {
       "help": "Manage WordPress.com organization access",
       "usage_instructions": "Use `wordpress org token` commands for WordPress.com OAuth credentials and Jetpack plugin-update tokens.",
@@ -921,6 +1236,18 @@
                   "required": false,
                   "help": "Registered WordPress.com OAuth redirect URI"
                 },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "status": {
+              "help": "Report whether the active profile is ready for WordPress.com plugin updates.",
+              "arguments": [],
+              "options": [
                 {
                   "name": "--profile",
                   "type": "TEXT",
@@ -1468,6 +1795,12 @@
               "help": "New post content"
             },
             {
+              "name": "--content-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Read new post content from file"
+            },
+            {
               "name": "--status",
               "type": "TEXT",
               "required": false,
@@ -1502,6 +1835,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Tag IDs (comma-separated)"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post excerpt"
             },
             {
               "name": "--meta",

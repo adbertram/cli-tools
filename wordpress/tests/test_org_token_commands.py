@@ -109,3 +109,46 @@ def test_org_token_requests_and_saves_token_without_printing_raw_token(runner, m
     assert config.wpcom_access_token == "raw-token-value"
     assert config.wpcom_token_type == "bearer"
     assert config.wpcom_scope == "global"
+
+
+def test_org_token_status_reports_upgrade_readiness_without_secrets(runner):
+    config = get_config()
+    config.save_wpcom_credentials(
+        client_id="client-123",
+        client_secret="secret-456",
+        site="example.com",
+        redirect_uri="https://localhost.example/callback",
+    )
+
+    result = runner.invoke(app, ["org", "token", "status"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "site": "example.com",
+        "credentials_saved": True,
+        "token_saved": False,
+        "ready": False,
+        "missing_fields": [],
+        "setup_command": "wordpress org token save-credential --client-id ... --client-secret ... --site ... --redirect-uri ...",
+        "token_command": "wordpress org token",
+    }
+    assert "secret-456" not in result.stdout
+
+
+def test_org_token_status_reports_missing_fields(runner):
+    config = get_config()
+    config.save_wpcom_credentials(site="example.com")
+
+    result = runner.invoke(app, ["org", "token", "status"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["credentials_saved"] is False
+    assert payload["token_saved"] is False
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == [
+        "WPCOM_CLIENT_ID",
+        "WPCOM_CLIENT_SECRET",
+        "WPCOM_REDIRECT_URI",
+    ]

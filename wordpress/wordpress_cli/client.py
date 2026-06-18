@@ -346,6 +346,35 @@ class WordPressClient:
             )
         return themes
 
+    @staticmethod
+    def _theme_identifier_values(theme: dict) -> List[str]:
+        """Return exact identifiers users can discover from theme list output."""
+        values = [theme["theme"], theme["name"]]
+        textdomain = theme.get("textdomain")
+        if textdomain:
+            values.append(textdomain)
+        return values
+
+    def get_theme(self, theme: str) -> dict:
+        """Get a specific theme by stylesheet, textdomain, or exact name."""
+        if not theme or not theme.strip():
+            raise ValueError("theme cannot be empty")
+
+        normalized = theme.strip().casefold()
+        matches = [
+            installed
+            for installed in self.list_themes()
+            if normalized in {value.casefold() for value in self._theme_identifier_values(installed)}
+        ]
+        if not matches:
+            raise ClientError(
+                f"Theme not found: {theme}. Use a stylesheet, textdomain, or exact name from themes list."
+            )
+        if len(matches) > 1:
+            match_names = ", ".join(sorted(match["theme"] for match in matches))
+            raise ClientError(f"Theme identifier is ambiguous: {theme}. Matches: {match_names}")
+        return matches[0]
+
     def _wp_json_base_url(self) -> str:
         suffix = "/wp/v2"
         base_url = self.base_url.rstrip("/")
@@ -840,6 +869,137 @@ class WordPressClient:
 
         response = self._make_request("DELETE", endpoint, params=params)
         return response
+
+    # ==================== Navigation Menu Methods ====================
+
+    def list_menus(self) -> List[dict]:
+        """List WordPress navigation menus."""
+        response = self._make_request("GET", "/menus", params={"per_page": 100})
+        if not isinstance(response, list):
+            raise ClientError(f"Expected menu list response to be a list, got {type(response)}")
+        return response
+
+    def list_menu_locations(self) -> dict:
+        """List WordPress navigation menu locations."""
+        response = self._make_request("GET", "/menu-locations")
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected menu locations response to be a dict, got {type(response)}")
+        return response
+
+    def resolve_menu_id(self, *, menu: Optional[str] = None, location: Optional[str] = None) -> int:
+        """Resolve a menu ID from a menu ID/slug/name or a theme location."""
+        if bool(menu) == bool(location):
+            raise ValueError("Provide exactly one of menu or location")
+
+        if location is not None:
+            locations = self.list_menu_locations()
+            location_data = locations.get(location)
+            if not isinstance(location_data, dict):
+                raise ClientError(f"Menu location not found: {location}")
+            menu_id = location_data.get("menu")
+            if not isinstance(menu_id, int) or menu_id <= 0:
+                raise ClientError(f"Menu location has no assigned menu: {location}")
+            return menu_id
+
+        assert menu is not None
+        menu_identifier = menu.strip()
+        if not menu_identifier:
+            raise ValueError("menu cannot be empty")
+        if menu_identifier.isdigit():
+            return int(menu_identifier)
+
+        normalized = menu_identifier.casefold()
+        matches = [
+            raw_menu
+            for raw_menu in self.list_menus()
+            if str(raw_menu.get("slug", "")).casefold() == normalized
+            or str(raw_menu.get("name", "")).casefold() == normalized
+        ]
+        if not matches:
+            raise ClientError(f"Menu not found: {menu}")
+        if len(matches) > 1:
+            names = ", ".join(sorted(str(match.get("name", match.get("id"))) for match in matches))
+            raise ClientError(f"Menu identifier is ambiguous: {menu}. Matches: {names}")
+        menu_id = matches[0].get("id")
+        if not isinstance(menu_id, int):
+            raise ClientError(f"Resolved menu did not include an integer id: {menu}")
+        return menu_id
+
+    def list_menu_items(self, menu_id: int, limit: int = 100) -> List[dict]:
+        """List items in a navigation menu with automatic pagination."""
+        if menu_id <= 0:
+            raise ValueError("menu_id must be a positive integer")
+        if limit <= 0:
+            raise ValueError("limit must be a positive integer")
+
+        all_items: List[dict] = []
+        page = 1
+        remaining = limit
+        while remaining > 0:
+            per_page = min(remaining, 100)
+            response, headers = self._make_request(
+                "GET",
+                "/menu-items",
+                params={
+                    "menus": menu_id,
+                    "per_page": per_page,
+                    "page": page,
+                    "orderby": "menu_order",
+                    "order": "asc",
+                },
+                return_headers=True,
+            )
+            if not isinstance(response, list):
+                raise ClientError(f"Expected menu item list response to be a list, got {type(response)}")
+            all_items.extend(response)
+            if len(response) < per_page:
+                break
+            total_pages = int(headers.get("x-wp-totalpages", 1))
+            if page >= total_pages:
+                break
+            remaining -= len(response)
+            page += 1
+        return all_items
+
+    def add_page_to_menu(
+        self,
+        *,
+        page_id: int,
+        menu_id: int,
+        title: Optional[str] = None,
+        menu_order: Optional[int] = None,
+    ) -> dict:
+        """Add a page to a navigation menu, returning an existing item when already present."""
+        if page_id <= 0:
+            raise ValueError("page_id must be a positive integer")
+        if menu_id <= 0:
+            raise ValueError("menu_id must be a positive integer")
+
+        for item in self.list_menu_items(menu_id):
+            if (
+                item.get("type") == "post_type"
+                and item.get("object") == "page"
+                and item.get("object_id") == page_id
+            ):
+                return {"created": False, "menu_id": menu_id, "item": item}
+
+        data: Dict[str, Any] = {
+            "status": "publish",
+            "type": "post_type",
+            "object": "page",
+            "object_id": page_id,
+            "menus": menu_id,
+            "parent": 0,
+        }
+        if title is not None:
+            data["title"] = title
+        if menu_order is not None:
+            data["menu_order"] = menu_order
+
+        item = self._make_request("POST", "/menu-items", data=data)
+        if not isinstance(item, dict):
+            raise ClientError(f"Expected created menu item response to be a dict, got {type(item)}")
+        return {"created": True, "menu_id": menu_id, "item": item}
 
     # ==================== Media Methods ====================
 

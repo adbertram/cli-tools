@@ -1,18 +1,21 @@
 """WordPress admin command group."""
 import typer
 
-from . import plugins
+from . import plugins, themes
 from cli_tools_shared.output import print_json, print_table, handle_error
 
-app = typer.Typer(help="WordPress admin commands")
+app = typer.Typer(help="WordPress admin commands", no_args_is_help=True)
 
 COMMAND_CREDENTIALS = {
     "plugins": ["username_password"],
+    "themes": ["username_password"],
+    "file-push": ["no_auth"],
     "security-scan": ["username_password"],
     "health-report": ["username_password"],
 }
 
 app.add_typer(plugins.app, name="plugins", help="Manage WordPress plugins")
+app.add_typer(themes.app, name="themes", help="Manage WordPress themes")
 
 
 def get_client():

@@ -33,6 +33,9 @@ wordpress <command-group> <action> [arguments] [options]
 | List tags | `wordpress tags list --table` |
 | List plugins | `wordpress admin plugins list --table` |
 | Upgrade plugin | `wordpress admin plugins upgrade PLUGIN` |
+| List themes | `wordpress admin themes list --table` |
+| Preview theme file push | `wordpress admin themes file-push THEME LOCAL_FILE REMOTE_FILE --remote-root /path/to/wp --host host --dry-run` |
+| Push theme file | `wordpress admin themes file-push THEME LOCAL_FILE REMOTE_FILE --remote-root /path/to/wp --host host --backup --yes` |
 | Save WordPress.com OAuth credentials | `wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...` |
 | Refresh WordPress.com token | `wordpress org token` |
 </quick_start>
@@ -51,7 +54,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **media** — Media library: list, get, upload, delete
 - **categories** — Category management: list, get, create, update, delete
 - **tags** — Tag management: list, get, create, update, delete
-- **admin** — WordPress admin maintenance, including plugin list/get/activate/deactivate/delete/install/upgrade
+- **admin** — WordPress admin maintenance, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through explicit SSH/SFTP settings
 - **org** — WordPress.com OAuth token commands used by Jetpack plugin updates
 </principle>
 

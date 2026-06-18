@@ -884,6 +884,10 @@ wordpress cache clear
 wordpress admin plugins list
 wordpress admin plugins get akismet
 wordpress admin plugins upgrade akismet/akismet
+wordpress admin themes list --table
+wordpress admin themes get active-theme
+wordpress admin themes file-push active-theme ./front-page.php front-page.php --remote-root /srv/www/site --host wp-host --dry-run
+wordpress admin themes file-push active-theme ./front-page.php front-page.php --remote-root /srv/www/site --host wp-host --backup --yes
 wordpress org token --help
 wordpress org token save-credential --help
 ```

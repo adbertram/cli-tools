@@ -21,12 +21,13 @@ app.add_typer(auth_app, name="auth", help="Manage WordPress API authentication")
 app.add_typer(create_cache_app(get_config), name="cache", help="Manage CLI cache")
 
 # Register command modules
-from .commands import posts, pages, media, categories, tags, admin, org
+from .commands import posts, pages, media, categories, tags, admin, org, menus
 register_commands(app, get_config, posts, name="posts", help="Manage WordPress posts")
 register_commands(app, get_config, pages, name="pages", help="Manage WordPress pages")
 register_commands(app, get_config, media, name="media", help="Manage WordPress media library")
 register_commands(app, get_config, categories, name="categories", help="Manage WordPress categories")
 register_commands(app, get_config, tags, name="tags", help="Manage WordPress tags")
+register_commands(app, get_config, menus, name="menus", help="Manage WordPress navigation menus")
 register_commands(app, get_config, admin, name="admin", help="WordPress admin commands")
 register_commands(app, get_config, org, name="org", help="Manage WordPress.com organization access")
 
