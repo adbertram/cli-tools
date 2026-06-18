@@ -1,5 +1,6 @@
 """File operation commands for Dropbox CLI."""
 import os
+import signal
 from datetime import datetime, timedelta
 import typer
 from typing import Optional
@@ -487,6 +488,7 @@ def files_upload(
 def files_delete(
     path: str = typer.Argument(..., help="Dropbox path to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    timeout: int = typer.Option(120, "--timeout", help="Maximum seconds to wait for the delete request"),
 ):
     """
     Delete a file or folder.
@@ -501,12 +503,27 @@ def files_delete(
                 print_info("Aborted")
                 raise typer.Exit(0)
 
-        client = get_client()
-        metadata = client.delete(path)
+        if timeout <= 0:
+            raise typer.BadParameter("--timeout must be greater than 0")
+
+        def _delete_timeout(signum, frame):
+            raise TimeoutError(f"Delete timed out after {timeout} seconds: {path}")
+
+        previous_handler = signal.signal(signal.SIGALRM, _delete_timeout)
+        signal.alarm(timeout)
+        try:
+            client = get_client()
+            client.set_timeout(timeout)
+            metadata = client.delete(path)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, previous_handler)
         print_success(f"Deleted: {metadata['path_display']}")
 
     except typer.Exit:
         raise
+    except TimeoutError as e:
+        raise typer.Exit(handle_error(e))
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

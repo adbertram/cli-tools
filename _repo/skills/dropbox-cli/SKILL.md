@@ -44,6 +44,23 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **account** — View account info and storage usage
 - **sharing** — Inspect, list, and download shared links/folders
 </principle>
+
+<principle name="Auth Smoke Probes">
+Use `dropbox auth status --table` or `dropbox auth test` to verify Dropbox auth.
+Do not use `dropbox files info /` as an auth or API smoke probe: Dropbox
+`files/get_metadata` does not support root folder metadata. For root content
+reachability, use `dropbox files ls /` instead.
+</principle>
+
+<principle name="Local Dropbox Folder Files">
+For classic local Dropbox paths under `/Users/adam/Dropbox/...`, do not use
+macOS `fileproviderctl`; those paths are not File Provider URLs and can return
+`NSFileProviderErrorDomain Code=-1005` with `No item for URL`. If a local
+Dropbox file is missing, placeholder-only, or needs to be materialized, map the
+local path to its Dropbox API path by stripping `/Users/adam/Dropbox`, then use
+the Dropbox CLI surface from `usage.json`, typically
+`dropbox files get <dropbox_path> <local_path>`.
+</principle>
 </essential_principles>
 
 <reference_index>

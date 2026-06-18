@@ -13,7 +13,7 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, files, folders, account, sharing
+from .commands import auth, files, folders, account, sharing, sync
 
 app.add_typer(auth.app, name="auth", help="Manage Dropbox authentication")
 app.add_typer(create_cache_app(get_config), name="cache")
@@ -21,6 +21,7 @@ register_commands(app, get_config, files, name="files", help="Manage files and f
 register_commands(app, get_config, folders, name="folders", help="Manage folders")
 register_commands(app, get_config, account, name="account", help="View account information")
 register_commands(app, get_config, sharing, name="sharing", help="Work with shared links and folders")
+register_commands(app, get_config, sync, name="sync", help="Inspect Dropbox desktop sync state")
 def main():
     """Main entry point."""
     run_app(app, error_types=ClientError)

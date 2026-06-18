@@ -1,8 +1,8 @@
 {
   "tool": "dropbox",
   "description": "CLI interface for Dropbox API",
-  "discovered_at": "2026-05-20T16:10:21.624470+00:00",
-  "total_commands": 30,
+  "discovered_at": "2026-06-18T15:42:56Z",
+  "total_commands": 32,
   "global_options": [
     {
       "name": "--version",
@@ -19,11 +19,79 @@
     }
   ],
   "commands": {
+    "account": {
+      "help": "View account information",
+      "usage_instructions": "Account information — view account details and disk usage/quota.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "info": {
+          "help": "Display account information.",
+          "examples": [
+            "dropbox account info",
+            "dropbox account info --table"
+          ],
+          "usage_instructions": "Use to see account details (name, email, account type, team info). Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "usage": {
+          "help": "Display disk usage information.",
+          "examples": [
+            "dropbox account usage",
+            "dropbox account usage --table"
+          ],
+          "usage_instructions": "Use to check storage quota and how much space is used. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage Dropbox authentication",
+      "usage_instructions": "Authentication management — login, logout, check status, refresh tokens, and test credentials. All auth commands support --profile/-p for multi-account setups.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to authenticate with Dropbox. Opens a browser for OAuth consent. Use --profile/-p to save to a named profile. Use --force/-F to re-authenticate if credentials are stale.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +106,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Use to authenticate with Dropbox. Opens a browser for OAuth consent. Use --profile/-p to save to a named profile. Use --force/-F to re-authenticate if credentials are stale."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use to clear stored credentials. Use --profile/-p to target a specific profile; otherwise clears the default.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,31 +121,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to clear stored credentials. Use --profile/-p to target a specific profile; otherwise clears the default."
+          ]
         },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management for multi-account setups. Create named profiles, set defaults, and list/delete profiles. Each profile stores its own credentials.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a new named profile. NAME is a required positional argument. After creation, use `auth login --profile NAME` to configure credentials.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
             },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to permanently remove a profile and its credentials. NAME is required. Use --force/-F to skip confirmation prompt.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to inspect a single profile's configuration. NAME is a required positional argument.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use to see all configured profiles and which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., --filter 'is_default:eq:True').",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          ],
-          "usage_instructions": "Use to check if credentials are valid and see token expiry. Use --table/-t for formatted output. Use --profile/-p to check a specific profile."
+          }
         },
         "refresh": {
           "help": "Refresh OAuth access token using stored refresh token.",
+          "usage_instructions": "Use to manually refresh an expired OAuth token. Normally not needed — commands auto-refresh. Use when auth test shows expired token.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -99,11 +272,33 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Use to manually refresh an expired OAuth token. Normally not needed \u2014 commands auto-refresh. Use when auth test shows expired token."
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use to check if credentials are valid and see token expiry. Use --table/-t for formatted output. Use --profile/-p to check a specific profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to verify credentials actually work by making a test API call. Use --verbose/-v for detailed check output. Good for diagnosing auth issues.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,155 +321,68 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to verify credentials actually work by making a test API call. Use --verbose/-v for detailed check output. Good for diagnosing auth issues."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use to see all configured profiles and which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., --filter 'is_default:eq:True')."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use to inspect a single profile's configuration. NAME is a required positional argument."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a new named profile. NAME is a required positional argument. After creation, use `auth login --profile NAME` to configure credentials."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use to switch the active default profile. All commands without --profile will use this profile. NAME is a required positional argument."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to permanently remove a profile and its credentials. NAME is required. Use --force/-F to skip confirmation prompt."
-            }
-          },
-          "usage_instructions": "Profile management for multi-account setups. Create named profiles, set defaults, and list/delete profiles. Each profile stores its own credentials."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management \u2014 login, logout, check status, refresh tokens, and test credentials. All auth commands support --profile/-p for multi-account setups."
+      }
     },
     "cache": {
       "help": "Manage response cache",
+      "usage_instructions": "Run `dropbox cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `dropbox cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `dropbox cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `dropbox cache --help` for exact arguments and options."
+      }
     },
     "files": {
       "help": "Manage files and folders",
+      "usage_instructions": "File and folder operations — list, upload, download, move, copy, delete, search, and view history. Use `ls` for quick listing or `list` for full filtering support. Paths are Dropbox paths starting with / (e.g., /Documents/report.pdf).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "ls": {
-          "help": "List files and folders.",
+        "changes": {
+          "help": "Show files changed within a date/time range. Lists files modified between --after and --before timestamps. Uses server_modified time from Dropbox. Date formats: yesterday, yesterday 18:00, today, today 14:30, 2026-03-02, 2026-03-02 18:00, 18:00, 2026-03-02T18:00:00",
+          "examples": [
+            "dropbox files changes /Projects --after \"yesterday 18:00\" --before \"yesterday 20:00\"",
+            "dropbox files changes --after yesterday --before today",
+            "dropbox files changes /Documents --after \"2026-03-01\" --table",
+            "dropbox files changes --after 18:00"
+          ],
+          "usage_instructions": "Use to find files modified in a time range. Requires --after/-a and/or --before/-b. Supports natural dates: 'yesterday', 'today', 'yesterday 18:00', ISO dates. Recursive by default; use --no-recursive to limit to one level. PATH is optional — omit for all files.",
           "arguments": [
             {
               "name": "path",
               "type": "PATH",
               "required": false,
-              "help": "Dropbox path to list (empty for root)"
+              "help": "Dropbox path to check (empty for root)"
             }
           ],
           "options": [
             {
-              "name": "--recursive",
-              "type": "bool",
+              "name": "--after",
+              "type": "TEXT",
               "required": false,
-              "help": "List recursively",
-              "short": "-R"
+              "help": "Show files modified after this time (e.g. 'yesterday 18:00', '2026-03-02 18:00')",
+              "short": "-a"
             },
             {
-              "name": "--long",
-              "type": "bool",
+              "name": "--before",
+              "type": "TEXT",
               "required": false,
-              "help": "Show detailed information",
-              "short": "-l"
+              "help": "Show files modified before this time",
+              "short": "-b"
             },
             {
               "name": "--table",
@@ -284,23 +392,169 @@
               "short": "-t"
             },
             {
-              "name": "--deleted",
+              "name": "--recursive",
               "type": "bool",
               "required": false,
-              "help": "Include deleted files",
-              "short": "-d"
+              "help": "Search recursively (default: true)",
+              "short": "-R",
+              "default": "recursive"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "cp": {
+          "help": "Copy a file or folder.",
+          "examples": [
+            "dropbox files cp /Documents/report.pdf /Backup/report.pdf",
+            "dropbox files cp /Projects/template /Projects/new-project"
+          ],
+          "usage_instructions": "Use to copy a file or folder. Both FROM_PATH and TO_PATH are required. Creates a full copy — not a reference.",
+          "arguments": [
+            {
+              "name": "from_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Source Dropbox path"
+            },
+            {
+              "name": "to_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination Dropbox path"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get file/folder info by ID or download a file by path. When given an id: argument, returns metadata. When given a path, downloads the file to the local filesystem.",
           "examples": [
-            "dropbox files ls",
-            "dropbox files ls /Documents",
-            "dropbox files ls -l /Photos",
-            "dropbox files ls -R /Projects"
+            "dropbox files get id:abc123def456",
+            "dropbox files get /Documents/report.pdf",
+            "dropbox files get /Documents/report.pdf ./downloads/report.pdf",
+            "dropbox files get /Documents/report.pdf --table"
           ],
-          "usage_instructions": "Quick file listing. PATH is optional \u2014 omit for root. Use --recursive/-R for subdirectories. Use --long/-l for size and modified date. Use --deleted/-d to include deleted files. For filtering/limit/properties support, use `files list` instead."
+          "usage_instructions": "Dual-purpose: pass `id:abc123` to get metadata, or a Dropbox path to download. LOCAL_PATH is optional — defaults to current directory. Use --table/-t for metadata display. See also: `files info` for metadata-only lookups by path.",
+          "arguments": [
+            {
+              "name": "dropbox_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dropbox path or id: to get info/download"
+            },
+            {
+              "name": "local_path",
+              "type": "LOCAL_PATH",
+              "required": false,
+              "help": "Local destination path (default: current directory)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display metadata as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "history": {
+          "help": "Show version history for a file.",
+          "examples": [
+            "dropbox files history /Documents/report.pdf",
+            "dropbox files history /Documents/report.pdf --limit 20",
+            "dropbox files history /Documents/report.pdf --table"
+          ],
+          "usage_instructions": "Use to see previous versions of a file. PATH is required. Default shows 10 revisions; adjust with --limit/-l. Use --table/-t for formatted output. Use the revision IDs from output with `files restore --rev`.",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dropbox file path"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum revisions to show",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "info": {
+          "help": "Get detailed information about a file or folder.",
+          "examples": [
+            "dropbox files info /Documents/report.pdf"
+          ],
+          "usage_instructions": "Use to get metadata for a specific non-root file or folder by path (size, modified date, content hash, etc.). PATH is required. Do not use `dropbox files info /` as an auth or API smoke probe; Dropbox files/get_metadata does not support root folder metadata. Use `dropbox auth status --table` or `dropbox auth test` for auth verification, and `dropbox files ls /` for root content reachability. Use --table/-t for formatted output. See also: `files get id:...` for lookup by ID.",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dropbox path to get info for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "list": {
           "help": "List files and folders.",
+          "examples": [
+            "dropbox files list",
+            "dropbox files list /Documents",
+            "dropbox files list -l /Photos",
+            "dropbox files list --limit 10"
+          ],
+          "usage_instructions": "Full-featured file listing with filtering and pagination. Use --limit (default 50) to control result count. Use --filter/-f for field-based filtering (e.g., --filter 'name:contains:report'). Use --properties/-p to select specific fields. Prefer `ls` for quick checks; use `list` when you need filtering or pagination.",
           "arguments": [
             {
               "name": "path",
@@ -358,40 +612,46 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox files list",
-            "dropbox files list /Documents",
-            "dropbox files list -l /Photos",
-            "dropbox files list --limit 10"
-          ],
-          "usage_instructions": "Full-featured file listing with filtering and pagination. Use --limit (default 50) to control result count. Use --filter/-f for field-based filtering (e.g., --filter 'name:contains:report'). Use --properties/-p to select specific fields. Prefer `ls` for quick checks; use `list` when you need filtering or pagination."
+          ]
         },
-        "changes": {
-          "help": "Show files changed within a date/time range. Lists files modified between --after and --before timestamps. Uses server_modified time from Dropbox. Date formats: yesterday, yesterday 18:00, today, today 14:30, 2026-03-02, 2026-03-02 18:00, 18:00, 2026-03-02T18:00:00",
+        "ls": {
+          "help": "List files and folders.",
+          "examples": [
+            "dropbox files ls",
+            "dropbox files ls /Documents",
+            "dropbox files ls -l /Photos",
+            "dropbox files ls -R /Projects"
+          ],
+          "usage_instructions": "Quick file listing. PATH is optional — omit for root. Use --recursive/-R for subdirectories. Use --long/-l for size and modified date. Use --deleted/-d to include deleted files. For filtering/limit/properties support, use `files list` instead.",
           "arguments": [
             {
               "name": "path",
               "type": "PATH",
               "required": false,
-              "help": "Dropbox path to check (empty for root)"
+              "help": "Dropbox path to list (empty for root)"
             }
           ],
           "options": [
             {
-              "name": "--after",
-              "type": "TEXT",
+              "name": "--recursive",
+              "type": "bool",
               "required": false,
-              "help": "Show files modified after this time (e.g. 'yesterday 18:00', '2026-03-02 18:00')",
-              "short": "-a"
+              "help": "List recursively",
+              "short": "-R"
             },
             {
-              "name": "--before",
-              "type": "TEXT",
+              "name": "--long",
+              "type": "bool",
               "required": false,
-              "help": "Show files modified before this time",
-              "short": "-b"
+              "help": "Show detailed information",
+              "short": "-l"
             },
             {
               "name": "--table",
@@ -401,57 +661,81 @@
               "short": "-t"
             },
             {
-              "name": "--recursive",
+              "name": "--deleted",
               "type": "bool",
               "required": false,
-              "help": "--no-recursive          Search recursively (default: true)",
-              "short": "-R",
-              "default": "recursive"
-            }
-          ],
-          "examples": [
-            "dropbox files changes /Projects --after \"yesterday 18:00\" --before \"yesterday 20:00\"",
-            "dropbox files changes --after yesterday --before today",
-            "dropbox files changes /Documents --after \"2026-03-01\" --table",
-            "dropbox files changes --after 18:00"
-          ],
-          "usage_instructions": "Use to find files modified in a time range. Requires --after/-a and/or --before/-b. Supports natural dates: 'yesterday', 'today', 'yesterday 18:00', ISO dates. Recursive by default; use --no-recursive to limit to one level. PATH is optional \u2014 omit for all files."
-        },
-        "get": {
-          "help": "Get file/folder info by ID or download a file by path. When given an id: argument, returns metadata. When given a path, downloads the file to the local filesystem.",
-          "arguments": [
-            {
-              "name": "dropbox_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Dropbox path or id: to get info/download"
+              "help": "Include deleted files",
+              "short": "-d"
             },
             {
-              "name": "local_path",
-              "type": "LOCAL_PATH",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Local destination path (default: current directory)"
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mkdir": {
+          "help": "Create a new folder.",
+          "examples": [
+            "dropbox files mkdir /Projects/NewProject"
+          ],
+          "usage_instructions": "Use to create a folder in Dropbox. PATH is required. Creates intermediate folders if needed.",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dropbox path for new folder"
             }
           ],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display metadata as table",
-              "short": "-t"
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mv": {
+          "help": "Move a file or folder.",
+          "examples": [
+            "dropbox files mv /Documents/report.pdf /Archive/report.pdf",
+            "dropbox files mv /Temp/folder /Documents/folder"
+          ],
+          "usage_instructions": "Use to move or rename a file/folder. Both FROM_PATH and TO_PATH are required. Works for both files and folders.",
+          "arguments": [
+            {
+              "name": "from_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Source Dropbox path"
+            },
+            {
+              "name": "to_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination Dropbox path"
             }
           ],
-          "examples": [
-            "dropbox files get id:abc123def456",
-            "dropbox files get /Documents/report.pdf",
-            "dropbox files get /Documents/report.pdf ./downloads/report.pdf",
-            "dropbox files get /Documents/report.pdf --table"
-          ],
-          "usage_instructions": "Dual-purpose: pass `id:abc123` to get metadata, or a Dropbox path to download. LOCAL_PATH is optional \u2014 defaults to current directory. Use --table/-t for metadata display. See also: `files info` for metadata-only lookups by path."
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "put": {
           "help": "Upload a file to Dropbox.",
+          "examples": [
+            "dropbox files put ./report.pdf /Documents/report.pdf",
+            "dropbox files put ./report.pdf /Documents/",
+            "dropbox files put ./report.pdf --overwrite"
+          ],
+          "usage_instructions": "Use to upload a local file. LOCAL_PATH is required. DROPBOX_PATH is optional — if omitted, uses the filename in root. Use --overwrite/-o to replace an existing file; without it, Dropbox auto-renames on conflict.",
           "arguments": [
             {
               "name": "local_path",
@@ -473,17 +757,61 @@
               "required": false,
               "help": "Overwrite existing file",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "restore": {
+          "help": "Restore a file to a previous version. First use 'history' command to find the revision ID, then restore:",
+          "examples": [
+            "dropbox files history /Documents/report.pdf --table",
+            "dropbox files restore /Documents/report.pdf --rev abc123def456",
+            "dropbox files restore /Documents/report.pdf -r abc123def456 --force"
+          ],
+          "usage_instructions": "Use to restore a file to a previous version. PATH is required. --rev/-r is required — get the revision ID from `files history`. Use --force/-f to skip confirmation. Two-step workflow: first `files history <path>`, then `files restore <path> --rev <id>`.",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Dropbox file path to restore"
             }
           ],
-          "examples": [
-            "dropbox files put ./report.pdf /Documents/report.pdf",
-            "dropbox files put ./report.pdf /Documents/",
-            "dropbox files put ./report.pdf --overwrite"
-          ],
-          "usage_instructions": "Use to upload a local file. LOCAL_PATH is required. DROPBOX_PATH is optional \u2014 if omitted, uses the filename in root. Use --overwrite/-o to replace an existing file; without it, Dropbox auto-renames on conflict."
+          "options": [
+            {
+              "name": "--rev",
+              "type": "TEXT",
+              "required": true,
+              "help": "Revision ID to restore to",
+              "short": "-r"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "rm": {
           "help": "Delete a file or folder.",
+          "examples": [
+            "dropbox files rm /Documents/old-file.txt",
+            "dropbox files rm /Temp --force"
+          ],
+          "usage_instructions": "Use to delete a file or folder from Dropbox. PATH is required. Use --force/-f to skip confirmation. Deleted items can be restored via `files restore` or `folders restore`.",
           "arguments": [
             {
               "name": "path",
@@ -499,75 +827,30 @@
               "required": false,
               "help": "Skip confirmation",
               "short": "-f"
-            }
-          ],
-          "examples": [
-            "dropbox files rm /Documents/old-file.txt",
-            "dropbox files rm /Temp --force"
-          ],
-          "usage_instructions": "Use to delete a file or folder from Dropbox. PATH is required. Use --force/-f to skip confirmation. Deleted items can be restored via `files restore` or `folders restore`."
-        },
-        "mkdir": {
-          "help": "Create a new folder.",
-          "arguments": [
-            {
-              "name": "path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Dropbox path for new folder"
-            }
-          ],
-          "examples": [
-            "dropbox files mkdir /Projects/NewProject"
-          ],
-          "usage_instructions": "Use to create a folder in Dropbox. PATH is required. Creates intermediate folders if needed."
-        },
-        "mv": {
-          "help": "Move a file or folder.",
-          "arguments": [
-            {
-              "name": "from_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Source Dropbox path"
             },
             {
-              "name": "to_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Destination Dropbox path"
-            }
-          ],
-          "examples": [
-            "dropbox files mv /Documents/report.pdf /Archive/report.pdf",
-            "dropbox files mv /Temp/folder /Documents/folder"
-          ],
-          "usage_instructions": "Use to move or rename a file/folder. Both FROM_PATH and TO_PATH are required. Works for both files and folders."
-        },
-        "cp": {
-          "help": "Copy a file or folder.",
-          "arguments": [
-            {
-              "name": "from_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Source Dropbox path"
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum seconds to wait for the delete request",
+              "default": "120"
             },
             {
-              "name": "to_path",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Destination Dropbox path"
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox files cp /Documents/report.pdf /Backup/report.pdf",
-            "dropbox files cp /Projects/template /Projects/new-project"
-          ],
-          "usage_instructions": "Use to copy a file or folder. Both FROM_PATH and TO_PATH are required. Creates a full copy \u2014 not a reference."
+          ]
         },
         "search": {
           "help": "Search for files and folders.",
+          "examples": [
+            "dropbox files search \"report\"",
+            "dropbox files search \"*.pdf\" --path /Documents",
+            "dropbox files search \"project\" --table"
+          ],
+          "usage_instructions": "Use to find files by name or content. QUERY is required. Use --path/-p to scope search to a directory. Default max results is 100; adjust with --max/-m. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "query",
@@ -598,114 +881,38 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox files search \"report\"",
-            "dropbox files search \"*.pdf\" --path /Documents",
-            "dropbox files search \"project\" --table"
-          ],
-          "usage_instructions": "Use to find files by name or content. QUERY is required. Use --path/-p to scope search to a directory. Default max results is 100; adjust with --max/-m. Use --table/-t for formatted output."
-        },
-        "info": {
-          "help": "Get detailed information about a file or folder.",
-          "arguments": [
-            {
-              "name": "path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Dropbox path to get info for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox files info /Documents/report.pdf"
-          ],
-          "usage_instructions": "Use to get metadata for a specific file or folder by path (size, modified date, content hash, etc.). PATH is required. Use --table/-t for formatted output. See also: `files get id:...` for lookup by ID."
-        },
-        "history": {
-          "help": "Show version history for a file.",
-          "arguments": [
-            {
-              "name": "path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Dropbox file path"
-            }
-          ],
-          "options": [
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum revisions to show",
-              "short": "-l",
-              "default": "10"
             },
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox files history /Documents/report.pdf",
-            "dropbox files history /Documents/report.pdf --limit 20",
-            "dropbox files history /Documents/report.pdf --table"
-          ],
-          "usage_instructions": "Use to see previous versions of a file. PATH is required. Default shows 10 revisions; adjust with --limit/-l. Use --table/-t for formatted output. Use the revision IDs from output with `files restore --rev`."
-        },
-        "restore": {
-          "help": "Restore a file to a previous version. First use 'history' command to find the revision ID, then restore:",
-          "arguments": [
-            {
-              "name": "path",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Dropbox file path to restore"
-            }
-          ],
-          "options": [
-            {
-              "name": "--rev",
-              "type": "TEXT",
-              "required": true,
-              "help": "Revision ID to restore to",
-              "short": "-r"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
               "required": false,
-              "help": "Skip confirmation",
-              "short": "-f"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox files history /Documents/report.pdf --table",
-            "dropbox files restore /Documents/report.pdf --rev abc123def456",
-            "dropbox files restore /Documents/report.pdf -r abc123def456 --force"
-          ],
-          "usage_instructions": "Use to restore a file to a previous version. PATH is required. --rev/-r is required \u2014 get the revision ID from `files history`. Use --force/-f to skip confirmation. Two-step workflow: first `files history <path>`, then `files restore <path> --rev <id>`."
+          ]
         }
-      },
-      "usage_instructions": "File and folder operations \u2014 list, upload, download, move, copy, delete, search, and view history. Use `ls` for quick listing or `list` for full filtering support. Paths are Dropbox paths starting with / (e.g., /Documents/report.pdf)."
+      }
     },
     "folders": {
       "help": "Manage folders",
+      "usage_instructions": "Folder-specific operations. Currently provides folder restore for recovering deleted folders and all their contents.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "restore": {
           "help": "Restore a deleted folder and all its contents. This command finds all deleted files within a folder and restores them to their last known state before deletion.",
+          "examples": [
+            "dropbox folders restore /Projects/old-project",
+            "dropbox folders restore /Documents/deleted-folder --force",
+            "dropbox folders restore /Backup/removed --table"
+          ],
+          "usage_instructions": "Use to recover a deleted folder and all its files. PATH is the original Dropbox path of the deleted folder. Use --force/-f to skip confirmation. Use --table/-t for results display. See also: `files restore` for single-file version restore.",
           "arguments": [
             {
               "name": "path",
@@ -728,63 +935,84 @@
               "required": false,
               "help": "Display results as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox folders restore /Projects/old-project",
-            "dropbox folders restore /Documents/deleted-folder --force",
-            "dropbox folders restore /Backup/removed --table"
-          ],
-          "usage_instructions": "Use to recover a deleted folder and all its files. PATH is the original Dropbox path of the deleted folder. Use --force/-f to skip confirmation. Use --table/-t for results display. See also: `files restore` for single-file version restore."
-        }
-      },
-      "usage_instructions": "Folder-specific operations. Currently provides folder restore for recovering deleted folders and all their contents."
-    },
-    "account": {
-      "help": "View account information",
-      "commands": {
-        "info": {
-          "help": "Display account information.",
-          "options": [
+            },
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox account info",
-            "dropbox account info --table"
-          ],
-          "usage_instructions": "Use to see account details (name, email, account type, team info). Use --table/-t for formatted output."
-        },
-        "usage": {
-          "help": "Display disk usage information.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox account usage",
-            "dropbox account usage --table"
-          ],
-          "usage_instructions": "Use to check storage quota and how much space is used. Use --table/-t for formatted output."
+          ]
         }
-      },
-      "usage_instructions": "Account information \u2014 view account details and disk usage/quota."
+      }
     },
     "sharing": {
       "help": "Work with shared links and folders",
+      "usage_instructions": "Shared link and folder operations — inspect shared links, list shared folder contents, and download shared folders. All commands take a shared link URL as the first argument.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "download": {
+          "help": "Download all contents of a shared folder.",
+          "examples": [
+            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\"",
+            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" ./downloads",
+            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" --path /subfolder",
+            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" -q"
+          ],
+          "usage_instructions": "Use to download an entire shared folder to local disk. URL is required. LOCAL_PATH is optional — defaults to folder name in current directory. Use --path/-p to download only a subfolder. Use --quiet/-q to suppress progress output.",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Shared folder link URL"
+            },
+            {
+              "name": "local_path",
+              "type": "LOCAL_PATH",
+              "required": false,
+              "help": "Local destination directory (default: folder name)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path within shared folder to download",
+              "short": "-p"
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "Suppress progress output",
+              "short": "-q"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "info": {
           "help": "Get metadata for a shared link.",
+          "examples": [
+            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\"",
+            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\" --table",
+            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\" --path /subfolder"
+          ],
+          "usage_instructions": "Use to inspect a shared link's metadata (owner, permissions, expiry). URL is required. Use --path/-p to get info about a specific item within a shared folder. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "url",
@@ -807,17 +1035,23 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\"",
-            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\" --table",
-            "dropbox sharing info \"https://www.dropbox.com/scl/fo/...\" --path /subfolder"
-          ],
-          "usage_instructions": "Use to inspect a shared link's metadata (owner, permissions, expiry). URL is required. Use --path/-p to get info about a specific item within a shared folder. Use --table/-t for formatted output."
+          ]
         },
         "ls": {
           "help": "List contents of a shared folder.",
+          "examples": [
+            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\"",
+            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\" --table",
+            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\" --path /subfolder -l"
+          ],
+          "usage_instructions": "Use to list files inside a shared folder link. URL is required. Use --path/-p to navigate into subfolders. Use --long/-l for detailed info. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "url",
@@ -847,57 +1081,70 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\"",
-            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\" --table",
-            "dropbox sharing ls \"https://www.dropbox.com/scl/fo/...\" --path /subfolder -l"
-          ],
-          "usage_instructions": "Use to list files inside a shared folder link. URL is required. Use --path/-p to navigate into subfolders. Use --long/-l for detailed info. Use --table/-t for formatted output."
-        },
-        "download": {
-          "help": "Download all contents of a shared folder.",
-          "arguments": [
-            {
-              "name": "url",
-              "type": "TEXT",
-              "required": true,
-              "help": "Shared folder link URL"
             },
             {
-              "name": "local_path",
-              "type": "LOCAL_PATH",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Local destination directory (default: folder name)"
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "sync": {
+      "help": "Inspect Dropbox desktop sync state",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "pending": {
+          "help": "Report pending Dropbox desktop sync items from the local queue.",
+          "arguments": [],
           "options": [
             {
-              "name": "--path",
-              "type": "TEXT",
+              "name": "--db",
+              "type": "PATH",
               "required": false,
-              "help": "Path within shared folder to download",
-              "short": "-p"
+              "help": "Dropbox desktop nucleus.sqlite3 path",
+              "default": "/Users/adam/.dropbox/instance1/sync/nucleus.sqlite3"
             },
             {
-              "name": "--quiet",
+              "name": "--dropbox-root",
+              "type": "PATH",
+              "required": false,
+              "help": "Local Dropbox root for heuristic path candidates",
+              "default": "/Users/adam/Dropbox"
+            },
+            {
+              "name": "--resolve-paths",
               "type": "bool",
               "required": false,
-              "help": "Suppress progress output",
-              "short": "-q"
+              "help": "Find heuristic path candidates by exact filename under Dropbox root",
+              "default": "resolve-paths"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\"",
-            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" ./downloads",
-            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" --path /subfolder",
-            "dropbox sharing download \"https://www.dropbox.com/scl/fo/...\" -q"
-          ],
-          "usage_instructions": "Use to download an entire shared folder to local disk. URL is required. LOCAL_PATH is optional \u2014 defaults to folder name in current directory. Use --path/-p to download only a subfolder. Use --quiet/-q to suppress progress output."
+          ]
         }
-      },
-      "usage_instructions": "Shared link and folder operations \u2014 inspect shared links, list shared folder contents, and download shared folders. All commands take a shared link URL as the first argument."
+      }
     }
   },
   "usage_instructions": "Use for managing Dropbox files, folders, sharing, and account info. Commands follow `dropbox <group> <action>` pattern. Most list commands support --table/-t for table display, --filter/-f, --limit/-l, and --properties/-p. Use `files` group for file operations, `sharing` group for shared links."
