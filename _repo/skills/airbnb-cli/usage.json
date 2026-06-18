@@ -1,0 +1,597 @@
+{
+  "tool": "airbnb",
+  "description": "Read-only Airbnb renter search and host data CLI",
+  "total_commands": 18,
+  "commands": {
+    "auth": {
+      "help": "Manage airbnb authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "listings": {
+      "help": "Read Airbnb listings",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one Airbnb listing.",
+          "arguments": [
+            {
+              "name": "listing_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Listing ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Airbnb listings.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of listings",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "messages": {
+      "help": "Read Airbnb message threads",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one Airbnb message thread.",
+          "arguments": [
+            {
+              "name": "thread_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message thread ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Airbnb message threads.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of message threads",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "reservations": {
+      "help": "Read Airbnb reservations",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one Airbnb reservation.",
+          "arguments": [
+            {
+              "name": "reservation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reservation ID or confirmation code"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Airbnb reservations.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of reservations",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--date-min",
+              "type": "TEXT",
+              "required": false,
+              "help": "Minimum check-in date, YYYY-MM-DD"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated Airbnb reservation statuses",
+              "default": "accepted,request"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "stays": {
+      "help": "Search available Airbnb stays",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "search": {
+          "help": "Search available Airbnb stays as a renter.",
+          "arguments": [
+            {
+              "name": "destination",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination to search"
+            }
+          ],
+          "options": [
+            {
+              "name": "--checkin",
+              "type": "TEXT",
+              "required": true,
+              "help": "Check-in date, YYYY-MM-DD"
+            },
+            {
+              "name": "--checkout",
+              "type": "TEXT",
+              "required": true,
+              "help": "Checkout date, YYYY-MM-DD"
+            },
+            {
+              "name": "--adults",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of adult guests",
+              "default": "1"
+            },
+            {
+              "name": "--children",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of child guests",
+              "default": "0"
+            },
+            {
+              "name": "--infants",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of infant guests",
+              "default": "0"
+            },
+            {
+              "name": "--pets",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of pets",
+              "default": "0"
+            },
+            {
+              "name": "--min-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum nightly price"
+            },
+            {
+              "name": "--max-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum nightly price"
+            },
+            {
+              "name": "--bedrooms",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum bedrooms"
+            },
+            {
+              "name": "--beds",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum beds"
+            },
+            {
+              "name": "--bathrooms",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum bathrooms"
+            },
+            {
+              "name": "--room-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Airbnb room type, repeatable"
+            },
+            {
+              "name": "--property-type-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Airbnb property type ID, repeatable"
+            },
+            {
+              "name": "--currency",
+              "type": "TEXT",
+              "required": false,
+              "help": "Currency code",
+              "default": "USD"
+            },
+            {
+              "name": "--locale",
+              "type": "TEXT",
+              "required": false,
+              "help": "Locale code",
+              "default": "en"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of stays",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "discovered_at": "2026-06-17T22:23:58Z"
+}
