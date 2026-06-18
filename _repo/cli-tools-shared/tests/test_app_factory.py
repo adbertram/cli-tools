@@ -113,3 +113,21 @@ def test_create_app_leaves_no_cache_option_value_intact_at_build_time(monkeypatc
     create_app(name="demo", help="x", version="1.0.0")
 
     assert sys.argv == ["demo", "create", "--name", "--no-cache"]
+
+
+def test_create_app_normalizes_root_help_alias_at_build_time(monkeypatch):
+    """``demo help`` should behave like ``demo --help`` for console scripts."""
+    monkeypatch.setattr(sys, "argv", ["demo", "help"])
+
+    create_app(name="demo", help="x", version="1.0.0")
+
+    assert sys.argv == ["demo", "--help"]
+
+
+def test_create_app_does_not_rewrite_help_option_values(monkeypatch):
+    """Only the root help alias is rewritten."""
+    monkeypatch.setattr(sys, "argv", ["demo", "create", "--name", "help"])
+
+    create_app(name="demo", help="x", version="1.0.0")
+
+    assert sys.argv == ["demo", "create", "--name", "help"]

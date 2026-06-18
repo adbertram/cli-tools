@@ -40,11 +40,12 @@ For any request that uses an existing CLI tool, read `workflows/skill-router.md`
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate the
 available CLI tools from the source tree. The script prints JSON records with
 `name`, `readme`, and `description`, where `description` is extracted from each
-tool README's `## DESCRIPTION` block. Pass `--markdown` for a compact
-`- name: <first sentence>` list (~2K tokens) suitable for context injection;
-the Claude (`SessionStart` in `~/.claude/settings.json`) and Codex
-(`SessionStart` in `~/.codex/hooks.json`) session-start hooks call it this way
-to preload the CLI-tool roster every session.
+tool README's `## DESCRIPTION` block. The default mode is JSON, and `--json` is
+accepted as an explicit alias for that default. Pass `--markdown` for a compact
+`- name: <first sentence>` list (~2K tokens) suitable for context injection; the
+Claude (`SessionStart` in `~/.claude/settings.json`) and Codex (`SessionStart`
+in `~/.codex/hooks.json`) session-start hooks call it this way to preload the
+CLI-tool roster every session.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
@@ -76,7 +77,7 @@ This handles: directory structure, uv tool installation (isolated venv + symlink
 </principle>
 
 <principle name="Existing Path Operands Only">
-Before passing optional repo paths to `rg`, `grep`, `find`, `cat`, `sed`, `nl`, `wc`, `head`, `tail`, or similar commands, prove each path exists or build the operand list from discovered existing paths. For file-reading commands such as `cat`, `sed`, `nl`, `wc`, `head`, and `tail`, filter glob and optional operands to regular files, not just existing paths; directories such as `__pycache__` are command errors. This includes personal CLI tool paths such as `_personal/<tool>/install.sh`, `_personal/<tool>/README.md`, and any other optional per-tool file. Missing optional paths are command errors, not no-match results, and wrong-kind operands are command errors too; report skipped optional paths separately instead of passing them as operands.
+Before passing optional repo paths to `rg`, `grep`, `find`, `ls`, `stat`, `cat`, `sed`, `nl`, `wc`, `head`, `tail`, or similar commands, prove each path exists or build the operand list from discovered existing paths. This applies equally to relative operands and absolute operands under `<cli-tools-root>`, including optional root children such as `<cli-tools-root>/scripts`; do not pass an absolute path just because the repo root exists. For file-reading commands such as `cat`, `sed`, `nl`, `wc`, `head`, and `tail`, filter glob and optional operands to regular files, not just existing paths; directories such as `__pycache__` are command errors. This includes personal CLI tool paths such as `_personal/<tool>/install.sh`, `_personal/<tool>/README.md`, and any other optional per-tool file. Missing optional paths are command errors, not no-match results, and wrong-kind operands are command errors too; report skipped optional paths separately instead of passing them as operands.
 
 Shell globs used as search operands are optional paths too. Do not pass operands
 such as `*/*_cli`, `tests`, or `docs` directly to `rg`; with Bash's default
@@ -88,6 +89,9 @@ glob that produced no existing paths.
 Do not run direct reads like `sed -n '1,260p' _personal/<tool>/install.sh`
 unless that exact file has already been proven present in the same command or
 by a prerequisite command whose result is in scope.
+Do not run direct listings like `ls -la <tool>/.venv` unless that exact
+directory has already been proven present in the same command or by a
+prerequisite command whose result is in scope.
 This also applies to guessed Python module paths after package layout
 uncertainty, including shared package paths such as
 `_repo/cli-tools-shared/cli_tools_shared/...`; discover the real file first
@@ -337,12 +341,13 @@ When a deterministic command reaches a boundary that requires AI judgment, retur
 <principle name="Use the CLI's Own Interpreter for Manual Imports">
 **Every uv-installed CLI has its own isolated interpreter at `~/.local/share/uv/tools/<pkg-name>/bin/python3`.** The launcher at `~/.local/bin/<cli>` has a shebang that points to it. Running `python3 -c "import <cli>_cli.main"` or `python3 - <<'PY'` with ANY other interpreter (system python, Homebrew python, the test venv) will fail with `ModuleNotFoundError` because the CLI's dependencies are installed ONLY in that uv tool venv. Those failures are NOT CLI bugs — they are wrong-interpreter diagnoses.
 
-**Rule:** For any ad-hoc import/smoke test of a CLI's modules, inspect the live launcher and use the interpreter from its shebang. Do not derive the uv tool path from the command name.
+**Rule:** For any ad-hoc import/smoke test of a CLI's modules, inspect the live launcher and use the interpreter from its shebang. Do not derive the uv tool path from the command name. This also applies to task-workspace scripts that import CLI packages or internals such as `<pkg>_cli.commands`; run those scripts with the launcher shebang interpreter instead of ambient `python3`.
 
 ```bash
 launcher="$(command -v <cli>)"
 interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 "$interpreter" -c "import <pkg>_cli.main"
+"$interpreter" path/to/task_script_that_imports_cli.py
 ```
 
 For heredoc probes, the heredoc target must be the same shebang interpreter;

@@ -9,11 +9,12 @@ REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--markdown]
+Usage: $(basename "$0") [--json|--markdown]
 
 Print the available CLI tools with their README DESCRIPTION text.
 
-  (default)    JSON array of {name, readme, description}
+  (default), --json
+               JSON array of {name, readme, description}
   --markdown   Compact markdown list "- name: <first sentence>" for context injection
 EOF
 }
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        --json)
+            MODE="json"
+            shift
             ;;
         --markdown|--md)
             MODE="markdown"
@@ -49,7 +54,12 @@ repo_root = Path(os.environ["REPO_ROOT"])
 mode = os.environ.get("MODE", "json")
 records = []
 
-for pyproject_path in sorted(repo_root.glob("*/pyproject.toml")):
+pyproject_paths = list(repo_root.glob("*/pyproject.toml"))
+personal_root = repo_root / "_personal"
+if personal_root.is_dir():
+    pyproject_paths.extend(personal_root.glob("*/pyproject.toml"))
+
+for pyproject_path in sorted(pyproject_paths):
     tool_dir = pyproject_path.parent
     readme_path = tool_dir / "README.md"
     if not readme_path.exists():

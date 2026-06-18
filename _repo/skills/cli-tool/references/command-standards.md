@@ -96,6 +96,10 @@ mycli statistics list  # NO - doesn't make sense
 
 ### The Rule
 
+This rule applies at every command-group depth, including nested resource
+groups such as `ssh connection`, `ssh keys`, `ssh config`, and `sftp
+connection`.
+
 | If you have... | You must also have... | Reason |
 |----------------|----------------------|--------|
 | `list` command | `get` command | Users can list items and then get details by ID |
@@ -114,9 +118,12 @@ Both scenarios leave users with incomplete functionality.
 # CORRECT - both list and get exist
 mycli database page list          # Discover page IDs
 mycli database page get PAGE_ID   # Get specific page
+mycli ssh connection list         # Nested groups follow the same rule
+mycli ssh connection get CONN_ID
 
 # WRONG - get without list
 mycli database page get PAGE_ID   # How do users discover PAGE_ID?
+mycli sftp connection get CONN_ID # Nested get without list is also incomplete
 ```
 
 ### Exceptions

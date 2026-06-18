@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -93,9 +96,57 @@ def test_install_script_requires_launcher_symlink_for_success():
 def test_repo_install_script_requires_uv_managed_global_launcher():
     script_text = (REPO_ROOT / "_repo/_scripts/install-cli-tool.sh").read_text()
 
+    assert 'PERSONAL_TOOL_DIR="$REPO_ROOT/_personal/$REQUESTED_TOOL"' in script_text
+    assert 'TOOL_DIR="$PERSONAL_TOOL_DIR"' in script_text
     assert 'LAUNCHER="$HOME/.local/bin/$CLI_NAME"' in script_text
     assert "did not create expected launcher" in script_text
     assert 'command -v "$CLI_NAME"' not in script_text
+
+
+def test_repo_install_script_installs_personal_cli_by_name_with_fake_uv(tmp_path):
+    script = REPO_ROOT / "_repo/_scripts/install-cli-tool.sh"
+    fake_bin = tmp_path / "bin"
+    fake_home = tmp_path / "home"
+    uv_args_file = tmp_path / "uv-args.txt"
+    fake_bin.mkdir()
+    fake_home.mkdir()
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" > "$UV_ARGS_FILE"
+case "$*" in
+    *"/_personal/ata-blog"*) ;;
+    *)
+        printf 'unexpected uv args: %s\\n' "$*" >&2
+        exit 9
+        ;;
+esac
+mkdir -p "$HOME/.local/bin"
+printf '%s\\n' '#!/usr/bin/env bash' 'if [[ "${1:-}" == "--help" ]]; then exit 0; fi' 'exit 0' > "$HOME/.local/bin/ata-blog"
+chmod +x "$HOME/.local/bin/ata-blog"
+"""
+    )
+    fake_uv.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "HOME": str(fake_home),
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "UV_ARGS_FILE": str(uv_args_file),
+    }
+    result = subprocess.run(
+        [str(script), "ata-blog"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "/_personal/ata-blog" in uv_args_file.read_text()
 
 
 def test_validate_script_resolves_personal_cli_dirs():
@@ -104,3 +155,28 @@ def test_validate_script_resolves_personal_cli_dirs():
     assert 'TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"' in script_text
     assert '[ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]' in script_text
     assert 'TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"' in script_text
+
+
+def test_find_cli_tools_discovers_personal_cli_dirs():
+    script_text = (REPO_ROOT / "_repo/scripts/find-cli-tools.sh").read_text()
+
+    assert 'personal_root = repo_root / "_personal"' in script_text
+    assert "personal_root.glob(\"*/pyproject.toml\")" in script_text
+
+
+def test_find_cli_tools_accepts_explicit_json_mode():
+    script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
+
+    result = subprocess.run(
+        [str(script), "--json"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    records = json.loads(result.stdout)
+    assert isinstance(records, list)
+    assert records
+    assert {"name", "readme", "description"} <= set(records[0])

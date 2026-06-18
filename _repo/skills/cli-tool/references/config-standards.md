@@ -110,6 +110,12 @@ interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 "$interpreter" -c "from mytool_cli.config import get_config; print(get_config(profile='default').env_file_path)"
 ```
 
+Do not inspect arbitrary `Config` instance attributes such as `cfg.active`,
+`cfg.authenticated`, or inferred token fields to determine auth readiness. Use
+`<tool> auth status` JSON for authentication evidence, or use the shared
+`ProfileStore`/`list_profiles` profile API when the diagnostic specifically
+needs profile metadata instead of live auth status.
+
 Profile resolution priority is:
 1. Explicit `profile=...` / `Config(profile=...)`
 2. Runtime command-profile override set by the CLI entrypoint

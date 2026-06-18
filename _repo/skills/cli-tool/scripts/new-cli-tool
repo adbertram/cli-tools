@@ -149,6 +149,47 @@ def replace_placeholders(content: str, replacements: dict) -> str:
     return content
 
 
+def normalize_description_fragment(description: str, fallback: str) -> str:
+    """Return one prose sentence fragment safe for the README DESCRIPTION block."""
+    raw = (description or "").strip() or fallback
+    before_docs = re.split(
+        r"\b(?:docs?|documentation|references?|usage|examples?)\s*:",
+        raw,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    without_links = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", before_docs)
+    without_urls = re.sub(r"https?://\S+", "", without_links)
+    compact = re.sub(r"\s+", " ", without_urls).strip(" -")
+    sentence_match = re.match(r"(.+?[.!?])(?=\s+[A-Z0-9]|$)", compact)
+    if sentence_match:
+        compact = sentence_match.group(1)
+    compact = re.sub(r"[.!?]+", "", compact).strip(" -")
+    if not compact:
+        compact = fallback.strip().rstrip(".!?")
+    return compact
+
+
+def build_docs_section(tool_type: str, base_url: str, docs_url: str) -> str:
+    """Build the README Docs section outside the bounded DESCRIPTION block."""
+    entries: list[tuple[str, str]] = []
+    if docs_url:
+        label_by_type = {
+            "api": "API documentation",
+            "browser": "Website documentation",
+            "wrapper": "Wrapped CLI documentation",
+        }
+        entries.append((label_by_type[tool_type], docs_url))
+    if tool_type in {"api", "browser"} and base_url and base_url != docs_url:
+        entries.append(("Base URL" if tool_type == "api" else "Website", base_url))
+    if not entries:
+        return ""
+
+    lines = ["## Docs", ""]
+    lines.extend(f"- {label}: {url}" for label, url in entries)
+    return "\n".join(lines) + "\n\n"
+
+
 def copy_and_process_template(
     template_dir: Path,
     output_dir: Path,
@@ -606,8 +647,12 @@ PASSWORD=secret://{name}-password
 
 """
 
-    # Build replacements dict
     cli_command = args.cli_command or name
+    default_description = f"Wrapper for {cli_command}" if args.type == "wrapper" else f"Interact with {name_pascal}"
+    readme_description = normalize_description_fragment(args.description, default_description)
+    docs_section = build_docs_section(args.type, args.base_url, args.docs_url)
+
+    # Build replacements dict
     replacements = {
         "{{name}}": name,
         "{{name_underscore}}": name_underscore,
@@ -615,8 +660,9 @@ PASSWORD=secret://{name}-password
         "{{NAME}}": name_upper,
         "{{base_url}}": args.base_url or "",
         "{{cli_command}}": cli_command,
-        "{{description}}": args.description or (f"Wrapper for {cli_command}" if args.type == "wrapper" else f"Interact with {name_pascal}"),
+        "{{description}}": readme_description,
         "{{docs_url}}": args.docs_url or args.base_url or "",
+        "{{DOCS_SECTION}}": docs_section,
         "{{credential_types}}": credential_types_str,
         "{{AUTH_IMPORT}}": auth_import,
         "{{AUTH_MOUNT}}": auth_mount,
@@ -672,7 +718,7 @@ PASSWORD=secret://{name}-password
     
     # Update the repo-owned CLI inventory with the new tool entry
     service_name = name_pascal if not args.cli_command else to_pascal_case(args.cli_command)
-    api_desc = args.description or f"{service_name} API"
+    api_desc = readme_description or f"{service_name} API"
     update_cli_tools_doc(name, api_desc)
 
     # Print summary

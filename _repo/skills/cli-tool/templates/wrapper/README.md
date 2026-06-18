@@ -2,10 +2,11 @@
 
 ## DESCRIPTION
 
-A standardized command-line wrapper for [{{cli_command}}]({{docs_url}}). {{description}}.
+A standardized command-line wrapper for {{cli_command}}. {{description}}.
 
 Use this CLI when you need the wrapped command exposed through the cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
+{{DOCS_SECTION}}
 ## Prerequisites
 
 This CLI wraps the `{{cli_command}}` command-line tool. Install that tool first.

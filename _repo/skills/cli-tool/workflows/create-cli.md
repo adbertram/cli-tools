@@ -81,12 +81,17 @@ Explore <service-url> to discover internal/hidden REST APIs.
    - Request body (for POST/PUT/PATCH)
    - Response body structure (field names, types, nesting)
    - Authentication mechanism (Bearer token, session cookie, API key header, etc.)
-6. Identify patterns across endpoints:
+6. **BACKUP PLAN FOR BOT PROTECTION:** If the site blocks your automation with an interstitial bot-check (e.g. Datadome, PerimeterX "Almost there..."), do NOT give up. Instead, use the `run_command` tool to launch the user's REAL system Chrome in the background without stealing focus using `open -n -g`:
+   ```bash
+   open -n -g -a "Google Chrome" --args --remote-debugging-port=9222 --no-first-run --no-default-browser-check --user-data-dir=$(mktemp -d)
+   ```
+   Wait a few seconds for it to start listening, then write a temporary Python script that uses `playwright` to connect to `p.chromium.connect_over_cdp("http://127.0.0.1:9222")`. Because this uses the legitimate system Chrome executable, it reliably bypasses bot detection. Execute the script to perform the login, capture the required endpoint traces, and finally terminate the background Chrome process using `lsof -i :9222 -t | xargs kill -9`.
+7. Identify patterns across endpoints:
    - Base URL prefix (e.g., /api/v2/)
    - Pagination style (offset, cursor, page number)
    - Error response format
    - Rate limiting headers
-7. Produce your findings as a structured JSON report with an "endpoints" array, each entry containing: url, method, headers, requestBody, responseBody, authMechanism, notes
+8. Produce your findings as a structured JSON report with an "endpoints" array, each entry containing: url, method, headers, requestBody, responseBody, authMechanism, notes
 ```
 
 **Using the agent results:**
@@ -539,6 +544,118 @@ Invoke the `debloat` skill on the CLI directory.
 2. Re-run `test-cli-tool.sh` to confirm zero failures
 3. Only proceed when both `/debloat` is clean and tests pass
 
+## Step 9.7: LastPass Credential Discovery And Live Auth Smoke
+
+After the CLI implementation is created, installed, and testable, complete this
+step before `cli_tools.md`, CLI skill generation, commits, or final completion.
+
+### 9.7.1 Classify The Auth Boundary
+
+- API and browser service CLIs with any auth type other than `none`: this step
+  is mandatory.
+- Wrapper CLIs: skip this step when the underlying CLI owns service auth. Record
+  `SKIPPED_WRAPPER_AUTH: underlying CLI owns auth`. If the wrapper itself
+  persists a separate CLI-tools auth profile, this step is mandatory for that
+  wrapper profile.
+- CLIs with `--auth-type none`: record `SKIPPED_NO_AUTH`.
+
+### 9.7.2 Search LastPass With The `lastpass` CLI
+
+Use the repo-owned `lastpass` CLI syntax from
+`<cli-tools-root>/_repo/skills/lastpass-cli/usage.json`. Do not call `lpass`,
+parse LastPass exports, use the browser vault UI, or use any ad hoc LastPass
+helper.
+
+Verify LastPass auth first:
+
+```bash
+lastpass auth status
+```
+
+Search for the service credential entry without printing secret values:
+
+```bash
+lastpass items list --filter "name:like:%<service-name>%" --properties id,name,username,url --table
+lastpass items list --filter "url:like:%<service-domain>%" --properties id,name,username,url --table
+```
+
+If no unambiguous LastPass entry contains the credential values required by the
+new CLI, stop with `LIVE_AUTH_BLOCKED: LastPass has no usable <service-name>
+credentials for <needed credential types>` and do not mark CLI creation
+complete.
+
+### 9.7.3 Store Reusable Credentials In The CLI-Tools Secret Manager
+
+Retrieve only the exact values needed by the new CLI's auth flow. Do not print
+secrets, do not use `lastpass items get --show-password`, and do not write raw
+reusable credentials to `.env`, `.env.example`, or
+`authentication_profiles/<profile>/.env`.
+
+Use the value-specific LastPass commands and immediately store each reusable
+credential through `references/secrets.md`:
+
+```bash
+SECRET_VALUE="$(lastpass items username "$entry_id")"
+printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name> --type username
+unset SECRET_VALUE
+
+SECRET_VALUE="$(lastpass items password "$entry_id")"
+printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name> --type <credential-type>
+unset SECRET_VALUE
+```
+
+Choose the secret-manager `<credential-type>` from the CLI's auth contract, for
+example `password`, `api-key`, `personal-access-token`, `client-id`, or
+`client-secret`. For token-style LastPass entries, treat the LastPass password
+field as the token value unless the service's documented credential shape
+requires a separate exact field.
+
+Reusable raw credentials belong in the CLI-tools secret manager. CLI-managed
+runtime auth state belongs in `~/.local/share/cli-tools/<name>/authentication_profiles/<profile>/`.
+`.env.example` remains shape-only.
+
+### 9.7.4 Create Or Verify The CLI Auth Profile
+
+Use the new CLI's own auth/profile commands. Do not create profile files by hand.
+
+```bash
+<name> auth profiles list --properties name,active,auth_type
+<name> auth profiles create <profile-name>
+<name> auth login --profile <profile-name>
+<name> auth status --profile <profile-name>
+```
+
+Create the profile only when the CLI's own profile list proves it is absent. For
+multi-credential CLIs, authenticate the required credential type explicitly when
+needed:
+
+```bash
+<name> auth login --profile <profile-name> --credential-type <credential-type>
+```
+
+Feed values retrieved from the CLI-tools secret manager into the CLI's normal
+non-echoing auth flow or first-class auth options without printing them. If the
+CLI cannot create an authenticated profile from the stored credentials, stop with
+`LIVE_AUTH_BLOCKED: <name> auth login/status failed for <profile-name>` and
+preserve the non-secret failure output.
+
+### 9.7.5 Run Live Read-Only Smoke Commands
+
+After `<name> auth status --profile <profile-name>` reports the shared
+`profiles[].authenticated` JSON shape as authenticated, run at least one live
+read-only command against the service. Use a command from the approved command
+tree, such as a `list`, `get`, `search`, or `status` command. Do not count
+`--help`, unit tests, compliance tests, cache-only output, or local parser checks
+as the live smoke.
+
+```bash
+<name> <resource> list --limit 1
+```
+
+The read-only smoke command must complete successfully against the live service.
+If live auth or the smoke command cannot be completed, report the exact
+`LIVE_AUTH_BLOCKED` reason and do not mark CLI creation complete.
+
 ## Step 10: Update cli_tools.md
 
 Add the new CLI to `<cli-tools-root>/_repo/docs/cli_tools.md`:
@@ -591,6 +708,13 @@ CLI creation is complete when:
   - [ ] Exponential retry correctly implemented
   - [ ] Internal representation is minimal and tied to the command contract
 - [ ] `/debloat` final pass completed (Step 9.5) — tests still pass after fixes
+- [ ] Step 9.7 LastPass/profile/live-smoke completed for non-wrapper API/browser service CLIs:
+  - [ ] `lastpass auth status` passed and `lastpass items list` searched the service credential entry without printing secrets
+  - [ ] Needed reusable credential values were transferred to `<cli-tools-root>/_repo/_secret-manager/secrets.sh`
+  - [ ] CLI auth profile was created or verified through the CLI's own `auth` commands
+  - [ ] `<name> auth status --profile <profile-name>` confirmed authenticated profile JSON
+  - [ ] At least one live read-only service smoke command succeeded
+- [ ] Wrapper CLIs explicitly skipped Step 9.7 unless the wrapper owns a separate CLI-tools auth profile
 - [ ] cli_tools.md has been updated with the new CLI
 - [ ] `/create-cli-tool-skill` invoked to generate the CLI's repo-owned skill
 - [ ] Git repo initialized and committed

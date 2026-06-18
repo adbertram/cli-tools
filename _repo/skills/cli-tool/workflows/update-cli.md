@@ -95,16 +95,30 @@ exact line currently exists. If the target text is embedded in a longer
 paragraph, anchor on the whole current line or an existing verified heading and
 insert relative to that.
 
-## Step 2: Navigate to CLI Directory
+## Step 2: Resolve and Navigate to CLI Source Directory
+
+Before any source inspection command, prove the target CLI source directory.
+Do not assume `<cli-tools-root>/<name>` exists, and do not pass that guessed
+path to `cd`, `ls`, `find`, `rg`, `sed`, `cat`, `nl`, `wc`, `head`, `tail`, or
+similar commands.
+
+Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate available
+CLI tools, match the exact `name` from its JSON output, and derive the source
+directory from the matching record's `readme` parent. Then prove that directory
+exists and contains `pyproject.toml` before navigating. If there is no exact
+record, report `CLI_SOURCE_NOT_FOUND: <name>` and stop or ask which discovered
+CLI name to update.
+
+Only after the source directory is proven:
 
 ```bash
-cd <cli-tools-root>/<name>
+cd "$tool_dir"
 ```
 
 Verify the CLI structure:
 ```bash
-ls -la <name>_cli/
-find <name>_cli -maxdepth 2 -type f | sort
+find . -maxdepth 1 -type d -name '*_cli' -print
+find . -maxdepth 2 -type f | sort
 ```
 
 When reading existing tests, discover the real test files first and pass only
@@ -397,7 +411,7 @@ the installed CLI help.
 ## Step 7: Commit Changes
 
 ```bash
-cd <cli-tools-root>/<name>
+cd "$tool_dir"
 git add -A
 git commit -m "Add <description of changes>"
 git push

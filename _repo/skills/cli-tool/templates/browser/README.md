@@ -2,10 +2,11 @@
 
 ## DESCRIPTION
 
-A command-line interface for [{{Name}}]({{base_url}}) using browser automation. {{description}}.
+A browser-automation command-line interface for {{Name}}. {{description}}.
 
 Use this CLI when you need repeatable access to {{Name}} workflows that are only available through the website.
 
+{{DOCS_SECTION}}
 ## Installation
 
 ```bash

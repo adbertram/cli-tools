@@ -61,10 +61,44 @@ Interaction commands can report a markdown `### Error` block after the browser h
 <principle name="Session Management">
 - **Default session**: Commands operate on the most recent browser session automatically.
 - **Named sessions**: Use `-s=<session_name>` global option to target a specific session.
+- **Do not use implicit `default` for automation**: For portal login,
+credential, and multi-step browser work, open and reuse a short named session
+with `-s=<short-name>` on every command. A bare command uses `default`, which
+maps to `default.sock` under the workspace daemon hash; concurrent or stale
+daemon startup can fail with `listen EADDRINUSE .../default.sock`. If this
+happens, do not retry the bare command. Run `playwright-cli list --all`, target
+the intended named session, or use `kill-all` only after preserving any needed
+browser state.
 - **Keep session names short on macOS**: The CLI embeds the session name directly in a Unix socket path under the system temp directory. Long names can exceed macOS socket path limits and fail with `listen EINVAL`. Use short lowercase names such as `rcenv`, `impact`, or `bf` instead of descriptive names like `codex-run-code-env-test`.
+- **Recover after socket/runtime failures**: Errors such as `EADDRINUSE`,
+  `listen EINVAL`, daemon startup failure, or `The browser '<name>' is not open,
+  please run open first` mean the CLI session state is not trustworthy. Stop
+  issuing element-ref commands like `click`, `fill`, or `press` against the old
+  refs. Preserve the exact error, run `playwright-cli list` to prove whether the
+  named session still exists, then either reopen the same short named session
+  with `playwright-cli -s=<name> open <current-url>` and take a fresh
+  `snapshot`, or escalate to the next approved browser-control method with the
+  target URL and failure evidence. Never paste credentials into a session after
+  this failure until the browser has been reopened and the visible destination
+  has been verified.
 - **List sessions**: `playwright-cli list` (add `--all` to include sessions from all workspaces).
 - **Multiple sessions**: Open multiple browsers with `playwright-cli open`, target each with `-s=<name>`.
 - **Cleanup**: `playwright-cli close-all`, or `playwright-cli kill-all` for stale/zombie processes.
+</principle>
+
+<principle name="Installed Package Internals">
+When diagnosing the npm-installed `@playwright/cli` package, do not call
+`require.resolve()` on guessed private package subpaths such as
+`playwright/lib/mcp/terminal/daemon`. Node enforces the package `exports` map,
+and non-exported internals fail with `ERR_PACKAGE_PATH_NOT_EXPORTED` even when
+the file exists on disk. Resolve an exported neighboring module from the real
+launcher package context first, then inspect adjacent files by filesystem path
+only after proving those paths exist.
+
+```bash
+launcher=$(command -v playwright-cli)
+node -e 'const fs=require("node:fs"); const path=require("node:path"); const {createRequire}=require("node:module"); const launcher=fs.realpathSync(process.argv[1]); const req=createRequire(launcher); const exported=req.resolve("playwright/lib/mcp/terminal/program"); const dir=path.dirname(exported); const target=path.join(dir,"daemon.js"); if (!fs.existsSync(target)) { console.error(`MISSING_INSTALLED_FILE:${target}`); process.exit(1); } console.log(target);' "$launcher"
+```
 </principle>
 
 <principle name="fill vs type">
@@ -108,6 +142,40 @@ The categories below mirror the section headers in `playwright-cli --help`. They
 
 <principle name="Output Format">
 Commands return **markdown** (Slack-style `mrkdwn` with `###` headers and indented list items) — **not JSON**. Large results (snapshots, network logs, console logs) are written to files inside `.playwright-cli/` and the command output references them by path. Read those files directly for structured data. When using `--filename`, keep the command output visible and verify the referenced file is non-empty before relying on it; modal dialogs and failed or blocked states can still produce useful command output even when a redirected file is empty.
+
+When redirecting `playwright-cli` stdout to an artifact, especially for
+`run-code`, do not run a bare command such as `playwright-cli ... run-code ...
+>"$out"`. Create the artifact parent, capture stderr to a sidecar file,
+preserve the producer status, and print explicit evidence on failure. On
+success, verify the stdout artifact is non-empty and inspect it for `### Error`
+before treating the command as successful.
+If a validation wrapper prints per-case summaries to the parent stdout, capture
+that wrapper stdout in its own log and assert summary markers against that log,
+not against the per-case redirected producer stdout artifacts.
+
+```bash
+out=/path/to/workspace/dom.json
+err=/path/to/workspace/dom.stderr
+mkdir -p "$(dirname "$out")"
+if playwright-cli -s=ata run-code 'async (page) => ({ title: await page.title() })' >"$out" 2>"$err"; then
+  if [ ! -s "$out" ]; then
+    printf 'PLAYWRIGHT_STDOUT_EMPTY:%s\n' "$out" >&2
+    exit 1
+  fi
+  rg -n -F -- '### Error' "$out"
+  rg_rc=$?
+  if [ "$rg_rc" -eq 0 ]; then
+    printf 'PLAYWRIGHT_MARKDOWN_ERROR:%s\n' "$out" >&2
+    exit 1
+  fi
+  [ "$rg_rc" -eq 1 ] || exit "$rg_rc"
+else
+  rc=$?
+  printf 'PLAYWRIGHT_FAILED:%s rc=%s stderr=%s\n' "$out" "$rc" "$err" >&2
+  [ -s "$err" ] && sed -n '1,80p' "$err" >&2
+  exit "$rc"
+fi
+```
 
 Per-command options vary and are documented in `usage.json`; examples:
 - `list` supports `--all`

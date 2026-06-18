@@ -96,6 +96,12 @@ def _hoist_no_cache_flag() -> None:
         sys.argv = [sys.argv[0], "--no-cache", *rebuilt]
 
 
+def _normalize_help_alias() -> None:
+    """Support ``<tool> help`` as an alias for root ``<tool> --help``."""
+    if sys.argv[1:] == ["help"]:
+        sys.argv = [sys.argv[0], "--help"]
+
+
 def create_app(
     name: str,
     help: str,
@@ -136,11 +142,12 @@ def create_app(
             typer.echo(ctx.get_help())
             raise typer.Exit()
 
-    # Normalise --no-cache position here, not only in run_app: most CLIs use a
+    # Normalise argv here, not only in run_app: most CLIs use a
     # ``main:app`` console-script entry point that calls ``app()`` directly and
-    # never reaches run_app. create_app runs at import time — before ``app()``
+    # never reaches run_app. create_app runs at import time - before ``app()``
     # parses sys.argv — so this is the one chokepoint shared by every entry
-    # style. Idempotent: run_app calls it again for the ``main:main`` path.
+    # style. Idempotent: run_app calls these again for the ``main:main`` path.
+    _normalize_help_alias()
     _hoist_no_cache_flag()
 
     return app
@@ -156,6 +163,7 @@ def run_app(app: typer.Typer, *, error_types=None) -> None:
             :class:`cli_tools_shared.exceptions.ClientError`.
     """
     _ensure_utf8_streams()
+    _normalize_help_alias()
     _hoist_no_cache_flag()
 
     if error_types is None:

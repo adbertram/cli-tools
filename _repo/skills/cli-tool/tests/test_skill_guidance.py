@@ -60,6 +60,30 @@ def test_skill_places_usage_json_in_cli_skill_folder():
     assert "do not import `cli_test_utils` from ad-hoc Python" in text
 
 
+def test_create_workflow_requires_lastpass_profile_live_smoke_for_non_wrappers():
+    text = _read("workflows/create-cli.md")
+
+    assert "Step 9.7: LastPass Credential Discovery And Live Auth Smoke" in text
+    assert "API and browser service CLIs with any auth type other than `none`" in text
+    assert "SKIPPED_WRAPPER_AUTH: underlying CLI owns auth" in text
+    assert "lastpass auth status" in text
+    assert "lastpass items list --filter \"name:like:%<service-name>%\"" in text
+    assert "<cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name>" in text
+    assert "<name> auth status --profile <profile-name>" in text
+    assert "LIVE_AUTH_BLOCKED: LastPass has no usable" in text
+    assert "At least one live read-only service smoke command succeeded" in text
+
+
+def test_skill_requires_launcher_interpreter_for_cli_importing_task_scripts():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "Use the CLI's Own Interpreter for Manual Imports" in text
+    assert "task-workspace scripts that import CLI packages or internals" in text_words
+    assert "run those scripts with the launcher shebang interpreter instead of ambient `python3`" in text_words
+    assert '"$interpreter" path/to/task_script_that_imports_cli.py' in text
+
+
 def test_skill_requires_bounded_schema_safe_usage_json_inspection():
     text = _read("SKILL.md")
     text_words = _words(text)
@@ -78,6 +102,8 @@ def test_skill_requires_existing_path_operands_for_repo_probes():
 
     assert "Existing Path Operands Only" in text
     assert "prove each path exists" in text
+    assert "absolute operands under `<cli-tools-root>`" in text
+    assert "optional root children such as `<cli-tools-root>/scripts`" in text
     assert "filter glob and optional operands to regular files" in text
     assert "directories such as `__pycache__` are command errors" in text
     assert "Missing optional paths are command errors" in text
@@ -136,6 +162,16 @@ def test_skill_requires_shaped_expected_auth_status_probes():
     assert "Do not run bare commands such as `paypal auth status -t`" in text
     assert "copilot auth status --profile default" in text
     assert "can exit `2` while returning structured JSON" in text
+
+
+def test_config_standards_forbid_arbitrary_config_auth_probes():
+    text = _read("references/config-standards.md")
+    text_words = _words(text)
+
+    assert "Do not inspect arbitrary `Config` instance attributes" in text
+    assert "cfg.active" in text
+    assert "`<tool> auth status` JSON" in text
+    assert "`ProfileStore`/`list_profiles`" in text
 
 
 def test_copilot_guidance_forbids_inferred_format_flags():
@@ -220,6 +256,28 @@ def test_test_workflow_documents_safe_harness_collection_command():
     assert "Targeted harness execution" in text
     assert "pass `--cli-name \"$TOOL_NAME\"`" in text_words
     assert "Use `--force` only for batch or collect-only harness" in text_words
+
+
+def test_test_workflow_documents_safe_harness_batch_command():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Harness batch execution" in text
+    assert "uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests --force" in text_words
+    assert "Do not run `python3 -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests`" in text
+    assert "bypasses the skill project's declared `cli-tools-shared` dependency" in text_words
+    assert "CLI-dependent tests are only valid without `--cli-name` when `--force`" in text_words
+
+
+def test_test_workflow_requires_shared_harness_path_discovery_before_reads():
+    text = _read("workflows/test-cli.md")
+
+    assert "Apply the same rule to shared harness paths" in text
+    assert "Do not assume root-level paths such" in text
+    assert "<cli-tools-root>/tests/conftest.py" in text
+    assert "<cli-tools-root>/_repo/skills/cli-tool/tests" in text
+    assert "<cli-tools-root>/_repo/cli-tools-shared/tests" in text
+    assert "keep only proven regular files" in text
 
 
 def test_test_workflow_requires_serial_uv_validation():

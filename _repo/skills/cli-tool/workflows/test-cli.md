@@ -31,6 +31,20 @@ uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest --colle
 
 This only proves the harness collects. It is not a replacement for CLI-specific validation through `test-cli-tool.sh --cli-name "$TOOL_NAME"`.
 
+**Harness batch execution:** When validating harness unit tests without a
+specific CLI target, run pytest through the cli-tool skill uv project and pass
+the batch confirmation flag:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests --force
+```
+
+Do not run `python3 -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests`
+directly. That bypasses the skill project's declared `cli-tools-shared`
+dependency, and CLI-dependent tests are only valid without `--cli-name` when
+`--force` explicitly confirms a batch/collect-only harness run where those
+tests may skip.
+
 **UV validation serialization:** Run `uv run`, `uv sync`, `uv lock`,
 `uv pip install`, `uv tool install`, and related environment-mutating
 validation commands sequentially for this repo unless each command uses a
@@ -55,13 +69,22 @@ tests without the tool package importable. Do not run `PYTHONPATH=. pytest`,
 a tool-local `.venv/bin/python`, or another ambient interpreter; shared
 dependencies such as `cli_tools_shared` are resolved by the uv project declared
 in the tool's `pyproject.toml`, and pytest is supplied with `--with pytest`.
+If ambient `python3 -m pytest` fails during collection with
+`ModuleNotFoundError: No module named 'cli_tools_shared'`, treat the command as
+a wrong test environment and rerun with the uv project command below.
 
 Before reading or passing a tool's test paths to `sed`, `cat`, `nl`, `wc`,
 `head`, `tail`, `grep`, `rg`, or direct `pytest`, discover the real test files
 or prove the `tests` directory exists. Do not infer conventional filenames such
-as `tests/test_<tool>.py` or `tests/test_commands.py`. If no tests directory
-exists, report `SKIP_MISSING` and use the harness script below instead of a
-guessed file path.
+as `tests/test_<tool>.py`, `tests/test_cli.py`, or `tests/test_commands.py`. If
+no tests directory exists, report `SKIP_MISSING` and use the harness script
+below instead of a guessed file path.
+
+Apply the same rule to shared harness paths. Do not assume root-level paths such
+as `<cli-tools-root>/tests/conftest.py` exist. Discover the harness files under
+`<cli-tools-root>/_repo/skills/cli-tool/tests` or the shared-package files under
+`<cli-tools-root>/_repo/cli-tools-shared/tests`, keep only proven regular files,
+and read or pass only those proven paths.
 
 ```bash
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests

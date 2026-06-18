@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: %s <tool-folder>\n' "$(basename "$0")" >&2
+    printf 'Usage: %s <tool-name-or-folder>\n' "$(basename "$0")" >&2
 }
 
 if [[ $# -ne 1 ]]; then
@@ -12,7 +12,14 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TOOL_DIR="$REPO_ROOT/$1"
+REQUESTED_TOOL="$1"
+TOOL_DIR="$REPO_ROOT/$REQUESTED_TOOL"
+if [[ ! -f "$TOOL_DIR/pyproject.toml" && "$REQUESTED_TOOL" != */* ]]; then
+    PERSONAL_TOOL_DIR="$REPO_ROOT/_personal/$REQUESTED_TOOL"
+    if [[ -f "$PERSONAL_TOOL_DIR/pyproject.toml" ]]; then
+        TOOL_DIR="$PERSONAL_TOOL_DIR"
+    fi
+fi
 CLI_NAME="$(basename "$TOOL_DIR")"
 
 if [[ ! -f "$TOOL_DIR/pyproject.toml" ]]; then
