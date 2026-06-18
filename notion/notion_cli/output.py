@@ -500,11 +500,16 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
             inner_items = process_inner(match.group(10), {"italic": True})
             rich_text.extend(inner_items)
         elif match.group(12):  # Code `text`
-            # Code blocks don't recurse - content is literal
+            # Code blocks don't recurse - content is literal. A code run is
+            # emitted code-only and never inherits bold/italic: markdown has no
+            # syntax for a run that is BOTH code and bold/italic, so carrying an
+            # inherited annotation onto a code run round-trips as broken
+            # `**`code`**` -> `****` on export. The surrounding runs are still
+            # bold/italic (handled above), which preserves the author's intent.
             item = {
                 "type": "text",
                 "text": {"content": match.group(12)},
-                "annotations": {**inherited_annotations, "code": True}
+                "annotations": {"code": True},
             }
             rich_text.append(item)
         elif match.group(14):  # Link [text](url)

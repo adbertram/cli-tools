@@ -26,13 +26,21 @@ class Config(BaseConfig):
         return self._get("FINGERPRINT")
 
     def test_connection(self):
-        """Test if the browser session can authorize CVS mcapi requests."""
+        """Test if the browser session can authorize CVS mcapi requests.
+
+        Uses the SAME refresh-on-401 retry that real read-only commands use.
+        On a freshly loaded page CVS hands out a short-lived guest token before
+        upgrading it to the authenticated one; a single no-retry probe can read
+        that guest token and 401, reporting a false "not authenticated" even
+        though every real command would refresh and succeed. Matching the
+        command path makes ``auth status`` reflect what users actually get.
+        """
         try:
             from .client import EXPERIENCE_IDS, get_client
             client = get_client(config=self)
             client._make_request(
                 EXPERIENCE_IDS["PATIENTS"],
-                refresh_on_unauthorized=False,
+                refresh_on_unauthorized=True,
             )
             return {"api_test": "passed"}
         except Exception as e:

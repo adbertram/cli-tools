@@ -1,8 +1,8 @@
 {
   "tool": "paypal",
   "description": "CLI interface for PayPal API",
-  "discovered_at": "2026-05-20T15:43:10.219025+00:00",
-  "total_commands": 15,
+  "discovered_at": "2026-06-15T01:27:44Z",
+  "total_commands": 19,
   "global_options": [
     {
       "name": "--version",
@@ -19,11 +19,199 @@
     }
   ],
   "commands": {
-    "payouts": {
-      "help": "Manage batch payouts",
+    "auth": {
+      "help": "Manage paypal authentication",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List batch payouts (not yet implemented via API).",
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "short": "-c"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -33,30 +221,84 @@
               "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
+              "name": "--verbose",
+              "type": "bool",
               "required": false,
-              "help": "Maximum number of payouts to return",
-              "short": "-l"
+              "help": "Show detailed checks",
+              "short": "-v"
             },
             {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
+              "help": "Profile name (defaults to all profiles)",
               "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "payouts": {
+      "help": "Manage batch payouts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "cancel-item": {
+          "help": "Cancel an unclaimed payout item. Only items with UNCLAIMED status can be cancelled.",
+          "examples": [
+            "paypal payouts cancel-item ITEM_ID_HERE"
+          ],
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Payout item ID to cancel"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
         "create": {
           "help": "Create a batch payout to one or more recipients. For a single recipient, use --receiver and --amount. For multiple recipients, use --items-json with a JSON array.",
+          "examples": [
+            "paypal payouts create --receiver user@example.com --amount 10.00",
+            "paypal payouts create --receiver user@example.com --amount 25.50 --note \"Payment for services\"",
+            "paypal payouts create --items-json '[{\"receiver\":\"a@example.com\",\"amount\":\"10.00\"},{\"receiver\":\"b@example.com\",\"amount\":\"20.00\"}]'"
+          ],
+          "arguments": [],
           "options": [
             {
               "name": "--receiver",
@@ -111,16 +353,21 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "paypal payouts create --receiver user@example.com --amount 10.00",
-            "paypal payouts create --receiver user@example.com --amount 25.50 --note \"Payment for services\"",
-            "paypal payouts create --items-json '[{\"receiver\":\"a@example.com\",\"amount\":\"10.00\"},{\"receiver\":\"b@example.com\",\"amount\":\"20.00\"}]'"
           ]
         },
         "get": {
           "help": "Get batch payout status and details.",
+          "examples": [
+            "paypal payouts get BATCH_ID_HERE",
+            "paypal payouts get BATCH_ID_HERE -t"
+          ],
           "arguments": [
             {
               "name": "batch_id",
@@ -136,15 +383,21 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "paypal payouts get BATCH_ID_HERE",
-            "paypal payouts get BATCH_ID_HERE -t"
           ]
         },
         "get-item": {
           "help": "Get individual payout item details.",
+          "examples": [
+            "paypal payouts get-item ITEM_ID_HERE",
+            "paypal payouts get-item ITEM_ID_HERE -t"
+          ],
           "arguments": [
             {
               "name": "item_id",
@@ -160,88 +413,188 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "paypal payouts get-item ITEM_ID_HERE",
-            "paypal payouts get-item ITEM_ID_HERE -t"
           ]
-        },
-        "cancel-item": {
-          "help": "Cancel an unclaimed payout item. Only items with UNCLAIMED status can be cancelled.",
+        }
+      }
+    },
+    "refunds": {
+      "help": "Manage refunds",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Issue a full or partial refund for a PayPal capture.",
           "arguments": [
             {
-              "name": "item_id",
+              "name": "capture_id",
               "type": "TEXT",
               "required": true,
-              "help": "Payout item ID to cancel"
+              "help": "PayPal capture ID to refund"
             }
           ],
           "options": [
             {
-              "name": "--table",
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Partial refund amount. Omit for full refund",
+              "short": "-a"
+            },
+            {
+              "name": "--currency",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO currency code",
+              "short": "-c",
+              "default": "USD"
+            },
+            {
+              "name": "--invoice-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "PayPal refund invoice ID"
+            },
+            {
+              "name": "--custom-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "PayPal refund custom ID"
+            },
+            {
+              "name": "--note-to-payer",
+              "type": "TEXT",
+              "required": false,
+              "help": "Note visible to the payer"
+            },
+            {
+              "name": "--idempotency-key",
+              "type": "TEXT",
+              "required": false,
+              "help": "PayPal-Request-Id for idempotence"
+            },
+            {
+              "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Print the planned refund without issuing it"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Issue the refund without an interactive prompt",
+              "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "from-bricklink": {
+          "help": "Issue a PayPal refund using PayPal transaction search and BrickLink order context.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "BrickLink order ID"
             }
           ],
-          "examples": [
-            "paypal payouts cancel-item ITEM_ID_HERE"
+          "options": [
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Partial refund amount. Omit for full refund",
+              "short": "-a"
+            },
+            {
+              "name": "--details",
+              "type": "TEXT",
+              "required": false,
+              "help": "Note visible to the payer",
+              "short": "-d"
+            },
+            {
+              "name": "--order-json",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to verified BrickLink order JSON. Omit to run `bricklink order get`"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the planned refund without issuing it"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Issue the refund without an interactive prompt",
+              "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
           ]
         }
       }
     },
-    "auth": {
-      "help": "Manage paypal authentication",
+    "transactions": {
+      "help": "Manage transaction reporting",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+        "get": {
+          "help": "Get transaction-search matches for a PayPal transaction ID.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "PayPal transaction ID"
+            }
+          ],
           "options": [
             {
-              "name": "--profile",
+              "name": "--start-date",
               "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
+              "required": true,
+              "help": "Start of the search range. YYYY-MM-DD becomes 00:00:00Z. Naive datetimes are interpreted as UTC"
             },
             {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
+              "name": "--end-date",
               "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth')",
-              "short": "-c"
-            }
-          ]
-        },
-        "logout": {
-          "help": "Clear stored credentials.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ]
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
+              "required": true,
+              "help": "End of the search range. YYYY-MM-DD becomes 23:59:59Z. Naive datetimes are interpreted as UTC"
             },
             {
               "name": "--table",
@@ -249,12 +602,51 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of transaction detail fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "default": "100"
+            },
+            {
+              "name": "--all-records",
+              "type": "bool",
+              "required": false,
+              "help": "Include non-balance-affecting records by sending balance_affecting_records_only=N"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
+        "list": {
+          "help": "List transactions from the PayPal Transaction Search API.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Start of the transaction range. YYYY-MM-DD becomes 00:00:00Z. Naive datetimes are interpreted as UTC"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "End of the transaction range. YYYY-MM-DD becomes 23:59:59Z. Naive datetimes are interpreted as UTC"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -263,128 +655,47 @@
               "short": "-t"
             },
             {
-              "name": "--verbose",
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]       Maximum number of transactions to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value. Supports nested fields such as transaction_info.transaction_status:eq:S",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "default": "100"
+            },
+            {
+              "name": "--all-records",
               "type": "bool",
               "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
+              "help": "Include non-balance-affecting records by sending balance_affecting_records_only=N"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
           ]
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ]
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ]
-            }
-          }
-        }
-      }
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
         }
       }
     }

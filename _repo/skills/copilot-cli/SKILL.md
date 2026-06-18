@@ -78,6 +78,37 @@ The CLI handles this automatically: when content contains `{`, the emitted YAML 
 
 If you ever see "Unexpected character in expression" on `copilot agent publish` for an agent whose response-format file or instructions file contains `{`, suspect the Mustache opt-in is missing — check `client.py` `build_gpt_component_yaml`.
 </gotcha>
+
+<gotcha name="agent prompt: Power Platform cloud is auto-resolved (do not set POWERPLATFORM_CLOUD_URL)">
+**For integrated-auth agents ("Authenticate with Microsoft"), `copilot agent prompt` uses the M365 Agents SDK and derives the Power Platform cloud automatically from the environment's Dataverse host** — no cloud config is needed for normal commercial tenants (`*.crm.dynamics.com` → public cloud `api.powerplatform.com`). Sovereign clouds are mapped from the Dataverse host too: GCC (`*.crm9.dynamics.com`), GCC High (`*.crm.microsoftdynamics.us`), DoD (`*.crm.appsplatform.us`), China (`*.crm.dynamics.cn`).
+
+Do NOT set `POWERPLATFORM_CLOUD_URL` to force a cloud — that legacy profile value held a Direct Line *island-gateway* host and is ignored for SDK cloud selection. Forcing the SDK's `Other` cloud with a host-only value caused `M365 SDK request failed: ... PowerPlatformCloud is Other` (error code `-65003`); this is fixed by the auto-resolver.
+
+Override only for a cloud the host table cannot classify: set `POWERPLATFORM_CLOUD` to a `PowerPlatformCloud` enum name understood by the SDK (`Prod`, `Gov`, `High`, `DoD`, `Mooncake`). A free-form base address is intentionally NOT accepted because the SDK's `Other` base-address path cannot build a valid connection URL.
+</gotcha>
+
+<gotcha name="agent prompt: 405 'App-only S2S access is not enabled' (use delegated auth)">
+**If `copilot agent prompt` reaches the agent but fails with HTTP `405` while the active profile has a service-principal secret (`AZURE_CLIENT_SECRET`/`M365_SDK_CLIENT_SECRET`), the environment does not allow app-only (service principal) access to Copilot Studio conversations.** The Direct-to-Engine endpoint returns `App-only S2S access is not enabled for this environment.`
+
+Fix: use delegated (user) auth — run with a profile that has no service-principal secret so the device-code sign-in flow runs — or have an admin enable app-only S2S access for the environment. This is an environment/tenant policy, not a CLI defect; the CLI now prints this cause and fix when it detects the condition.
+</gotcha>
+
+<gotcha name="auth status: unauthenticated profile exits 2 with JSON status data">
+`copilot auth status --profile default` can exit `2` for an unauthenticated
+profile while still returning structured JSON that includes `"authenticated":
+false`. Treat that as status data, not an unhandled tool failure, when the probe
+is intentionally checking auth state. Wrap the command per the cli-tool
+`Shape Expected Auth Status Probes` rule and validate both exit status `2` and
+the unauthenticated evidence before exiting `0`.
+</gotcha>
+
+<gotcha name="agent list: JSON is default, no --format flag">
+`copilot agent list` emits JSON. JSON is already the default. Do not add `--format json`,
+`--json`, or any output flag not listed for the leaf command. `copilot agent --help`
+is group help only; before adding flags, inspect `usage.json` at
+`commands.agent.commands.list.options` or run `copilot agent list --help`.
+Use `--table` only when human-readable output is requested.
+</gotcha>
 </gotchas>
 
 <success_criteria>

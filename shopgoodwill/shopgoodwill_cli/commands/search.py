@@ -112,8 +112,12 @@ def search_get(
     try:
         client = ShopGoodwillClient(require_auth=False)
         item = client.get_item(item_id)
+        if item.get("allowShippingCalculation"):
+            item["shippingEstimate"] = client.calculate_shipping(item)
 
         if table:
+            buy_now_price = item.get("buyNowPrice")
+            shipping_estimate = item.get("shippingEstimate")
             # Format key details for table
             table_data = [{
                 "field": "Item ID",
@@ -124,7 +128,13 @@ def search_get(
             }, {
                 "field": "Current Price",
                 "value": f"${item.get('currentPrice', 0):.2f}",
-            }, {
+            }]
+            if buy_now_price:
+                table_data.append({
+                    "field": "Buy Now Price",
+                    "value": f"${buy_now_price:.2f}",
+                })
+            table_data.extend([{
                 "field": "Bids",
                 "value": str(item.get("numBids", 0)),
             }, {
@@ -138,11 +148,28 @@ def search_get(
                 "value": f"{item.get('sellerCity', '')}, {item.get('sellerState', '')}",
             }, {
                 "field": "Shipping",
-                "value": f"${item.get('shippingPrice', 0):.2f}" if item.get("shippingPrice") else "Pickup Only",
+                "value": f"${item.get('shippingPrice', 0):.2f}" if item.get("shippingPrice") else "Not calculated",
             }, {
                 "field": "URL",
                 "value": f"https://shopgoodwill.com/item/{item.get('itemId', '')}",
-            }]
+            }])
+            if shipping_estimate:
+                table_data.extend([{
+                    "field": "Destination ZIP",
+                    "value": shipping_estimate["destinationZip"],
+                }, {
+                    "field": "Destination Shipping",
+                    "value": f"${shipping_estimate['shippingPrice']:.2f}",
+                }, {
+                    "field": "Destination Handling",
+                    "value": f"${shipping_estimate['handlingPrice']:.2f}",
+                }, {
+                    "field": "Shipping + Handling",
+                    "value": f"${shipping_estimate['total']:.2f}",
+                }, {
+                    "field": "Shipping Service",
+                    "value": shipping_estimate["serviceDescription"],
+                }])
             print_table(table_data, ["field", "value"], ["Field", "Value"])
         else:
             print_json(item)

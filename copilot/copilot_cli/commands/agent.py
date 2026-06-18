@@ -984,6 +984,131 @@ def create_agent(
 DIRECTLINE_URL = "https://directline.botframework.com/v3/directline"
 
 
+# =============================================================================
+# Power Platform cloud resolution (M365 Agents SDK path)
+# =============================================================================
+#
+# The M365 Agents SDK resolves the Copilot Studio host from the
+# ``PowerPlatformCloud`` category. For commercial tenants this is the public
+# cloud (``api.powerplatform.com``); sovereign clouds (US Gov, DoD, China) are
+# first-class SDK enum values, so a correct cloud is derived deterministically
+# from the Dataverse environment host — never hardcoded to a single tenant and
+# never forced to ``Other`` (which requires an explicit base address and breaks
+# normal commercial environments).
+#
+# Data-driven: add a sovereign cloud by adding a row here, not a code branch.
+# Maps a Dataverse host suffix (the org host in DATAVERSE_URL) to the
+# PowerPlatformCloud enum *name*. Commercial hosts are intentionally absent —
+# they resolve to the SDK default (public/PROD) via cloud=None.
+# Source: Microsoft Learn "Dynamics 365 US Government URLs" and "Discover user
+# organizations" (Global Discovery Service per-cloud hosts).
+DATAVERSE_HOST_CLOUD_MAP = {
+    ".crm.microsoftdynamics.us": "HIGH",      # US Gov GCC High
+    ".crm.appsplatform.us": "DOD",            # US Gov DoD
+    ".crm9.dynamics.com": "GOV",              # US Gov GCC
+    ".crm.dynamics.cn": "MOONCAKE",           # China (operated by 21Vianet)
+}
+
+# Commercial Dataverse hosts resolve to the public cloud (cloud=None). Regional
+# commercial orgs use ``.crmN.dynamics.com`` (N = region number) plus the
+# unnumbered North America ``.crm.dynamics.com``; GCC reuses N=9 and is handled
+# above, so any other ``.dynamics.com`` host is commercial.
+_COMMERCIAL_DYNAMICS_SUFFIX = ".dynamics.com"
+
+# Optional explicit cloud override for the rare case where the Dataverse host
+# cannot be auto-classified (e.g. a private/preview cloud the table does not
+# cover). The value is a ``PowerPlatformCloud`` enum *name* understood by the
+# installed M365 Agents SDK (case-insensitive), e.g. ``Prod``, ``Gov``,
+# ``High``, ``DoD``, ``Mooncake``.
+#
+# This is intentionally a known cloud category, NOT a free-form base address:
+# the SDK's ``Other`` / ``custom_power_platform_cloud`` code path cannot build a
+# valid connection URL (it concatenates the raw value into the host), so a
+# base-address override would not actually work. The legacy
+# ``POWERPLATFORM_CLOUD_URL`` value (a Direct Line island-gateway host) is
+# unrelated and is never consulted here.
+POWERPLATFORM_CLOUD_ENV = "POWERPLATFORM_CLOUD"
+
+
+def resolve_power_platform_cloud(dataverse_url, override=None):
+    """Resolve the M365 Agents SDK cloud for the active Dataverse environment.
+
+    Returns a ``(cloud, custom_base_address)`` tuple to pass straight to
+    ``ConnectionSettings(cloud=..., custom_power_platform_cloud=...)``. The
+    second element is always ``None`` — every supported cloud (commercial and
+    sovereign) is a first-class SDK enum, so the broken ``Other`` base-address
+    path is never used.
+
+    - Commercial tenants -> ``(None, None)`` so the SDK uses the public cloud
+      (``api.powerplatform.com``). This is the no-config default.
+    - Sovereign clouds (US Gov GCC/GCC High/DoD, China) -> ``(<enum>, None)``
+      derived from the Dataverse host; the SDK already knows their hosts.
+    - Explicit ``override`` (a ``PowerPlatformCloud`` enum name) -> the matching
+      enum, for clouds the host table does not classify.
+
+    Fails loudly (ValueError) for an unknown override name or an unidentifiable
+    non-commercial Dataverse host, instead of silently defaulting to public.
+
+    :param dataverse_url: The active environment's Dataverse URL
+        (e.g. ``https://org23192677.crm.dynamics.com/``). May be ``None``.
+    :param override: Optional ``PowerPlatformCloud`` enum name override.
+    :return: ``(cloud, custom_base_address)`` for ConnectionSettings.
+    """
+    from urllib.parse import urlparse
+
+    from microsoft_agents.copilotstudio.client.power_platform_cloud import (
+        PowerPlatformCloud,
+    )
+
+    # 1. Explicit operator override wins. It must name a known SDK cloud, since
+    #    only enum-based clouds resolve to a usable endpoint in this SDK.
+    if override:
+        cloud = _coerce_power_platform_cloud(override, PowerPlatformCloud)
+        if cloud is None:
+            valid = ", ".join(c.value for c in PowerPlatformCloud)
+            raise ValueError(
+                f"{POWERPLATFORM_CLOUD_ENV}={override!r} is not a known Power "
+                f"Platform cloud. Valid values: {valid}."
+            )
+        return (None if cloud is PowerPlatformCloud.PROD else cloud), None
+
+    # 2. Derive from the Dataverse environment host.
+    host = urlparse(dataverse_url).hostname if dataverse_url else None
+    if not host:
+        # No environment host to classify; let the SDK default to public cloud.
+        return None, None
+
+    host = host.lower()
+    for suffix, cloud_name in DATAVERSE_HOST_CLOUD_MAP.items():
+        if host.endswith(suffix):
+            return PowerPlatformCloud[cloud_name], None
+
+    # 3. Commercial Dataverse hosts -> public cloud (SDK default).
+    if host.endswith(_COMMERCIAL_DYNAMICS_SUFFIX):
+        return None, None
+
+    # 4. Unidentifiable non-commercial host: fail loudly rather than guess.
+    raise ValueError(
+        f"Could not determine the Power Platform cloud for Dataverse host "
+        f"'{host}'. If this is a sovereign cloud, add its Dataverse suffix to "
+        f"DATAVERSE_HOST_CLOUD_MAP; otherwise set {POWERPLATFORM_CLOUD_ENV} to a "
+        f"known cloud name (e.g. Prod, Gov, High, DoD, Mooncake)."
+    )
+
+
+def _coerce_power_platform_cloud(value, power_platform_cloud_enum):
+    """Coerce a string to a PowerPlatformCloud enum member, or None if unknown.
+
+    Accepts either the enum member name (e.g. ``DOD``) or its value
+    (e.g. ``DoD``), case-insensitively.
+    """
+    candidate = value.strip()
+    for member in power_platform_cloud_enum:
+        if candidate.lower() in (member.name.lower(), member.value.lower()):
+            return member
+    return None
+
+
 @app.command("prompt")
 def prompt_agent(
     agent_id: str = typer.Argument(
@@ -1175,22 +1300,36 @@ def prompt_agent(
                     typer.echo(f"  Client ID: {m365_client_id[:8]}...")
                     typer.echo(f"  Tenant ID: {m365_tenant_id[:8]}...")
 
-                # Create connection settings
-                # Check for custom Power Platform cloud URL (for environments with non-standard endpoints)
-                from microsoft_agents.copilotstudio.client.power_platform_cloud import PowerPlatformCloud
-                custom_cloud_url = os.environ.get("POWERPLATFORM_CLOUD_URL")
-                cloud_setting = PowerPlatformCloud.OTHER if custom_cloud_url else None
-                
+                # Create connection settings.
+                # Derive the Power Platform cloud from the Dataverse environment
+                # host so commercial tenants resolve to the public cloud with no
+                # config, and sovereign clouds map to their SDK enum. An explicit
+                # base-address override is honored for private/unlisted clouds.
+                cloud_override = os.environ.get(POWERPLATFORM_CLOUD_ENV)
+                try:
+                    cloud_setting, custom_cloud_base = resolve_power_platform_cloud(
+                        config.dataverse_url,
+                        override=cloud_override,
+                    )
+                except ValueError as cloud_err:
+                    typer.echo(f"Error: {cloud_err}", err=True)
+                    raise typer.Exit(1)
+
                 settings = ConnectionSettings(
                     environment_id=m365_environment_id,
                     agent_identifier=agent_schema_name,
                     cloud=cloud_setting,
                     copilot_agent_type=None,
-                    custom_power_platform_cloud=custom_cloud_url,
+                    custom_power_platform_cloud=custom_cloud_base,
                 )
-                
-                if verbose and custom_cloud_url:
-                    typer.echo(f"  Custom Cloud URL: {custom_cloud_url}")
+
+                if verbose:
+                    if custom_cloud_base:
+                        typer.echo(f"  Power Platform cloud: Other ({custom_cloud_base})")
+                    elif cloud_setting is not None:
+                        typer.echo(f"  Power Platform cloud: {cloud_setting.value}")
+                    else:
+                        typer.echo("  Power Platform cloud: Public (api.powerplatform.com)")
 
                 # Acquire token using MSAL device code flow
                 if verbose:
@@ -1216,6 +1355,7 @@ def prompt_agent(
 
                 token_scopes = ["https://api.powerplatform.com/.default"]
                 access_token = None
+                m365_used_service_principal = False
 
                 # Check for service principal credentials (client secret) for non-interactive auth
                 from ..config import get_config as _get_copilot_config
@@ -1225,6 +1365,7 @@ def prompt_agent(
                     or _cfg._get("AZURE_CLIENT_SECRET")
                 )
                 if m365_client_secret:
+                    m365_used_service_principal = True
                     if verbose:
                         typer.echo("Using service principal (client credentials) authentication...")
                     cca = msal.ConfidentialClientApplication(
@@ -1334,6 +1475,24 @@ def prompt_agent(
                     bot_response = asyncio.run(prompt_with_m365_sdk())
                 except Exception as sdk_error:
                     typer.echo(f"Error: M365 SDK request failed: {sdk_error}", err=True)
+                    # A 405 on the Direct-to-Engine conversations endpoint while
+                    # using app-only (service principal) auth means the
+                    # environment rejects app-only S2S calls. The server body is
+                    # "App-only S2S access is not enabled for this environment."
+                    if m365_used_service_principal and "405" in str(sdk_error):
+                        typer.echo(
+                            "Cause: the environment does not allow app-only "
+                            "(service principal) access for Copilot Studio "
+                            "conversations.",
+                            err=True,
+                        )
+                        typer.echo(
+                            "Fix: use delegated (user) auth by removing the "
+                            "service-principal secret from the active profile so "
+                            "the device-code flow runs, or have an admin enable "
+                            "app-only S2S access for this environment.",
+                            err=True,
+                        )
                     raise typer.Exit(1)
 
                 if not bot_response:

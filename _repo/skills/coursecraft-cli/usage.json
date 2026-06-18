@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-13T17:17:13Z",
-  "total_commands": 47,
+  "discovered_at": "2026-06-17T16:13:09Z",
+  "total_commands": 52,
   "global_options": [
     {
       "name": "--version",
@@ -514,7 +514,7 @@
             "coursecraft clips update recXXX --brainstorming-outline \"---\"",
             "coursecraft clips update recXXX --content-done"
           ],
-          "usage_instructions": "Update an existing clip by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --story/-s, --learning-objectives/-l, --target-length, --status. Supports --brainstorming-outline/-b for outline content and --brainstorming-outline-fact-checked to mark as reviewed.",
+          "usage_instructions": "Update an existing clip by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --story/-s, --learning-objectives/-l, --target-length, --status. Supports --brainstorming-outline/-b for outline content. The Clips table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Clips.",
           "arguments": [
             {
               "name": "record_id",
@@ -579,16 +579,22 @@
               "short": "-b"
             },
             {
-              "name": "--brainstorming-outline-fact-checked",
-              "type": "bool",
-              "required": false,
-              "help": "Mark brainstorming outline as fact-checked"
-            },
-            {
               "name": "--content-done",
               "type": "bool",
               "required": false,
-              "help": "Mark clip content structure as complete"
+              "help": "Set or clear the clip content-structure-complete flag"
+            },
+            {
+              "name": "--feedback-requested",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the feedback-requested gate flag"
+            },
+            {
+              "name": "--feedback-requested-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
               "name": "--profile",
@@ -1163,13 +1169,13 @@
               "name": "--course-outline-submitted",
               "type": "bool",
               "required": false,
-              "help": "--no-course-outline-submitted                                                                      Mark whether the course outline has been submitted to Pluralsight"
+              "help": "Mark whether the course outline has been submitted to Pluralsight"
             },
             {
               "name": "--course-outline-approved-pluralsight",
               "type": "bool",
               "required": false,
-              "help": "--no-course-outline-approved-pluralsight                                                           Mark whether the course outline has been approved by Pluralsight"
+              "help": "Mark whether the course outline has been approved by Pluralsight"
             },
             {
               "name": "--short-description",
@@ -1303,7 +1309,19 @@
               "name": "--brainstorming-outline-fact-checked",
               "type": "bool",
               "required": false,
-              "help": "Mark brainstorming outline as fact-checked"
+              "help": "Set or clear the brainstorming outline fact-checked flag"
+            },
+            {
+              "name": "--feedback-requested",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the feedback-requested gate flag"
+            },
+            {
+              "name": "--feedback-requested-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
               "name": "--profile",
@@ -1584,6 +1602,13 @@
               "short": "-n"
             },
             {
+              "name": "--clip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Re-parent the demo to this clip record ID",
+              "short": "-c"
+            },
+            {
               "name": "--clip-order",
               "type": "INTEGER",
               "required": false,
@@ -1626,7 +1651,7 @@
               "name": "--action-summary-human-review-complete",
               "type": "bool",
               "required": false,
-              "help": "--no-action-summary-human-review-complete                                               Mark human review of action summary complete"
+              "help": "Mark human review of action summary complete"
             },
             {
               "name": "--environment-prep-checklist",
@@ -1644,13 +1669,13 @@
               "name": "--environment-prep-complete",
               "type": "bool",
               "required": false,
-              "help": "--no-environment-prep-complete                                                          Mark environment prep as complete"
+              "help": "Mark environment prep as complete"
             },
             {
               "name": "--tested-approved",
               "type": "bool",
               "required": false,
-              "help": "--no-tested-approved                                                                    Mark demo as tested and approved"
+              "help": "Mark demo as tested and approved"
             },
             {
               "name": "--recap",
@@ -1669,25 +1694,25 @@
               "name": "--script-review-human",
               "type": "bool",
               "required": false,
-              "help": "--no-script-review-human                                                                Mark script human review as complete"
+              "help": "Mark script human review as complete"
             },
             {
               "name": "--demo-walkthrough-script-created",
               "type": "bool",
               "required": false,
-              "help": "--no-demo-walkthrough-script-created                                                    Mark whether the demo walkthrough automation has been created for this demo"
+              "help": "Mark whether the demo walkthrough automation has been created for this demo"
             },
             {
               "name": "--demo-review-complete",
               "type": "bool",
               "required": false,
-              "help": "--no-demo-review-complete                                                               Mark selected demo build review complete"
+              "help": "Mark selected demo build review complete"
             },
             {
               "name": "--dictation-recorded",
               "type": "bool",
               "required": false,
-              "help": "--no-dictation-recorded                                                                 Mark demo dictation audio as recorded"
+              "help": "Mark demo dictation audio as recorded"
             },
             {
               "name": "--voice-recording-path",
@@ -1699,13 +1724,25 @@
               "name": "--recorded",
               "type": "bool",
               "required": false,
-              "help": "--no-recorded                                                                           Mark demo as recorded"
+              "help": "Mark demo as recorded"
             },
             {
               "name": "--audio-synced",
               "type": "bool",
               "required": false,
-              "help": "--no-audio-synced                                                                       Mark demo narration audio as synced onto the recorded video"
+              "help": "Mark demo narration audio as synced onto the recorded video"
+            },
+            {
+              "name": "--feedback-requested",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the feedback-requested gate flag"
+            },
+            {
+              "name": "--feedback-requested-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
               "name": "--profile",
@@ -1779,6 +1816,309 @@
               "required": false,
               "help": "Show what would be done without exporting",
               "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "feedback": {
+      "help": "Manage feedback records",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a feedback record.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--demo",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked demo record ID",
+              "short": "-D"
+            },
+            {
+              "name": "--slide",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked slide record ID",
+              "short": "-S"
+            },
+            {
+              "name": "--clip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked clip record ID",
+              "short": "-c"
+            },
+            {
+              "name": "--module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked module record ID",
+              "short": "-m"
+            },
+            {
+              "name": "--course",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked course record ID"
+            },
+            {
+              "name": "--feedback",
+              "type": "TEXT",
+              "required": true,
+              "help": "Feedback text (required)",
+              "short": "-f"
+            },
+            {
+              "name": "--patterns-learned",
+              "type": "TEXT",
+              "required": false,
+              "help": "Patterns learned from this feedback",
+              "short": "-p"
+            },
+            {
+              "name": "--timestamp",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp; defaults to the current UTC time when omitted"
+            },
+            {
+              "name": "--processing-status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Processing status (Pending, Proposed, Applied, Declined, Failed, No Action)"
+            },
+            {
+              "name": "--processed-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback was processed"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a feedback record.",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Feedback record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a single feedback record by ID.",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Feedback record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List feedback records.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--demo",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by linked demo record ID (client-side)",
+              "short": "-D"
+            },
+            {
+              "name": "--slide",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by linked slide record ID (client-side)",
+              "short": "-S"
+            },
+            {
+              "name": "--clip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by linked clip record ID (client-side)",
+              "short": "-c"
+            },
+            {
+              "name": "--module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by linked module record ID (client-side)",
+              "short": "-m"
+            },
+            {
+              "name": "--course",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by linked course record ID (client-side)"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., feedback:contains:typo, timestamp:gte:2026-01-01)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of records to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include (supports dot notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update a feedback record.",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Feedback record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--demo",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked demo record ID",
+              "short": "-D"
+            },
+            {
+              "name": "--slide",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked slide record ID",
+              "short": "-S"
+            },
+            {
+              "name": "--clip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked clip record ID",
+              "short": "-c"
+            },
+            {
+              "name": "--module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked module record ID",
+              "short": "-m"
+            },
+            {
+              "name": "--course",
+              "type": "TEXT",
+              "required": false,
+              "help": "Linked course record ID"
+            },
+            {
+              "name": "--feedback",
+              "type": "TEXT",
+              "required": false,
+              "help": "Feedback text",
+              "short": "-f"
+            },
+            {
+              "name": "--patterns-learned",
+              "type": "TEXT",
+              "required": false,
+              "help": "Patterns learned from this feedback",
+              "short": "-p"
+            },
+            {
+              "name": "--timestamp",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp"
+            },
+            {
+              "name": "--processing-status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Processing status (Pending, Proposed, Applied, Declined, Failed, No Action)"
+            },
+            {
+              "name": "--processed-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback was processed"
             },
             {
               "name": "--profile",
@@ -2054,7 +2394,7 @@
             "coursecraft modules update recXXX --order 2 --status \"Complete\"",
             "coursecraft modules update recXXX --brainstorming-outline-file outline.md"
           ],
-          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length, --status/-s. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Use --slides-submitted for Pluralsight slide deck submission tracking.",
+          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length, --status/-s. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content. The Modules table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Modules. Use --slides-submitted for Pluralsight slide deck submission tracking.",
           "arguments": [
             {
               "name": "record_id",
@@ -2119,22 +2459,28 @@
               "help": "Path to file containing brainstorming outline"
             },
             {
-              "name": "--brainstorming-outline-fact-checked",
-              "type": "bool",
-              "required": false,
-              "help": "Mark brainstorming outline as fact-checked"
-            },
-            {
               "name": "--module-review-complete",
               "type": "bool",
               "required": false,
-              "help": "Mark module review as complete"
+              "help": "Set or clear the module review complete flag"
             },
             {
               "name": "--slides-submitted",
               "type": "bool",
               "required": false,
-              "help": "Mark slide deck as submitted for review (Pluralsight only)"
+              "help": "Set or clear the slide deck submitted-for-review flag (Pluralsight only)"
+            },
+            {
+              "name": "--feedback-requested",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the feedback-requested gate flag"
+            },
+            {
+              "name": "--feedback-requested-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
               "name": "--profile",
@@ -2737,13 +3083,13 @@
               "name": "--built",
               "type": "bool",
               "required": false,
-              "help": "--no-built                          Slide built checkbox"
+              "help": "Slide built checkbox"
             },
             {
               "name": "--dictation-recorded",
               "type": "bool",
               "required": false,
-              "help": "--no-dictation-recorded             Mark slide dictation audio as recorded"
+              "help": "Mark slide dictation audio as recorded"
             },
             {
               "name": "--voice-recording-path",
@@ -2755,7 +3101,7 @@
               "name": "--recorded",
               "type": "bool",
               "required": false,
-              "help": "--no-recorded                       Mark slide as recorded"
+              "help": "Mark slide as recorded"
             },
             {
               "name": "--status",
@@ -2769,6 +3115,18 @@
               "required": false,
               "help": "Demo record ID (for demo intro slides)",
               "short": "-d"
+            },
+            {
+              "name": "--feedback-requested",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the feedback-requested gate flag"
+            },
+            {
+              "name": "--feedback-requested-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
               "name": "--profile",
@@ -2857,7 +3215,7 @@
               "name": "--speaker-boost",
               "type": "bool",
               "required": false,
-              "help": "--no-speaker-boost                               ElevenLabs speaker boost"
+              "help": "ElevenLabs speaker boost"
             },
             {
               "name": "--speed",

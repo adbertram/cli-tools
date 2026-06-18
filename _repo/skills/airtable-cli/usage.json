@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when needed.",
-  "discovered_at": "2026-06-13T17:49:51Z",
-  "total_commands": 26,
+  "discovered_at": "2026-06-17T15:44:25Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -237,6 +237,87 @@
               "required": false,
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "bases": {
+      "help": "Discover Airtable bases",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one base by ID or name from the accessible bases list.",
+          "arguments": [
+            {
+              "name": "base_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The base ID (beginning with app) or base name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every base the active Personal Access Token can access.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum bases to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:CourseCraft, name:contains:Course)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }

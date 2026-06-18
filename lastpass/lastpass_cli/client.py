@@ -38,6 +38,7 @@ PLAINTEXT_KEY_PATH = os.path.join(LPASS_DIR, "plaintext_key")
 MASKED_SECRET_VALUE = "********"
 SENSITIVE_ITEM_DETAIL_KEY_MARKERS = (
     "password",
+    "pwd",
     "passphrase",
     "secret",
     "token",

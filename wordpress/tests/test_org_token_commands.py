@@ -99,7 +99,7 @@ def test_org_token_requests_and_saves_token_without_printing_raw_token(runner, m
         "scope": "global",
     }
     assert opened_urls == [
-        "https://public-api.wordpress.com/oauth2/authorize?client_id=client-123&redirect_uri=https%3A%2F%2Flocalhost.example%2Fcallback&response_type=code&blog=example.com"
+        "https://public-api.wordpress.com/oauth2/authorize?client_id=client-123&redirect_uri=https%3A%2F%2Flocalhost.example%2Fcallback&response_type=code&scope=global"
     ]
     assert "raw-token-value" not in result.stdout
     assert "raw-token-value" not in result.stderr

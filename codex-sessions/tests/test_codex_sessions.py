@@ -183,6 +183,36 @@ def write_malformed_rollout(codex_home: Path) -> Path:
     return rollout_path
 
 
+def write_partially_malformed_rollout(codex_home: Path, cwd: str) -> Path:
+    session_dir = codex_home / "sessions" / "2026" / "04" / "22"
+    session_dir.mkdir(parents=True)
+    rollout_path = session_dir / "rollout-2026-04-22T11-00-00-partial-session.jsonl"
+    records = [
+        {
+            "timestamp": "2026-04-22T16:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "partial-session",
+                "timestamp": "2026-04-22T16:00:00.000Z",
+                "cwd": cwd,
+            },
+        },
+        '{"timestamp": "2026-04-22T16:00:01.000Z", "type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "unterminated}',
+        {
+            "timestamp": "2026-04-22T16:00:02.000Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "valid tail"}],
+            },
+        },
+    ]
+    lines = [json.dumps(records[0]), records[1], json.dumps(records[2])]
+    rollout_path.write_text("\n".join(lines) + "\n")
+    return rollout_path
+
+
 def write_minimal_current_rollout(codex_home: Path, cwd: str) -> Path:
     session_dir = codex_home / "sessions" / "2026" / "04" / "23"
     session_dir.mkdir(parents=True)
@@ -500,6 +530,24 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(
                 client.load_errors,
                 [f"{malformed_path}:1 invalid JSON: Expecting value"],
+            )
+
+    def test_indexed_scans_skip_rollouts_with_invalid_middle_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            malformed_path = write_partially_malformed_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            sessions = client.list_sessions(project_path=project_path)
+
+            self.assertEqual(len(sessions), 1)
+            self.assertEqual(sessions[0].id, SESSION_ID)
+            self.assertEqual(len(client.load_errors), 1)
+            self.assertIn(
+                f"{malformed_path}:2 invalid JSON: Unterminated string starting at",
+                client.load_errors[0],
             )
 
     def test_broad_scans_skip_missing_rollout_paths_and_record_load_errors(self):

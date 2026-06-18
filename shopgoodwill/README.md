@@ -91,6 +91,9 @@ shopgoodwill search get 123456789
 shopgoodwill search get 123456789
 ```
 
+When ShopGoodwill enables shipping calculation for a listing, item detail output
+includes a `shippingEstimate` object calculated to ZIP `47725`.
+
 ## Output Formats
 
 All commands support two output formats:

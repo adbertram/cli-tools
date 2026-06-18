@@ -1,7 +1,7 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-06-14T19:30:47Z",
+  "discovered_at": "2026-06-17T20:03:26Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -471,7 +471,7 @@
               "name": "--inline",
               "type": "bool",
               "required": false,
-              "help": "--no-inline          Create the database inline in the parent page",
+              "help": "Create the database inline in the parent page",
               "default": "no-inline"
             },
             {
@@ -1079,7 +1079,7 @@
                   "name": "--archive",
                   "type": "bool",
                   "required": false,
-                  "help": "--restore          Archive or restore the page"
+                  "help": "Archive or restore the page"
                 },
                 {
                   "name": "--profile",
@@ -1287,6 +1287,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Expression for formula type"
+            },
+            {
+              "name": "--relation-database",
+              "type": "TEXT",
+              "required": false,
+              "help": "For relation type: the TARGET's database container ID OR data_source ID. Resolved to the target's data_source_id (API 2025-09-03)"
             },
             {
               "name": "--relation-type",
@@ -1574,6 +1580,12 @@
               "help": "Expression for formula type"
             },
             {
+              "name": "--relation-database",
+              "type": "TEXT",
+              "required": false,
+              "help": "For relation fields: the TARGET's database container ID OR data_source ID. Resolved to the target's data_source_id (API 2025-09-03)"
+            },
+            {
               "name": "--relation-type",
               "type": "TEXT",
               "required": false,
@@ -1796,9 +1808,8 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "Maximum number of blocks to return",
-                  "short": "-l",
-                  "default": "100"
+                  "help": "Maximum number of blocks to return (default: all blocks)",
+                  "short": "-l"
                 },
                 {
                   "name": "--filter",
@@ -1854,7 +1865,7 @@
                   "name": "--checked",
                   "type": "bool",
                   "required": false,
-                  "help": "--unchecked              Set checked state for to_do blocks"
+                  "help": "Set checked state for to_do blocks"
                 },
                 {
                   "name": "--json",
@@ -1874,7 +1885,7 @@
                   "name": "--toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-toggleable          For heading_1/2/3 blocks: turn the toggle arrow on or off"
+                  "help": "For heading_1/2/3 blocks: turn the toggle arrow on or off"
                 },
                 {
                   "name": "--no-nest",
@@ -2505,7 +2516,7 @@
               "name": "--archive",
               "type": "bool",
               "required": false,
-              "help": "--restore          Archive or restore the page"
+              "help": "Archive or restore the page"
             },
             {
               "name": "--profile",

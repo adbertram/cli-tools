@@ -81,7 +81,7 @@ def plugins_list(
 
 @app.command("get")
 def plugins_get(
-    plugin: str = typer.Argument(..., help="Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"),
+    plugin: str = typer.Argument(..., help="Plugin path, slug, textdomain, or exact name from plugins list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ):
@@ -182,9 +182,6 @@ def plugins_upgrade(
     """Upgrade a plugin to the latest version through Jetpack's native updater."""
     try:
         client = get_client()
-        current = client.get_plugin(plugin)
-        print_info(f"Upgrading {current.name} from v{current.version}...")
-
         result = client.upgrade_plugin(plugin)
         print_success(f"Plugin {result.name} upgraded to v{result.version} (status: {result.status})")
         print_json(result)

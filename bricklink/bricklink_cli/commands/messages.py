@@ -158,11 +158,13 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
 
     seen = set()
     conversation = []
+    source_sent_date = _parse_msg_date((source_detail or {}).get("sent_date", (source_detail or {}).get("date", "")))
     root_date = None
     order_id = _extract_order_id(subject)
     messages_scanned = 0
 
-    # 1. Root date detection: API for order-linked threads, inbox non-"Re:" fallback
+    # 1. Root date detection: API for order-linked threads, source-date fallback,
+    #    then inbox non-"Re:" refinement.
     if order_id:
         api_msgs = _cached_api_messages(order_id)
         if api_msgs:
@@ -170,6 +172,8 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
             if oldest_date_str:
                 dt = datetime.fromisoformat(oldest_date_str.replace("Z", "+00:00"))
                 root_date = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    elif source_sent_date != datetime.min:
+        root_date = source_sent_date
 
     def _scan_folder(folder):
         """Scan a folder for messages matching the conversation subject/order."""
@@ -201,8 +205,10 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
                     entry["source"] = "browser"
                     conversation.append(entry)
                     # Detect root date from first non-reply in inbox
-                    if not root_date and folder == "i" and not raw_subject.strip().lower().startswith("re:"):
-                        root_date = _parse_msg_date(detail.get("sent_date", c.get("date", "")))
+                    if folder == "i" and not raw_subject.strip().lower().startswith("re:"):
+                        detected_root_date = _parse_msg_date(detail.get("sent_date", c.get("date", "")))
+                        if detected_root_date != datetime.min:
+                            root_date = detected_root_date
             if root_date:
                 page_oldest = _parse_msg_date(msgs[-1].get("date", ""))
                 if page_oldest <= root_date - timedelta(days=1):

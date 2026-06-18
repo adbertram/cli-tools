@@ -8,12 +8,14 @@
   "syntax": "playwright-cli [-s=<session>] <command> [arguments] [options]",
   "notes": [
     "All commands are flat (single-word or hyphenated). The binary does NOT use grouped subcommands like 'browser open' or 'page snapshot'.",
-    "The category field below mirrors the sections shown in 'playwright-cli --help' and is reference-only — it is NOT a command prefix."
+    "The category field below mirrors the sections shown in 'playwright-cli --help' and is reference-only — it is NOT a command prefix.",
+    "On macOS, keep --session/-s names short. The CLI embeds the session name in a Unix socket path under the system temp directory, and long names can fail with listen EINVAL when the full socket path exceeds the OS limit.",
+    "For secret entry, set PLAYWRIGHT_MCP_SECRETS_FILE to a dotenv file when opening the session, then pass the secret key name as the fill/type text. Do not use run-code with process.env; process is unavailable in the run-code VM."
   ],
   "global_options": [
     {"name": "--help", "type": "TEXT", "required": false, "help": "Print help; optionally pass a command name for command-specific help"},
     {"name": "--version", "type": "bool", "required": false, "help": "Print version"},
-    {"name": "--session", "short": "-s", "type": "TEXT", "required": false, "help": "Target a specific browser session (usage: -s=<session>)"}
+    {"name": "--session", "short": "-s", "type": "TEXT", "required": false, "help": "Target a specific browser session (usage: -s=<session>). On macOS, use a short name to avoid Unix socket path length failures."}
   ],
   "commands": {
     "open": {

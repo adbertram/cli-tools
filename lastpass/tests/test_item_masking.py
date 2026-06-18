@@ -26,6 +26,7 @@ def test_get_item_masks_nested_password_secret_and_email_fields_by_default():
     notes_payload = {
         "email": SYNTHETIC_EMAIL,
         "password": SYNTHETIC_PASSWORD,
+        "pwd": "nested-pwd-value",
         "metadata": {
             "api_secret": SYNTHETIC_SECRET,
         },
@@ -36,6 +37,7 @@ def test_get_item_masks_nested_password_secret_and_email_fields_by_default():
                 "Name: Synthetic Entry",
                 "Password: top-level-password",
                 "password: lower-case-password",
+                "pwd: short-password-alias",
                 f"Notes: {json.dumps(notes_payload)}",
             ]
         )
@@ -46,8 +48,11 @@ def test_get_item_masks_nested_password_secret_and_email_fields_by_default():
 
     assert item["Password"] == MASKED
     assert item["password"] == MASKED
+    assert item["pwd"] == MASKED
     assert "top-level-password" not in serialized
     assert "lower-case-password" not in serialized
+    assert "short-password-alias" not in serialized
+    assert "nested-pwd-value" not in serialized
     assert SYNTHETIC_PASSWORD not in serialized
     assert SYNTHETIC_SECRET not in serialized
     assert SYNTHETIC_EMAIL not in serialized
@@ -57,6 +62,7 @@ def test_get_item_reveals_password_secret_and_email_fields_when_requested():
     notes_payload = {
         "email": SYNTHETIC_EMAIL,
         "password": SYNTHETIC_PASSWORD,
+        "pwd": "nested-pwd-value",
         "metadata": {
             "api_secret": SYNTHETIC_SECRET,
         },
@@ -68,6 +74,7 @@ def test_get_item_reveals_password_secret_and_email_fields_when_requested():
                 "Name: Synthetic Entry",
                 "Password: top-level-password",
                 "password: lower-case-password",
+                "pwd: short-password-alias",
                 f"Notes: {notes_json}",
             ]
         )
@@ -77,4 +84,5 @@ def test_get_item_reveals_password_secret_and_email_fields_when_requested():
 
     assert item["Password"] == "top-level-password"
     assert item["password"] == "lower-case-password"
+    assert item["pwd"] == "short-password-alias"
     assert item["Notes"] == notes_json

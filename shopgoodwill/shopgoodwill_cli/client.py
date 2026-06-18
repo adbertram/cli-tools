@@ -1,5 +1,6 @@
 """ShopGoodwill service client."""
 import base64
+import re
 import urllib.parse
 from typing import Dict, List, Optional
 
@@ -26,6 +27,8 @@ class ShopGoodwillClient:
         "block_size": 16,
     }
     INVALID_AUTH_MESSAGE = "The username or password are incorrect"
+    SHIPPING_DESTINATION_ZIP = "47725"
+    SHIPPING_DESTINATION_COUNTRY = "US"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     def __init__(self, require_auth: bool = True, config=None):
@@ -214,6 +217,52 @@ class ShopGoodwillClient:
             raise ClientError(f"Failed to get item {item_id}: status {response.status_code}")
 
         return response.json()
+
+    def calculate_shipping(self, item: Dict) -> Dict:
+        """
+        Calculate destination-specific shipping for an item.
+
+        ShopGoodwill returns this estimate as an HTML fragment.
+        """
+        shipping_params = {
+            "itemId": item.get("itemId"),
+            "sellerId": item.get("sellerId"),
+            "zipCode": self.SHIPPING_DESTINATION_ZIP,
+            "country": self.SHIPPING_DESTINATION_COUNTRY,
+            "packageWeight": item.get("displayWeight"),
+            "quantity": 1,
+        }
+
+        response = self.session.post(
+            f"{self.API_ROOT}/ItemDetail/CalculateShipping",
+            json=shipping_params,
+        )
+
+        if response.status_code != 200:
+            raise ClientError(
+                f"Failed to calculate shipping for item {item.get('itemId')}: "
+                f"status {response.status_code}"
+            )
+
+        return self._parse_shipping_estimate(response.text)
+
+    def _parse_shipping_estimate(self, html: str) -> Dict:
+        shipping_match = re.search(r"Shipping:.*?\$([0-9]+(?:\.[0-9]{2})?)", html, re.DOTALL)
+        service_match = re.search(r"Shipping:.*?\$[0-9]+(?:\.[0-9]{2})? \(([^)]+)\)", html, re.DOTALL)
+        handling_match = re.search(r"Handling:\s*\$([0-9]+(?:\.[0-9]{2})?)", html)
+        total_match = re.search(r"Total Shipping and Handling:\s*\$([0-9]+(?:\.[0-9]{2})?)", html)
+
+        if not shipping_match or not handling_match or not total_match:
+            raise ClientError(f"Shipping calculation failed: {html}")
+
+        return {
+            "destinationZip": self.SHIPPING_DESTINATION_ZIP,
+            "country": self.SHIPPING_DESTINATION_COUNTRY,
+            "shippingPrice": float(shipping_match.group(1)),
+            "handlingPrice": float(handling_match.group(1)),
+            "total": float(total_match.group(1)),
+            "serviceDescription": service_match.group(1) if service_match else "",
+        }
 
 
 _client: Optional[ShopGoodwillClient] = None

@@ -581,10 +581,21 @@ class MonarchClient:
             end_date=end_date
         ))
 
-    def get_cashflow_summary(self) -> Dict[str, Any]:
-        """Get cashflow summary (income/expense/savings)."""
+    def get_cashflow_summary(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get cashflow summary (income/expense/savings).
+
+        When both start_date and end_date are provided, the summary covers that
+        range. When both are omitted, the SDK defaults to the current month.
+        """
         mm = self._get_mm()
-        return self._query_monarch(mm.get_cashflow_summary())
+        return self._query_monarch(mm.get_cashflow_summary(
+            start_date=start_date,
+            end_date=end_date
+        ))
 
     # ==================== Institution Methods ====================
 

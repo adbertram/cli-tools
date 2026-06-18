@@ -121,6 +121,21 @@ span. Asterisk emphasis (`*text*`) intentionally still allows intraword spans,
 matching CommonMark.
 </principle>
 
+<principle name="Markdown Round-Trip: Code Inside Bold Is Code-Only">
+A `` `code` `` token nested inside a `**bold**` (or `*italic*`/`***bold
+italic***`) span is emitted **code-only** — the code run is never also marked
+bold/italic. Markdown has no syntax for a run that is simultaneously code and
+bold, so a bold+code run used to export as `` **`code`** `` and the adjacent
+bold delimiters collided into `****`, corrupting input like
+`` **Grounding (`clip-slide-plan.1`):** `` into
+`` **Grounding (****`clip-slide-plan.1`****):** ``. This is **fixed**: a label
+such as `` **Grounding (`clip-slide-plan.1`):** `` now survives
+`pages content set --file` → `pages export -f md` (or `pages blocks list -m`)
+with **no `****`**. The surrounding text stays bold; the code token stays code.
+Pass such labels verbatim — no manual escaping or splitting the bold around the
+code is needed.
+</principle>
+
 <principle name="Command Groups">
 - **auth** — Manage authentication (status, login, logout)
 - **database** — Query/manage databases, database pages, templates
@@ -291,6 +306,17 @@ There are three ways to put content inside a toggle:
 **Verification:** In `/Users/adam/Dropbox/GitRepos/cli-tools/notion`, `uv run --extra dev pytest -q` passes. Tests cover local image upload wiring and prove `--dry-run` does not call image upload processing.
 
 **Recurrence Prevention:** Any future Markdown-processing page command must match the append/set behavior for local images and must keep `--dry-run` read-only before making API upload calls.
+
+### 4. `pages blocks list` Truncated at 100 Blocks
+**Symptom:** `notion pages blocks list --page-id PAGE_ID` returned only the first 100 child blocks on pages with more than 100 blocks, with no warning. On page `3825d9c85b2b8074bbe3ed8aa65c9f91` it returned 100 blocks / 14 `heading_2`, while `notion pages get PAGE_ID -b -m` rendered all 16 `heading_2` sections from the same page. `--recursive` was also affected: it still capped the top-level list at 100.
+
+**Cause:** The Notion children endpoint (`GET /v1/blocks/{id}/children`) defaults to `page_size=100` and returns `has_more` + `next_cursor`. The client method `get_block_children_all` already paginates fully when called with `limit=None`, but the `blocks list` command hard-coded `--limit` to a default of `100`, passed that as the fetch limit (non-recursive), AND re-sliced the result with `formatted[:limit]` / `blocks[:limit]` in every output path — so even the recursive run (which fetched all top-level blocks) was re-truncated to 100 before output.
+
+**Fix:** `--limit` now defaults to `None` (return the COMPLETE list). The command fetches with `limit=None` by default (full `has_more`/`next_cursor` pagination via `get_block_children_all`) and applies a client-side cap only when `--limit` is explicitly provided. One code path, no fallback. Related: `pages blocks append --after` now reports only the number of blocks actually inserted (`len(blocks)`) instead of `len(results)`; Notion echoes the entire repositioned tail in the `--after` response, which made the old count overstate (e.g. inserting 3 reported 113). The `--after` path sends a single PATCH and never re-fetches or recreates the existing tail, so no blocks are dropped past position 100.
+
+**Verification:** After the fix on page `3825d9c85b2b8074bbe3ed8aa65c9f91` (read-only), `notion pages blocks list --page-id 3825d9c85b2b8074bbe3ed8aa65c9f91` returns 117 blocks / 16 `heading_2`, and `... -m` emits 16 `## ` headings — matching `notion pages get 3825d9c85b2b8074bbe3ed8aa65c9f91 -b -m`. `--limit 50` correctly caps at 50. On a scratch 111-block page, inserting 3 blocks with `--after` a block at index 105 reported `blocks_created: 3`, grew the page to 114, and lost 0 original blocks. Regression tests in `tests/test_blocks_list_pagination.py` cover multi-page `has_more`/`next_cursor` fetches, the uncapped default, the explicit-limit cap, the recursive path, and the `--after` count.
+
+**Recurrence Prevention:** Any command that lists Notion children must paginate the full `has_more`/`next_cursor` sequence by default and must not impose a hidden default cap on `list` output. `--limit` is an explicit opt-in cap only. Never count `len(results)` from an `--after` append as "created" — Notion returns the full repositioned tail there; the inserted count is `len(input_blocks)`.
 
 <success_criteria>
 - Command executes without error

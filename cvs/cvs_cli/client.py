@@ -1,13 +1,17 @@
 """CVS API client with browser-session JWT authentication."""
 import base64
 import json
+import logging
 import time
 from typing import Any, Dict, List, Optional
 
 import requests
 
 from cli_tools_shared.http_session import BrowserAuthState, BrowserAuthStateError
-from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.exceptions import ClientError, CredentialError
+from cli_tools_shared.output import print_warning
+
+logger = logging.getLogger("cvs_cli.client")
 
 from .browser import CvsBrowser
 from .config import get_config
@@ -17,6 +21,7 @@ from .models.prescription import RefillEligibility
 
 # Experience IDs for CVS mcapi endpoints
 EXPERIENCE_IDS = {
+    "AUTO_REFILL": "5eb2aee9-747e-4d59-883b-9622d58ca6a9",
     "PRESCRIPTIONS": "35d32039-61ac-47fc-9528-035f3dc5ef46",
     "ORDERS": "5f591215-cf0f-474f-8552-039f74515127",
     "PATIENTS": "5d92e709-1f65-4ec3-bd82-52eca8143556",
@@ -53,13 +58,13 @@ class CvsClient:
                 allowed_domains=("cvs.com",),
             )
         except BrowserAuthStateError as exc:
-            raise ClientError("No saved CVS browser session. Run 'cvs auth login' to authenticate.") from exc
+            raise CredentialError("No saved CVS browser session. Run 'cvs auth login' to authenticate.") from exc
 
         for cookie in cookies:
             if cookie.name == "access_token" and cookie.value:
                 return cookie.value
 
-        raise ClientError(
+        raise CredentialError(
             "No access_token cookie found. Run 'cvs auth login' to authenticate."
         )
 
@@ -109,13 +114,14 @@ class CvsClient:
                 self._jwt = self._refresh_jwt()
 
         if self._is_jwt_expired(self._jwt):
-            raise ClientError("Session expired. Run 'cvs auth login' to re-authenticate.")
+            raise CredentialError("Session expired. Run 'cvs auth login' to re-authenticate.")
         return self._jwt
 
     def _make_request(
         self,
         experience_id: str,
         extra_data: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
         refresh_on_unauthorized: bool = True,
     ) -> Dict[str, Any]:
         """Make a POST request to the CVS experience API.
@@ -147,6 +153,8 @@ class CvsClient:
             "x-client-fingerprint-id": self.config.fingerprint,
             "x-experienceid": experience_id,
         }
+        if extra_headers:
+            headers.update(extra_headers)
         cookies = f"access_token={jwt}; token_type=Bearer"
         headers["Cookie"] = cookies
 
@@ -170,11 +178,26 @@ class CvsClient:
             )
 
         if not response.ok:
+            if response.status_code in (401, 403):
+                raise CredentialError(
+                    f"CVS session is not authorized (HTTP {response.status_code}). "
+                    "Run 'cvs auth login' to re-authenticate."
+                )
             raise ClientError(
                 f"CVS API error: HTTP {response.status_code} - {response.text[:500]}"
             )
 
-        result = response.json()
+        try:
+            result = response.json()
+        except ValueError as exc:
+            raise ClientError(
+                "CVS returned an unexpected non-JSON response. If this persists, "
+                "run 'cvs auth login' to re-authenticate."
+            ) from exc
+        if not isinstance(result, dict):
+            raise ClientError(
+                "CVS returned an unexpected response shape (expected an object)."
+            )
 
         # CVS API uses statusCode "0000" for success
         status_code = result.get("statusCode")
@@ -183,6 +206,35 @@ class CvsClient:
             raise ClientError(f"CVS API error {status_code}: {status_msg}")
 
         return result.get("data", result)
+
+    def _get_drug_name(self, rx: Prescription) -> Optional[str]:
+        if rx.drugInfo and rx.drugInfo.drug:
+            return rx.drugInfo.drug.name
+        return None
+
+    def _get_ready_fill_subscription(self, rx: Prescription) -> Optional[Dict[str, Any]]:
+        for subscription in rx.rxSubscriptions or []:
+            if subscription.get("programName") in ("RXC_READY_FILL", "PBM_READY_FILL"):
+                return subscription
+        return None
+
+    def _ready_fill_status(self, rx: Prescription) -> Optional[str]:
+        subscription = self._get_ready_fill_subscription(rx)
+        if not subscription:
+            return None
+        status = subscription.get("status")
+        if status is None:
+            return None
+        return str(status).upper()
+
+    def _ready_fill_lob(self, rx: Prescription, program_name: str) -> str:
+        if program_name == "RXC_READY_FILL" or (rx.idType and "RXC" in rx.idType):
+            return "RETAIL"
+        if program_name == "PBM_READY_FILL" or (rx.idType and "PBM" in rx.idType):
+            return "PBM"
+        raise ClientError(
+            f"Prescription '{rx.id}' has unsupported auto-refill program '{program_name}'."
+        )
 
     # ==================== Prescriptions ====================
 
@@ -194,6 +246,7 @@ class CvsClient:
         """
         data = self._make_request(EXPERIENCE_IDS["PRESCRIPTIONS"])
         prescriptions: List[Prescription] = []
+        skipped = 0
 
         patients = data.get("getLinkedMemberPatients", [])
         for patient in patients:
@@ -205,8 +258,19 @@ class CvsClient:
                 for rx_data in rxs:
                     rx_data["patientFirstName"] = patient_first
                     rx_data["patientLastName"] = patient_last
-                    prescriptions.append(Prescription(**rx_data))
+                    # One malformed record must not abort the whole list — skip
+                    # it (visibly) and keep the rest. Read-only ops should still
+                    # return everything they can.
+                    try:
+                        prescriptions.append(Prescription(**rx_data))
+                    except Exception as exc:
+                        skipped += 1
+                        logger.debug("Skipping malformed prescription record: %s", exc)
 
+        if skipped:
+            print_warning(
+                f"Skipped {skipped} malformed prescription record(s) in the CVS response."
+            )
         return prescriptions
 
     def get_prescription(self, rx_id: str) -> Prescription:
@@ -227,6 +291,106 @@ class CvsClient:
                 return rx
         raise ClientError(f"Prescription '{rx_id}' not found.")
 
+    def set_auto_refill(self, rx_id: str, enabled: bool) -> Dict[str, Any]:
+        """Start or stop CVS ReadyFill auto-refill for a prescription."""
+        before = self.get_prescription(rx_id)
+        subscription = self._get_ready_fill_subscription(before)
+        if not subscription:
+            raise ClientError(f"Prescription '{rx_id}' is not eligible for CVS auto-refill.")
+
+        program_name = str(subscription.get("programName") or "")
+        if enabled and program_name != "RXC_READY_FILL":
+            raise ClientError(
+                "Starting auto-refill for this prescription requires the CVS consent flow. "
+                "Use the CVS site for this prescription."
+            )
+
+        status_before = self._ready_fill_status(before)
+        before_enabled = status_before == "ENROLLED"
+        action = "start" if enabled else "stop"
+        if before_enabled == enabled:
+            return {
+                "id": before.id,
+                "drugName": self._get_drug_name(before),
+                "action": action,
+                "programName": program_name,
+                "statusBefore": status_before,
+                "statusAfter": status_before,
+                "changed": False,
+                "verified": True,
+            }
+
+        auto_renew_status = "NOT_ELIGIBLE"
+        if before.autoRenewStatus == "ELIGIBLE" and enabled:
+            auto_renew_status = "ENROLL"
+        elif not enabled and program_name == "PBM_READY_FILL":
+            auto_renew_status = "UNENROLL"
+
+        payload = {
+            "enrollRxRequest": {
+                "rxDetails": [
+                    {
+                        "autoRenewStatus": auto_renew_status,
+                        "prescriptionLookupKey": before.prescriptionLookupKey,
+                        "program": {
+                            "lob": self._ready_fill_lob(before, program_name),
+                            "programName": program_name,
+                            "status": "ENROLL" if enabled else "UNENROLL",
+                        },
+                    }
+                ]
+            },
+            "profile": {
+                "id": "$id",
+                "idType": "$idType",
+            },
+            "patient": {
+                "id": "$id",
+                "idType": "$idType",
+            },
+        }
+
+        response = self._make_request(
+            EXPERIENCE_IDS["AUTO_REFILL"],
+            payload,
+            extra_headers={"x-channel-type": "WEB"},
+        )
+
+        rx_details = response.get("enrollPrescriptions", {}).get("rxDetails", [])
+        if not rx_details:
+            rx_details = response.get("enrollPrescriptionsWithLookupKey", {}).get(
+                "rxDetails",
+                [],
+            )
+        rx_detail = rx_details[0] if rx_details else {}
+        ready_fill_status = rx_detail.get("readyFillstatus")
+        if (
+            program_name == "RXC_READY_FILL"
+            and ready_fill_status
+            and ready_fill_status != "Success"
+        ):
+            raise ClientError(f"CVS auto-refill update failed: {ready_fill_status}")
+
+        after = self.get_prescription(rx_id)
+        status_after = self._ready_fill_status(after)
+        after_enabled = status_after == "ENROLLED"
+        if after_enabled != enabled:
+            raise ClientError(
+                f"CVS accepted the auto-refill update, but verification still shows "
+                f"status '{status_after}'."
+            )
+
+        return {
+            "id": after.id,
+            "drugName": self._get_drug_name(after),
+            "action": action,
+            "programName": program_name,
+            "statusBefore": status_before,
+            "statusAfter": status_after,
+            "changed": True,
+            "verified": True,
+        }
+
     # ==================== Orders ====================
 
     def list_orders(self) -> List[Order]:
@@ -236,8 +400,20 @@ class CvsClient:
             List of Order models.
         """
         data = self._make_request(EXPERIENCE_IDS["ORDERS"])
-        raw_orders = data.get("retailOrderHistory", [])
-        return [Order(**o) for o in raw_orders]
+        orders: List[Order] = []
+        skipped = 0
+        for o in data.get("retailOrderHistory", []):
+            # Skip a malformed record rather than losing the whole order list.
+            try:
+                orders.append(Order(**o))
+            except Exception as exc:
+                skipped += 1
+                logger.debug("Skipping malformed order record: %s", exc)
+        if skipped:
+            print_warning(
+                f"Skipped {skipped} malformed order record(s) in the CVS response."
+            )
+        return orders
 
     def get_order(self, order_id: str) -> Order:
         """Get a specific order by ID.

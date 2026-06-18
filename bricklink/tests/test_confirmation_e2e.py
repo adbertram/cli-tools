@@ -62,7 +62,7 @@ def test_messages_list_prompts_for_confirmation_code_and_retries(monkeypatch):
     page = _ConfirmationPage()
 
     monkeypatch.setattr(BricklinkRuntimeBrowser, "__init__", _fake_runtime_init)
-    monkeypatch.setattr(BricklinkRuntimeBrowser, "get_page", lambda self, url: page)
+    monkeypatch.setattr(BricklinkRuntimeBrowser, "get_page", lambda self: page)
     monkeypatch.setattr(BricklinkRuntimeBrowser, "close", lambda self: None)
 
     runner = CliRunner()

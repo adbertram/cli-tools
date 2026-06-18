@@ -4,7 +4,7 @@ description: >-
   MANDATORY: Use this skill for ALL Airtable service operations. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute airtable operations using the `airtable` CLI tool.
   CLI interface for Airtable API -- manage records, fields, tables, authentication, cache, and profiles.
-  Triggers: airtable, airtable cli, airtable records, airtable fields, airtable tables, list airtable tables, create airtable table, update airtable table, create airtable field, update airtable field, list airtable records, create airtable record, update airtable, airtable data, query airtable, airtable base
+  Triggers: airtable, airtable cli, airtable records, airtable fields, airtable tables, airtable bases, list airtable bases, list airtable tables, find airtable base id, resolve airtable base by name, create airtable table, update airtable table, create airtable field, update airtable field, list airtable records, create airtable record, update airtable, airtable data, query airtable, airtable base
 ---
 
 <objective>
@@ -19,6 +19,8 @@ airtable <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
+| List bases the token can access | `airtable bases list` |
+| Resolve a base by name to its ID | `airtable bases get CourseCraft` |
 | List records from a table | `airtable records list "Table Name"` |
 | Get a specific record | `airtable records get "Table" recXXX` |
 | Create a record | `airtable records create "Table" "Field=Value"` |
@@ -44,9 +46,24 @@ This file contains complete command syntax, all arguments, all options, and usag
 <principle name="Command Groups">
 - **auth** -- Authentication management (login, logout, status, refresh, test) and nested `auth profiles`
 - **cache** -- Local response cache management
+- **bases** -- Discover the bases the active Personal Access Token can access (list, get). `bases list` follows the Metadata API `offset` pagination to return every accessible base; `bases get <id-or-name>` resolves one base to its id/name/permissionLevel. Airtable exposes no single-base detail endpoint, so `get` resolves from the full listing.
 - **tables** -- Airtable table schema operations (list, create, update). Note: Airtable's public Meta API does not expose a delete-table endpoint.
 - **fields** -- Airtable field schema operations (list, create, update). Airtable's public Web/Meta API does not support deleting fields.
 - **records** -- CRUD operations on Airtable records (list, get, create, update, delete)
+</principle>
+
+<principle name="Confirmation In Non-Interactive Contexts">
+**Destructive commands require `--yes`/`-y` when stdin is not a terminal** (agent
+Bash tools, pipes, CI). Without a TTY they cannot show an interactive
+confirmation prompt, so they fail fast with a clear refusal
+(`Refusing to delete ... Re-run with --yes in non-interactive contexts.`) and a
+non-zero exit instead of hanging. Always pass `--yes` for `records delete` (and
+`auth profiles delete` uses `--force`/`-F`) from any agent or script.
+
+```bash
+airtable records delete "Table" recXXX --yes
+airtable auth profiles delete <name> --force
+```
 </principle>
 </essential_principles>
 

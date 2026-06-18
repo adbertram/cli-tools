@@ -23,6 +23,9 @@ monarch <command-group> <action> [arguments] [options]
 | Already-reviewed transactions | `monarch transactions list --reviewed --days 30 --table` |
 | View budgets this month | `monarch budgets list --month 2024-01 --table` |
 | View cashflow summary | `monarch cashflow summary --table` |
+| Annual/range income + expense totals | `monarch cashflow summary --start 2025-01-01 --end 2025-12-31 --table` |
+| Per-category-group totals for a range | `monarch cashflow list --start 2025-01-01 --end 2025-12-31 --table` |
+| Income group total only | `monarch cashflow list --start 2025-01-01 --end 2025-12-31 --filter "group:Income"` |
 | List categories | `monarch categories list --table` |
 | Sync accounts | `monarch accounts sync --wait` |
 | List transaction rules | `monarch rules list --table` |
@@ -53,6 +56,16 @@ Do not invent rules from a single category change. Only persist what Adam has ex
 <principle name="Usage Reference">
 **MANDATORY: Consult `usage.json` before executing ANY `monarch` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Range / Annual Income & Expense Totals">
+To pull income and expense totals for an arbitrary date range (e.g. a full calendar year), use the cashflow aggregates -- they sum the underlying transactions server-side:
+
+- **PRIMARY -- totals:** `monarch cashflow summary --start <YYYY-MM-DD> --end <YYYY-MM-DD>` returns `sumIncome`, `sumExpense`, `savings`, and `savingsRate` for the range. With no dates it summarizes the current month.
+- **PRIMARY -- per-group breakdown:** `monarch cashflow list --start <d> --end <d>` returns one row per category group with `id`, `group`, and `sum`. Add `--filter "group:Income"` to isolate the Income group total (income groups are positive; expense groups are negative).
+- **FALLBACK / cross-check:** sum `monarch transactions list --category <id> --start <d> --end <d> --limit 5000` across the Income-group categories (Paychecks, Interest, Business Income, Other Income). Use this only to validate the cashflow figure; the cashflow aggregates are the primary source.
+
+**Caveat (self-employed):** the "Business Income" category is gross business deposits, not Schedule C net income. Do not treat the cashflow income total as taxable/net income for a self-employed user -- business expenses are tracked separately and are not netted out here.
 </principle>
 
 <principle name="Command Groups">

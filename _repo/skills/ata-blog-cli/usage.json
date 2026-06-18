@@ -1,8 +1,8 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-06-10T17:17:12Z",
-  "total_commands": 69,
+  "discovered_at": "2026-06-17T15:13:34Z",
+  "total_commands": 71,
   "global_options": [
     {
       "name": "--version",
@@ -1296,7 +1296,7 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "--no-all             Disable ALL ads (default)",
+              "help": "Disable ALL ads (default)",
               "default": "all"
             },
             {
@@ -1355,7 +1355,7 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "--no-all          Enable ALL ads (default)",
+              "help": "Enable ALL ads (default)",
               "default": "all"
             },
             {
@@ -1918,6 +1918,25 @@
         }
       ],
       "commands": {
+        "health-report": {
+          "help": "Emit a structured WordPress maintenance health report.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "plugins": {
           "help": "Manage WordPress plugins",
           "usage_instructions": "Use `ata-blog wordpress-admin plugins` to access this command group. Run `--help` on a subcommand for details.",
@@ -1992,7 +2011,7 @@
                   "name": "plugin",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Plugin identifier"
+                  "help": "Plugin path, slug, textdomain, or exact name from plugins list"
                 }
               ],
               "options": [
@@ -2114,6 +2133,31 @@
               ]
             }
           }
+        },
+        "security-scan": {
+          "help": "Scan installed plugins and themes for known vulnerabilities.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--active-only",
+              "type": "bool",
+              "required": false,
+              "help": "Scan only active plugins plus all themes"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display affected components as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
@@ -2248,6 +2292,20 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw Gutenberg blocks instead of rendered HTML",
+              "short": "-r"
             },
             {
               "name": "--profile",
@@ -2453,6 +2511,20 @@
               "short": "-t"
             },
             {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw Gutenberg blocks instead of rendered HTML",
+              "short": "-r"
+            },
+            {
               "name": "--include-ads",
               "type": "bool",
               "required": false,
@@ -2656,10 +2728,16 @@
               "name": "post_id",
               "type": "INTEGER",
               "required": true,
-              "help": ""
+              "help": "Post ID"
             }
           ],
           "options": [
+            {
+              "name": "--featured-media",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Featured image media ID"
+            },
             {
               "name": "--profile",
               "type": "TEXT",

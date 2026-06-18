@@ -54,6 +54,46 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **admin** — WordPress admin maintenance, including plugin list/get/activate/deactivate/delete/install/upgrade
 - **org** — WordPress.com OAuth token commands used by Jetpack plugin updates
 </principle>
+
+<principle name="Ad-Hoc Internal Imports">
+If a diagnostic task must import WordPress CLI internals directly, use the live
+`wordpress` launcher shebang interpreter and the actual source module paths.
+There is no `wordpress_cli.auth` module; auth commands are mounted from shared
+CLI tooling, and the WordPress API client factory lives in `wordpress_cli.client`.
+
+```bash
+launcher="$(command -v wordpress)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+from wordpress_cli.client import get_client
+
+client = get_client()
+PY
+```
+</principle>
+<principle name="ACF Options Writes">
+ACF options can be read from the site's ACF to REST API endpoint, for example
+`GET /wp-json/acf/v3/options/options/site_ad_settings`, but do not use that
+endpoint for ATA sitewide option writes. On the ATA Blog, ACF to REST API 3.3.4
+advertises editable options routes, but authenticated administrator no-op POST,
+PUT, and PATCH probes to `/acf/v3/options/options/site_ad_settings`,
+`/acf/v3/options/options/site_ad_settings_logo`, `/acf/v3/options/option`, and
+`/acf/v3/options/options` all return `500 Cannot update item`, including the
+documented `fields[...]` body shape. Treat this as an unavailable REST write
+capability, not a payload-shape typo.
+
+For ATA sitewide ACF option changes, use a server-side WordPress execution path
+that loads ACF, such as WP-CLI on the WordPress host, and update the ACF option
+fields with `update_field(..., 'option')` after backing up the REST GET response.
+Example method for the sitewide ad settings:
+
+```bash
+wp eval 'update_field("site_ad_settings_logo", 26999, "option"); update_field("site_ad_settings_link", "https://specopssoft.com/product/specops-password-auditor/?utm_source=adamtheautomator&utm_medium=referral&utm_campaign=adamtheautomator_referral_na&utm_content=display", "option"); update_field("site_ad_settings_text", "<p>Audit your Active Directory for weak passwords and risky accounts. <strong><a href=\"https://specopssoft.com/product/specops-password-auditor/?utm_source=adamtheautomator&amp;utm_medium=referral&amp;utm_campaign=adamtheautomator_referral_na&amp;utm_content=display\">Run your free Specops scan</a> now!</strong></p>\n", "option");'
+```
+
+Preserve valid HTML and use `&amp;` inside HTML attributes when updating the copy
+field. Verify with `GET /wp-json/acf/v3/options/options/site_ad_settings`.
+</principle>
 </essential_principles>
 
 <reference_index>

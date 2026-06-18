@@ -22,6 +22,7 @@ ata-blog <command-group> <action> [arguments] [options]
 | List Notion pages | `ata-blog notion-page list` |
 | Publish Notion page to WordPress | `ata-blog notion-page publish <page_id>` |
 | List WordPress posts | `ata-blog wordpress-post list` |
+| Get WordPress post fields | `ata-blog wordpress-post get --properties id,title,slug,link,status,modified,content <post_id>` |
 | List WordPress pages | `ata-blog wordpress-page list --table` |
 | Get page (raw HTML) | `ata-blog wordpress-page get <page_id> --raw` |
 | Update page content | `ata-blog wordpress-page update <page_id> --content-file page.html` |
@@ -65,6 +66,17 @@ Incompatible with `--table` (JSON only). Scan takes ~20-60s per post depending o
 <principle name="Usage Reference">
 **MANDATORY: Consult `usage.json` before executing ANY `ata-blog` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="WordPress Passthrough Constraints">
+`ata-blog wordpress-*` commands wrap the repo-owned `wordpress` CLI. For ATA
+sitewide ACF option writes, do not use the ACF REST options endpoints when they
+return `500 Cannot update item`; follow the `wordpress-cli` skill's ACF options
+write guidance and use a server-side WordPress execution path instead.
+
+If a diagnostic task must import WordPress CLI internals, there is no
+`wordpress_cli.auth` module. Use the live `wordpress` launcher shebang
+interpreter and the actual module documented by the `wordpress-cli` skill.
 </principle>
 
 <principle name="Command Groups">

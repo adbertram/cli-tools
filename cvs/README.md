@@ -1,138 +1,110 @@
-# Cvs CLI
+# cvs CLI
 
 ## DESCRIPTION
 
-The `cvs` CLI provides a command-line interface for Cvs API.
-
-Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
+The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands.
 
 ## Installation
 
-```bash
-cd cvs
-pip install -e .
-```
+Installed as an isolated uv tool; the `cvs` command is on your PATH.
 
-After installation, the `cvs` command will be available in your terminal.
-
-## Quick Start
+## Authentication
 
 ```bash
-# Authenticate with Cvs
+# Log in. Opens a NORMAL Chrome window (no automation attached, so CVS's bot
+# detection does not block it). Log in by hand — finish any OTP/CAPTCHA — until
+# your account/prescriptions page is visible, then return to the terminal and
+# press Enter to capture the session.
 cvs auth login
 
-# List items
-cvs items list
+# Check auth status (performs a live round-trip — reflects ground truth, not
+# just on-disk state). Exit 0 if authenticated, 2 if not.
+cvs auth status
+cvs auth status --table
 
-# Get a specific item
-cvs items get ITEM_ID
+# Verify the session can actually reach the CVS API.
+cvs auth test
+
+# Clear the stored session and credentials.
+cvs auth logout
+```
+
+Do not pass `--force` for a routine re-login: a plain `cvs auth login` re-uses
+the existing profile (preserving the device-trust cookies that help you pass
+CVS's risk check) and re-opens the browser automatically when the saved session
+is no longer valid.
+
+### Profiles
+
+```bash
+cvs auth profiles list            # list profiles (--table, --filter, --limit)
+cvs auth profiles get default     # show one profile
+cvs auth profiles create NAME     # new profile
+cvs auth profiles select NAME     # set the active profile
+cvs auth profiles delete NAME [--force]
 ```
 
 ## Commands
 
-### Authentication
+### Prescriptions
 
 ```bash
-# Login with API key
-cvs auth login
-cvs auth login --api-key YOUR_API_KEY
-
-# Check authentication status
-cvs auth status
-cvs auth status
-
-# Clear stored credentials
-cvs auth logout
+cvs prescriptions list                              # JSON
+cvs prescriptions list --table                      # table
+cvs prescriptions list --limit 10
+cvs prescriptions list --filter isRefillable:eq:true
+cvs prescriptions list --properties id,drugInfo.drug.name
+cvs prescriptions get RX_ID
 ```
 
-### Items
+### Orders
 
 ```bash
-# List all items (JSON output)
-cvs items list
+cvs orders list [--table] [--limit N] [--filter F] [--properties P]
+cvs orders get ORDER_ID
+```
 
-# List items with table format
-cvs items list
+### Refills
 
-# Limit results
-cvs items list --limit 10
+```bash
+cvs refills check [--table] [--limit N] [--filter F] [--properties P]
+```
 
-# Get a specific item
-cvs items get ITEM_ID
-cvs items get ITEM_ID
+### Auto Refills
+
+```bash
+cvs auto-refills start RX_ID --yes
+cvs auto-refills stop RX_ID --yes
 ```
 
 ### Cache
 
 ```bash
-# Clear cached data
-cvs cache clear
-
-# Show cache status
-cvs cache status
-```
-
-### Profiles
-
-```bash
-# List all profiles
-cvs auth profiles list
-
-# Select active profile
-cvs auth profiles select PROFILE_NAME
-
-# Create a new profile
-cvs auth profiles create PROFILE_NAME
-
-# Delete a profile
-cvs auth profiles delete PROFILE_NAME
-```
-
-## Output Formats
-
-All commands support two output formats:
-
-- **JSON** (default): Machine-readable output for scripting and piping
-
-### JSON Output Example
-
-```bash
-cvs items list --limit 2
-```
-
-### Table Output Example
-
-```bash
-cvs items list --limit 5
+cvs cache clear     # remove cached responses
 ```
 
 ## Options Reference
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--limit` | `-l` | Maximum number of results (default: 50) |
-| `--offset` | `-o` | Offset for pagination |
-| `--version` | `-v` | Show version and exit |
+| Option | Short | Applies to | Description |
+|--------|-------|------------|-------------|
+| `--table` | `-t` | list/get/status | Human-readable table instead of JSON |
+| `--limit` | `-l` | list/check | Max results (`0`/negative = no limit) |
+| `--filter` | `-f` | list/check | `field:op:value` (e.g. `isRefillable:eq:true`, dotted paths supported) |
+| `--properties` | `-p` | list/check | Comma-separated fields to include |
+| `--no-cache` | | global | Bypass the response cache |
+| `--version` | `-v` | global | Show version and exit |
 
-## Configuration
+## Output
 
-Authentication profile files live under `~/.local/share/cli-tools/cvs/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/cvs/.env`:
+- **JSON** (default): machine-readable, pipe to `jq`.
+- **Table** (`--table`): human-readable.
+
+Malformed records in a CVS response are skipped (with a warning on stderr) so a
+single bad record never aborts an entire `list`.
 
 ```bash
-# API Key
-CVS_API_KEY=your_api_key
-
-# Or OAuth credentials
-CVS_CLIENT_ID=your_client_id
-CVS_CLIENT_SECRET=your_client_secret
-
-# OAuth tokens (managed automatically after login)
-CVS_ACCESS_TOKEN=<access_token>
-CVS_REFRESH_TOKEN=<refresh_token>
-CVS_TOKEN_EXPIRES_AT=<timestamp>
-
-# Optional: API base URL
-CVS_BASE_URL=https://www.cvs.com
+cvs prescriptions list | jq '.[] | {id, drug: .drugInfo.drug.name}'
+cvs refills check --table
 ```
 
 ## Exit Codes
@@ -140,123 +112,14 @@ CVS_BASE_URL=https://www.cvs.com
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error |
-| 2 | Authentication/credential error |
-| 130 | User interrupted (Ctrl+C) |
+| 1 | General error (e.g. not found, unexpected response) |
+| 2 | Authentication/credential error — run `cvs auth login` |
+| 130 | Interrupted (Ctrl+C) |
 
-## Examples
+## Notes
 
-### List Items and Filter with jq
-
-```bash
-cvs items list | jq '.items[].id'
-```
-
-### Export Items to JSON File
-
-```bash
-cvs items list --limit 200 > items.json
-```
-
-## Models
-
-This CLI uses Pydantic models for type-safe data handling. All commands return strongly-typed models.
-
-### Available Models
-
-| Model | Description | Required Fields |
-|-------|-------------|-----------------|
-| `Item` | Base item for list commands | `id`, `name` |
-| `ItemDetail` | Extended item for get commands | `id`, `name` |
-
-### Model Architecture
-
-```
-models/
-├── __init__.py      # Exports all models
-├── base.py          # CLIModel base class
-└── item.py          # Item, ItemDetail models
-```
-
-### Creating Custom Models
-
-1. Define your model in `models/`:
-
-```python
-from .base import CLIModel
-from typing import Optional
-from enum import Enum
-
-class MyStatus(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-
-class MyItem(CLIModel):
-    # Required fields - no default value
-    id: str
-    name: str
-
-    # Optional fields with defaults
-    status: MyStatus = MyStatus.ACTIVE
-    description: Optional[str] = None
-```
-
-2. Export from `models/__init__.py`
-3. Use factory function in `client.py` to return models
-
-### Read-Only Fields
-
-Pydantic supports read-only fields natively using `Field()` parameters:
-
-| Pattern | Effect |
-|---------|--------|
-| `Field(frozen=True)` | Immutable after model creation (raises error on assignment) |
-| `Field(exclude=True)` | Excluded from `model_dump()` output |
-| `Field(init=False)` | Excluded from `__init__` (requires default value) |
-
-```python
-from pydantic import Field
-from .base import CLIModel
-from typing import Optional
-
-class Item(CLIModel):
-    # Read-only: server-assigned, cannot be changed after creation
-    id: str = Field(frozen=True)
-
-    # Regular writable field
-    name: str
-
-    # Read-only timestamps: server-assigned, immutable
-    created_at: Optional[str] = Field(default=None, frozen=True)
-    updated_at: Optional[str] = Field(default=None, frozen=True)
-
-# Separate model for create payloads (no read-only fields)
-class ItemCreate(CLIModel):
-    name: str
-    description: Optional[str] = None
-```
-
-### Model Validation
-
-Models enforce required fields at runtime:
-
-```python
-# This will raise ValidationError - missing required 'name'
-item = Item(id="123")
-
-# This works - all required fields provided
-item = Item(id="123", name="My Item")
-```
-
-## Requirements
-
-- Python 3.9+
-- Dependencies (installed automatically):
-  - typer
-  - python-dotenv
-  - requests
-  - pydantic
-
-## License
-
-MIT
+- Read-only commands open a headless browser to read the live session, then call
+  the CVS experience API. `auth login` is the only command that opens a visible
+  browser.
+- Credentials/session live under
+  `~/.local/share/cli-tools/cvs/authentication_profiles/<profile>/`.

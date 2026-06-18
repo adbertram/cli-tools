@@ -16,6 +16,7 @@ from .config import Config
 
 WPCOM_OAUTH_AUTH_URL = "https://public-api.wordpress.com/oauth2/authorize"
 WPCOM_OAUTH_TOKEN_URL = "https://public-api.wordpress.com/oauth2/token"
+WPCOM_OAUTH_SCOPE = "global"
 WPCOM_SAVE_CREDENTIAL_COMMAND = (
     "wordpress org token save-credential "
     "--client-id ... --client-secret ... --site ... --redirect-uri ..."
@@ -127,7 +128,7 @@ def build_wpcom_authorization_url(config: Config) -> str:
         "client_id": config.wpcom_client_id,
         "redirect_uri": config.wpcom_redirect_uri,
         "response_type": "code",
-        "blog": config.wpcom_site,
+        "scope": WPCOM_OAUTH_SCOPE,
     }
     return f"{WPCOM_OAUTH_AUTH_URL}?{urlencode(params)}"
 

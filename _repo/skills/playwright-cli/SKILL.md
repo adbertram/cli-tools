@@ -54,11 +54,14 @@ The core interaction pattern for element-based commands:
 2. **Interact** — Use the REF in an interaction command: `playwright-cli click REF`
 
 The following commands require a REF from a prior snapshot: `click`, `dblclick`, `fill`, `hover`, `drag` (two refs), `select`, `check`, `uncheck`, and optionally `screenshot`/`eval`. Always snapshot before interacting, and re-snapshot after any DOM-changing action — stale refs are invalid. After any submit or navigation, inspect the new snapshot and continue from the live page state; do not assume the next page or step.
+
+Interaction commands can report a markdown `### Error` block after the browser has already completed part of the action, such as a submit click that times out while the page still navigates. Treat `### Error` in stdout as an action error, then verify the final page state with `snapshot`, URL, or title before deciding whether the workflow can continue from the new page.
 </principle>
 
 <principle name="Session Management">
 - **Default session**: Commands operate on the most recent browser session automatically.
 - **Named sessions**: Use `-s=<session_name>` global option to target a specific session.
+- **Keep session names short on macOS**: The CLI embeds the session name directly in a Unix socket path under the system temp directory. Long names can exceed macOS socket path limits and fail with `listen EINVAL`. Use short lowercase names such as `rcenv`, `impact`, or `bf` instead of descriptive names like `codex-run-code-env-test`.
 - **List sessions**: `playwright-cli list` (add `--all` to include sessions from all workspaces).
 - **Multiple sessions**: Open multiple browsers with `playwright-cli open`, target each with `-s=<name>`.
 - **Cleanup**: `playwright-cli close-all`, or `playwright-cli kill-all` for stale/zombie processes.
@@ -67,6 +70,7 @@ The following commands require a REF from a prior snapshot: `click`, `dblclick`,
 <principle name="fill vs type">
 - `fill REF "text"` — Replaces existing content instantly (like clearing + pasting). Requires a REF. Use for most form fields.
 - `type "text"` — Types character by character into the currently focused element. **Takes only text, no REF.** Focus the target first (e.g., `click REF`) before `type`. Use when the field has autocomplete, live search, or key-by-key event handlers. Add `--submit` to press Enter after typing.
+- For password/API-key/token fields, do not pass the real secret value as the `fill`/`type` text and do not embed it in `run-code`; command output includes the generated Playwright code. Instead, open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` pointing to a dotenv file, then pass the secret key name to `fill` or `type`, e.g. `playwright-cli -s=pp fill REF PAYPAL_PASS`. The CLI fills the secret value and redacts it from output as `<secret>PAYPAL_PASS</secret>`.
 - If `click REF` on a visible submit control is blocked by an overlay or intercepted pointer events, use keyboard submission from the focused field, such as `playwright-cli press Enter` or `playwright-cli fill REF "text" --submit`, before reaching for raw DOM submission.
 </principle>
 
@@ -118,7 +122,7 @@ There are **no** generic `--table`, `--limit`, `--filter`, `--properties`, or `-
 <principle name="Verify Form Mutations">
 `run-code` expects a JavaScript function/callable expression invoked with the `page` object. Do not pass top-level statements such as `await page.title();` or `const title = await page.title();`; use `async (page) => { ... }` for multi-statement snippets. Runtime syntax errors can print a markdown `### Error` block while the process still exits `0`, so inspect stdout for `### Error` before treating a `run-code` result as successful.
 
-Do not assume Node globals are available in `run-code`. In this environment, `require(...)` fails with `ReferenceError: require is not defined`, and dynamic `import(...)` can fail with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`. For local CLI lookups or secrets, retrieve values outside `run-code`, redirect command output when needed, and use normal snapshot-ref commands.
+Do not assume Node globals are available in `run-code`. In this environment, `process` is `undefined`, `require(...)` fails with `ReferenceError: require is not defined`, and dynamic `import(...)` can fail with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`. For secrets, do not use `process.env` in `run-code`; open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` and use normal snapshot-ref `fill`/`type` commands with the secret key name.
 
 After dropdown changes, verify the live DOM value with `playwright-cli eval`. If `playwright-cli select REF VALUE` reports success but the selected value is still empty, set the element value with `eval` and dispatch a bubbling `change` event, then verify again.
 </principle>
@@ -137,5 +141,5 @@ For payment or credential flows, minimize exploratory commands once sensitive pa
 - Flat command name used (verified against `usage.json` or `playwright-cli --help <cmd>`).
 - Snapshot taken before any element-ref interaction command.
 - `-s=<session>` used when multiple sessions exist.
-- Command executes without error.
+- Command stdout inspected for `### Error`; when present, final page state is verified before continuing.
 </success_criteria>

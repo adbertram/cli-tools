@@ -1657,17 +1657,25 @@ def content_replace_section(
             )
             raise typer.Exit(1)
 
-        # Step 2: Delete old section blocks (parallel for speed)
+        # Step 2: Delete old section blocks (parallel for speed).
+        #
+        # Use the idempotent delete: archiving a top-level block auto-archives
+        # its descendants, so a parallel batch that also targets one of those
+        # descendants would otherwise get a 400 "Can't edit block that is
+        # archived" AFTER the section has already been swapped -- making a
+        # successful replace exit non-zero (and skip the caller's verify).
+        # delete_block_if_present treats that already-archived case as
+        # already-gone (the desired end state) while still raising on every
+        # other error, so genuine failures still fail fast.
         typer.echo(f"Deleting {len(block_ids_to_delete)} old block(s)...", err=True)
 
-        def delete_block(block_id: str) -> bool:
-            client.delete_block(block_id)
-            return True
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {executor.submit(delete_block, bid): bid for bid in block_ids_to_delete}
+            futures = {
+                executor.submit(client.delete_block_if_present, bid): bid
+                for bid in block_ids_to_delete
+            }
             for future in concurrent.futures.as_completed(futures):
-                future.result()  # Raise on failure
+                future.result()  # Raise on any non-already-archived failure
 
         print_success(f"Replaced section '{target_text}' with {created_count} new block(s)")
         print_json({
@@ -1840,9 +1848,14 @@ def _nest_section_under_heading(client, heading_block_id: str, progress_callback
             f"Deleting {len(section_block_ids)} original sibling block(s)...",
         )
 
+    # Idempotent delete: these top-level siblings can have children that Notion
+    # auto-archives when their parent is archived, so a parallel batch that also
+    # targets a descendant must treat its already-archived 400 as already-gone
+    # rather than aborting after the re-parent already succeeded. Every other
+    # error still raises (fail-fast).
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
-            executor.submit(client.delete_block, bid): bid
+            executor.submit(client.delete_block_if_present, bid): bid
             for bid in section_block_ids
         }
         for future in concurrent.futures.as_completed(futures):
@@ -1923,11 +1936,11 @@ def blocks_list(
         "-m",
         help="Output blocks as markdown",
     ),
-    limit: int = typer.Option(
-        100,
+    limit: Optional[int] = typer.Option(
+        None,
         "--limit",
         "-l",
-        help="Maximum number of blocks to return",
+        help="Maximum number of blocks to return (default: all blocks)",
     ),
     filter: Optional[List[str]] = typer.Option(
         None,
@@ -1944,14 +1957,22 @@ def blocks_list(
     """
     List blocks (children) of a page or block.
 
+    Returns the complete child-block list by default, paginating through every
+    page of the Notion children endpoint (has_more/next_cursor). Pass --limit to
+    cap the result; without it, all blocks are returned.
+
     Examples:
         notion pages blocks list --page-id PAGE_ID
         notion pages blocks list --page-id PAGE_ID --table
         notion pages blocks list --page-id PAGE_ID --recursive
         notion pages blocks list --page-id PAGE_ID --markdown
+        notion pages blocks list --page-id PAGE_ID --limit 50
     """
     try:
         client = get_client()
+        # Default (limit=None) fetches the COMPLETE child list via full
+        # has_more/next_cursor pagination. Only an explicit --limit caps the
+        # fetch, and recursive runs always fetch every top-level block.
         fetch_limit = None if recursive else limit
         blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
 
@@ -1966,8 +1987,9 @@ def blocks_list(
         if filter:
             formatted = apply_filters(formatted, filter)
 
-        # Apply client-side limit
-        formatted = formatted[:limit]
+        # Apply client-side limit only when the caller asked for one
+        if limit is not None:
+            formatted = formatted[:limit]
 
         # Filter to requested properties if specified
         if properties:
@@ -1979,8 +2001,9 @@ def blocks_list(
             formatted = filtered_blocks
 
         if markdown:
-            # For markdown, we need the original blocks structure, so apply filters before formatting
-            markdown_content = blocks_to_markdown(blocks[:limit])
+            # For markdown, we need the original blocks structure
+            markdown_blocks = blocks if limit is None else blocks[:limit]
+            markdown_content = blocks_to_markdown(markdown_blocks)
             typer.echo(markdown_content)
             return
 
@@ -2273,30 +2296,51 @@ def blocks_delete(
                 raise typer.Exit(0)
 
         deleted_count = 0
+        already_gone_count = 0
 
-        # Delete children in parallel if recursive
+        # Delete children in parallel if recursive.
+        #
+        # Use the idempotent delete: archiving a parent block auto-archives its
+        # descendants, so a parallel batch that also targets one of those
+        # descendants would otherwise get a 400 "Can't edit block that is
+        # archived". delete_block_if_present treats that one already-archived
+        # case as already-gone (the desired end state) while still raising on
+        # EVERY other error (auth, not-found, transport, any non-archived 400).
+        # The result iterator is consumed with list(), so any such error
+        # propagates out of the executor and is reported by the outer
+        # `except Exception as e: handle_error(e)` with a non-zero exit -- a
+        # genuine child-delete failure is never silently dropped.
         if recursive and children_ids:
-            # Delete in reverse order (deepest first) to avoid parent issues
-            # But since we're deleting the parent anyway, we can delete in parallel
-            def delete_child(child_id: str) -> bool:
-                try:
-                    client.delete_block(child_id)
-                    return True
-                except Exception:
-                    return False
-
             with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                results = list(executor.map(delete_child, children_ids))
-                deleted_count = sum(1 for r in results if r)
+                results = list(
+                    executor.map(client.delete_block_if_present, children_ids)
+                )
 
-            typer.echo(f"Deleted {deleted_count} child block(s).", err=True)
+            # results[i] is True if this run archived the child, False if it was
+            # already gone (cascade). Count both truthfully -- the total still
+            # accounts for every requested child, with no hidden failures.
+            deleted_count = sum(1 for archived in results if archived)
+            already_gone_count = len(results) - deleted_count
+
+            if already_gone_count:
+                typer.echo(
+                    f"Deleted {deleted_count} child block(s) "
+                    f"({already_gone_count} already gone).",
+                    err=True,
+                )
+            else:
+                typer.echo(f"Deleted {deleted_count} child block(s).", err=True)
 
         # Delete the main block
         deleted_block = client.delete_block(block_id)
 
         print_json(format_block_for_display(deleted_block))
-        if recursive and deleted_count > 0:
-            print_success(f"Block {block_id} and {deleted_count} children deleted successfully.")
+        if recursive and children_ids:
+            print_success(
+                f"Block {block_id} and {len(children_ids)} child block(s) deleted "
+                f"successfully ({deleted_count} archived this run, "
+                f"{already_gone_count} already gone)."
+            )
         else:
             print_success(f"Block {block_id} deleted successfully.")
 
@@ -2389,15 +2433,18 @@ def blocks_append(
         if len(blocks) > 100:
             typer.echo(f"Content has {len(blocks)} blocks, uploading...", err=True)
 
-        if after:
-            # Use direct append with 'after' positioning
-            result = client.append_block_children(block_id, blocks, after=after)
-            created_count = len(result.get("results", []))
-        else:
-            # Append blocks using nesting-aware method (handles Notion's 2-level nesting limit)
-            created_count, _ = client._upload_blocks_with_nesting(
-                block_id, blocks, progress_callback=nesting_progress_cb
-            )
+        # One upload path for both positioned (--after) and plain appends.
+        # _upload_blocks_with_nesting chunks past Notion's 100-block-per-call
+        # limit, handles arbitrary nesting depth, threads `after` into only the
+        # first chunk to position the insertion, and returns the true count of
+        # blocks created (top-level + descendants). It never re-fetches or
+        # recreates the existing tail, so an --after insert past position 100
+        # cannot drop blocks. (The raw single-call append returns Notion's full
+        # repositioned tail in `results`, which would both overcount and cap at
+        # 100 -- avoided by routing through the chunked, nesting-aware uploader.)
+        created_count, _ = client._upload_blocks_with_nesting(
+            block_id, blocks, progress_callback=nesting_progress_cb, after=after
+        )
 
         print_success(f"Appended {created_count} block(s) to {block_id}")
         print_json({"blocks_created": created_count, "parent_id": block_id})

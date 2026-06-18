@@ -16,6 +16,11 @@ dependencies = [
     "cli-tools-shared",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 bricklink = "bricklink_cli.main:main"
 

@@ -63,6 +63,13 @@ class FakeClient:
     def delete_block(self, block_id):
         self.deleted.append(block_id)
 
+    def delete_block_if_present(self, block_id):
+        # Mirror the real client: idempotent delete delegates to delete_block.
+        # OrderRecordingClient overrides delete_block, so its event recording
+        # still fires through this path.
+        self.delete_block(block_id)
+        return True
+
     def _upload_blocks_with_nesting(self, parent_id, blocks, progress_callback=None, after=None):
         self.uploads.append(
             {
@@ -320,6 +327,144 @@ def test_replace_section_normalizes_unsupported_code_language_before_any_delete(
     assert delete_indexes, "old section blocks should have been deleted"
     assert insert_idx < min(delete_indexes)
     assert sorted(client.deleted) == ["first-body", "first-heading"]
+
+
+class _FakeResponse:
+    """Minimal stand-in for requests.Response for _make_request unit tests."""
+
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = "x"  # non-empty so _make_request parses json()
+        self.headers = {}
+
+    @property
+    def ok(self):
+        return 200 <= self.status_code < 300
+
+    def json(self):
+        return self._payload
+
+
+def _make_client():
+    client = NotionClient.__new__(NotionClient)
+    client.base_url = "https://api.notion.com/v1"
+    client.headers = {}
+    client.max_retries = 0  # no retry loop for these unit tests
+    client.base_delay = 0
+    client.max_delay = 0
+    client.jitter = 0
+    return client
+
+
+def test_make_request_raises_block_already_archived_on_400(monkeypatch):
+    """The exact 400 'Can't edit block that is archived' maps to the subclass."""
+    from notion_cli import client as client_mod
+
+    client = _make_client()
+    response = _FakeResponse(
+        400,
+        {
+            "object": "error",
+            "status": 400,
+            "code": "validation_error",
+            "message": "Can't edit block that is archived. You must unarchive the block before editing.",
+        },
+    )
+    monkeypatch.setattr(client_mod.requests, "request", lambda **kwargs: response)
+
+    with pytest.raises(client_mod.BlockAlreadyArchivedError):
+        client._make_request("DELETE", "/blocks/abc")
+
+
+def test_make_request_other_400_stays_generic_client_error(monkeypatch):
+    """A different 400 is NOT swallowed as already-archived (fail-fast preserved)."""
+    from notion_cli import client as client_mod
+
+    client = _make_client()
+    response = _FakeResponse(
+        400,
+        {"object": "error", "status": 400, "code": "validation_error", "message": "body failed validation"},
+    )
+    monkeypatch.setattr(client_mod.requests, "request", lambda **kwargs: response)
+
+    with pytest.raises(client_mod.ClientError) as exc:
+        client._make_request("DELETE", "/blocks/abc")
+    assert not isinstance(exc.value, client_mod.BlockAlreadyArchivedError)
+
+
+def test_delete_block_if_present_treats_already_archived_as_gone(monkeypatch):
+    """delete_block_if_present returns False (already gone) for the archived 400,
+    True when it actually archived, and re-raises any other error."""
+    from notion_cli import client as client_mod
+
+    client = _make_client()
+
+    calls = {"n": 0}
+
+    def fake_delete(block_id):
+        calls["n"] += 1
+        if block_id == "already-archived":
+            raise client_mod.BlockAlreadyArchivedError("API request failed: 400 - ... block that is archived ...")
+        if block_id == "boom":
+            raise client_mod.ClientError("API request failed: 409 - conflict")
+        return {"id": block_id}
+
+    monkeypatch.setattr(client, "delete_block", fake_delete)
+
+    assert client.delete_block_if_present("fresh") is True
+    assert client.delete_block_if_present("already-archived") is False
+    with pytest.raises(client_mod.ClientError):
+        client.delete_block_if_present("boom")
+    assert calls["n"] == 3
+
+
+class ArchivedCascadeClient(FakeClient):
+    """replace-section client where deleting one section block reports it was
+    already archived (the auto-archive cascade). The command must still finish
+    cleanly (no raise) instead of aborting after the content was swapped."""
+
+    def __init__(self, already_archived_id):
+        super().__init__()
+        self._already_archived_id = already_archived_id
+        self.attempted_deletes = []
+
+    def delete_block_if_present(self, block_id):
+        self.attempted_deletes.append(block_id)
+        if block_id == self._already_archived_id:
+            return False  # already gone (cascade) — benign
+        self.delete_block(block_id)
+        return True
+
+
+def test_replace_section_succeeds_when_a_block_is_already_archived(monkeypatch):
+    """The reported failure: a delete in the cleanup step finds an already
+    archived block. With the idempotent delete the command completes (no raise)
+    and still reports the swap, rather than exiting non-zero after a correct
+    replacement."""
+    client = ArchivedCascadeClient(already_archived_id="first-body")
+    printed_json = []
+
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(
+        page, "text_to_blocks", lambda content, image_uploads=None: [heading("replacement-heading", "First")]
+    )
+    monkeypatch.setattr(page, "print_success", lambda message: None)
+    monkeypatch.setattr(page, "print_json", printed_json.append)
+
+    # Must NOT raise even though one section block was already archived.
+    page.content_replace_section(
+        "parent-block",
+        heading="## First",
+        text="## First\n\nnew",
+        file=None,
+        dry_run=False,
+    )
+
+    # Both section blocks were attempted; the already-archived one was tolerated.
+    assert sorted(client.attempted_deletes) == ["first-body", "first-heading"]
+    assert client.deleted == ["first-heading"]  # only the live one truly deleted
+    assert printed_json and printed_json[0]["blocks_deleted"] == 2
 
 
 def test_clean_block_for_creation_strips_type_icon_from_non_tab_blocks():

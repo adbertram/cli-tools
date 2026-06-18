@@ -1960,7 +1960,7 @@
             "n8n workflows list --filter \"name:contains:backup\"",
             "n8n workflows list --properties \"id,name,active\""
           ],
-          "usage_instructions": "List all workflows on the server. Supports --filter/-f for client-side filtering (e.g., `active:eq:true`, `name:contains:sync`), --limit/-l, --table/-t, --properties/-p to select fields.",
+          "usage_instructions": "List all workflows on the server. Default stdout is JSON; --table/-t switches to human-readable table output. There is no --json option. Supports --filter/-f for client-side filtering (e.g., `active:eq:true`, `name:contains:sync`), --limit/-l, --properties/-p to select fields.",
           "arguments": [],
           "options": [
             {

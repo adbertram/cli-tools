@@ -129,7 +129,9 @@ class CodexSessionsClient:
     ) -> List[SessionSummary]:
         sessions: List[SessionSummary] = []
         for index in self._matching_rollout_indexes(project, project_path, since, date_window):
-            parsed = load_rollout(index.path)
+            parsed = self._load_rollout_or_record_error(index.path)
+            if parsed is None:
+                continue
             summary = self._session_summary(parsed)
             if min_tool_calls is not None and summary.tool_call_count < min_tool_calls:
                 continue
@@ -183,7 +185,9 @@ class CodexSessionsClient:
         for rollout_index in self._matching_rollout_indexes(project, project_path, since):
             if resolved_id and rollout_index.session_id != resolved_id:
                 continue
-            parsed = load_rollout(rollout_index.path)
+            parsed = self._load_rollout_or_record_error(rollout_index.path)
+            if parsed is None:
+                continue
             turn_records = [record for record in parsed.records if record.record_type == "turn_context"]
             if not turn_records:
                 conversations.append(self._conversation_summary(parsed, 1))
@@ -347,12 +351,11 @@ class CodexSessionsClient:
             try:
                 if not self._rollout_path_contains_text(path, call_id):
                     continue
-                parsed = load_rollout(path)
             except FileNotFoundError:
                 self.load_errors.append(f"{path}: file not found")
                 continue
-            except ValueError as error:
-                self.load_errors.append(str(error))
+            parsed = self._load_rollout_or_record_error(path)
+            if parsed is None:
                 continue
             if any(self._matches_tool_call(record, call_id, tool_names) for record in tool_call_records(parsed)):
                 return parsed
@@ -515,13 +518,8 @@ class CodexSessionsClient:
             self.load_errors = []
             events: List[TimelineEvent] = []
             for path in sorted(iter_rollout_paths(self.codex_home), reverse=True):
-                try:
-                    parsed = load_rollout(path)
-                except FileNotFoundError:
-                    self.load_errors.append(f"{path}: file not found")
-                    continue
-                except ValueError as error:
-                    self.load_errors.append(str(error))
+                parsed = self._load_rollout_or_record_error(path)
+                if parsed is None:
                     continue
                 for event in self._iter_timeline_events_desc(parsed):
                     events.append(event)
@@ -766,12 +764,9 @@ class CodexSessionsClient:
             return []
         rollouts = []
         for path in iter_rollout_paths(self.codex_home):
-            try:
-                rollouts.append(load_rollout(path))
-            except FileNotFoundError:
-                self.load_errors.append(f"{path}: file not found")
-            except ValueError as error:
-                self.load_errors.append(str(error))
+            parsed = self._load_rollout_or_record_error(path)
+            if parsed is not None:
+                rollouts.append(parsed)
         rollouts.sort(key=lambda parsed: self._timestamp_sort_key(max_timestamp(parsed.records)), reverse=True)
         return rollouts
 
@@ -789,6 +784,15 @@ class CodexSessionsClient:
                 self.load_errors.append(str(error))
         indexes.sort(key=lambda index: self._timestamp_sort_key(index.last_activity), reverse=True)
         return indexes
+
+    def _load_rollout_or_record_error(self, path: Path) -> Optional[ParsedRollout]:
+        try:
+            return load_rollout(path)
+        except FileNotFoundError:
+            self.load_errors.append(f"{path}: file not found")
+        except ValueError as error:
+            self.load_errors.append(str(error))
+        return None
 
     def _get_rollout(self, session_id: str) -> ParsedRollout:
         resolved = self._resolve_session_id(session_id)
@@ -812,7 +816,9 @@ class CodexSessionsClient:
             yield parsed
             return
         for index in self._matching_rollout_indexes(project, project_path, since):
-            yield load_rollout(index.path)
+            parsed = self._load_rollout_or_record_error(index.path)
+            if parsed is not None:
+                yield parsed
 
     def _matching_rollout_indexes(
         self,

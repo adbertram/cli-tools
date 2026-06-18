@@ -537,6 +537,43 @@ class AirtableClient:
                 return field
         raise ClientError(f"Field not found in table metadata: {field_id}")
 
+    def list_bases(self) -> List[Dict[str, Any]]:
+        """List every base the active Personal Access Token can access.
+
+        Hits GET /meta/bases and returns the combined bases array. The
+        Metadata API paginates this endpoint with an ``offset`` token; this
+        method follows the token until Airtable stops returning one so the
+        full set of accessible bases is returned, not just the first page.
+
+        Each base record has ``id``, ``name``, and ``permissionLevel``.
+        """
+        endpoint = "/meta/bases"
+        all_bases: List[Dict[str, Any]] = []
+        offset: Optional[str] = None
+
+        while True:
+            params = {"offset": offset} if offset else None
+            result = self._make_request("GET", endpoint, params=params)
+            all_bases.extend(result.get("bases", []))
+
+            offset = result.get("offset")
+            if not offset:
+                break
+
+        return all_bases
+
+    def get_base(self, base_id: str) -> Dict[str, Any]:
+        """Get one base by ID or name from the accessible bases list.
+
+        Airtable's Metadata API exposes no single-base detail endpoint, so this
+        resolves the base from the full GET /meta/bases listing, matching on
+        either the base ID (appXXXXXXXXXXXXXX) or the base name.
+        """
+        for base in self.list_bases():
+            if base.get("id") == base_id or base.get("name") == base_id:
+                return base
+        raise ClientError(f"Base not found for the active token: {base_id}")
+
     def list_tables(self, base_id: str) -> List[Dict[str, Any]]:
         """List all tables in an Airtable base.
 

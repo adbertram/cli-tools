@@ -1,8 +1,8 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-06-10T17:09:13Z",
-  "total_commands": 43,
+  "discovered_at": "2026-06-14T21:40:47Z",
+  "total_commands": 45,
   "global_options": [
     {
       "name": "--version",
@@ -32,6 +32,25 @@
         }
       ],
       "commands": {
+        "health-report": {
+          "help": "Emit a structured WordPress maintenance health report.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "plugins": {
           "help": "Manage WordPress plugins",
           "usage_instructions": "Run `wordpress admin plugins --help` for exact arguments and options.",
@@ -106,7 +125,7 @@
                   "name": "plugin",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Plugin identifier (e.g. mailchimp-for-wp/mailchimp-for-wp)"
+                  "help": "Plugin path, slug, textdomain, or exact name from plugins list"
                 }
               ],
               "options": [
@@ -228,6 +247,31 @@
               ]
             }
           }
+        },
+        "security-scan": {
+          "help": "Scan installed plugins and themes for known vulnerabilities.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--active-only",
+              "type": "bool",
+              "required": false,
+              "help": "Scan only active plugins plus all themes"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display affected components as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },

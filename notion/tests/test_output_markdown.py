@@ -87,6 +87,41 @@ def test_set_get_roundtrip_preserves_intraword_underscore_tokens():
         assert roundtripped == source, token
 
 
+def test_text_to_blocks_code_inside_bold_is_code_only_not_bold():
+    """A `code` token inside a **bold** span must NOT be marked bold too.
+
+    Markdown has no syntax for a run that is BOTH code and bold, so a
+    bold+code run round-trips as broken ``**`code`**`` and the adjacent bold
+    delimiters collide into ``****``. The code run must be code-only; the
+    surrounding runs stay bold.
+    """
+    source = "**Grounding (`clip-slide-plan.1`):** rest is plain."
+    blocks = text_to_blocks(source)
+
+    rich_text = _paragraph_rich_text(blocks[0])
+    by_text = {seg["text"]["content"]: (seg.get("annotations") or {}) for seg in rich_text}
+    # The code token is code-only, never bold.
+    assert by_text["clip-slide-plan.1"] == {"code": True}
+    # The surrounding runs inside the bold span stay bold.
+    assert by_text["Grounding ("] == {"bold": True}
+    assert by_text["):"] == {"bold": True}
+
+
+def test_set_get_roundtrip_code_inside_bold_has_no_quadruple_asterisks():
+    """set->get round-trip of `code` inside **bold** must not emit ``****``.
+
+    Mirrors a live ``pages content set`` then ``pages get -m`` by converting
+    markdown -> create blocks -> API-shaped read blocks -> markdown.
+    """
+    source = "**Grounding (`clip-slide-plan.1`):** the rest is bold too."
+    blocks = text_to_blocks(source)
+    api_blocks = _to_api_block_shape(blocks)
+    roundtripped = blocks_to_markdown(api_blocks)
+
+    assert "****" not in roundtripped
+    assert "`clip-slide-plan.1`" in roundtripped
+
+
 def test_text_to_blocks_nested_fenced_code_block_preserves_literal_content():
     markdown = (
         "- Example\n"

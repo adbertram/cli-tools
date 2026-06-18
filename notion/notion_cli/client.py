@@ -36,6 +36,26 @@ class NotFoundError(ClientError):
     pass
 
 
+class BlockAlreadyArchivedError(ClientError):
+    """Raised when a block edit/delete is rejected because the block is already
+    archived (HTTP 400, "Can't edit block that is archived.").
+
+    Distinct from ClientError so a caller deleting a SET of blocks can treat an
+    already-archived block as already-gone (success for that id) while still
+    failing fast on every other error. This is the cascade case: archiving a
+    parent block auto-archives its descendants, so a parallel batch that targets
+    both a parent and one of its (now trashed) descendants gets this 400 for the
+    descendant even though the delete is effectively complete.
+    """
+    pass
+
+
+# Substring Notion returns in the 400 validation_error message when a block is
+# already archived/in trash. Matched (not the volatile error `code`) so the
+# detection survives Notion API wording-adjacent changes to the code field.
+_ALREADY_ARCHIVED_MESSAGE = "block that is archived"
+
+
 class NotionClient:
     """Client for interacting with Notion API."""
 
@@ -171,6 +191,17 @@ class NotionClient:
                 if not response.ok:
                     error_data = response.json() if response.text else {}
                     error_msg = error_data.get("message", response.text)
+                    # Surface the already-archived 400 as a distinct error so a
+                    # delete-set caller can treat an already-trashed block as
+                    # already-gone instead of aborting the whole operation.
+                    if (
+                        response.status_code == 400
+                        and isinstance(error_msg, str)
+                        and _ALREADY_ARCHIVED_MESSAGE in error_msg.lower()
+                    ):
+                        raise BlockAlreadyArchivedError(
+                            f"API request failed: {response.status_code} - {error_msg}"
+                        )
                     raise ClientError(f"API request failed: {response.status_code} - {error_msg}")
 
                 return response.json()
@@ -840,6 +871,35 @@ class NotionClient:
             The deleted block object
         """
         return self._make_request("DELETE", f"/blocks/{block_id}")
+
+    def delete_block_if_present(self, block_id: str) -> bool:
+        """
+        Delete a block, treating an already-archived block as already-gone.
+
+        Identical to ``delete_block`` except that a Notion 400
+        "Can't edit block that is archived" response is interpreted as success:
+        the block is already in the trash, which is the desired end state. This
+        is the idempotent delete used when removing a SET of blocks whose
+        archiving can cascade (archiving a parent auto-archives its descendants),
+        so a parallel batch that also targets a descendant must not abort on the
+        descendant's already-archived 400.
+
+        Every other error (auth, not-found, transport, any non-archived 400)
+        still raises, preserving fail-fast behavior. Only the specific
+        already-archived case is benign.
+
+        Args:
+            block_id: The block ID to delete.
+
+        Returns:
+            True if this call archived the block; False if it was already
+            archived (already gone).
+        """
+        try:
+            self.delete_block(block_id)
+            return True
+        except BlockAlreadyArchivedError:
+            return False
 
     def update_block(
         self,

@@ -44,7 +44,7 @@ class PayPalApiClient:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing API credentials: {', '.join(missing)}. "
-                "Add them to your .env file."
+                "Run `paypal auth login -c oauth` to configure PayPal API credentials."
             )
 
         self.base_url = self.config.api_base_url
@@ -177,9 +177,53 @@ class PayPalApiClient:
         """GET request to PayPal API."""
         return self._make_request("GET", endpoint, params=params)
 
-    def post(self, endpoint: str, data: Dict = None) -> Dict:
+    def post(
+        self,
+        endpoint: str,
+        data: Dict = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict:
         """POST request to PayPal API."""
-        return self._make_request("POST", endpoint, data=data)
+        return self._make_request("POST", endpoint, data=data, extra_headers=extra_headers)
+
+    def refund_capture(
+        self,
+        *,
+        capture_id: str,
+        amount: Optional[str] = None,
+        currency: str = "USD",
+        invoice_id: Optional[str] = None,
+        custom_id: Optional[str] = None,
+        note_to_payer: Optional[str] = None,
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        """Refund a captured payment by capture ID."""
+        payload: Dict[str, Any] = {}
+        if amount is not None:
+            payload["amount"] = {"value": amount, "currency_code": currency}
+        if invoice_id:
+            payload["invoice_id"] = invoice_id
+        if custom_id:
+            payload["custom_id"] = custom_id
+        if note_to_payer:
+            payload["note_to_payer"] = note_to_payer
+
+        refund = self.post(
+            f"/v2/payments/captures/{capture_id}/refund",
+            data=payload,
+            extra_headers={"PayPal-Request-Id": idempotency_key},
+        )
+
+        request = {
+            "capture_id": capture_id,
+            "refund_type": "partial" if amount is not None else "full",
+            "amount": payload.get("amount"),
+            "invoice_id": invoice_id,
+            "custom_id": custom_id,
+            "note_to_payer": note_to_payer,
+            "idempotency_key": idempotency_key,
+        }
+        return {"request": request, "refund": refund}
 
     def create_payout(self, items: List[Dict], email_subject: str = None, email_message: str = None) -> Dict:
         """Create a batch payout."""

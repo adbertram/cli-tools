@@ -1,7 +1,8 @@
 """WordPress API client with automatic retry and Pydantic models."""
 import json
 import os
-from datetime import datetime, timedelta
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import random
@@ -33,6 +34,7 @@ from .models import (
 )
 from .wpcom import (
     acquire_wpcom_access_token,
+    build_wpcom_missing_credentials_message,
     extract_wpcom_error_message,
     wpcom_response_indicates_invalid_token,
 )
@@ -50,6 +52,7 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 # User agent for all requests
 DEFAULT_USER_AGENT = "WordPressClient/1.0"
 WPCOM_API_BASE_URL = "https://public-api.wordpress.com/rest/v1.1"
+WPVULNERABILITY_API_BASE_URL = "https://api.wpvulnerability.com"
 JETPACK_PLUGIN_MANAGEMENT_ERROR = (
     "Jetpack is not connected to a WordPress.com account that can manage plugins for this site. "
     "Connect the current WordPress admin user to WordPress.com through Jetpack before plugin updates can run."
@@ -173,6 +176,22 @@ class WordPressClient:
             # Could be HTTP-date format, but we'll skip that complexity
             return None
 
+    @staticmethod
+    def _clean_text(value: Any) -> Optional[str]:
+        """Return the useful text from common WordPress raw/rendered fields."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            raw = value.get("raw")
+            if isinstance(raw, str):
+                return raw
+            rendered = value.get("rendered")
+            if isinstance(rendered, str):
+                return rendered
+        raise ClientError(f"Expected text field to be a string or dict, got {type(value)}")
+
     def _make_request(
         self,
         method: str,
@@ -287,6 +306,45 @@ class WordPressClient:
         if return_headers:
             return json_data, dict(last_response.headers)
         return json_data
+
+    def get_site_settings(self) -> dict:
+        """Read site settings exposed through the authenticated WordPress REST API."""
+        response = self._make_request("GET", "/settings")
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected settings response to be a dict, got {type(response)}")
+        return response
+
+    def list_themes(self) -> List[dict]:
+        """List installed WordPress themes from the authenticated REST API."""
+        response = self._make_request("GET", "/themes")
+        if not isinstance(response, list):
+            raise ClientError(f"Expected theme list response to be a list, got {type(response)}")
+
+        themes: List[dict] = []
+        for raw_theme in response:
+            if not isinstance(raw_theme, dict):
+                raise ClientError(f"Expected theme entry to be a dict, got {type(raw_theme)}")
+            stylesheet = raw_theme.get("stylesheet")
+            version = raw_theme.get("version")
+            status = raw_theme.get("status")
+            if not isinstance(stylesheet, str) or not stylesheet:
+                raise ClientError("Theme entry did not include a non-empty stylesheet")
+            if not isinstance(version, str) or not version:
+                raise ClientError(f"Theme {stylesheet} did not include a non-empty version")
+            if not isinstance(status, str) or not status:
+                raise ClientError(f"Theme {stylesheet} did not include a non-empty status")
+            themes.append(
+                {
+                    "theme": stylesheet,
+                    "name": self._clean_text(raw_theme.get("name")) or stylesheet,
+                    "version": version,
+                    "status": status,
+                    "requires_wp": raw_theme.get("requires_wp"),
+                    "requires_php": raw_theme.get("requires_php"),
+                    "textdomain": raw_theme.get("textdomain"),
+                }
+            )
+        return themes
 
     def _wp_json_base_url(self) -> str:
         suffix = "/wp/v2"
@@ -1366,8 +1424,6 @@ class WordPressClient:
         if not manage_plugins:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-        wpcom_site = self._get_wpcom_site_record()
-        self._assert_wpcom_site_has_plugin_management_access(wpcom_site)
         self._assert_wpcom_plugin_endpoint_access()
 
     def _assert_wpcom_plugin_endpoint_access(self) -> None:
@@ -1498,6 +1554,42 @@ class WordPressClient:
             return self.enrich_plugins_with_update_status(plugins)
         return plugins
 
+    @staticmethod
+    def _plugin_identifier_values(plugin: Plugin) -> List[str]:
+        """Return exact identifiers users can discover from plugin list output."""
+        values = [plugin.plugin, plugin.plugin.split("/", 1)[0], plugin.name]
+        if plugin.textdomain:
+            values.append(plugin.textdomain)
+        return values
+
+    def resolve_plugin_identifier(self, plugin: str) -> str:
+        """
+        Resolve a user-facing plugin identifier to the REST API plugin path.
+
+        WordPress.com plugin detail endpoints require the full plugin path, but
+        list output exposes several practical identifiers: plugin path, slug,
+        name, and textdomain.
+        """
+        if not plugin or not plugin.strip():
+            raise ValueError("plugin cannot be empty")
+
+        normalized = plugin.strip().casefold()
+        matches = [
+            installed
+            for installed in self.list_plugins()
+            if normalized in {value.casefold() for value in self._plugin_identifier_values(installed)}
+        ]
+
+        if not matches:
+            raise ClientError(
+                f"Plugin not found: {plugin}. Use a plugin path, slug, textdomain, or exact name from plugins list."
+            )
+        if len(matches) > 1:
+            match_names = ", ".join(sorted(match.plugin for match in matches))
+            raise ClientError(f"Plugin identifier is ambiguous: {plugin}. Matches: {match_names}")
+
+        return matches[0].plugin
+
     def get_plugin(self, plugin: str, include_update_status: bool = False) -> Plugin:
         """
         Get a specific plugin by its identifier.
@@ -1509,7 +1601,8 @@ class WordPressClient:
         Returns:
             Plugin model
         """
-        endpoint = f"/plugins/{plugin}"
+        plugin_path = self.resolve_plugin_identifier(plugin)
+        endpoint = f"/plugins/{plugin_path}"
         response = self._make_request("GET", endpoint)
 
         result = create_plugin(response)
@@ -1581,6 +1674,10 @@ class WordPressClient:
         Returns:
             Plugin model with updated version
         """
+        missing_wpcom_credentials = self.config.get_missing_wpcom_credentials()
+        if missing_wpcom_credentials:
+            raise ClientError(build_wpcom_missing_credentials_message(missing_wpcom_credentials))
+
         current = self.get_plugin(plugin, include_update_status=True)
         if current.update_status != "available":
             raise ClientError(f"Plugin {plugin} does not have an available update")
@@ -1607,6 +1704,301 @@ class WordPressClient:
             )
 
         return upgraded
+
+    # ==================== Maintenance Report Methods ====================
+
+    @staticmethod
+    def _version_numbers(value: str) -> List[int]:
+        if not isinstance(value, str) or not value.strip():
+            raise ClientError(f"Expected non-empty version string, got {value!r}")
+        numbers = [int(part) for part in re.findall(r"\d+", value)]
+        if not numbers:
+            raise ClientError(f"Version string did not contain numeric components: {value}")
+        return numbers
+
+    @classmethod
+    def _compare_versions(cls, installed: str, expected: str) -> int:
+        installed_parts = cls._version_numbers(installed)
+        expected_parts = cls._version_numbers(expected)
+        width = max(len(installed_parts), len(expected_parts))
+        installed_parts.extend([0] * (width - len(installed_parts)))
+        expected_parts.extend([0] * (width - len(expected_parts)))
+        if installed_parts < expected_parts:
+            return -1
+        if installed_parts > expected_parts:
+            return 1
+        return 0
+
+    @staticmethod
+    def _operator_matches(compare_result: int, operator: str) -> bool:
+        normalized = operator.strip().lower()
+        if normalized in {"lt", "<"}:
+            return compare_result < 0
+        if normalized in {"lte", "le", "<="}:
+            return compare_result <= 0
+        if normalized in {"gt", ">"}:
+            return compare_result > 0
+        if normalized in {"gte", "ge", ">="}:
+            return compare_result >= 0
+        if normalized in {"eq", "=", "=="}:
+            return compare_result == 0
+        raise ClientError(f"Unsupported vulnerability version operator: {operator}")
+
+    @classmethod
+    def vulnerability_affects_version(cls, installed_version: str, vulnerability: dict) -> bool:
+        """Return whether a WPVulnerability record applies to an installed version."""
+        operator_data = vulnerability.get("operator")
+        if not isinstance(operator_data, dict):
+            raise ClientError("Vulnerability record did not include operator data")
+
+        checks: List[bool] = []
+        for version_key, operator_key in (("min_version", "min_operator"), ("max_version", "max_operator")):
+            expected_version = operator_data.get(version_key)
+            operator = operator_data.get(operator_key)
+            if expected_version is None and operator is None:
+                continue
+            if not isinstance(expected_version, str) or not expected_version:
+                raise ClientError(f"Vulnerability operator did not include {version_key}")
+            if not isinstance(operator, str) or not operator:
+                raise ClientError(f"Vulnerability operator did not include {operator_key}")
+            checks.append(cls._operator_matches(cls._compare_versions(installed_version, expected_version), operator))
+
+        if checks:
+            return all(checks)
+
+        unfixed = operator_data.get("unfixed")
+        if unfixed in {"1", 1, True}:
+            return True
+        raise ClientError("Vulnerability operator did not include a version range")
+
+    def get_wpvulnerability_record(self, component_type: str, slug: str) -> dict:
+        """Fetch a component record from the public WPVulnerability API."""
+        if component_type not in {"plugin", "theme", "core"}:
+            raise ValueError(f"Unsupported component type: {component_type}")
+        if not slug or not slug.strip():
+            raise ValueError("slug cannot be empty")
+
+        url = f"{WPVULNERABILITY_API_BASE_URL}/{component_type}/{quote(slug.strip(), safe='')}"
+        response = requests.get(
+            url,
+            headers={"Accept": "application/json", "User-Agent": DEFAULT_USER_AGENT},
+            timeout=30,
+        )
+
+        if response.status_code == 404:
+            return {
+                "error": 1,
+                "message": "Component was not found in WPVulnerability",
+                "data": None,
+                "updated": None,
+            }
+        if not response.ok:
+            raise ClientError(f"WPVulnerability lookup failed for {component_type}:{slug} ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ClientError(f"Expected WPVulnerability response to be a dict, got {type(data)}")
+        if "data" not in data:
+            raise ClientError("WPVulnerability response did not include data")
+        return data
+
+    @staticmethod
+    def _vulnerability_severity(vulnerability: dict) -> Optional[str]:
+        impact = vulnerability.get("impact")
+        if not isinstance(impact, dict):
+            return None
+        for key in ("cvss3", "cvss"):
+            score_data = impact.get(key)
+            if isinstance(score_data, dict) and isinstance(score_data.get("severity"), str):
+                return score_data["severity"]
+        return None
+
+    @staticmethod
+    def _vulnerability_score(vulnerability: dict) -> Optional[str]:
+        impact = vulnerability.get("impact")
+        if not isinstance(impact, dict):
+            return None
+        for key in ("cvss3", "cvss"):
+            score_data = impact.get(key)
+            if isinstance(score_data, dict) and score_data.get("score") is not None:
+                return str(score_data["score"])
+        return None
+
+    @classmethod
+    def _summarize_vulnerability(cls, vulnerability: dict) -> dict:
+        if not isinstance(vulnerability, dict):
+            raise ClientError(f"Expected vulnerability entry to be a dict, got {type(vulnerability)}")
+        uuid = vulnerability.get("uuid")
+        name = vulnerability.get("name")
+        if not isinstance(uuid, str) or not uuid:
+            raise ClientError("Vulnerability entry did not include uuid")
+        if not isinstance(name, str) or not name:
+            raise ClientError("Vulnerability entry did not include name")
+        source = vulnerability.get("source") or []
+        if not isinstance(source, list):
+            raise ClientError("Vulnerability source was not a list")
+        source_ids = [
+            item.get("id")
+            for item in source
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("id")
+        ]
+        return {
+            "uuid": uuid,
+            "name": name,
+            "severity": cls._vulnerability_severity(vulnerability),
+            "score": cls._vulnerability_score(vulnerability),
+            "source_ids": source_ids,
+        }
+
+    def _scan_component(self, component_type: str, slug: str, name: str, installed_version: str, status: str) -> dict:
+        record = self.get_wpvulnerability_record(component_type, slug)
+        data = record.get("data")
+        if data is None:
+            return {
+                "component_type": component_type,
+                "slug": slug,
+                "name": name,
+                "installed_version": installed_version,
+                "status": status,
+                "database_status": "not_found",
+                "affected_vulnerability_count": 0,
+                "vulnerabilities": [],
+            }
+        if not isinstance(data, dict):
+            raise ClientError(f"Expected WPVulnerability data to be a dict, got {type(data)}")
+
+        vulnerability_entries = data.get("vulnerability") or []
+        if not isinstance(vulnerability_entries, list):
+            raise ClientError("WPVulnerability data.vulnerability was not a list")
+
+        affected = [
+            self._summarize_vulnerability(vulnerability)
+            for vulnerability in vulnerability_entries
+            if self.vulnerability_affects_version(installed_version, vulnerability)
+        ]
+        return {
+            "component_type": component_type,
+            "slug": slug,
+            "name": name,
+            "installed_version": installed_version,
+            "status": status,
+            "database_status": "found",
+            "affected_vulnerability_count": len(affected),
+            "vulnerabilities": affected,
+        }
+
+    def security_scan(self, active_only: bool = False) -> dict:
+        """Scan installed plugins and themes against WPVulnerability."""
+        plugins = self.list_plugins(include_update_status=True)
+        themes = self.list_themes()
+        settings = self.get_site_settings()
+
+        plugin_results = []
+        for plugin in plugins:
+            if active_only and plugin.status != "active":
+                continue
+            plugin_results.append(
+                self._scan_component(
+                    "plugin",
+                    self._plugin_slug(plugin),
+                    plugin.name,
+                    plugin.version,
+                    plugin.status,
+                )
+            )
+
+        theme_results = [
+            self._scan_component("theme", theme["theme"], theme["name"], theme["version"], theme["status"])
+            for theme in themes
+        ]
+
+        affected = [
+            result
+            for result in plugin_results + theme_results
+            if result["affected_vulnerability_count"] > 0
+        ]
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "source": {
+                "name": "WPVulnerability",
+                "url": WPVULNERABILITY_API_BASE_URL,
+            },
+            "site": {
+                "title": settings.get("title"),
+                "url": settings.get("url"),
+            },
+            "summary": {
+                "plugins_checked": len(plugin_results),
+                "themes_checked": len(theme_results),
+                "affected_component_count": len(affected),
+                "affected_vulnerability_count": sum(result["affected_vulnerability_count"] for result in affected),
+                "core_status": "unavailable",
+            },
+            "core": {
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose the installed core version.",
+            },
+            "plugins": plugin_results,
+            "themes": theme_results,
+            "affected_components": affected,
+        }
+
+    def health_report(self) -> dict:
+        """Build a structured WordPress maintenance health report."""
+        plugins = self.list_plugins(include_update_status=True)
+        themes = self.list_themes()
+        settings = self.get_site_settings()
+        plugin_records = [plugin.model_dump() for plugin in plugins]
+        theme_records = themes
+
+        updates_available = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "available"
+        ]
+        closed_plugins = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "closed"
+        ]
+        unverified_plugins = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "unverified"
+        ]
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "site": {
+                "title": settings.get("title"),
+                "url": settings.get("url"),
+                "description": settings.get("description"),
+                "timezone": settings.get("timezone"),
+            },
+            "wordpress": {
+                "core_version": None,
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose the installed core version.",
+            },
+            "php": {
+                "version": None,
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose PHP runtime version.",
+            },
+            "plugins": {
+                "count": len(plugin_records),
+                "active_count": sum(1 for plugin in plugin_records if plugin.get("status") == "active"),
+                "inactive_count": sum(1 for plugin in plugin_records if plugin.get("status") == "inactive"),
+                "updates_available_count": len(updates_available),
+                "closed_count": len(closed_plugins),
+                "unverified_count": len(unverified_plugins),
+                "updates_available": updates_available,
+                "closed": closed_plugins,
+                "unverified": unverified_plugins,
+                "items": plugin_records,
+            },
+            "themes": {
+                "count": len(theme_records),
+                "active": [theme for theme in theme_records if theme["status"] == "active"],
+                "inactive": [theme for theme in theme_records if theme["status"] != "active"],
+                "items": theme_records,
+            },
+        }
 
 
 # Module-level client instance - singleton pattern

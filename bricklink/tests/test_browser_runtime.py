@@ -47,6 +47,22 @@ class _NoNetworkIdlePage:
         return None
 
 
+class _AbortedNavigationPage(_NoNetworkIdlePage):
+    def __init__(self, *, body_visible=True):
+        super().__init__()
+        self.body_visible = body_visible
+
+    def goto(self, url, wait_until=None):
+        self.url = url
+        self.goto_calls.append((url, wait_until))
+        raise RuntimeError(f"Page.goto: net::ERR_ABORTED at {url}")
+
+    def wait_for_selector(self, selector, **_kwargs):
+        if selector == "body" and not self.body_visible:
+            raise TimeoutError("body not visible")
+        return super().wait_for_selector(selector, **_kwargs)
+
+
 def _make_runtime(monkeypatch):
     """Build a BricklinkRuntimeBrowser without invoking its __init__.
 
@@ -155,6 +171,29 @@ def test_get_page_for_does_not_require_networkidle(monkeypatch):
     runtime.get_page.assert_called_once_with()
     assert page.goto_calls == [(url, "domcontentloaded")]
     assert "body" in page.waited_selectors
+
+
+def test_get_page_for_accepts_aborted_navigation_when_body_rendered(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _AbortedNavigationPage(body_visible=True)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/v3/order/refund.page?id=31816264"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    assert page.goto_calls == [(url, "domcontentloaded")]
+    assert "body" in page.waited_selectors
+
+
+def test_get_page_for_reraises_aborted_navigation_when_body_missing(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _AbortedNavigationPage(body_visible=False)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/v3/order/refund.page?id=31816264"
+
+    with pytest.raises(TimeoutError, match="body not visible"):
+        runtime._get_page_for(url)
 
 
 def test_check_session_expired_raises_actionable_even_if_clear_session_fails(monkeypatch):

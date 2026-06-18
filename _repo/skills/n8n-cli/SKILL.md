@@ -37,6 +37,29 @@ n8n <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Bounded Discovery Probes">
+Use `usage.json` as the primary syntax source. Do not run unbounded n8n
+group-level help probes or unbounded local Node source-inspection probes against
+global n8n `node_modules` paths. `n8n data-tables --help` is known to hang for
+over 40 seconds and can exit `130` after Ctrl+C with no output; a local Node
+heredoc reading
+`/opt/homebrew/lib/node_modules/n8n/node_modules/n8n-nodes-base/dist/nodes/DataTable/DataTable.node.js`
+has shown the same failure shape. If live help or local source inspection is
+required, select the leaf command or exact source path from `usage.json` or the
+repo-owned n8n CLI source, capture stdout/stderr under the task workspace, and
+run it with an explicit deadline. Treat a timeout as blocker evidence, not as
+successful command discovery.
+</principle>
+
+<principle name="Workflow List Output Contract">
+`n8n workflows list` has no `--json` option. The command's default stdout is
+JSON; `--table` switches to table output. For machine parsing, run
+`n8n workflows list --properties "id,name,active"` without `--json`, save stdout
+to a file, verify the command status and non-empty file, then parse. For human
+display, use `--table`. The supported options are the ones in `usage.json`:
+`--table`, `--limit`, `--filter`, `--properties`, `--active`, and `--profile`.
+</principle>
+
 <principle name="Command Groups">
 - **auth** -- login, logout, status, refresh, test credentials
 - **auth** -- Authentication commands and nested `auth profiles` management

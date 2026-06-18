@@ -22,6 +22,8 @@ google <service> <action> [arguments] [options]
 | List Gmail inbox | `google gmail list --table` |
 | Send an email | `google gmail send --to "user@example.com" --subject "Hi" --body "Hello"` |
 | Search Gmail | `google gmail search "from:boss subject:urgent" --table` |
+| Read a Gmail message body | `google gmail read MESSAGE_ID` |
+| Get Gmail metadata with decoded body | `google gmail get MESSAGE_ID --include-body` |
 | List Gmail filters | `google gmail filters list --table` |
 | Create a Gmail filter | `google gmail filters create --from "news@example.com" --remove-label INBOX` |
 | List today's calendar events | `google calendar today --table` |
@@ -53,6 +55,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 zero results. `--properties` accepts comma-separated or repeated fields from:
 `id`, `from`, `to`, `subject`, `date`, `threadId`, `labelIds`, `attachments`.
 Invalid fields fail clearly instead of returning blank objects.
+</principle>
+
+<principle name="Gmail Body Reads">
+For link inspection, unsubscribe/source-stop work, or any task that needs full
+message text, use `google gmail read MESSAGE_ID`. Use
+`google gmail get MESSAGE_ID --include-body` only when metadata and decoded body
+are both needed. Do not use `--properties` with `google gmail get`; `get`
+supports `--table`, `--raw`, `--include-body`, and `--profile`.
 </principle>
 </essential_principles>
 

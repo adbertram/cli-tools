@@ -54,7 +54,15 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
     def _goto_page(self, page, url: str) -> None:
         # BrickLink can keep background requests open; selectors prove readiness.
-        page.goto(url, wait_until=self.NAVIGATION_READY_STATE)
+        try:
+            page.goto(url, wait_until=self.NAVIGATION_READY_STATE)
+        except Exception as exc:
+            if "net::ERR_ABORTED" not in str(exc):
+                raise
+            activity.warning(
+                "Bricklink navigation aborted for %s; checking whether page rendered",
+                url,
+            )
         page.wait_for_selector("body", state="visible", timeout=15000)
 
     def _read_confirmation_code(self) -> str:
