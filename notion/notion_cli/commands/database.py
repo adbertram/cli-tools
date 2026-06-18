@@ -864,8 +864,12 @@ def page_list(
         )
 
         if not pages:
-            typer.echo("No pages found.")
-            raise typer.Exit(0)
+            if table:
+                print_table([], columns=["id"], headers=["ID"])
+            else:
+                print_json([])
+            typer.echo("\n0 page(s) found.", err=True)
+            return
 
         # Parse properties list
         props_list = None
@@ -900,6 +904,8 @@ def page_list(
 
         typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
