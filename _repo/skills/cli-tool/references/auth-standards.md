@@ -241,6 +241,12 @@ import typer
 - Values are lists of credential type strings (e.g., `["api_key"]`, `["browser_session"]`)
 - Every command in the file should have an entry
 - Single-credential CLIs can omit this dict (all commands use the single type)
+- A command with a `--dry-run` or preview path that only prints the planned
+  request and does not call a live API must not be blocked by registration-time
+  credential checks. Map it to `["no_auth"]` and make the command enforce the
+  required credentials before any live API mutation. Verify with the installed
+  launcher under isolated profile data (`XDG_DATA_HOME="$(mktemp -d)"`) so an
+  empty user profile cannot satisfy the check accidentally.
 
 ## auth login --force Flag (MANDATORY)
 

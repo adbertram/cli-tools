@@ -249,13 +249,25 @@ def parse_help_options(section_text: str) -> List[Dict]:
         if any(line.startswith(option) for option in filtered_options):
             continue
 
-        flag_match = re.match(r"^(--[\w-]+)\s+(-\w)?\s*(.*)", line)
+        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w)?\s*(.*)", line)
         if not flag_match:
             continue
 
         long_flag = flag_match.group(1)
         short_flag = flag_match.group(2)
         rest = flag_match.group(3).strip()
+
+        # Typer renders a paired boolean flag as two long forms on one line,
+        # e.g. "--content-done            --no-content-done   <help>". The
+        # primary regex only consumes an optional short flag, so the negative
+        # secondary form would otherwise be captured as part of the help text.
+        # Strip a leading secondary long flag (with its own optional short
+        # flag) before extracting the type/help so the help stays clean.
+        secondary_match = re.match(r"^(--[\w-]+)(?:\s+(-\w))?\s+(.*)", rest)
+        if secondary_match:
+            if short_flag is None and secondary_match.group(2):
+                short_flag = secondary_match.group(2)
+            rest = secondary_match.group(3).strip()
 
         type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
         if type_match:

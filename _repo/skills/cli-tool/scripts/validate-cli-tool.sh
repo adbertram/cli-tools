@@ -19,6 +19,26 @@ TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"
 if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
     TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"
 fi
+
+# tomllib (used by the no-auth-CLI probe below) only entered the stdlib in 3.11,
+# but the ambient `python3` may be older (system Python 3.9 on macOS). Resolve a
+# 3.11+ interpreter once and use it for every embedded Python step. Fail loudly
+# rather than letting a confusing tomllib ModuleNotFoundError surface mid-run.
+PYTHON_BIN=""
+if python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    PYTHON_BIN="python3"
+else
+    for candidate in python3.14 python3.13 python3.12 python3.11; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            PYTHON_BIN="$candidate"
+            break
+        fi
+    done
+fi
+if [ -z "$PYTHON_BIN" ]; then
+    echo '{"error": "validate-cli-tool.sh needs Python 3.11+ for tomllib, but no python3.11+ interpreter was found on PATH. Install one (e.g. brew install python@3.11) and retry."}' >&2
+    exit 1
+fi
 SYMLINK_PATH="$HOME/.local/bin/$CLI_NAME"
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 PKG_DIR_NAME="${CLI_NAME}-cli"
@@ -26,7 +46,7 @@ if [ -f "$TOOL_DIR/pyproject.toml" ]; then
     PYPROJECT_NAME=$(awk -F'"' '/^name[[:space:]]*=/ { print $2; exit }' "$TOOL_DIR/pyproject.toml")
     [ -n "$PYPROJECT_NAME" ] && PKG_DIR_NAME="$PYPROJECT_NAME"
 fi
-UV_TOOL_DIR_NAME=$(printf '%s' "$PKG_DIR_NAME" | python3 -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
+UV_TOOL_DIR_NAME=$(printf '%s' "$PKG_DIR_NAME" | "$PYTHON_BIN" -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
 UV_VENV="$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME"
 PKG_NAME="$(echo "$CLI_NAME" | tr '-' '_')_cli"
 MAIN_PY="$TOOL_DIR/$PKG_NAME/main.py"
@@ -58,7 +78,7 @@ run_silent() {
 
 help_works=false; run_silent --help && help_works=true
 version_works=false; run_silent --version && version_works=true
-is_no_auth_cli=$(python3 - "$TEST_CONFIG_PATH" "$CLI_NAME" <<'PY'
+is_no_auth_cli=$("$PYTHON_BIN" - "$TEST_CONFIG_PATH" "$CLI_NAME" <<'PY'
 import sys
 import tomllib
 from pathlib import Path
@@ -171,7 +191,7 @@ USES_CREATE_APP="$uses_create_app" \
 USES_RUN_APP="$uses_run_app" \
 AI_INSTRUCTION_CONTRACT="$ai_instruction_contract" \
 AI_INSTRUCTION_FORBIDDEN_FIELDS="$ai_instruction_forbidden_fields" \
-python3 - <<'PY'
+"$PYTHON_BIN" - <<'PY'
 import json, os
 
 def coerce(v):

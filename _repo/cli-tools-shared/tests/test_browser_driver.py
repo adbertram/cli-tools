@@ -8,6 +8,7 @@ from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _fill_js
+from cli_tools_shared.browser.processes import ProcessCommand
 import cli_tools_shared.browser.driver as driver
 
 
@@ -78,15 +79,15 @@ def test_session_process_pids_match_only_same_session_user_data_dir(tmp_path, mo
     service._user_data_dir = session_dir
     monkeypatch.setattr(
         service,
-        "_list_process_commands",
+        "_list_process_table",
         lambda: [
-            (101, "S", f"/Applications/Google Chrome --user-data-dir={session_dir}"),
-            (102, "S", f"/Applications/Google Chrome Helper --user-data-dir {session_dir}"),
-            (103, "S", f"/Applications/Google Chrome --user-data-dir={extra_dir}"),
-            (104, "S", f"/Applications/Google Chrome Helper --user-data-dir {extra_dir}"),
-            (105, "S", "/Applications/Google Chrome"),
-            (106, "S", f"/Applications/Google Chrome --user-data-dir={other_dir}"),
-            (107, "Z", f"/Applications/Google Chrome --user-data-dir={session_dir}"),
+            ProcessCommand(101, 1, "S", f"/Applications/Google Chrome --user-data-dir={session_dir}"),
+            ProcessCommand(102, 1, "S", f"/Applications/Google Chrome Helper --user-data-dir {session_dir}"),
+            ProcessCommand(103, 1, "S", f"/Applications/Google Chrome --user-data-dir={extra_dir}"),
+            ProcessCommand(104, 1, "S", f"/Applications/Google Chrome Helper --user-data-dir {extra_dir}"),
+            ProcessCommand(105, 1, "S", "/Applications/Google Chrome"),
+            ProcessCommand(106, 1, "S", f"/Applications/Google Chrome --user-data-dir={other_dir}"),
+            ProcessCommand(107, 1, "Z", f"/Applications/Google Chrome --user-data-dir={session_dir}"),
         ],
     )
 
@@ -356,6 +357,94 @@ def test_query_selector_returns_none_when_absent(monkeypatch):
     assert service.query_selector("button.missing") is None
 
 
+def test_get_by_role_accepts_exact_name(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [1])
+
+    assert service.get_by_role("button", name="Post", exact=True).count() == 1
+
+    assert "value === \"Post\"" in calls[0]
+    assert "aria-labelledby" in calls[0]
+
+
+def test_get_page_locator_aria_snapshot_uses_cdp_accessibility_tree():
+    service = BrowserHarnessService("sample-browser-session")
+    service._opened = True
+    calls: list[tuple[str, dict]] = []
+
+    ax_tree = {
+        "nodes": [
+            {
+                "nodeId": "1",
+                "ignored": False,
+                "role": {"value": "RootWebArea"},
+                "name": {"value": ""},
+                "childIds": ["2"],
+            },
+            {
+                "nodeId": "2",
+                "ignored": False,
+                "role": {"value": "generic"},
+                "name": {"value": ""},
+                "childIds": ["3", "4", "5"],
+            },
+            {
+                "nodeId": "3",
+                "ignored": False,
+                "role": {"value": "link"},
+                "name": {"value": "Reset access , RITM0360937"},
+                "backendDOMNodeId": 33,
+            },
+            {
+                "nodeId": "4",
+                "ignored": False,
+                "role": {"value": "textbox"},
+                "name": {"value": "Type your message here"},
+                "backendDOMNodeId": 44,
+            },
+            {
+                "nodeId": "5",
+                "ignored": False,
+                "role": {"value": "button"},
+                "name": {"value": "Post"},
+                "backendDOMNodeId": 55,
+            },
+        ]
+    }
+
+    class _Helpers:
+        def cdp(self, method, **kwargs):
+            calls.append((method, kwargs))
+            if method == "Accessibility.getFullAXTree":
+                return ax_tree
+            if method == "DOM.resolveNode":
+                return {"object": {"objectId": f"node-{kwargs['backendNodeId']}"}}
+            if method == "Runtime.callFunctionOn":
+                return {
+                    "result": {
+                        "value": (
+                            "?id=ticket&table=sc_req_item&sys_id="
+                            "abcdef1234567890abcdef1234567890"
+                        )
+                    }
+                }
+            if method == "Runtime.releaseObject":
+                return {}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    snapshot = service._get_page().locator("body").aria_snapshot()
+
+    assert '- link "Reset access , RITM0360937":' in snapshot
+    assert (
+        '- /url: "?id=ticket&table=sc_req_item&sys_id='
+        'abcdef1234567890abcdef1234567890"'
+    ) in snapshot
+    assert '- textbox "Type your message here"' in snapshot
+    assert '- button "Post"' in snapshot
+    assert calls[0] == ("Accessibility.getFullAXTree", {})
+
+
 def test_page_eval_wraps_evaluate_result(monkeypatch):
     service = BrowserHarnessService("sample-browser-session")
     monkeypatch.setattr(service, "_require_open", lambda: None)
@@ -394,6 +483,7 @@ def test_locator_select_option_supports_value(monkeypatch):
 
     assert "criterion = \"value\"" in calls[0]
     assert "unread" in calls[0]
+    assert "o.value === wanted || (o.textContent || '').trim() === wanted" in calls[0]
 
 
 def test_page_content_returns_serialized_html(monkeypatch):
@@ -562,12 +652,12 @@ def test_session_process_pids_filters_against_persistent_profile_dir(tmp_path, m
     service._user_data_dir = persistent
     monkeypatch.setattr(
         service,
-        "_list_process_commands",
+        "_list_process_table",
         lambda: [
-            (201, "S", f"chrome --user-data-dir={persistent}"),
-            (202, "S", f"chrome --user-data-dir={other}"),
-            (203, "S", "chrome"),
-            (204, "Z", f"chrome --user-data-dir={persistent}"),
+            ProcessCommand(201, 1, "S", f"chrome --user-data-dir={persistent}"),
+            ProcessCommand(202, 1, "S", f"chrome --user-data-dir={other}"),
+            ProcessCommand(203, 1, "S", "chrome"),
+            ProcessCommand(204, 1, "Z", f"chrome --user-data-dir={persistent}"),
         ],
     )
 

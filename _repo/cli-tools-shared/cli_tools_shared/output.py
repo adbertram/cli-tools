@@ -245,7 +245,6 @@ def print_json(data: Any, indent: int = 2, exclude_none: bool = False):
     """Print data as JSON to stdout.
 
     Handles Pydantic models (including nested), dicts, lists, and enums.
-    Auto-injects ``cache_hit`` when the last method call used @cached.
 
     Args:
         data: Data to print (model, dict, list of models/dicts).
@@ -257,15 +256,9 @@ def print_json(data: Any, indent: int = 2, exclude_none: bool = False):
     else:
         output = _serialize_for_json(data)
 
-    # Auto-inject cache_hit from @cached decorator state
-    from cli_tools_shared.data_cache import get_cache_hit, reset_cache_hit
-    cache_hit = get_cache_hit()
-    if cache_hit is not None:
-        if isinstance(output, dict):
-            output = {"cache_hit": cache_hit, **output}
-        elif isinstance(output, list):
-            output = {"cache_hit": cache_hit, "results": output}
-        reset_cache_hit()
+    # Consume cache state so a prior @cached call cannot affect later output.
+    from cli_tools_shared.data_cache import reset_cache_hit
+    reset_cache_hit()
 
     json_str = json.dumps(output, indent=indent, ensure_ascii=False, default=str)
     sys.stdout.buffer.write(json_str.encode("utf-8"))
@@ -300,9 +293,36 @@ def print_output(data: Any, table: bool = False, columns: List[str] = None, head
         print_json(data, indent)
 
 
+def _stdin_is_interactive_tty() -> bool:
+    """Return True only when stdin is a real interactive terminal.
+
+    Destructive commands prompt for confirmation on stdin. When stdin is a pipe,
+    a closed stream, or otherwise not a terminal (e.g. an agent's Bash tool or a
+    CI runner), there is no way to answer the prompt: the read returns EOF and
+    click raises ``Abort``. Callers use this to fail fast with an actionable
+    message instead of blocking on an unanswerable prompt.
+    """
+    isatty = getattr(sys.stdin, "isatty", None)
+    if isatty is None:
+        return False
+    try:
+        return bool(isatty())
+    except ValueError:
+        # isatty() can raise on a closed stream (e.g. at pytest teardown).
+        return False
+
+
 def print_error(message: str):
-    """Print error message to stderr."""
-    print(f"Error: {message}", file=sys.stderr)
+    """Print error message to stderr.
+
+    Never emits a bare ``Error:`` with no detail. Some exceptions carry an empty
+    ``str()`` (e.g. ``click.exceptions.Abort``); for those, fall back to a
+    generic, non-empty description so the user always sees what went wrong.
+    """
+    text = str(message).strip()
+    if not text:
+        text = "an unknown error occurred (the exception carried no message)"
+    print(f"Error: {text}", file=sys.stderr)
 
 
 def print_warning(message: str):
@@ -349,3 +369,51 @@ def handle_error(error: Exception) -> int:
     if isinstance(error, CredentialError):
         return 2
     return 1
+
+
+def confirm_destructive_action(
+    prompt: str,
+    *,
+    assume_yes: bool,
+    action_description: str,
+) -> None:
+    """Gate a destructive action behind confirmation, safe for non-TTY contexts.
+
+    This is the single confirmation path for every destructive CLI command
+    (delete, clear, purge, etc.). It guarantees three things:
+
+    * ``assume_yes=True`` (the command's ``--yes``/``-y``/``--force`` flag was
+      passed): proceed with no prompt. Behavior is unchanged.
+    * stdin is an interactive terminal: prompt the user with ``typer.confirm``.
+      Declining cancels cleanly with exit code 0 (no error).
+    * stdin is NOT a terminal (agent Bash tool, pipe, CI) and ``assume_yes`` is
+      False: fail fast with a clear, actionable ``ClientError`` instead of
+      blocking on an unanswerable prompt and surfacing a bare ``Error:`` when
+      the prompt read hits EOF. The caller's ``handle_error`` turns this into a
+      non-zero exit with the message below.
+
+    Args:
+        prompt: The yes/no question shown to interactive users.
+        assume_yes: True when the command's confirmation-skip flag was supplied.
+        action_description: Short imperative describing the action for the
+            non-interactive refusal message, e.g. ``"delete record recXXX"`` or
+            ``"delete field fldXXX"``.
+
+    Raises:
+        ClientError: When confirmation is required but stdin is not a TTY.
+        typer.Exit: With code 0 when an interactive user declines.
+    """
+    import typer
+
+    if assume_yes:
+        return
+
+    if not _stdin_is_interactive_tty():
+        raise ClientError(
+            f"Refusing to {action_description} without confirmation. "
+            "Re-run with --yes in non-interactive contexts."
+        )
+
+    if not typer.confirm(prompt):
+        print_info("Cancelled")
+        raise typer.Exit(0)

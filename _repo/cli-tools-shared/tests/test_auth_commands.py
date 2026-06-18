@@ -1,11 +1,12 @@
 from pathlib import Path
+import json
 from unittest.mock import MagicMock
 
 import pytest
 from typer.testing import CliRunner
 
 import cli_tools_shared.config as config_module
-from cli_tools_shared.auth_commands import create_auth_app
+from cli_tools_shared.auth_commands import _clear_login_state, create_auth_app
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -158,6 +159,26 @@ def test_browser_session_login_skips_live_probe_when_no_session_on_disk(tmp_path
     assert result.exit_code == 0, result.output
     config.has_saved_session.assert_called_once_with()
     browser.is_authenticated.assert_not_called()
+    browser.login.assert_called_once_with(force=False)
+    browser.close.assert_called_once_with()
+
+
+def test_auth_login_accepts_browser_credential_alias_for_browser_session(tmp_path):
+    browser = MagicMock()
+    browser.login.return_value = {"success": True, "message": "ok"}
+    browser.close.return_value = None
+
+    profile_path = tmp_path / "default" / ".env"
+    profile_path.parent.mkdir(parents=True)
+    profile_path.write_text("ACTIVE=true\n")
+
+    config = _make_config(browser, profile_path)
+    config.has_saved_session.return_value = False
+    app = create_auth_app(lambda profile=None: config, tool_name="tool")
+
+    result = CliRunner().invoke(app, ["login", "--credential", "browser"])
+
+    assert result.exit_code == 0, result.output
     browser.login.assert_called_once_with(force=False)
     browser.close.assert_called_once_with()
 
@@ -324,6 +345,23 @@ def test_logout_clears_browser_session_via_config(tmp_path, monkeypatch):
     assert config._get("REFRESH_TOKEN") in (None, "")
 
 
+def test_clear_login_state_uses_browser_cleanup_when_available():
+    browser = MagicMock()
+    cleared = []
+
+    class _Cfg:
+        def _clear(self, field_name):
+            cleared.append(field_name)
+
+        def get_browser(self):
+            return browser
+
+    _clear_login_state(_Cfg(), [CredentialType.BROWSER_SESSION])
+
+    browser.clear_session.assert_called_once_with()
+    assert cleared == []
+
+
 def test_refresh_command_hidden_without_oauth_token_url(tmp_path):
     """Browser/API CLIs without OAuth token support must not expose refresh."""
     browser = MagicMock()
@@ -340,6 +378,59 @@ def test_refresh_command_hidden_without_oauth_token_url(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "refresh" not in result.output
+
+
+def test_auth_status_reports_missing_profile_secret_as_unauthenticated(tmp_path, monkeypatch):
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("ACTIVE=true\nAPI_KEY=\n")
+
+    profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    profile = profiles_dir / "default" / ".env"
+    profile.parent.mkdir(parents=True)
+    profile.write_text("ACTIVE=true\nAPI_KEY=secret://tool-api-key\n")
+
+    def fake_run(command: str, secret_name: str, *, secret_value=None):
+        assert command == "get"
+        assert secret_name == "tool-api-key"
+        return config_module.subprocess.CompletedProcess(
+            [],
+            1,
+            stdout="",
+            stderr="missing",
+        )
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+
+    result = CliRunner().invoke(app, ["status"])
+
+    assert result.exit_code == 2, result.output
+    data = json.loads(result.output)
+    profile_status = data["profiles"][0]
+    assert profile_status["name"] == "default"
+    assert profile_status["authenticated"] is False
+    api_key_status = profile_status["credential_types"]["api_key"]
+    assert api_key_status["credentials_saved"] is False
+    assert api_key_status["authenticated"] is False
+    assert "Missing secret 'tool-api-key'" in api_key_status["message"]
 
 
 def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch):
@@ -1222,6 +1313,32 @@ def test_auth_status_canonical_shape_no_credentials(tmp_path, monkeypatch):
     block = profile["credential_types"]["api_key"]
     assert block["credentials_saved"] is False
     assert block["authenticated"] is False
+
+
+def test_auth_status_missing_secret_placeholder_reports_unauthenticated_profile(tmp_path, monkeypatch):
+    """A missing secret:// target should be status data, not an unhandled config error."""
+    app, _get_config, _tool_dir, base_profiles_dir = _make_auth_app_in_tmp(
+        tmp_path, monkeypatch, [CredentialType.API_KEY]
+    )
+    _seed_profile(
+        base_profiles_dir,
+        "default",
+        active=True,
+        env_body="API_KEY=secret://tool-api-key\n",
+    )
+
+    result = CliRunner().invoke(app, ["status"])
+
+    assert result.exit_code == 2, result.output
+    data = _assert_canonical_status_shape(result.stdout)
+    profile = data["profiles"][0]
+    assert profile["name"] == "default"
+    assert profile["authenticated"] is False
+    block = profile["credential_types"]["api_key"]
+    assert block["credentials_saved"] is False
+    assert block["authenticated"] is False
+    assert block["api_test"].startswith("failed: Missing secret 'tool-api-key'")
+    assert "referenced by" in block["message"]
 
 
 def test_auth_status_table_no_credentials_exits_two_and_preserves_output(tmp_path, monkeypatch):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 
@@ -59,14 +60,33 @@ def test_skill_places_usage_json_in_cli_skill_folder():
     assert "do not import `cli_test_utils` from ad-hoc Python" in text
 
 
+def test_skill_requires_bounded_schema_safe_usage_json_inspection():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "Schema-Safe Usage JSON Inspection" in text
+    assert "root type, root keys, and `commands` keys" in text
+    assert "print only the current node type and keys before indexing" in text_words
+    assert "Avoid full-map dumps, recursive walks, interactive extractors" in text_words
+    assert "probes that can block or emit excessive output" in text_words
+    assert "MISSING_JSON_PATH: commands.<group>.<subcommand>" in text_words
+
+
 def test_skill_requires_existing_path_operands_for_repo_probes():
     text = _read("SKILL.md")
     text_words = _words(text)
 
     assert "Existing Path Operands Only" in text
     assert "prove each path exists" in text
+    assert "filter glob and optional operands to regular files" in text
+    assert "directories such as `__pycache__` are command errors" in text
     assert "Missing optional paths are command errors" in text
+    assert "wrong-kind operands are command errors" in text
     assert "report skipped optional paths separately" in text
+    assert "Shell globs used as search operands are optional paths too" in text
+    assert "`*/*_cli`, `tests`, or `docs`" in text
+    assert "unmatched glob stays literal" in text
+    assert "ripgrep exits with status" in text
     assert "Do not rely on a downstream pipeline stage" in text
     assert "SKIPPED_MISSING_PATH" in text
     assert "NO_EXISTING_PATHS" in text
@@ -91,6 +111,66 @@ def test_skill_requires_shaped_expected_live_api_probes():
     assert "explicitly validate the expected exit status plus the expected error marker" in text
     assert "EXPECTED_FAILURE: fake field ID returned Airtable 404" in text
     assert "A bare CLI command that exits non-zero is a Tool Failure Protocol violation" in text
+
+
+def test_skill_requires_shaped_expected_mutation_safeguard_probes():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "Shape Expected Mutation-Safeguard Probes" in text
+    assert "mutating command refuses" in text
+    assert "explicitly validate the expected exit status plus the exact refusal message" in text_words
+    assert "Refusing to issue refund without --yes or --dry-run" in text
+    assert "EXPECTED_FAILURE: refund command refused to mutate without --yes or --dry-run." in text
+
+
+def test_skill_requires_shaped_expected_auth_status_probes():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "Shape Expected Auth Status Probes" in text
+    assert "intentionally checks for an unauthenticated profile" in text_words
+    assert "explicitly validate the expected exit status plus the status evidence" in text_words
+    assert "authenticated: false" in text
+    assert "EXPECTED_STATUS: paypal profile is unauthenticated" in text
+    assert "Do not run bare commands such as `paypal auth status -t`" in text
+    assert "copilot auth status --profile default" in text
+    assert "can exit `2` while returning structured JSON" in text
+
+
+def test_copilot_guidance_forbids_inferred_format_flags():
+    text = _read("../copilot-cli/SKILL.md")
+    text_words = _words(text)
+    usage = json.loads(_read("../copilot-cli/usage.json"))
+    agent_list_options = {
+        option["name"]
+        for option in usage["commands"]["agent"]["commands"]["list"]["options"]
+    }
+
+    assert "--format" not in agent_list_options
+    assert "--table" in agent_list_options
+    assert "Do not add `--format json`" in text_words
+    assert "JSON is already the default" in text_words
+    assert "`copilot agent --help` is group help only" in text_words
+    assert "`copilot agent list --help`" in text_words
+
+
+def test_skill_requires_structured_cli_json_parsing_from_files():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "Structured CLI JSON Parsing" in text
+    assert "save stdout to" in text_words
+    assert "verify the command status and non-empty file" in text_words
+    assert "az account list --all --output json | python3 - <<'PY'" in text
+    assert "az account show --output json | python3 - <<'PY'" in text
+    assert "json.load(sys.stdin)" in text
+    assert "JSONDecodeError: Expecting value: line 1 column 1 (char 0)" in text
+    assert "Broken pipe" in text
+    assert 'python3 - "$json_file"' in text
+    assert "GET /api/providers" in text_words
+    assert "MISSING_JSON_PATH: providers[0].config" in text
+    assert "KeyError: 'config'" in text
 
 
 def test_skill_requires_literal_searches_for_template_tokens():
@@ -154,6 +234,30 @@ def test_test_workflow_requires_serial_uv_validation():
     assert "malformed `_uv_ephemeral_overlay.pth`" in text
 
 
+def test_test_workflow_documents_shared_package_pytest_command():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Direct shared-package pytest execution" in text
+    assert "`<cli-tools-root>/_repo/cli-tools-shared`" in text
+    assert "Do not run `uv run pytest` from inside" in text_words
+    assert "ModuleNotFoundError:" in text
+    assert "cli_tools_shared" in text_words
+    assert "uv run --project <cli-tools-root>/_repo/cli-tools-shared --with pytest python -m pytest" in text_words
+
+
+def test_test_workflow_requires_expected_red_wrapper_for_test_first_runs():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Expected-red test-first runs" in text
+    assert "intended to fail before implementation" in text_words
+    assert "do not run the bare pytest command" in text_words
+    assert "validate the expected failure text" in text_words
+    assert "EXPECTED_RED: test-first failure confirmed before implementation." in text
+    assert "UNEXPECTED_PASS: test-first run passed before implementation." in text
+
+
 def test_common_issues_uses_supported_test_cli_tool_invocation():
     text = _read("references/common-issues.md")
 
@@ -182,6 +286,16 @@ def test_test_workflow_documents_harness_unit_monkeypatch_targets():
     assert "causing the real helper to execute" in text_words
 
 
+def test_test_workflow_documents_command_fake_lifecycle_methods():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Command test fake lifecycle methods" in text
+    assert "including cleanup methods reached in `finally` blocks such as `close()`" in text_words
+    assert "Missing lifecycle methods are test-fixture bugs" in text_words
+    assert "add the method to the fake instead of changing the production cleanup path" in text_words
+
+
 def test_test_workflow_documents_live_auth_blockers():
     text = _read("workflows/test-cli.md")
 
@@ -190,6 +304,22 @@ def test_test_workflow_documents_live_auth_blockers():
     assert "auth_required: true" in text
     assert "live compliance remains `LIVE_AUTH_BLOCKED`" in _read("workflows/create-cli.md")
     assert "live compliance remains `LIVE_AUTH_BLOCKED`" in _read("workflows/update-cli.md")
+
+
+def test_dry_run_preview_guidance_requires_auth_free_isolated_launcher_smoke():
+    test_workflow = _read("workflows/test-cli.md")
+    auth_standards = _read("references/auth-standards.md")
+    test_workflow_words = _words(test_workflow)
+    auth_standards_words = _words(auth_standards)
+
+    assert "Verify dry-run/preview commands that do not call live APIs run auth-free with isolated profile data" in test_workflow
+    assert "CRITICAL dry-run/preview auth requirements" in test_workflow
+    assert 'XDG_DATA_HOME="$tmpdir" <tool> <command> --dry-run' in test_workflow
+    assert "fix the command credential declaration or shared registration path" in test_workflow_words
+    assert 'COMMAND_CREDENTIALS = {"<command>": ["no_auth"]}' in test_workflow
+    assert "registration-time\n  credential checks" in auth_standards
+    assert "Map it to `[\"no_auth\"]`" in auth_standards_words
+    assert "isolated profile data" in auth_standards_words
 
 
 def test_browser_automation_requires_explicit_user_approval_after_api_discovery():

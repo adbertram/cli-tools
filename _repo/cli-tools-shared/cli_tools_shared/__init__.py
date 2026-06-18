@@ -54,6 +54,7 @@ from .output import (
     print_success,
     print_info,
     handle_error,
+    confirm_destructive_action,
     print_ai_instruction,
     safe_symbol,
 )
@@ -164,6 +165,7 @@ __all__ = [
     "print_success",
     "print_info",
     "handle_error",
+    "confirm_destructive_action",
     "print_ai_instruction",
     "safe_symbol",
 ]

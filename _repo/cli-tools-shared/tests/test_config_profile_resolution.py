@@ -416,3 +416,31 @@ def test_clear_session_removes_browser_data_without_deleting_profile_env(tmp_pat
     assert env_file.exists()
     assert "ACCESS_TOKEN=secret://exampletool-access-token" in env_file.read_text()
     assert not (config.get_profile_data_dir() / "browser-data").exists()
+
+
+def test_clear_session_removes_browser_data_when_browser_configured(tmp_path, isolated_data_home):
+    """Config-level session cleanup owns profile data deletion."""
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, active=True, api_url="https://x")
+
+    calls = []
+
+    class _Browser:
+        def clear_session(self):
+            calls.append("clear_session")
+
+    class BrowserConfig(CustomConfig):
+        CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
+
+        def get_browser(self):
+            return _Browser()
+
+    config = BrowserConfig(tool_dir=tool_dir)
+    browser_data = config.get_profile_data_dir() / "browser-data"
+    browser_data.mkdir(parents=True)
+
+    config.clear_session()
+
+    assert calls == []
+    assert not browser_data.exists()

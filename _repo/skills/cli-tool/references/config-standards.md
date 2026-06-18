@@ -121,6 +121,26 @@ Profile resolution priority is:
 profiles are active and the probe does not pass `profile=...`, `ConfigError`
 is the expected behavior.
 
+When probing optional profile names, discover first and instantiate second.
+Do not loop over candidate names with `Config(profile=name)` or
+`get_config(profile=name)` unless absence is already ruled out; missing
+profiles intentionally raise `ConfigError`. Use the CLI's data command:
+
+```bash
+mytool auth profiles list --properties name,active,auth_type
+```
+
+or the shared profile API from the installed launcher interpreter:
+
+```python
+from cli_tools_shared.profiles import ProfileStore, list_profiles
+profiles = list_profiles(ProfileStore("mytool"))
+profile_names = {profile["name"] for profile in profiles}
+```
+
+Treat a missing optional profile as evidence (`profile_absent`) and continue
+the diagnostic instead of surfacing an unhandled `ConfigError`.
+
 ## What Goes in the Root `.env`
 - API base URLs
 - Cache enable/TTL settings

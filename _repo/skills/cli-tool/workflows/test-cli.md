@@ -49,10 +49,12 @@ checks where CLI-dependent tests are allowed to skip.
 
 **Direct per-tool pytest execution:** When running a tool's own tests directly,
 use that tool's uv project environment and add pytest to the run environment.
-Do not run `PYTHONPATH=. pytest`, `python -m pytest`, or another ambient
-interpreter from the tool directory; shared dependencies such as
-`cli_tools_shared` are resolved by the uv project declared in the tool's
-`pyproject.toml`.
+Invoke pytest as `python -m pytest`; do not run a bare `pytest` executable,
+because uv can resolve that executable from a different environment and collect
+tests without the tool package importable. Do not run `PYTHONPATH=. pytest`,
+a tool-local `.venv/bin/python`, or another ambient interpreter; shared
+dependencies such as `cli_tools_shared` are resolved by the uv project declared
+in the tool's `pyproject.toml`, and pytest is supplied with `--with pytest`.
 
 Before reading or passing a tool's test paths to `sed`, `cat`, `nl`, `wc`,
 `head`, `tail`, `grep`, `rg`, or direct `pytest`, discover the real test files
@@ -65,6 +67,50 @@ guessed file path.
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
 ```
 
+**Direct shared-package pytest execution:** When running tests for
+`<cli-tools-root>/_repo/cli-tools-shared`, treat `cli-tools-shared` as its own
+uv project, not as a CLI tool directory. Do not run `uv run pytest` from inside
+`_repo/cli-tools-shared`; that can resolve the `pytest` executable without the
+shared package on the import path, causing `ModuleNotFoundError:
+cli_tools_shared` while loading `tests/conftest.py`.
+
+Use `python -m pytest` through the shared package project and inject pytest into
+that run:
+
+```bash
+uv run --project <cli-tools-root>/_repo/cli-tools-shared --with pytest python -m pytest <cli-tools-root>/_repo/cli-tools-shared/tests
+```
+
+**Expected-red test-first runs:** When a direct per-tool or shared-package
+pytest run is intended to fail before implementation, do not run the bare
+pytest command. Wrap it, capture the status and output, validate the expected
+failure text, and exit `0` only for the intended red result. Expected red text
+may be an assertion diff, exception type, or exact exception message. Unexpected
+pass, unexpected failure text, or any other status remains a tool failure.
+For `cli-tools-shared`, use the direct shared-package pytest command above in
+the wrapper instead of a `$TOOL_NAME` project path.
+
+```bash
+tmp_output="$(mktemp)"
+if uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests/test_new_feature.py >"$tmp_output" 2>&1; then
+  status=0
+else
+  status=$?
+fi
+cat "$tmp_output"
+if [ "$status" -ne 0 ] && rg -q -F -- 'expected assertion, exception type, or exception message' "$tmp_output"; then
+  printf '%s\n' 'EXPECTED_RED: test-first failure confirmed before implementation.'
+  rm -f "$tmp_output"
+  exit 0
+fi
+rm -f "$tmp_output"
+if [ "$status" -eq 0 ]; then
+  printf '%s\n' 'UNEXPECTED_PASS: test-first run passed before implementation.' >&2
+  exit 1
+fi
+exit "$status"
+```
+
 **Harness unit monkeypatches:** When a harness unit test patches an imported
 helper such as `run_cli_command`, patch the module object that owns the
 reference used by the code under test (for example,
@@ -72,6 +118,13 @@ reference used by the code under test (for example,
 the module under test and patch that object. Do not use a bare string target
 such as `"test_profiles.run_cli_command"`; pytest may collect the file under a
 different module name, causing the real helper to execute.
+
+**Command test fake lifecycle methods:** When a command test replaces a
+production client or browser client with a fake, the fake must implement every
+method the command can call on that object, including cleanup methods reached in
+`finally` blocks such as `close()`. Missing lifecycle methods are test-fixture
+bugs; add the method to the fake instead of changing the production cleanup
+path.
 
 **Run the test script for structured JSON results:**
 
@@ -166,6 +219,7 @@ Create todos from:
    - "AI Review: Verify auth status makes actual API call (CRITICAL)"
    - "AI Review: Verify auth uses cli_tools_shared (not custom auth module)"
    - "AI Review: Verify --force only clears ephemeral state (tokens/sessions), not static credentials"
+   - "AI Review: Verify dry-run/preview commands that do not call live APIs run auth-free with isolated profile data"
    - "AI Review: Verify reusable credentials are routed through the CLI-tools secret manager, not any `.env` file"
    - "AI Review: Verify activity logging covers important code paths"
    - "AI Review: Verify browser CLI uses base class is_authenticated() (no custom auth-check methods)" *(browser CLIs only)*
@@ -233,6 +287,26 @@ The `auth status` command MUST make an actual API call to verify credentials are
 - Agents and docs MUST NOT instruct users to place those values in any `.env` file
 - `.env` files are limited to non-secret config and CLI-managed runtime auth state
 
+**CRITICAL dry-run/preview auth requirements:**
+Commands whose `--dry-run` or preview mode only prints the intended request and
+does not call a live API MUST be executable without saved credentials. Validate
+the installed launcher with isolated profile data so shared command
+registration cannot require auth before the command inspects `--dry-run`:
+
+```bash
+tmpdir="$(mktemp -d)"
+XDG_DATA_HOME="$tmpdir" <tool> <command> --dry-run
+rc=$?
+rm -rf "$tmpdir"
+exit "$rc"
+```
+
+If that check fails with missing credentials, fix the command credential
+declaration or shared registration path instead of adding credentials to the
+test environment. Use `COMMAND_CREDENTIALS = {"<command>": ["no_auth"]}` only
+when the command code itself enforces auth before live mutations and keeps the
+dry-run path auth-free.
+
 ### Fix Process
 
 For fix todos:
@@ -290,6 +364,7 @@ Only after ALL todos are complete, present:
 - Error handling: [Verified NO silent error swallowing - all API errors surface to user]
 - auth status: [Verified makes actual API call to validate credentials]
 - --force ephemeral: [Verified --force only clears tokens/sessions, not static credentials]
+- Dry-run preview auth: [Verified dry-run/preview commands that do not call live APIs run with isolated empty profile data]
 - Secret storage: [Verified reusable credentials use secret manager instead of `.env`]
 - Activity logging: [Verified get_activity_logger used in client and command files]
 - Browser auth delegation: [Verified uses base class is_authenticated() — no custom is_logged_in/_ensure_logged_in] *(browser CLIs only)*

@@ -43,6 +43,8 @@ def test_test_script_validates_readme_description_block():
     assert "validate_readme_description_block" in script_text
     assert "DESCRIPTION block" in script_text
     assert 'readme_description_block' in script_text
+    assert "found {sentence_count}" in script_text
+    assert "json_test_failure" in script_text
 
 
 def test_test_script_unknown_argument_points_to_supported_invocation():

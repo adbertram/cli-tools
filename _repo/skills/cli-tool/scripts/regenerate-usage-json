@@ -3,12 +3,41 @@
 
 from __future__ import annotations
 
-import argparse
-import json
+import os
+import shutil
 import sys
-import tomllib
-from datetime import datetime, timezone
-from pathlib import Path
+
+# The shebang resolves to whatever ``python3`` is first on PATH, which on this
+# machine is system Python 3.9.6. ``tomllib`` (used below) only entered the
+# stdlib in 3.11, so re-exec under a 3.11+ interpreter when the current one is
+# too old. This early-returns when already on 3.11+, so a caller that invokes
+# the script with a modern interpreter is unaffected.
+if sys.version_info < (3, 11):
+    _REEXEC_GUARD = "_REGEN_USAGE_JSON_REEXEC"
+    if os.environ.get(_REEXEC_GUARD):
+        raise SystemExit(
+            "regenerate-usage-json needs Python 3.11+ for tomllib, but re-exec landed "
+            f"on {sys.version.split()[0]}. Install Python 3.11 or newer and retry."
+        )
+    for _candidate in ("python3.14", "python3.13", "python3.12", "python3.11"):
+        _interpreter = shutil.which(_candidate)
+        if _interpreter:
+            os.execve(
+                _interpreter,
+                [_interpreter, os.path.abspath(__file__), *sys.argv[1:]],
+                {**os.environ, _REEXEC_GUARD: "1"},
+            )
+    raise SystemExit(
+        "regenerate-usage-json needs Python 3.11+ for tomllib, but the current "
+        f"interpreter is {sys.version.split()[0]} and no python3.11/3.12/3.13/3.14 was "
+        "found on PATH. Install one (e.g. `brew install python@3.11`) and retry."
+    )
+
+import argparse  # noqa: E402
+import json  # noqa: E402
+import tomllib  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 
 SKILL_DIR = Path(__file__).resolve().parents[1]

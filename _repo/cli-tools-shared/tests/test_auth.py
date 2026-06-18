@@ -43,6 +43,10 @@ class _HeadedAutomationBrowser(_TestBrowser):
     AUTOMATION_HEADED = True
 
 
+class _ManualLoginBrowser(_TestBrowser):
+    MANUAL_LOGIN = True
+
+
 class _LoginUrlBrowser(_TestBrowser):
     AUTH_URL_PATTERN = r"/login"
 
@@ -73,6 +77,7 @@ class _Service:
         self.browser_open_calls = []
         self.goto_calls = []
         self.wait_for_timeout_calls = []
+        self.browser_close_calls = 0
         self.cookie_list_calls = 0
         self._opened = False
         self._cookies: list = []
@@ -94,6 +99,7 @@ class _Service:
         return list(self._cookies)
 
     def browser_close(self):
+        self.browser_close_calls += 1
         self._opened = False
 
 
@@ -302,6 +308,50 @@ def test_prompt_enter_eof_safe_handles_eof_via_tty(tmp_path, monkeypatch):
     assert fake_tty.read is True
 
 
+def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monkeypatch):
+    browser = _ManualLoginBrowser(_TestConfig(tmp_path))
+    waited = []
+
+    class _FakeProc:
+        def __init__(self):
+            self.terminated = False
+
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            self.terminated = True
+
+    proc = _FakeProc()
+
+    def _raise_eof(*_a, **_k):
+        raise EOFError("piped stdin")
+
+    def _raise_tty_error(path, *_a, **_k):
+        if path == "/dev/tty":
+            raise OSError("no tty")
+        raise AssertionError(f"unexpected open path: {path}")
+
+    monkeypatch.setattr("builtins.input", _raise_eof)
+    monkeypatch.setattr("builtins.open", _raise_tty_error)
+    monkeypatch.setattr("cli_tools_shared.browser.driver._chrome_binary", lambda: "/tmp/chrome")
+    monkeypatch.setattr("cli_tools_shared.browser.driver._chrome_launch_command", lambda _chrome, args: args)
+    monkeypatch.setattr("cli_tools_shared.auth.subprocess.Popen", lambda *_a, **_k: proc)
+    monkeypatch.setattr(
+        browser,
+        "_wait_for_manual_browser_close",
+        lambda process, profile_dir: waited.append((process, Path(profile_dir))),
+    )
+    monkeypatch.setattr("cli_tools_shared.auth.terminate_profile_processes", lambda _profile_dir: None)
+    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert waited == [(proc, tmp_path / "chromium-profile")]
+    assert proc.terminated is True
+
+
 # ---------------------------------------------------------------------------
 # clear_session() — rmtree the persistent profile dir, invalidate cached svc
 # ---------------------------------------------------------------------------
@@ -382,6 +432,43 @@ def test_clear_session_invalidates_cached_service(tmp_path, monkeypatch):
     browser.clear_session()
 
     assert browser._service is None
+
+
+def test_manual_login_cleanup_uses_shared_profile_process_terminator(tmp_path, monkeypatch):
+    config = _TestConfig(tmp_path)
+    profile_dir = config.get_persistent_profile_dir()
+    browser = _TestBrowser(config)
+    terminated_profiles = []
+    run_calls = []
+
+    class _LoginLauncher:
+        def __init__(self):
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+    launcher = _LoginLauncher()
+
+    def fake_profile_terminator(path):
+        terminated_profiles.append(Path(path))
+
+    def fake_subprocess_run(*args, **kwargs):
+        run_calls.append((args, kwargs))
+
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.terminate_profile_processes",
+        fake_profile_terminator,
+        raising=False,
+    )
+    monkeypatch.setattr("cli_tools_shared.auth.subprocess.run", fake_subprocess_run)
+    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
+
+    browser._quit_login_chrome(launcher, profile_dir)
+
+    assert launcher.terminated is True
+    assert terminated_profiles == [profile_dir]
+    assert run_calls == []
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +574,42 @@ def test_is_authenticated_cookie_pattern_does_not_wait_for_page_load(tmp_path, m
 
     assert result.authenticated is True
     assert service.wait_for_timeout_calls == []
+    assert service.browser_close_calls == 1
+
+
+def test_is_authenticated_closes_browser_after_live_check_failure(tmp_path, monkeypatch):
+    browser = _CookieBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    def _raise_cookie_error():
+        raise RuntimeError("cookie read failed")
+
+    service.cookie_list = _raise_cookie_error
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    result = browser.is_authenticated()
+
+    assert result.authenticated is False
+    assert service.browser_close_calls == 1
+
+
+def test_test_session_closes_browser_after_live_check_failure(tmp_path, monkeypatch):
+    config = _TestConfig(tmp_path)
+    (config.get_persistent_profile_dir() / "Default").mkdir(parents=True)
+    (config.get_persistent_profile_dir() / "Default" / "Cookies").write_text("sqlite-stub")
+    browser = _TestBrowser(config)
+    service = _Service()
+
+    def _raise_wait_error(_timeout):
+        raise RuntimeError("page crashed")
+
+    service.wait_for_timeout = _raise_wait_error
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    result = browser.test_session()
+
+    assert result == {"authenticated": False, "error": "page crashed"}
+    assert service.browser_close_calls == 1
 
 
 # ---------------------------------------------------------------------------

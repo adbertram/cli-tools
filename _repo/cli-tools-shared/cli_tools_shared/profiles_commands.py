@@ -9,7 +9,7 @@ import typer
 from .config import ConfigError, get_profile_auth_settings, resolve_tool_dir
 from .filters import apply_filters, apply_limit, apply_properties_filter
 from .profiles import ProfileStore, create_profile, delete_profile, list_profiles, select_profile
-from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command
+from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command, confirm_destructive_action
 
 
 def _get_config_class(get_config_fn):
@@ -249,10 +249,11 @@ def create_profiles_app(get_config_fn, tool_name: str):
         force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation"),
     ):
         """Delete a profile and its data."""
-        if not force and not typer.confirm(
-            f"Delete profile '{name}'? This removes the .env file and profile data."
-        ):
-            raise typer.Exit(0)
+        confirm_destructive_action(
+            f"Delete profile '{name}'? This removes the .env file and profile data.",
+            assume_yes=force,
+            action_description=f"delete profile '{name}'",
+        )
 
         delete_profile(profile_store, name)
         print_success(f"Profile '{name}' deleted")

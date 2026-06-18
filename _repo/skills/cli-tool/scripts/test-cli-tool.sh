@@ -55,8 +55,12 @@ PY
 
 validate_readme_description_block() {
     local readme_path="$CLI_DIR/README.md"
+    local readme_file="${readme_path#"$REPO_ROOT"/}"
     if [[ ! -f "$readme_path" ]]; then
-        json_error "README.md is required for CLI tool: $CLI_NAME" >&2
+        json_test_failure \
+            "readme_description_block" \
+            "$readme_file" \
+            "README.md is required for CLI tool: $CLI_NAME"
         exit 1
     fi
 
@@ -68,14 +72,19 @@ import os
 import re
 from pathlib import Path
 
+
+def fail(message: str) -> None:
+    print(message)
+    raise SystemExit(1)
+
+
 path = Path(os.environ["README_PATH"])
 lines = path.read_text().splitlines()
 
 try:
     start = lines.index("## DESCRIPTION")
 except ValueError:
-    print("README.md must contain a ## DESCRIPTION block")
-    raise SystemExit(1)
+    fail("README.md must contain a ## DESCRIPTION block")
 
 end = len(lines)
 for index in range(start + 1, len(lines)):
@@ -85,16 +94,27 @@ for index in range(start + 1, len(lines)):
 
 block = "\n".join(lines[start + 1 : end]).strip()
 sentences = re.findall(r"[^.!?]+[.!?]", block)
-if len(sentences) < 2 or len(sentences) > 3:
-    print("README.md DESCRIPTION block must contain 2-3 sentences")
-    raise SystemExit(1)
+sentence_count = len(sentences)
+if sentence_count < 2 or sentence_count > 3:
+    preview = re.sub(r"\s+", " ", block).strip()
+    if len(preview) > 180:
+        preview = f"{preview[:177]}..."
+    fail(
+        "README.md DESCRIPTION block must contain 2-3 sentences; "
+        f"found {sentence_count}. Current block: {preview!r}"
+    )
 
 if "use" not in block.lower():
-    print("README.md DESCRIPTION block must explain why someone would use the CLI")
-    raise SystemExit(1)
+    fail(
+        "README.md DESCRIPTION block must explain why someone would use the CLI; "
+        "include a sentence that contains 'use'."
+    )
 PY
     )"; then
-        json_error "$README_DESCRIPTION_ERROR" >&2
+        json_test_failure \
+            "readme_description_block" \
+            "$readme_file" \
+            "$README_DESCRIPTION_ERROR"
         exit 1
     fi
 

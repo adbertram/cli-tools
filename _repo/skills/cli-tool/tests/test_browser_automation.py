@@ -14,6 +14,7 @@ Tests validate:
 """
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,30 @@ def _get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:
     """Get the CLI package directory."""
     pkg_name = cli_name.replace("-", "_") + "_cli"
     return cli_dir / pkg_name
+
+
+def _browser_client_files(pkg_dir: Path) -> list[Path]:
+    """Return client modules that may own browser-backed operations."""
+    return [
+        path
+        for path in (pkg_dir / "client.py", pkg_dir / "browser_client.py")
+        if path.exists()
+    ]
+
+
+def _uses_browser_automation(content: str) -> bool:
+    """Return whether a source file participates in browser automation."""
+    return any(
+        marker in content
+        for marker in (
+            "BrowserAutomation",
+            "PlaywrightBrowserAutomation",
+            "get_browser",
+            "get_browser_client",
+            "get_page",
+            "browser_session",
+        )
+    )
 
 
 # ==================== Config Pattern ====================
@@ -118,27 +143,29 @@ def test_browser_cli_client_uses_browser_automation(cli_name, cli_dir, test_conf
         pytest.skip(f"{cli_name} is not a browser automation CLI")
 
     pkg_dir = _get_pkg_dir(cli_dir, cli_name)
-    client_file = pkg_dir / "client.py"
-
-    if not client_file.exists():
-        pytest.fail(f"client.py not found at {client_file}")
-
-    content = client_file.read_text()
+    client_files = _browser_client_files(pkg_dir)
+    if not client_files:
+        pytest.fail(
+            f"No browser client module found for {cli_name}. "
+            "Expected client.py or browser_client.py."
+        )
 
     # Client should import the BrowserAutomation subclass from config or browser
-    has_browser_import = (
-        "BrowserAutomation" in content
-        or "Browser(" in content  # e.g., BrickfreedomBrowser(
-        or "get_browser" in content
+    has_browser_import = any(
+        _uses_browser_automation(path.read_text())
+        for path in client_files
     )
     assert has_browser_import, (
-        f"'{cli_name}' client.py must use a BrowserAutomation subclass for browser management. "
-        f"Fix: Import the BrowserAutomation subclass from browser.py and use its get_page()/close() methods."
+        f"'{cli_name}' browser client module must use a BrowserAutomation subclass for browser management. "
+        f"Fix: Import the BrowserAutomation subclass from browser.py or call config.get_browser(), "
+        f"then use get_page()/close() methods."
     )
-    assert "BrowserService" not in content, (
-        f"'{cli_name}' client.py must NOT reference BrowserService (old pattern). "
-        f"Fix: Replace BrowserService with BrowserAutomation subclass from browser.py."
-    )
+    for path in client_files:
+        content = path.read_text()
+        assert "BrowserService" not in content, (
+            f"'{cli_name}' {path.name} must NOT reference BrowserService (old pattern). "
+            f"Fix: Replace BrowserService with BrowserAutomation subclass from browser.py."
+        )
 
 
 # ==================== Auth Delegation ====================
@@ -168,7 +195,11 @@ def test_browser_cli_no_direct_browser_auth(cli_name, cli_dir, test_config, comm
         if py_file.name in excluded_files or "__pycache__" in py_file.parts:
             continue
 
-        lines = py_file.read_text().splitlines()
+        content = py_file.read_text()
+        if not _uses_browser_automation(content):
+            continue
+
+        lines = content.splitlines()
         rel_path = py_file.relative_to(cli_dir)
 
         for line_num, line in enumerate(lines, start=1):
@@ -305,6 +336,47 @@ def test_browser_cli_uses_browser_harness_via_browser_automation(
         "BrowserHarnessService directly or call browser binaries via subprocess.\n"
         "Correct: self._browser.get_page(url), self._browser.close()\n"
         "Wrong: subprocess.run(['playwright-cli', 'page', 'goto', url])"
+    )
+
+
+# ==================== Playwright Service Dependency ====================
+
+
+def test_browser_cli_declares_playwright_when_using_playwright_service(
+    cli_name, cli_dir, test_config, command_filter, is_browser_cli
+):
+    """CLIs using PlaywrightBrowserAutomation must declare playwright directly."""
+    if command_filter:
+        pytest.skip("Skipping browser automation tests (command filter active)")
+    if not is_browser_cli:
+        pytest.skip(f"{cli_name} is not a browser automation CLI")
+
+    pkg_dir = _get_pkg_dir(cli_dir, cli_name)
+    browser_file = pkg_dir / "browser.py"
+    config_file = pkg_dir / "config.py"
+    source = "\n".join(
+        path.read_text()
+        for path in (browser_file, config_file)
+        if path.exists()
+    )
+
+    if "PlaywrightBrowserAutomation" not in source:
+        pytest.skip(f"{cli_name} does not use PlaywrightBrowserAutomation")
+
+    pyproject_file = cli_dir / "pyproject.toml"
+    if not pyproject_file.exists():
+        pytest.fail(f"pyproject.toml not found at {pyproject_file}")
+
+    project = tomllib.loads(pyproject_file.read_text())
+    dependencies = project.get("project", {}).get("dependencies", [])
+    has_playwright = any(dep.split(";", 1)[0].strip().startswith("playwright") for dep in dependencies)
+
+    assert has_playwright, (
+        f"'{cli_name}' uses PlaywrightBrowserAutomation, which imports "
+        f"playwright.sync_api at runtime, but {pyproject_file} does not declare "
+        f"playwright as a direct dependency.\n"
+        f"Fix: Add 'playwright>=1.40.0' to [project].dependencies and refresh "
+        f"the tool install/lockfile."
     )
 
 

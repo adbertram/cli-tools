@@ -361,7 +361,10 @@ def _check_credentials(
             + f"\n\nRun '{cli_name} auth login' to authenticate.",
             err=True,
         )
-        raise typer.Exit(1)
+        # Exit 2 = authentication/credential error (matches the documented
+        # exit-code contract and CredentialError handling). Missing credentials
+        # is an auth failure, not a generic error.
+        raise typer.Exit(2)
 
 
 def register_commands(

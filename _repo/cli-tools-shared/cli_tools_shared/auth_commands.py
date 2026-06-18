@@ -19,6 +19,11 @@ from .output import print_json, print_table, print_output, print_success, print_
 logger = get_debug_logger("cli_tools.auth_commands")
 
 
+_CREDENTIAL_TYPE_ALIASES = {
+    "browser": CredentialType.BROWSER_SESSION.value,
+}
+
+
 def _login_setup_instructions(config) -> Optional[str]:
     """Return the preferred auth setup message for a config."""
     for attr_name in ("AUTH_SETUP_INSTRUCTIONS", "LOGIN_INSTRUCTIONS"):
@@ -81,7 +86,11 @@ def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
         config._clear(field_name)
 
     if CredentialType.BROWSER_SESSION in credential_types:
-        config.clear_session()
+        browser = config.get_browser() if hasattr(config, "get_browser") else None
+        if browser is not None:
+            browser.clear_session()
+        else:
+            config.clear_session()
 
 
 def _handle_browser_login(config, tool_name: str, force: bool):
@@ -176,6 +185,10 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
     from .profiles import list_profiles
 
     config_cls = _get_config_class(get_config_fn)
+    configured_credential_types = list(
+        getattr(config_cls, "CREDENTIAL_TYPES", None)
+        or []
+    )
     profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
     profile_entries = [entry for entry in list_profiles(profile_store) if entry.get("active") is True]
     if not profile_entries:
@@ -266,10 +279,44 @@ def _collect_profile_statuses(
         entry["name"]: entry
         for entry in list_profiles(profile_store)
     }
+    configured_credential_types = list(
+        getattr(config_cls, "CREDENTIAL_TYPES", []) if config_cls is not None else []
+    )
 
     profile_entries = []
     for prof_name in profile_names:
-        config = get_config_fn(profile=prof_name)
+        try:
+            config = get_config_fn(profile=prof_name)
+        except ConfigError as exc:
+            message = str(exc)
+            if (
+                config_cls is None
+                or not message.startswith("Missing secret '")
+                or " referenced by " not in message
+            ):
+                raise
+            active_name = prof_name or "default"
+            profile_meta = profile_map.get(active_name, {})
+            credential_types = {
+                ct.value: {
+                    "credentials_saved": False,
+                    "authenticated": False,
+                    "api_test": f"failed: {message}",
+                    "message": message,
+                }
+                for ct in configured_credential_types
+            }
+            profile_entries.append(
+                {
+                    "name": active_name,
+                    "auth_type": profile_meta.get("auth_type") or "default",
+                    "active": bool(profile_meta.get("active", False)),
+                    "authenticated": False,
+                    "credential_types": credential_types,
+                    "missing": [message],
+                }
+            )
+            continue
         verifier = AuthVerifier(config, api_test_handler=api_test_handler)
         result = verifier.verify()
 
@@ -394,8 +441,9 @@ def _resolve_credential_type(config, credential_type_str: str):
     if len(cred_types) < 2:
         print_error("--credential-type is only valid for CLIs with multiple credential types")
         raise typer.Exit(1)
+    normalized = _CREDENTIAL_TYPE_ALIASES.get(credential_type_str, credential_type_str)
     for ct in cred_types:
-        if ct.value == credential_type_str:
+        if ct.value == normalized:
             return ct
     valid = ", ".join(ct.value for ct in cred_types)
     print_error(f"Unknown credential type '{credential_type_str}'. Valid types: {valid}")
@@ -588,7 +636,7 @@ def create_auth_app(
                 False, "--force", "-F", help="Clear existing credentials and re-authenticate"
             ),
             credential_type: Optional[str] = typer.Option(
-                None, "--credential-type", "-c", help=credential_type_help
+                None, "--credential-type", "--credential", "-c", help=credential_type_help
             ),
         ):
             _run_auth_login(profile, force, credential_type)

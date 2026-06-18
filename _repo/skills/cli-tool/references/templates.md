@@ -964,6 +964,14 @@ After scaffolding, customize:
 
 **Browser type:**
 - **Capture real DOM data FIRST** via `config.get_browser().get_page(url).evaluate(...)` before writing any parsers
+- For login/status proof scripts on pages that redirect during authentication,
+  do not poll visibility with repeated `page.evaluate(...)` calls. Use
+  Playwright locator waits such as `page.locator(selector).first.wait_for(...)`
+  or `is_visible(timeout=...)` so navigation is handled by the browser driver.
+  If raw evaluation is unavoidable for a DOM-capture probe, treat
+  "Execution context was destroyed" as a navigation-in-progress signal only:
+  wait for the page to settle, then retry the bounded probe instead of
+  classifying it as login failure or credential failure.
 - Implement `parsers.py` based on REAL DOM patterns (never guess)
 - Add domain methods to `client.py` using the `BrowserAutomation` subclass via `self.config.get_browser()`
 - Validate every parser against actual captured data before marking complete

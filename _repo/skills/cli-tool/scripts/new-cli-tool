@@ -195,13 +195,23 @@ def validate_template_dir(template_dir: Path) -> None:
 def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
     """Install the package using uv tool install."""
     print_step("Installing via uv tool install...")
-    python3 = shutil.which("python3") or "python3"
 
-    result = subprocess.run(
-        ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh", "--python", python3],
-        capture_output=True,
-        text=True,
-    )
+    # Honor the tool's requires-python. Forcing the ambient python3 breaks when
+    # it is older than the tool requires (e.g. macOS system 3.9 vs a >=3.11
+    # tool, which uv rejects as "unsatisfiable"). resolve_uv_python returns the
+    # ambient interpreter when it already satisfies the constraint, otherwise a
+    # compatible "3.X" request for uv to find or download.
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.append(scripts_dir)
+    from resolve_uv_python import resolve_uv_python_request
+
+    cmd = ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh"]
+    python_request = resolve_uv_python_request(tool_dir / "pyproject.toml")
+    if python_request:
+        cmd += ["--python", python_request]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print_error(f"Failed to install via uv: {result.stderr}")
         return False

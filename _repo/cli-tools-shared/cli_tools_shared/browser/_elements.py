@@ -79,30 +79,42 @@ def _has_text_js(selector: str) -> str:
     )
 
 
-def _name_filter_js(base_js: str, name) -> str:
+def _name_filter_js(base_js: str, name, *, exact: bool = False) -> str:
     """Apply a name filter (string or compiled regex) on top of base_js."""
     if name is None:
         return base_js
+    names_expr = """[
+        (el.textContent || '').trim(),
+        el.getAttribute('aria-label') || '',
+        (el.getAttribute('aria-labelledby') || '')
+            .split(/\\s+/)
+            .filter(Boolean)
+            .map(id => {
+                const label = document.getElementById(id);
+                return label ? (label.textContent || '').trim() : '';
+            })
+            .filter(Boolean)
+            .join(' ')
+            .trim(),
+        ...(el.labels ? Array.from(el.labels).map(label => (label.textContent || '').trim()) : []),
+        el.getAttribute('placeholder') || '',
+        el.getAttribute('title') || '',
+        'value' in el ? String(el.value || '') : '',
+    ].filter(Boolean)"""
     if hasattr(name, "pattern"):
         flags = "i" if name.flags & re.IGNORECASE else ""
         js_re = f"/{name.pattern}/{flags}"
-        return (
-            f"{base_js}.filter(el => {js_re}.test(el.textContent.trim())"
-            f" || {js_re}.test(el.getAttribute('aria-label') || '')"
-            f" || {js_re}.test(el.value || ''))"
-        )
+        return f"{base_js}.filter(el => ({names_expr}).some(value => {js_re}.test(value)))"
     needle = json.dumps(str(name))
-    return (
-        f"{base_js}.filter(el => el.textContent.trim().includes({needle})"
-        f" || (el.getAttribute('aria-label') || '').includes({needle})"
-        f" || (el.value || '').includes({needle}))"
-    )
+    if exact:
+        return f"{base_js}.filter(el => ({names_expr}).some(value => value === {needle}))"
+    return f"{base_js}.filter(el => ({names_expr}).some(value => value.includes({needle})))"
 
 
-def _role_js(role: str, name=None, scope_js: Optional[str] = None) -> str:
+def _role_js(role: str, name=None, scope_js: Optional[str] = None, *, exact: bool = False) -> str:
     css = _ROLE_CSS.get(role, f"[role='{role}']")
     base = _scoped_css_js(scope_js, css) if scope_js else _css_js(css)
-    return _name_filter_js(base, name)
+    return _name_filter_js(base, name, exact=exact)
 
 
 def _has_text_filter_js(base_js: str, has_text) -> str:
@@ -128,12 +140,20 @@ class _ServiceLocator:
 
     def __init__(self, svc: BrowserHarnessService, selector_or_js: str, *, _is_js: bool = False):
         self._svc = svc
+        self._selector = None if _is_js else selector_or_js
         # _is_js distinguishes "raw JS expression" from "selector string we should compile"
         self._find_js = selector_or_js if _is_js else _selector_js(selector_or_js)
 
     @classmethod
-    def from_role(cls, svc: BrowserHarnessService, role: str, name=None) -> _ServiceLocator:
-        return cls(svc, _role_js(role, name), _is_js=True)
+    def from_role(
+        cls,
+        svc: BrowserHarnessService,
+        role: str,
+        name=None,
+        *,
+        exact: bool = False,
+    ) -> _ServiceLocator:
+        return cls(svc, _role_js(role, name, exact=exact), _is_js=True)
 
     def _eval_on_first(self, body: str, *, require: bool = False) -> Any:
         guard = (
@@ -198,6 +218,13 @@ class _ServiceLocator:
         value = self._eval_on_first("return 'value' in el ? el.value : '';")
         return value if isinstance(value, str) else ""
 
+    def aria_snapshot(self, *, timeout: int = 5000) -> str:
+        if self._selector is None:
+            raise BrowserHarnessError(
+                "aria_snapshot is only supported for direct selector locators"
+            )
+        return self._svc.aria_snapshot(self._selector, timeout=timeout)
+
     # --- chaining ---
 
     def all(self) -> List[_ServiceLocator]:
@@ -221,8 +248,12 @@ class _ServiceLocator:
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return self.locator(f'[placeholder="{text}"]')
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
-        return _ServiceLocator(self._svc, _role_js(role, name, scope_js=self._find_js), _is_js=True)
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator(
+            self._svc,
+            _role_js(role, name, scope_js=self._find_js, exact=exact),
+            _is_js=True,
+        )
 
 
 class _ServiceElement:
@@ -296,10 +327,10 @@ class _ServiceElement:
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return self.locator(f'[placeholder="{text}"]')
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
         return _ServiceLocator(
             self._svc,
-            _role_js(role, name, scope_js=f"[{self._js}].filter(Boolean)"),
+            _role_js(role, name, scope_js=f"[{self._js}].filter(Boolean)", exact=exact),
             _is_js=True,
         )
 
@@ -422,7 +453,7 @@ def _select_option(svc: BrowserHarnessService, element_js: str, *,
             const option = Array.from(el.options).find(o =>
                 criterion === 'label'
                     ? (o.textContent || '').trim() === wanted
-                    : o.value === wanted
+                    : o.value === wanted || (o.textContent || '').trim() === wanted
             );
             if (!option) throw new Error(`No select option matched ${{criterion}}: ${{wanted}}`);
             el.value = option.value;

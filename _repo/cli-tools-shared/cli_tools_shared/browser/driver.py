@@ -29,6 +29,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
+from .processes import ProcessCommand, command_user_data_dir, list_process_commands, profile_process_pids
 
 logger = get_debug_logger("cli_tools.browser_service")
 
@@ -272,71 +273,31 @@ class BrowserHarnessService:
         except subprocess.TimeoutExpired:
             logger.debug("_request_browser_close: timed out waiting for Chrome to exit")
 
-    def _list_process_commands(self) -> List[tuple[int, str, str]]:
-        """Return `(pid, stat, command)` rows for the local process table."""
+    def _list_process_table(self) -> List[ProcessCommand]:
+        """Return process-table rows for the local process table."""
         try:
-            result = subprocess.run(
-                ["ps", "ax", "-o", "pid=,stat=,command="],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as e:
+            return list_process_commands()
+        except RuntimeError as e:
             raise BrowserHarnessError(f"Failed to inspect process table: {e}") from e
 
-        rows: List[tuple[int, str, str]] = []
-        for raw_line in result.stdout.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            parts = line.split(None, 2)
-            try:
-                pid = int(parts[0])
-            except (IndexError, ValueError) as e:
-                raise BrowserHarnessError(
-                    f"Failed to parse process-table row: {raw_line!r}"
-                ) from e
-            stat = parts[1] if len(parts) >= 2 else ""
-            command = parts[2] if len(parts) == 3 else ""
-            rows.append((pid, stat, command))
-        return rows
+    def _list_process_commands(self) -> List[tuple[int, str, str]]:
+        """Return legacy `(pid, stat, command)` process rows."""
+        return [(proc.pid, proc.stat, proc.command) for proc in self._list_process_table()]
 
     def _session_process_pids(self) -> List[int]:
         """Return PIDs for Chrome/browser-harness children using this session's profile."""
         if self._user_data_dir is None:
             return []
-        user_data_dir = str(self._user_data_dir)
-        pids: List[int] = []
-        for pid, stat, command in self._list_process_commands():
-            if pid == os.getpid():
-                continue
-            if stat.startswith("Z"):
-                continue
-            command_user_data_dir = self._command_user_data_dir(command)
-            if command_user_data_dir != user_data_dir:
-                continue
-            pids.append(pid)
-        return pids
+        return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
 
     @staticmethod
     def _command_user_data_dir(command: str) -> Optional[str]:
-        for pattern in (
-            r"(?:^|\s)--user-data-dir=(?P<value>\"[^\"]+\"|'[^']+'|\S+)(?:\s|$)",
-            r"(?:^|\s)--user-data-dir\s+(?P<value>\"[^\"]+\"|'[^']+'|\S+)(?:\s|$)",
-        ):
-            match = re.search(pattern, command)
-            if not match:
-                continue
-            value = match.group("value")
-            if value.startswith(("'", '"')) and value.endswith(("'", '"')):
-                return value[1:-1]
-            return value
-        return None
+        return command_user_data_dir(command)
 
     def _pid_running(self, pid: int) -> bool:
-        for current_pid, stat, _command in self._list_process_commands():
-            if current_pid == pid:
-                return not stat.startswith("Z")
+        for proc in self._list_process_table():
+            if proc.pid == pid:
+                return not proc.stat.startswith("Z")
         return False
 
     def _terminate_session_pid(self, pid: int) -> None:
@@ -694,6 +655,144 @@ class BrowserHarnessService:
                 return frame_id
         return None
 
+    @staticmethod
+    def _ax_value(payload: Any) -> Any:
+        if isinstance(payload, dict):
+            return payload.get("value")
+        return None
+
+    @classmethod
+    def _ax_role(cls, node: Dict[str, Any]) -> str:
+        role = str(cls._ax_value(node.get("role")) or "").strip()
+        role = role.replace(" ", "").lower()
+        role_map = {
+            "rootwebarea": "root",
+            "statictext": "text",
+            "inlinetextbox": "text",
+            "labeltext": "text",
+            "genericcontainer": "generic",
+            "section": "generic",
+        }
+        return role_map.get(role, role)
+
+    @classmethod
+    def _ax_name(cls, node: Dict[str, Any]) -> str:
+        value = cls._ax_value(node.get("name"))
+        if value is None:
+            value = cls._ax_value(node.get("value"))
+        return str(value or "").strip()
+
+    @staticmethod
+    def _aria_quote(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    def _backend_node_js_value(
+        self,
+        backend_node_id: Any,
+        function_declaration: str,
+    ) -> Any:
+        if backend_node_id is None:
+            return None
+        resolved = self._bh.h.cdp("DOM.resolveNode", backendNodeId=backend_node_id)
+        object_id = None
+        if isinstance(resolved, dict):
+            object_id = (resolved.get("object") or {}).get("objectId")
+        if not object_id:
+            return None
+        try:
+            payload = self._bh.h.cdp(
+                "Runtime.callFunctionOn",
+                objectId=object_id,
+                functionDeclaration=function_declaration,
+                returnByValue=True,
+            )
+            return self._decode_cdp_runtime_value(payload, function_declaration)
+        finally:
+            try:
+                self._bh.h.cdp("Runtime.releaseObject", objectId=object_id)
+            except Exception:
+                pass
+
+    def _ax_link_url(self, node: Dict[str, Any]) -> str:
+        value = self._backend_node_js_value(
+            node.get("backendDOMNodeId"),
+            "function() { return this.getAttribute('href') || this.href || ''; }",
+        )
+        return value if isinstance(value, str) else ""
+
+    def _ax_snapshot_lines(self, payload: Dict[str, Any]) -> List[str]:
+        nodes = payload.get("nodes") if isinstance(payload, dict) else None
+        if not isinstance(nodes, list):
+            raise BrowserHarnessError(
+                f"Accessibility.getFullAXTree returned unexpected payload: {payload!r}"
+            )
+        by_id = {
+            str(node.get("nodeId")): node
+            for node in nodes
+            if isinstance(node, dict) and node.get("nodeId") is not None
+        }
+        child_ids = {
+            str(child)
+            for node in by_id.values()
+            for child in (node.get("childIds") or [])
+        }
+        roots = [
+            node for node_id, node in by_id.items()
+            if node_id not in child_ids
+        ]
+        if not roots and nodes:
+            roots = [nodes[0]]
+
+        lines: List[str] = []
+
+        def render(node: Dict[str, Any], indent: int = 0) -> None:
+            children = [
+                by_id[str(child_id)]
+                for child_id in (node.get("childIds") or [])
+                if str(child_id) in by_id
+            ]
+            if node.get("ignored"):
+                for child in children:
+                    render(child, indent)
+                return
+
+            role = self._ax_role(node)
+            name = self._ax_name(node)
+            if role in ("", "none", "root"):
+                for child in children:
+                    render(child, indent)
+                return
+
+            prefix = " " * indent + "- "
+            rendered_children_start = len(lines)
+            if role == "text":
+                if name:
+                    lines.append(f"{prefix}text: {name}")
+            elif role in ("generic", "paragraph") and name and not children:
+                lines.append(f"{prefix}{role}: {name}")
+            else:
+                quoted = f' "{self._aria_quote(name)}"' if name else ""
+                suffix = ":" if children or role == "link" else ""
+                lines.append(f"{prefix}{role}{quoted}{suffix}")
+
+            if role == "link":
+                url = self._ax_link_url(node)
+                if url:
+                    lines.append(
+                        f'{prefix}  - /url: "{self._aria_quote(url)}"'
+                    )
+
+            for child in children:
+                render(child, indent + 2)
+
+            if len(lines) == rendered_children_start:
+                for child in children:
+                    render(child, indent)
+
+        for root in roots:
+            render(root, 0)
+        return lines
+
     def evaluate(self, js: str, arg: Any = None) -> Any:
         self._require_open()
         try:
@@ -780,6 +879,11 @@ class BrowserHarnessService:
         self._require_open()
         html = self.evaluate("document.documentElement.outerHTML")
         return html if isinstance(html, str) else ""
+
+    def _get_page(self) -> "BrowserHarnessService":
+        """Return this page-shaped service for legacy Playwright callers."""
+        self._require_open()
+        return self
 
     def select_option(self, selector: str, value: str = None, *, label: str = None) -> None:
         """Select an ``<option>`` within the first element matching ``selector``.
@@ -966,8 +1070,8 @@ class BrowserHarnessService:
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
-        return _ServiceLocator.from_role(self, role, name)
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator.from_role(self, role, name, exact=exact)
 
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return _ServiceLocator(self, f'[placeholder="{text}"]')
@@ -1090,47 +1194,11 @@ class BrowserHarnessService:
         return _ServiceElement(self, css=selector)
 
     def aria_snapshot(self, selector: str = "body", *, timeout: int = 5000) -> str:
-        """Capture a Playwright-style accessibility snapshot from the live page.
-
-        browser-harness owns the running Chrome instance. To preserve the
-        exact loaded page state, attach to that same browser over CDP and
-        call Playwright's ``aria_snapshot()`` against the matching live page.
-        """
+        """Capture a Playwright-style accessibility snapshot from CDP."""
         self._require_open()
-        if self._cdp_port is None:
-            raise BrowserHarnessError(
-                f"No CDP port available for session '{self.session}'."
-            )
-
-        current_url = self.url
         try:
-            from playwright.sync_api import sync_playwright
-
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.connect_over_cdp(
-                    f"http://127.0.0.1:{self._cdp_port}"
-                )
-                try:
-                    if not browser.contexts:
-                        raise BrowserHarnessError(
-                            "CDP browser connection returned no contexts."
-                        )
-                    live_pages = browser.contexts[0].pages
-                    if not live_pages:
-                        raise BrowserHarnessError(
-                            "CDP browser connection returned no pages."
-                        )
-                    raw_page = next(
-                        (
-                            candidate
-                            for candidate in live_pages
-                            if candidate.url == current_url
-                        ),
-                        live_pages[0],
-                    )
-                    return raw_page.locator(selector).aria_snapshot(timeout=timeout)
-                finally:
-                    browser.close()
+            payload = self._bh.h.cdp("Accessibility.getFullAXTree")
+            return "\n".join(self._ax_snapshot_lines(payload))
         except BrowserHarnessError:
             raise
         except Exception as e:

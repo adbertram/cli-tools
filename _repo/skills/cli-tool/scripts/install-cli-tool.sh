@@ -28,33 +28,17 @@ fi
 # ============================================================================
 # Install via uv tool install (editable mode, force reinstall)
 # ============================================================================
-# When pyproject.toml's requires-python has an upper bound (e.g. ">=3.13,<3.14"),
-# uv tool install would otherwise pick the system python and ignore that bound,
-# leading to source-build failures. Honor the bound by passing --python.
-SYSTEM_PYTHON3="$(command -v python3 2>/dev/null || true)"
-[ -z "$SYSTEM_PYTHON3" ] && SYSTEM_PYTHON3="python3"
-PY_FLAG=(--python "$SYSTEM_PYTHON3")
-OVERRIDE_FLAG=()
-if [ -f "$TOOL_DIR/pyproject.toml" ]; then
-    UPPER_PY=$(python3 - <<PYEOF 2>/dev/null
-import re
-with open("$TOOL_DIR/pyproject.toml") as f:
-    for line in f:
-        m = re.match(r'\s*requires-python\s*=\s*"([^"]+)"', line)
-        if not m:
-            continue
-        spec = m.group(1)
-        upper = re.search(r'<\s*3\.(\d+)', spec)
-        if upper:
-            print(f"3.{int(upper.group(1)) - 1}")
-        break
-PYEOF
-)
-    if [ -n "$UPPER_PY" ]; then
-        PY_FLAG=(--python "$UPPER_PY")
-    fi
-fi
+# uv builds/resolves the tool against the interpreter it is given. Forcing the
+# ambient python3 breaks when it is older than the tool's requires-python (e.g.
+# macOS system 3.9 vs a >=3.11 tool: uv reports "requirements are
+# unsatisfiable"). resolve_uv_python.py returns the ambient interpreter when it
+# already satisfies the constraint, otherwise a compatible "3.X" version request
+# for uv to find or download.
+PY_FLAG=()
+PYTHON_REQUEST="$(python3 "$SCRIPT_DIR/resolve_uv_python.py" "$TOOL_DIR/pyproject.toml")"
+[ -n "$PYTHON_REQUEST" ] && PY_FLAG=(--python "$PYTHON_REQUEST")
 
+OVERRIDE_FLAG=()
 if [ -f "$TOOL_DIR/uv-overrides.txt" ]; then
     OVERRIDE_FLAG=(--overrides "$TOOL_DIR/uv-overrides.txt")
 fi

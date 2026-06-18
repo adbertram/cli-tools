@@ -15,8 +15,12 @@ CLI tools subclass :class:`BrowserAutomation` and declare class-level hooks::
         SESSION_NAME = "mysite"
 """
 
+import base64
 import hashlib
+import json
+import os
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -26,6 +30,11 @@ from typing import Any, Dict, List, Optional
 from ._debug_logging import get_debug_logger
 from .output import print_info, print_success
 from .browser import BrowserHarnessService, BrowserHarnessError
+from .browser.processes import (
+    list_process_commands,
+    profile_process_pids,
+    terminate_profile_processes,
+)
 
 logger = get_debug_logger("cli_tools.auth")
 
@@ -93,6 +102,20 @@ class BrowserAutomation:
     AUTH_STORAGE_KEY = ""        # localStorage key; True if key exists and has a value
     LOGIN_TIMEOUT = 300          # Seconds to wait for manual login
     SESSION_NAME = ""            # Named session used for the per-tool user-data-dir
+    # Token-cookie auth check (declarative). When AUTH_TOKEN_COOKIE is set, the
+    # auth check decodes that cookie's JWT and treats the session as
+    # authenticated only when 'aud'/'x-user-context-type' are NOT in the reject
+    # lists. It polls for a guest→authenticated token upgrade (some sites mint a
+    # short-lived guest token on load, then upgrade it).
+    AUTH_TOKEN_COOKIE = ""
+    AUTH_TOKEN_REJECT_AUD = ()       # JWT 'aud' values meaning NOT authenticated
+    AUTH_TOKEN_REJECT_CONTEXT = ()   # 'x-user-context-type' values meaning NOT authenticated
+    AUTH_TOKEN_POLL_SECONDS = 6
+    # Automation-free login. When True, authenticate() opens a PLAIN browser (no
+    # --remote-debugging-port, no CDP, no webdriver patching) for the user to log
+    # in by hand — for sites whose login flow blocks automated browsers — then
+    # reads the resulting session through the normal cookie path.
+    MANUAL_LOGIN = False
 
     def __init__(self, config):
         self.config = config
@@ -181,17 +204,17 @@ class BrowserAutomation:
 
     _safe_url_for_log = staticmethod(BrowserHarnessService._safe_url_for_log)
 
-    def _prompt_enter_eof_safe(self, message: str = "") -> None:
+    def _prompt_enter_eof_safe(self, message: str = "", *, allow_no_tty: bool = False) -> bool:
         """Block until the user presses Enter; tolerate non-TTY stdin.
 
         ``input()`` raises ``EOFError`` when stdin is closed or piped. Fall
-        back to ``/dev/tty`` for the controlling terminal; if even that is
-        unavailable, exit with status 2 — never silently treat the missing
-        confirmation as "login succeeded".
+        back to ``/dev/tty`` for the controlling terminal. For manual browser
+        login in non-interactive runtimes, callers may opt into a browser-close
+        completion signal instead of exiting immediately.
         """
         try:
             input(message)
-            return
+            return True
         except EOFError:
             pass
 
@@ -201,7 +224,16 @@ class BrowserAutomation:
                     sys.stderr.write(message)
                     sys.stderr.flush()
                 tty.readline()
+                return True
         except OSError as e:
+            if allow_no_tty:
+                sys.stderr.write(
+                    "Browser auth is running without an interactive terminal "
+                    f"({e}).\n"
+                    "Complete login in the opened browser window, then close "
+                    "that browser window to capture the session.\n"
+                )
+                return False
             sys.stderr.write(
                 "Browser auth requires an interactive terminal to confirm "
                 f"login completion, but stdin and /dev/tty are unavailable ({e}).\n"
@@ -241,10 +273,15 @@ class BrowserAutomation:
         except Exception as e:
             logger.debug("is_authenticated: live check failed: %s", e)
             return AuthResult(authenticated=False, available=False, live_check=True)
+        finally:
+            self.close()
 
     def authenticate(self, force: bool = False):
         """Interactive login via headed persistent browser."""
         logger.debug("authenticate: force=%s session=%s", force, self._session_name())
+
+        if self.MANUAL_LOGIN:
+            return self._authenticate_manual(force)
 
         has_saved = (
             self.config.has_saved_session()
@@ -301,6 +338,154 @@ class BrowserAutomation:
         self._auth_verified_at = time.time()
         logger.debug("authenticate: complete")
         print_success("Authentication complete.")
+
+    # ---- Automation-free login (MANUAL_LOGIN) ----
+
+    def _authenticate_manual(self, force: bool = False) -> None:
+        """Interactive login WITHOUT browser automation (no CDP attached).
+
+        For sites whose login flow rejects CDP-driven browsers (bot detection).
+        Launches a PLAIN browser bound to the persistent profile, waits for the
+        user to log in by hand (OTP/CAPTCHA/passkey all work), then reads the
+        resulting session through the normal cookie path. ``force`` does NOT
+        wipe the profile here: preserving the user-data-dir keeps device-trust
+        cookies that help the manual login pass risk scoring; the fresh login
+        overwrites the session cookies regardless.
+        """
+        from .browser.driver import _chrome_binary, _chrome_launch_command
+
+        # Release any CDP browser (e.g. from a pre-login auth check) so the
+        # persistent profile is unlocked for the plain browser.
+        self.close()
+
+        profile_dir = self._get_persistent_profile_dir()
+        profile_dir.mkdir(parents=True, exist_ok=True)
+
+        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+        args = [
+            chrome,
+            f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            self.LOGIN_URL,
+        ]
+        launch_args = _chrome_launch_command(chrome, args)
+
+        print_info("Opening a normal browser window for login (no automation attached).")
+        print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
+        print_info("Then come back here and press Enter to capture the session.")
+
+        proc = subprocess.Popen(
+            launch_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        try:
+            confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
+            if not confirmed:
+                self._wait_for_manual_browser_close(proc, profile_dir)
+        finally:
+            self._quit_login_chrome(proc, profile_dir)
+
+        if not self.is_authenticated():
+            raise BrowserAutomationError(
+                "Session is still not authenticated. Make sure you completed "
+                "login (your account page was visible) before pressing Enter, "
+                "then run login again."
+            )
+        self._auth_verified_at = time.time()
+        print_success("Authentication complete.")
+
+    def _wait_for_manual_browser_close(self, proc, profile_dir) -> None:
+        """Wait until the user closes the plain browser for this profile."""
+        deadline = time.time() + self.LOGIN_TIMEOUT
+        saw_profile_process = False
+        while time.time() < deadline:
+            try:
+                pids = profile_process_pids(
+                    profile_dir,
+                    processes=list_process_commands(),
+                )
+            except RuntimeError as exc:
+                raise BrowserAutomationError(
+                    f"Failed to inspect browser processes for manual login: {exc}"
+                ) from exc
+            if pids:
+                saw_profile_process = True
+            elif saw_profile_process or proc.poll() is not None:
+                return
+            time.sleep(1)
+        raise BrowserAutomationError(
+            "Timed out waiting for the manual login browser window to close."
+        )
+
+    def _quit_login_chrome(self, proc, profile_dir) -> None:
+        """Quit the plain login browser bound to this profile so cookies flush
+        and the user-data-dir lock is released. Scoped to THIS profile's
+        ``--user-data-dir`` so the user's other browser windows are untouched.
+        """
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        terminate_profile_processes(profile_dir)
+        time.sleep(3)
+        lock = Path(profile_dir) / "SingletonLock"
+        try:
+            if lock.is_symlink() or lock.exists():
+                lock.unlink()
+        except OSError:
+            pass
+
+    # ---- Token-cookie auth check (AUTH_TOKEN_COOKIE) ----
+
+    def _check_token_cookie_auth(self, page) -> bool:
+        """True when ``AUTH_TOKEN_COOKIE`` holds an authenticated-user JWT.
+
+        Polls for a guest→authenticated token upgrade (some sites mint a
+        short-lived guest token on page load, then upgrade it after a
+        validation XHR), returning True as soon as an accepted token appears.
+        """
+        polls = max(1, int(self.AUTH_TOKEN_POLL_SECONDS))
+        for attempt in range(polls):
+            try:
+                cookies = page.cookie_list()
+            except Exception:
+                return False
+            token = next(
+                (c.get("value") for c in cookies
+                 if c.get("name") == self.AUTH_TOKEN_COOKIE and c.get("value")),
+                None,
+            )
+            if token and self._token_is_authenticated(token):
+                return True
+            if attempt < polls - 1:
+                try:
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    break
+        return False
+
+    def _token_is_authenticated(self, token: str) -> bool:
+        """Decode a JWT and accept it unless its claims are in the reject lists.
+
+        A malformed payload (non-3-part, bad base64, JSON non-object, or no
+        ``aud``) is treated as not-authenticated rather than raising.
+        """
+        parts = (token or "").split(".")
+        if len(parts) < 2:
+            return False
+        try:
+            payload = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(payload))
+        except Exception:
+            return False
+        if not isinstance(claims, dict):
+            return False
+        aud = claims.get("aud")
+        if not aud or aud in self.AUTH_TOKEN_REJECT_AUD:
+            return False
+        if claims.get("x-user-context-type") in self.AUTH_TOKEN_REJECT_CONTEXT:
+            return False
+        return True
 
     def live_cookies(self) -> list:
         """Return current cookies from the running browser via CDP.
@@ -420,10 +605,11 @@ class BrowserAutomation:
             current_url = page.url
             authenticated = self._check_auth(page)
             result = {"authenticated": authenticated, "url": current_url}
-            self.close()
             return result
         except Exception as e:
             return {"authenticated": False, "error": str(e)}
+        finally:
+            self.close()
 
     # ==================== Overridable Hooks ====================
 
@@ -450,6 +636,11 @@ class BrowserAutomation:
 
     def _check_auth(self, page) -> bool:
         """Check if page indicates authenticated state."""
+        # Token-cookie audience check takes precedence when configured: the only
+        # reliable signal for sites that mint a guest token even when logged out.
+        if self.AUTH_TOKEN_COOKIE:
+            return self._check_token_cookie_auth(page)
+
         # Cookie-backed browser auth does not need page metadata. Some sites
         # keep the document load active long enough that URL/title inspection
         # can block the CDP session before cookies are read.

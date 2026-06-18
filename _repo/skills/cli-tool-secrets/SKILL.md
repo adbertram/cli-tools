@@ -50,6 +50,21 @@ workflows, or service runtime state owned by a CLI's auth system.
    <cli-tools-root>/_repo/_secret-manager/secrets.sh list
    <cli-tools-root>/_repo/_secret-manager/secrets.sh has <name>
    ```
+   When a missing secret is an expected diagnostic result, shape `has` so the
+   non-zero status is consumed and reported explicitly:
+   ```bash
+   if output="$(<cli-tools-root>/_repo/_secret-manager/secrets.sh has <name> 2>&1)"; then
+     printf 'SECRET_PRESENT:%s\n' '<name>'
+   else
+     rc=$?
+     if [ "$rc" -eq 1 ]; then
+       printf 'EXPECTED_MISSING_SECRET:%s\n' '<name>'
+       exit 0
+     fi
+     printf '%s\n' "$output" >&2
+     exit "$rc"
+   fi
+   ```
 3. If the secret exists, retrieve it with `get <name>` and use it without
    printing the value.
 4. Ask Adam only for missing reusable credentials.

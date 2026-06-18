@@ -76,6 +76,24 @@ Before asking Adam for any CLI-tool credential:
 
 Never print secret values in logs, final answers, test output, screenshots, or command examples.
 
+When a missing credential is an expected diagnostic result, do not run
+`has <name>` as a bare command. Shape the expected miss so the non-zero status
+is consumed and the result is explicit:
+
+```bash
+if output="$(<cli-tools-root>/_repo/_secret-manager/secrets.sh has <name> 2>&1)"; then
+  printf 'SECRET_PRESENT:%s\n' '<name>'
+else
+  rc=$?
+  if [ "$rc" -eq 1 ]; then
+    printf 'EXPECTED_MISSING_SECRET:%s\n' '<name>'
+    exit 0
+  fi
+  printf '%s\n' "$output" >&2
+  exit "$rc"
+fi
+```
+
 ## Interactive Prompt Automation
 
 Prefer non-echoing command input such as stdin, `SECRET_VALUE`, or a first-class CLI flag over automating an interactive credential prompt. Do not automate CLI credential prompts with `expect` while user logging is enabled. `expect` can echo sent input into terminal output, transcripts, and logs even when the underlying prompt would hide the value.

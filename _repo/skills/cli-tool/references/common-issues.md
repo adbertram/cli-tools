@@ -107,6 +107,23 @@ Do not use Homebrew/system `pip install -e .` or
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh myservice
 ```
 
+### Reinstall picks a Python that fails `test_cli_uses_system_python`
+
+A bare `uv tool install -e <dir> --force --refresh` lets uv choose its own
+Python (e.g. 3.12). The compliance check `test_cli_uses_system_python` requires
+the CLI venv interpreter to match the harness `python3`, so when they differ
+`test-cli-tool.sh` fails that gate even though the CLI runs fine.
+
+Pin the interpreter to the one `python3` resolves to so the venv matches:
+
+```bash
+uv tool install -e <cli-tools-root>/myservice --force --refresh \
+  --python "$(command -v python3)"
+```
+
+(On this machine that is `/opt/homebrew/bin/python3.14`.) The launcher shebang
+must still point into `~/.local/share/uv/tools/`.
+
 ---
 
 ## Metadata Probe Fails: No module named pip
@@ -378,10 +395,58 @@ lpass --version
 
 ---
 
+## False "not installed" From a `--version` Availability Probe
+
+### Symptom
+A CLI that shells out to another binary intermittently fails with
+`<dep> CLI is not installed or not in PATH`, but `which <dep>` exits 0 and an
+immediate re-run of the identical command succeeds. Most reproducible under
+load (batched or concurrent runs): one call fails while the rest pass.
+
+### Cause
+The CLI gated availability on a `<dep> --version` subprocess with a short
+timeout and treated `subprocess.TimeoutExpired` as "binary missing". uv-tool
+CLIs cold-start a fresh Python interpreter (~0.2s warm, more under cold-cache or
+CPU contention), so a short `--version` timeout can expire and be misreported as
+"not installed". It is a timeout false negative, not a PATH problem.
+
+### Fix
+Detect presence with `shutil.which` (a pure PATH lookup — it never spawns a
+process and never times out). Detect a genuinely missing or broken binary by
+catching `FileNotFoundError` on the *real* command and surfacing its real
+stderr.
+
+```python
+import shutil
+
+# WRONG — a slow uv-tool cold start under load reads as "not installed"
+def _dep_available() -> bool:
+    try:
+        return subprocess.run([dep, "--version"], capture_output=True,
+                              timeout=5).returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+# CORRECT — presence is a PATH lookup; liveness/errors come from the real call
+def _resolve_dep() -> str | None:
+    # If the runtime env may omit it, force ~/.local/bin onto the search path.
+    return shutil.which(dep)
+```
+
+### Recurrence Prevention
+Never gate availability on a `<dep> --version` subprocess with a short timeout.
+Use `shutil.which` for "is it on PATH"; let the real command's
+`FileNotFoundError` / stderr report a genuinely missing or broken binary. If a
+"not installed" error appears while `which <dep>` exits 0, it is a transient
+false positive — surface the real downstream stderr instead of the install hint.
+
+---
+
 ## Manual Import Tests Fail With ModuleNotFoundError (Wrong Interpreter)
 
 ### Symptom
-You manually import a CLI's modules with plain `python3` and get errors like:
+You manually import a CLI's modules with plain `python3`, including heredoc
+probes, and get errors like:
 ```bash
 $ python3 - <<'PY'
 import copilot_cli.main
@@ -412,8 +477,9 @@ nothing to do with the CLI itself — it's a wrong-interpreter diagnosis.
 
 ### Fix — Always Use the CLI's Own Interpreter for Ad-Hoc Imports
 
-**Never** import CLI modules with bare `python3`. Inspect the installed
-launcher and use the interpreter named in its shebang:
+**Never** import CLI modules with bare `python3`, including
+`python3 - <<'PY'` heredoc probes. Inspect the installed launcher and use the
+interpreter named in its shebang:
 
 ```bash
 # Correct — apples-to-apples manual import test
@@ -425,6 +491,18 @@ interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 Replace `jira` and `jira_cli.config` with the target CLI command and module.
 Do not derive the uv tool path from the command name; the launcher shebang is
 the source of truth.
+
+For multi-line probes, keep the same interpreter and only move the Python code
+into the heredoc:
+
+```bash
+launcher="$(command -v jira)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+import jira_cli.config
+print(jira_cli.config.__file__)
+PY
+```
 
 ### Second Wrinkle: sys.path Depends on CWD
 The uv tool venv's interpreter picks up the local editable source when run

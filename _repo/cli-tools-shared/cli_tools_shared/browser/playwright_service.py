@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -18,6 +20,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
+from .processes import ProcessCommand, command_user_data_dir, list_process_commands, profile_process_pids
 
 
 class PlaywrightServiceError(BrowserHarnessError):
@@ -120,6 +123,82 @@ class PlaywrightBrowserService:
             "console_warnings": 0,
         }
 
+    def _list_process_table(self) -> List[ProcessCommand]:
+        """Return process-table rows for the local process table."""
+        try:
+            return list_process_commands()
+        except RuntimeError as exc:
+            raise PlaywrightServiceError(f"Failed to inspect process table: {exc}") from exc
+
+    def _list_process_commands(self) -> List[tuple[int, str, str]]:
+        """Return legacy `(pid, stat, command)` process rows."""
+        return [(proc.pid, proc.stat, proc.command) for proc in self._list_process_table()]
+
+    def _session_process_pids(self) -> List[int]:
+        """Return PIDs for Chrome helpers using this service's profile."""
+        if self._user_data_dir is None:
+            return []
+        return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
+
+    def _pid_running(self, pid: int) -> bool:
+        for process in self._list_process_table():
+            if process.pid == pid:
+                return not process.stat.startswith("Z")
+        return False
+
+    def _terminate_session_pid(self, pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to stop stale browser process {pid}: {exc}"
+            ) from exc
+
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if not self._pid_running(pid):
+                return
+            time.sleep(0.1)
+
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to force-stop stale browser process {pid}: {exc}"
+            ) from exc
+
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if not self._pid_running(pid):
+                return
+            time.sleep(0.1)
+
+        raise PlaywrightServiceError(
+            f"Stale browser process {pid} for session '{self.session}' did not exit"
+        )
+
+    def _cleanup_stale_profile_processes(self) -> None:
+        """Terminate Chrome helpers that still own this exact user-data-dir."""
+        for pid in self._session_process_pids():
+            self._terminate_session_pid(pid)
+
+    @staticmethod
+    def _command_user_data_dir(command: str) -> Optional[str]:
+        return command_user_data_dir(command)
+
+    def _raise_if_profile_in_use(self) -> None:
+        pids = self._session_process_pids()
+        if not pids:
+            return
+        raise PlaywrightServiceError(
+            "Playwright profile is already in use by Chrome process(es) "
+            f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+        )
+
     def browser_open(
         self,
         url: Optional[str] = None,
@@ -148,6 +227,7 @@ class PlaywrightBrowserService:
         profile_dir = Path(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir
+        self._raise_if_profile_in_use()
 
         launch_args = [
             "--restore-last-session",
@@ -196,6 +276,7 @@ class PlaywrightBrowserService:
     def browser_close(self) -> Dict[str, Any]:
         context = self._context
         playwright = self._playwright
+        cleanup_owned_profile = self._opened or context is not None or playwright is not None
         self._context = None
         self._page = None
         self._playwright = None
@@ -204,8 +285,12 @@ class PlaywrightBrowserService:
             if context is not None:
                 context.close()
         finally:
-            if playwright is not None:
-                playwright.stop()
+            try:
+                if playwright is not None:
+                    playwright.stop()
+            finally:
+                if cleanup_owned_profile:
+                    self._cleanup_stale_profile_processes()
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
@@ -274,14 +359,16 @@ class PlaywrightBrowserService:
     def data_delete(self) -> Dict[str, Any]:
         self.browser_close()
         if self._user_data_dir is not None and self._user_data_dir.exists():
+            self._cleanup_stale_profile_processes()
+            self._raise_if_profile_in_use()
             shutil.rmtree(self._user_data_dir)
         return {"success": True, "message": "Session data deleted"}
 
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
-        return _ServiceLocator.from_role(self, role, name)
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator.from_role(self, role, name, exact=exact)
 
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return _ServiceLocator(self, f'[placeholder="{text}"]')

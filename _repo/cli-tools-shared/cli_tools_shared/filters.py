@@ -290,10 +290,12 @@ def apply_properties_filter(data: List[Dict], properties: Optional[str]) -> List
     for item in data:
         filtered_item = {}
         for prop in prop_list:
-            value = get_nested_value(item, prop)
-            if value is not None:
-                # Store with the original property path as key
-                filtered_item[prop] = value
+            # Always project the requested property, even when its value is
+            # None or the field is absent. Emit an explicit null instead of
+            # silently dropping the key, so a missing/empty value can never be
+            # mistaken for "this property was not requested." Dropping the key
+            # here would let a populated-but-currently-empty field read as gone.
+            filtered_item[prop] = get_nested_value(item, prop)
         filtered_data.append(filtered_item)
 
     return filtered_data

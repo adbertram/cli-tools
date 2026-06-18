@@ -64,6 +64,11 @@ sed -n '1,260p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<tool>-cli/u
 
 Follow the selected skill's principles. Use `usage.json` as the command syntax contract. Do not infer flags, argument order, output formats, or auth behavior from memory.
 
+For help probes, derive the exact command group and action from `usage.json`
+before executing `<tool> ... --help`. Do not pluralize service nouns or probe
+nearby guessed groups. For example, BrickLink order commands are under
+`bricklink order ...`, not `bricklink orders ...`.
+
 ## Step 5: Execute Through Bash
 
 Run the actual CLI command through Bash using the syntax from `usage.json`. Inspect stdout after every command. If stdout is an AI instruction object, follow the selected service skill's AI-instruction rule instead of summarizing it as normal output.

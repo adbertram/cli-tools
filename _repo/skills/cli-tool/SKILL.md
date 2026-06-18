@@ -40,7 +40,11 @@ For any request that uses an existing CLI tool, read `workflows/skill-router.md`
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate the
 available CLI tools from the source tree. The script prints JSON records with
 `name`, `readme`, and `description`, where `description` is extracted from each
-tool README's `## DESCRIPTION` block.
+tool README's `## DESCRIPTION` block. Pass `--markdown` for a compact
+`- name: <first sentence>` list (~2K tokens) suitable for context injection;
+the Claude (`SessionStart` in `~/.claude/settings.json`) and Codex
+(`SessionStart` in `~/.codex/hooks.json`) session-start hooks call it this way
+to preload the CLI-tool roster every session.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
@@ -72,7 +76,22 @@ This handles: directory structure, uv tool installation (isolated venv + symlink
 </principle>
 
 <principle name="Existing Path Operands Only">
-Before passing optional repo paths to `rg`, `grep`, `find`, `cat`, `sed`, `nl`, `wc`, `head`, `tail`, or similar commands, prove each path exists or build the operand list from discovered existing paths. Missing optional paths are command errors, not no-match results; report skipped optional paths separately instead of passing them as operands.
+Before passing optional repo paths to `rg`, `grep`, `find`, `cat`, `sed`, `nl`, `wc`, `head`, `tail`, or similar commands, prove each path exists or build the operand list from discovered existing paths. For file-reading commands such as `cat`, `sed`, `nl`, `wc`, `head`, and `tail`, filter glob and optional operands to regular files, not just existing paths; directories such as `__pycache__` are command errors. This includes personal CLI tool paths such as `_personal/<tool>/install.sh`, `_personal/<tool>/README.md`, and any other optional per-tool file. Missing optional paths are command errors, not no-match results, and wrong-kind operands are command errors too; report skipped optional paths separately instead of passing them as operands.
+
+Shell globs used as search operands are optional paths too. Do not pass operands
+such as `*/*_cli`, `tests`, or `docs` directly to `rg`; with Bash's default
+glob behavior, an unmatched glob stays literal and ripgrep exits with status
+`2` even if other operands produced matches. Expand the glob into an array,
+keep only existing entries, and print a skipped marker for any optional root or
+glob that produced no existing paths.
+
+Do not run direct reads like `sed -n '1,260p' _personal/<tool>/install.sh`
+unless that exact file has already been proven present in the same command or
+by a prerequisite command whose result is in scope.
+This also applies to guessed Python module paths after package layout
+uncertainty, including shared package paths such as
+`_repo/cli-tools-shared/cli_tools_shared/...`; discover the real file first
+with an existing root and then read only the proven path.
 
 Do not rely on a downstream pipeline stage to hide an upstream missing-operand
 error. This is unsafe:
@@ -116,6 +135,24 @@ operand list has been built.
 
 <principle name="Shape Expected No-Match Searches">
 When exploratory `rg` or `grep` searches may legitimately find no match, wrap each search so status `1` prints an explicit no-match marker and exits `0`. An unguarded no-match status is a Tool Failure Protocol violation even when the missing text was expected. Do not use `|| true` unless the command immediately interprets and reports the expected no-match.
+
+Do not chain exploratory searches to dependent file reads with `&&`, such as
+`rg -n -F -- 'literal' file dir && sed -n '1,260p' file`, unless the search is
+first wrapped to consume expected status `1`. A no-match result would skip the
+dependent read and surface as a parent command failure instead of evidence.
+</principle>
+
+<principle name="Keep Search Operands Attached">
+When composing `rg` or `grep` verification wrappers, keep every flag, pattern,
+and path operand on the same physical command line unless you use explicit
+backslash continuations or a shell array. Do not insert a bare newline before a
+path operand; Bash treats the path as a separate command, which can produce
+`Permission denied` or execute the wrong file even after the search printed a
+match.
+</principle>
+
+<principle name="Search Only Bounded Source Roots">
+Scope CLI-tool investigation searches to bounded source roots such as the target tool directory, `_repo/`, repo-owned skills, docs, tests, or exact files proven relevant. Do not run recursive `rg`, `grep`, or `find` over user cache/profile roots such as `/Users/adam/.npm`, `/Users/adam/.local/share`, `/Users/adam/Library`, or a whole home directory. When runtime profile or cache evidence is needed, inspect the exact known file or tool-owned profile path after proving it exists; do not discover it with a broad recursive search.
 </principle>
 
 <principle name="Safe printf Formats">
@@ -143,6 +180,94 @@ exit "$status"
 ```
 </principle>
 
+<principle name="Shape Expected Mutation-Safeguard Probes">
+When a negative smoke test intentionally verifies that a mutating command refuses
+to run without explicit confirmation, wrap the command and explicitly validate
+the expected exit status plus the exact refusal message. The wrapper must print
+an explicit expected-failure marker and exit `0` only for that guard response.
+A bare command such as `<tool> refunds create CAPTURE-123 --amount 4.50` that
+exits non-zero is a Tool Failure Protocol violation even when the refusal is the
+correct behavior.
+
+```bash
+if output="$(paypal refunds create CAPTURE-123 --amount 4.50 2>&1)"; then
+  status=0
+else
+  status=$?
+fi
+printf '%s\n' "$output"
+if [ "$status" -eq 1 ] && printf '%s\n' "$output" | rg -q -F -- 'Refusing to issue refund without --yes or --dry-run'; then
+  printf '%s\n' 'EXPECTED_FAILURE: refund command refused to mutate without --yes or --dry-run.'
+  exit 0
+fi
+exit "$status"
+```
+</principle>
+
+<principle name="Shape Expected Auth Status Probes">
+When an auth/status probe intentionally checks for an unauthenticated profile or
+missing credential state, wrap the command and explicitly validate the expected
+exit status plus the status evidence. The wrapper must print an explicit
+expected-status marker and exit `0` only for the intended unauthenticated result.
+Do not run bare commands such as `paypal auth status -t` when `authenticated:
+false` or missing credentials are an expected diagnostic outcome.
+Accept both YAML/text `authenticated: false` and JSON `"authenticated": false`
+status evidence. This includes `copilot auth status --profile default`, which
+can exit `2` while returning structured JSON with `"authenticated": false`; in
+that case the wrapper should treat the result as unauthenticated status data
+only after validating both the exit status and the JSON/text evidence.
+
+```bash
+if output="$(paypal auth status -t 2>&1)"; then
+  status=0
+else
+  status=$?
+fi
+printf '%s\n' "$output"
+if [ "$status" -eq 2 ] && printf '%s\n' "$output" | rg -q -e 'authenticated: false' -e '"authenticated"[[:space:]]*:[[:space:]]*false'; then
+  printf '%s\n' 'EXPECTED_STATUS: paypal profile is unauthenticated.'
+  exit 0
+fi
+exit "$status"
+```
+</principle>
+
+<principle name="Structured CLI JSON Parsing">
+When a CLI command emits JSON that another process will inspect, save stdout to
+a task-workspace/temp file first, verify the command status and non-empty file,
+then parse that file. Do not pipe JSON into a heredoc-backed parser that expects
+stdin. In shapes like `az account list --all --output json | python3 - <<'PY'`
+or `az account show --output json | python3 - <<'PY'`, the heredoc occupies
+Python's stdin, so `json.load(sys.stdin)` reads empty input, Python reports
+`JSONDecodeError: Expecting value: line 1 column 1 (char 0)`, and the producer
+can report `Broken pipe`.
+
+Use this shape instead:
+```bash
+json_file=$(mktemp -t cli-json)
+if az account show --output json >"$json_file"; then
+  python3 - "$json_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+print(data["name"])
+PY
+else
+  rc=$?
+  printf 'PRODUCER_FAILED: az account show rc=%s\n' "$rc" >&2
+  exit "$rc"
+fi
+```
+
+For API or CLI response verification, inspect or validate the JSON contract
+before indexing nested keys. Do not assume shapes such as every `GET
+/api/providers` item having a top-level `config` key. Check the container type
+and required paths explicitly; if the contract is missing, fail with
+`MISSING_JSON_PATH: providers[0].config` instead of a raw `KeyError: 'config'`.
+</principle>
+
 <principle name="Literal Searches For Template Tokens">
 When searching for CLI template tokens or copied text containing braces,
 backticks, dollar signs, parentheses, or other regex metacharacters, use
@@ -152,7 +277,7 @@ patterns unless every regex metacharacter is intentionally escaped.
 </principle>
 
 <principle name="Per-Tool Project Config Discovery">
-CLI tool project configs live under each tool directory. Do not assume `<cli-tools-root>/pyproject.toml` exists. When inspecting dependencies, pytest configuration, package metadata, or a test runner for a named CLI, discover `<cli-tools-root>/<tool>/pyproject.toml` or another existing config file from that tool directory and read it only after that exact file path exists.
+CLI tool project configs live under each tool directory. Do not assume `<cli-tools-root>/pyproject.toml` exists. Do not assume `<cli-tools-root>/<tool>/pyproject.toml` or `<cli-tools-root>/_personal/<tool>/pyproject.toml` exists either. When inspecting dependencies, pytest configuration, package metadata, or a test runner for a named CLI, discover `<cli-tools-root>/<tool>/pyproject.toml` from the target tool directory, keep only proven regular files, and read it only after that exact file path exists. If discovery shows no project config exists, report `CONFIG_ABSENT: <tool>` and do not issue `sed`, `cat`, `nl`, `wc`, `head`, or `tail` against the absent path.
 </principle>
 
 <principle name="Filtering Architecture">
@@ -180,6 +305,19 @@ Authentication-related runtime state lives under `~/.local/share/cli-tools/<tool
 Agents must not tell users to manually place reusable credentials in those `.env` files. Use the CLI-tools secret manager for raw credentials and let the CLI persist only its own runtime state.
 </principle>
 
+<principle name="Browser Profile Process Cleanup">
+Do not clear stale browser profile processes with ad hoc shell filters such as
+`ps | awk` plus `kill`. Browser profile cleanup must go through the shared
+`cli_tools_shared.browser.processes.profile_process_pids` helper or an existing
+CLI/shared cleanup path that uses it. That helper matches the explicit Chrome
+`--user-data-dir` value, skips zombies, and excludes the current process
+ancestry so a wrapper command that mentions the profile path cannot kill itself.
+
+If a CLI needs a new cleanup command or repair path, add it at the shared helper
+or CLI command layer and cover it with tests. Do not hand-run profile-path PID
+filters against `~/.local/share/cli-tools/<tool>/authentication_profiles/...`.
+</principle>
+
 <principle name="Fresh File Snapshots Before Patching">
 After any scaffolding script, installer, validation script, formatter, cleanup command, or subagent may have changed a file, reread that exact file before preparing an `apply_patch` hunk for it. Patch against the current on-disk content, not a remembered template or earlier read. Build each hunk from a current on-disk line plus verified surrounding context. If copied failure text, plan prose, or expected converted text is not present as its own current line, do not use it as a standalone patch anchor; choose a verified heading or current line instead.
 </principle>
@@ -197,7 +335,7 @@ When a deterministic command reaches a boundary that requires AI judgment, retur
 </principle>
 
 <principle name="Use the CLI's Own Interpreter for Manual Imports">
-**Every uv-installed CLI has its own isolated interpreter at `~/.local/share/uv/tools/<pkg-name>/bin/python3`.** The launcher at `~/.local/bin/<cli>` has a shebang that points to it. Running `python3 -c "import <cli>_cli.main"` with ANY other interpreter (system python, Homebrew python, the test venv) will fail with `ModuleNotFoundError` because the CLI's dependencies are installed ONLY in that uv tool venv. Those failures are NOT CLI bugs — they are wrong-interpreter diagnoses.
+**Every uv-installed CLI has its own isolated interpreter at `~/.local/share/uv/tools/<pkg-name>/bin/python3`.** The launcher at `~/.local/bin/<cli>` has a shebang that points to it. Running `python3 -c "import <cli>_cli.main"` or `python3 - <<'PY'` with ANY other interpreter (system python, Homebrew python, the test venv) will fail with `ModuleNotFoundError` because the CLI's dependencies are installed ONLY in that uv tool venv. Those failures are NOT CLI bugs — they are wrong-interpreter diagnoses.
 
 **Rule:** For any ad-hoc import/smoke test of a CLI's modules, inspect the live launcher and use the interpreter from its shebang. Do not derive the uv tool path from the command name.
 
@@ -207,6 +345,26 @@ interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 "$interpreter" -c "import <pkg>_cli.main"
 ```
 
+For heredoc probes, the heredoc target must be the same shebang interpreter;
+never write the probe as a bare `python3 - <<'PY'` from inside a CLI source
+directory:
+
+```bash
+launcher="$(command -v <cli>)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+import <pkg>_cli.main
+PY
+```
+
+The shebang interpreter only proves you are in the installed CLI environment;
+it does not prove an internal module path exists. Before importing non-entrypoint
+internals such as auth helpers or client factories, verify the source layout or
+use `importlib.util.find_spec()` with the shebang interpreter. Do not assume a
+module named `<pkg>_cli.auth` exists. In scaffolded CLIs, command auth is often
+mounted from `cli_tools_shared.auth_commands`, and client factories commonly
+live in `<pkg>_cli.client`.
+
 This interpreter rule is only for ad-hoc imports and direct config probes. Do
 not use the installed CLI interpreter to run a tool's pytest suite. The uv tool
 venv contains runtime dependencies, not test-only dependencies such as
@@ -215,6 +373,60 @@ venv contains runtime dependencies, not test-only dependencies such as
 
 ```bash
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
+```
+
+Do not use a source-checkout `uv run --project ... python -` heredoc for
+Playwright or dependency availability probes. Those probes are installed-runtime
+checks, so use the live launcher shebang interpreter and redirect stdout/stderr
+to bounded task-workspace files before printing a short summary:
+
+```bash
+workspace=/path/to/task-workspace
+mkdir -p "$workspace"
+launcher="$(command -v paypal)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+stdout="$workspace/paypal_playwright_probe.stdout"
+stderr="$workspace/paypal_playwright_probe.stderr"
+if "$interpreter" - >"$stdout" 2>"$stderr" <<'PY'
+import playwright
+print("PLAYWRIGHT_AVAILABLE")
+PY
+then
+  status=0
+else
+  status=$?
+fi
+printf 'STATUS:%s STDOUT_BYTES:%s STDERR_BYTES:%s\n' "$status" "$(wc -c <"$stdout")" "$(wc -c <"$stderr")"
+head -c 500 "$stdout"
+printf '\n'
+exit "$status"
+```
+
+When probing a CLI source checkout rather than the installed launcher, use that
+tool's `pyproject.toml` environment so editable sources such as
+`cli-tools-shared` resolve, but still keep parent output bounded. For PayPal
+source probes and tests, do not run bare `python` heredocs from
+`/Users/adam/Dropbox/GitRepos/cli-tools/paypal` and do not print unbounded
+`uv run` output directly to the parent tool result:
+
+```bash
+workspace=/path/to/task-workspace
+mkdir -p "$workspace"
+stdout="$workspace/paypal_source_probe.stdout"
+stderr="$workspace/paypal_source_probe.stderr"
+if uv run --project /Users/adam/Dropbox/GitRepos/cli-tools/paypal python - >"$stdout" 2>"$stderr" <<'PY'
+from paypal_cli.config import get_config
+print(get_config().env_file_path)
+PY
+then
+  status=0
+else
+  status=$?
+fi
+printf 'STATUS:%s STDOUT_BYTES:%s STDERR_BYTES:%s\n' "$status" "$(wc -c <"$stdout")" "$(wc -c <"$stderr")"
+head -c 500 "$stdout"
+printf '\n'
+exit "$status"
 ```
 
 Do not run `"$interpreter" -m pip ...` inside a uv tool venv for package
@@ -269,10 +481,18 @@ Use `<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json
 <principle name="Schema-Safe Usage JSON Inspection">
 When programmatically inspecting one or more `usage.json` files, identify the
 tool from the parent skill directory, not from the filename; every command map
-file is named `usage.json`. Before dereferencing a nested command path, print
-or otherwise inspect the available keys at the current level. Do not assume
-command groups, subcommands, or fields such as `name` exist from memory or from
-another tool's map.
+file is named `usage.json`. First run a bounded schema probe that prints the
+root type, root keys, and `commands` keys; for deeper command paths, print only
+the current node type and keys before indexing. When a `jq` key is not a valid
+identifier, including keys with hyphens such as `replace-section`, use bracket
+notation such as `.commands.pages.commands.content.commands["replace-section"]`
+instead of dot notation. Avoid full-map dumps, recursive walks, interactive
+extractors, or probes that can block or emit excessive output. Before
+dereferencing a nested command path, inspect the available keys
+at the current level and fail clearly with `MISSING_JSON_PATH:
+commands.<group>.<subcommand>` when the path is absent. Do not assume command
+groups, subcommands, or fields such as `name` exist from memory or from another
+tool's map.
 </principle>
 
 <principle name="⛔ Zero Test Failures Policy">
