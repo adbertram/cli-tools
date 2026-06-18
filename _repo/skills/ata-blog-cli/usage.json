@@ -1,8 +1,8 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-06-17T15:13:34Z",
-  "total_commands": 71,
+  "discovered_at": "2026-06-18T21:04:35Z",
+  "total_commands": 78,
   "global_options": [
     {
       "name": "--version",
@@ -1285,10 +1285,10 @@
           "usage_instructions": "Use `ata-blog raptive disable` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "resource_id",
               "type": "INTEGER",
               "required": true,
-              "help": "WordPress post ID"
+              "help": "WordPress post/page ID"
             }
           ],
           "options": [
@@ -1314,6 +1314,12 @@
               "short": "-v"
             },
             {
+              "name": "--preview-only",
+              "type": "bool",
+              "required": false,
+              "help": "Disable only ads shown while previewing in WordPress admin"
+            },
+            {
               "name": "--re-enable-days",
               "type": "INTEGER",
               "required": false,
@@ -1325,6 +1331,13 @@
               "type": "TEXT",
               "required": false,
               "help": "Auto re-enable on date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress resource type: post or page",
+              "default": "post"
             },
             {
               "name": "--profile",
@@ -1344,10 +1357,10 @@
           "usage_instructions": "Use `ata-blog raptive enable` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "resource_id",
               "type": "INTEGER",
               "required": true,
-              "help": "WordPress post ID"
+              "help": "WordPress post/page ID"
             }
           ],
           "options": [
@@ -1371,6 +1384,19 @@
               "required": false,
               "help": "Enable only video auto-insert",
               "short": "-v"
+            },
+            {
+              "name": "--preview-only",
+              "type": "bool",
+              "required": false,
+              "help": "Enable only ads shown while previewing in WordPress admin"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress resource type: post or page",
+              "default": "post"
             },
             {
               "name": "--profile",
@@ -1402,10 +1428,10 @@
           "usage_instructions": "Use `ata-blog raptive status` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "post_id",
+              "name": "resource_id",
               "type": "INTEGER",
               "required": true,
-              "help": "WordPress post ID"
+              "help": "WordPress post/page ID"
             }
           ],
           "options": [
@@ -1415,6 +1441,13 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "WordPress resource type: post or page",
+              "default": "post"
             },
             {
               "name": "--profile",
@@ -2158,6 +2191,320 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "themes": {
+          "help": "Manage WordPress themes",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "file-push": {
+              "help": "Push a local file to a remote WordPress theme through SSH/SFTP.",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme directory name under wp-content/themes"
+                },
+                {
+                  "name": "local_file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Local file to upload"
+                },
+                {
+                  "name": "remote_file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Relative destination path inside the theme"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--remote-root",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Absolute remote WordPress root path"
+                },
+                {
+                  "name": "--host",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SSH host"
+                },
+                {
+                  "name": "--user",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "SSH user"
+                },
+                {
+                  "name": "--port",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "SSH port",
+                  "default": "22"
+                },
+                {
+                  "name": "--identity-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "SSH identity file"
+                },
+                {
+                  "name": "--backup",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Back up the existing remote file before overwrite"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Upload and overwrite the remote file"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show readback without uploading"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific WordPress theme.",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme stylesheet, textdomain, or exact name from themes list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List installed WordPress themes.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum themes to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Forwarded filter expressions for wordpress admin",
+                  "short": "-f"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status",
+                  "short": "-s"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "wordpress-menu": {
+      "help": "Manage WordPress navigation menus",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add-page": {
+          "help": "Add a WordPress page to a navigation menu.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "WordPress page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--menu",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu ID, slug, or name"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Theme menu location"
+            },
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu item title"
+            },
+            {
+              "name": "--menu-order",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Menu item order"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "items": {
+          "help": "List items in a WordPress navigation menu.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--menu",
+              "type": "TEXT",
+              "required": false,
+              "help": "Menu ID, slug, or name"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Theme menu location"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum menu items to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List WordPress navigation menus.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "locations": {
+          "help": "List WordPress navigation menu locations.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
@@ -2364,10 +2711,82 @@
               "name": "page_id",
               "type": "INTEGER",
               "required": true,
-              "help": ""
+              "help": "Page ID"
             }
           ],
           "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New page title"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "New page content"
+            },
+            {
+              "name": "--content-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Read new page content from file"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "New page status"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "New URL slug"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)"
+            },
+            {
+              "name": "--featured-media",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Featured image media ID"
+            },
+            {
+              "name": "--parent",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Parent page ID"
+            },
+            {
+              "name": "--menu-order",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Order in menus"
+            },
+            {
+              "name": "--template",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page template slug"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page excerpt"
+            },
+            {
+              "name": "--meta",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page meta (key=value, repeatable)"
+            },
             {
               "name": "--profile",
               "type": "TEXT",

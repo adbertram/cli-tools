@@ -29,6 +29,9 @@ ata-blog <command-group> <action> [arguments] [options]
 | List WordPress plugins | `ata-blog wordpress-admin plugins list --properties "name,status,version"` |
 | Get WordPress plugin | `ata-blog wordpress-admin plugins get <plugin> --properties "name,status,version"` |
 | Upgrade WordPress plugin | `ata-blog wordpress-admin plugins upgrade <plugin>` |
+| List WordPress themes | `ata-blog wordpress-admin themes list --table` |
+| Preview theme file push | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --dry-run` |
+| Push theme file | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --backup --yes` |
 | Upload media | `ata-blog media upload <file_path>` |
 | Check ad earnings | `ata-blog earnings get` |
 | Set schema on post | `ata-blog schema set <post_id> <type>` |
@@ -79,13 +82,25 @@ If a diagnostic task must import WordPress CLI internals, there is no
 interpreter and the actual module documented by the `wordpress-cli` skill.
 </principle>
 
+<principle name="WP Engine Boundary">
+When an ATA Blog task needs WP Engine Hosting Platform data or operations
+(accounts, sites, environments/installs, WP Engine cache purge, SSH key API, or
+SSH/SFTP connection helper details), route that portion through the repo-owned
+`wpengine-cli` skill and execute the `wpengine` CLI after consulting
+`_repo/skills/wpengine-cli/usage.json`.
+
+Keep `ata-blog` as the owner for ATA Blog WordPress, Notion, Raptive, schema,
+media, and theme file-push workflows. Do not use `wpengine` for deploy or theme
+file mutation; use the existing ATA Blog/WordPress file-push path for that.
+</principle>
+
 <principle name="Command Groups">
 - **auth** -- Authentication management (login, logout, status, refresh, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **notion-page** -- Notion page management (list, get, publish, update, search, statuses, comments, content)
 - **wordpress-post** -- WordPress post CRUD (list, get, create, update, schedule, delete)
 - **wordpress-page** -- WordPress page CRUD (list, get, create, update, delete). Passthrough to `wordpress pages`; pages support `parent`, `menu_order`, `template` (no tags/categories/format).
-- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade.
+- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through the delegated `wordpress` CLI.
 - **media** -- WordPress media management (list, get, upload, delete)
 - **categories** -- WordPress categories (list, get, create)
 - **tags** -- WordPress tags (list, get, create)
