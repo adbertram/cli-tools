@@ -26,6 +26,8 @@ __pycache__/
 .pytest_cache/
 .playwright-cli/
 **/.playwright-cli/
+.chromium-profile/
+**/chromium-profile/
 .mypy_cache/
 .ruff_cache/
 
