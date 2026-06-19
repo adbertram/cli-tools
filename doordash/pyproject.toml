@@ -14,6 +14,10 @@ dependencies = [
     "playwright>=1.40.0",
     "pydantic>=2.0.0",
     "httpx>=0.25.0",
+    # DoorDashBrowser subclasses cli_tools_shared WebwrightBrowserAutomation, which
+    # lazy-imports webwright.environments.local_browser. webwright is an optional
+    # extra in cli-tools-shared, so the sole consumer (this CLI) must declare it.
+    "webwright @ git+https://github.com/microsoft/Webwright.git",
 ]
 
 [project.scripts]
