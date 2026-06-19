@@ -3,6 +3,7 @@ import json
 import re
 import shlex
 import subprocess
+import sys
 import time
 import zipfile
 import xml.etree.ElementTree as ElementTree
@@ -101,6 +102,8 @@ INTER_SLIDE_ACTIONS = [{
     "reason": "next slide",
 }]
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
+PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
+SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
 
 
 def slide_label(item, index):
@@ -254,21 +257,59 @@ def probe_capture_dimensions(video_input, framerate):
     return parse_capture_dimensions(completed.stderr)
 
 
-def validate_capture_resolution(source_width, source_height, output_width, output_height, video_input):
-    if source_width * output_height != output_width * source_height:
+def round_to_even(value):
+    return int(value) - (int(value) % 2)
+
+
+def centered_crop_for_output_aspect(capture_width, capture_height, output_width, output_height):
+    """Return the centered crop rectangle of the output AR within the capture frame.
+
+    PowerPoint's fullscreen slideshow always presents the 16:9 slide centered and
+    letterboxed/pillarboxed to fit the screen, so the centered output-aspect-ratio
+    rectangle of the capture IS exactly the slide. Returns ``None`` when the capture
+    already matches the output aspect ratio (no crop needed), otherwise a
+    ``(crop_width, crop_height, x, y)`` tuple with even dimensions and offsets.
+    """
+    if capture_width * output_height == output_width * capture_height:
+        return None
+
+    if capture_width * output_height < output_width * capture_height:
+        # Capture is "taller" than the output AR (e.g. 16:10 vs 16:9): full width,
+        # bars top and bottom. Crop full width, shrink height to the output AR.
+        crop_width = round_to_even(capture_width)
+        crop_height = round_to_even(round(capture_width * output_height / output_width))
+        crop_x = 0
+        crop_y = round_to_even((capture_height - crop_height) // 2)
+    else:
+        # Capture is "wider" than the output AR (e.g. 21:9): full height, bars left
+        # and right. Crop full height, shrink width to the output AR.
+        crop_height = round_to_even(capture_height)
+        crop_width = round_to_even(round(capture_height * output_width / output_height))
+        crop_y = 0
+        crop_x = round_to_even((capture_width - crop_width) // 2)
+
+    return (crop_width, crop_height, crop_x, crop_y)
+
+
+def capture_crop_plan(source_width, source_height, output_width, output_height, video_input):
+    """Validate a capture source and return its centered output-AR crop plan, if any.
+
+    Returns ``None`` when the capture already matches the output aspect ratio, or a
+    ``(crop_width, crop_height, x, y)`` tuple when a centered crop is required to
+    extract the slide before scaling. Raises when the (post-crop) capture region is
+    smaller than the requested output, since that would require upscaling.
+    """
+    crop = centered_crop_for_output_aspect(source_width, source_height, output_width, output_height)
+    effective_width, effective_height = (source_width, source_height) if crop is None else (crop[0], crop[1])
+    if effective_width < output_width or effective_height < output_height:
         raise ValueError(
-            f"Capture source {video_input} is {source_width}x{source_height}, "
-            f"which does not match requested output aspect ratio {output_width}x{output_height}. "
-            "Switch the display mode or --video-input capture source to the same aspect ratio before recording. "
-            "Use --force-aspect-ratio for automatic display switching when a matching display mode is available."
-        )
-    if source_width < output_width or source_height < output_height:
-        raise ValueError(
-            f"Capture source {video_input} is {source_width}x{source_height}, "
+            f"Capture source {video_input} is {source_width}x{source_height} "
+            f"(usable {effective_width}x{effective_height} after centered crop), "
             f"which is smaller than requested output {output_width}x{output_height}. "
             "Switch the display mode or --video-input capture source to at least the requested resolution before recording. "
             "Use --force-resolution for an exact display mode when that mode is available."
         )
+    return crop
 
 
 def osascript(*lines, args=None):
@@ -386,6 +427,9 @@ def render_quit_app_action(action):
 
 def render_fullscreen_window_action(action):
     contains = quote_applescript_text(action["contains"])
+    screen_width = int(action["screen_width"])
+    screen_height = int(action["screen_height"])
+    coverage_tolerance = int(action.get("coverage_tolerance", 4))
     return render_scoped_process_action(action, [
         "set frontmost to true",
         "repeat 40 times",
@@ -401,21 +445,51 @@ def render_fullscreen_window_action(action):
         "delay 0.25",
         "end repeat",
         f'if targetWindow is missing value then error "Window containing {contains} not found"',
+        'try',
         'perform action "AXRaise" of targetWindow',
+        'end try',
+        # PowerPoint's "full screen" slideshow uses its own presentation mode rather
+        # than macOS-native fullscreen, so AXFullScreen often stays false even though
+        # the Slide Show window already covers the whole display. Treat the slideshow
+        # as ready when AXFullScreen is true OR the window already covers the screen.
+        'try',
         'set value of attribute "AXFullScreen" of targetWindow to true',
+        'end try',
         "delay 1",
         "repeat 40 times",
-        "set fullscreenReached to false",
+        "set slideshowReady to false",
         "repeat with currentWindow in windows",
         "set windowName to name of currentWindow as text",
         f'if windowName contains "{contains}" then',
-        'if (value of attribute "AXFullScreen" of currentWindow) is true then set fullscreenReached to true',
+        'set isFullscreen to false',
+        'try',
+        'if (value of attribute "AXFullScreen" of currentWindow) is true then set isFullscreen to true',
+        'end try',
+        'set coversScreen to false',
+        'try',
+        "set windowSize to size of currentWindow",
+        "set windowPos to position of currentWindow",
+        "set windowWidth to item 1 of windowSize",
+        "set windowHeight to item 2 of windowSize",
+        "set windowX to item 1 of windowPos",
+        "set windowY to item 2 of windowPos",
+        f"set widthGap to {screen_width} - windowWidth",
+        f"set heightGap to {screen_height} - windowHeight",
+        "if widthGap < 0 then set widthGap to -widthGap",
+        "if heightGap < 0 then set heightGap to -heightGap",
+        "set absX to windowX",
+        "if absX < 0 then set absX to -absX",
+        "set absY to windowY",
+        "if absY < 0 then set absY to -absY",
+        f"if widthGap <= {coverage_tolerance} and heightGap <= {coverage_tolerance} and absX <= {coverage_tolerance} and absY <= {coverage_tolerance} then set coversScreen to true",
+        'end try',
+        "if isFullscreen or coversScreen then set slideshowReady to true",
         "end if",
         "end repeat",
-        "if fullscreenReached is true then return",
+        "if slideshowReady is true then return",
         "delay 0.25",
         "end repeat",
-        f'error "Window containing {contains} did not enter fullscreen"',
+        f'error "Window containing {contains} did not enter fullscreen and does not cover the screen"',
     ])
 
 
@@ -575,6 +649,45 @@ def slide_animation_count_from_xml(slide_xml):
     return len(root.findall(".//p:timing/p:tnLst//p:cTn[@nodeType='clickEffect']", namespace))
 
 
+def slide_layout_member_for_slide(deck, slide_number):
+    """Return the ``ppt/slideLayouts/<name>.xml`` member a slide references, or None.
+
+    Pluralsight-templated decks define their click-build animations on the
+    slide's slideLayout rather than on ``slide{N}.xml``. Resolve the layout from
+    the slide's relationship part so its animations can be counted too. A missing
+    or malformed rels part is treated as "no layout" rather than an error.
+    """
+    rels_path = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+    try:
+        rels_xml = deck.read(rels_path)
+    except KeyError:
+        return None
+
+    try:
+        rels_root = ElementTree.fromstring(rels_xml)
+    except ElementTree.ParseError:
+        return None
+
+    relationship_tag = f"{{{PACKAGE_RELATIONSHIPS_NAMESPACE}}}Relationship"
+    for relationship in rels_root.iter(relationship_tag):
+        relationship_type = relationship.get("Type", "")
+        target = relationship.get("Target", "")
+        if relationship_type.endswith(SLIDE_LAYOUT_RELATIONSHIP_SUFFIX) and target:
+            return f"ppt/slideLayouts/{Path(target).name}"
+    return None
+
+
+def slide_layout_animation_count(deck, slide_number):
+    layout_member = slide_layout_member_for_slide(deck, slide_number)
+    if layout_member is None:
+        return 0
+    try:
+        layout_xml = deck.read(layout_member)
+    except KeyError:
+        return 0
+    return slide_animation_count_from_xml(layout_xml)
+
+
 def slide_animation_counts(deck_path, slide_numbers):
     counts = {}
     try:
@@ -585,7 +698,10 @@ def slide_animation_counts(deck_path, slide_numbers):
                     slide_xml = deck.read(slide_xml_path)
                 except KeyError as error:
                     raise FileNotFoundError(f"Slide {slide_number} XML not found in deck: {slide_xml_path}") from error
-                counts[slide_number] = slide_animation_count_from_xml(slide_xml)
+                counts[slide_number] = (
+                    slide_animation_count_from_xml(slide_xml)
+                    + slide_layout_animation_count(deck, slide_number)
+                )
     except zipfile.BadZipFile as error:
         raise ValueError(f"PowerPoint deck is not a readable OOXML presentation: {deck_path}") from error
     return counts
@@ -742,7 +858,21 @@ def press_space():
     }])
 
 
+def parse_screen_point_size(output):
+    parts = [part.strip() for part in output.split(",")]
+    if len(parts) != 4:
+        raise ValueError(f"Unexpected desktop bounds response: {output}")
+    left, top, right, bottom = (int(part) for part in parts)
+    return right - left, bottom - top
+
+
+def screen_point_size():
+    output = capture_osascript('tell application "Finder" to get bounds of window of desktop')
+    return parse_screen_point_size(output)
+
+
 def force_slideshow_fullscreen():
+    screen_width, screen_height = screen_point_size()
     execute_ui_actions([
         {
             "action": "activate_app",
@@ -752,6 +882,8 @@ def force_slideshow_fullscreen():
             "action": "fullscreen_window",
             "process": "Microsoft PowerPoint",
             "contains": "Slide Show",
+            "screen_width": screen_width,
+            "screen_height": screen_height,
         },
     ])
 
@@ -811,23 +943,38 @@ def open_deck(config):
     raise RuntimeError(f"PowerPoint deck did not open: {deck_path}")
 
 
+def render_run_slideshow_range(starting_slide, ending_slide):
+    """AppleScript that starts the slideshow on a custom slide range.
+
+    PowerPoint's "Play from Start" always begins on slide 1, and typing a slide
+    number to jump is unreliable in the live show: the digit is dropped and the
+    show lands on slide 2, which silently desynchronizes every slide from its
+    narration and makes the per-cue Space presses fire against the wrong slides
+    (so click-build reveals never line up). Starting a custom slide-show range
+    begins the show directly on ``starting_slide`` in build-pending state, so the
+    click-build animations fire on Space exactly as in a normal linear run from
+    slide 1. Advance mode is forced to manual advance so a deck authored with
+    automatic slide timings cannot self-advance ahead of the narration.
+    """
+    return [
+        'tell application "Microsoft PowerPoint"',
+        "activate",
+        "set slideShowSettings to slide show settings of active presentation",
+        "set range type of slideShowSettings to slide show range",
+        f"set starting slide of slideShowSettings to {int(starting_slide)}",
+        f"set ending slide of slideShowSettings to {int(ending_slide)}",
+        "set advance mode of slideShowSettings to slide show advance manual advance",
+        "run slide show slideShowSettings",
+        "end tell",
+    ]
+
+
 def start_slideshow(config):
     open_deck(config)
+    starting_slide = config["items"][0]["identity"]["value"]
+    ending_slide = config["items"][-1]["identity"]["value"]
+    run_osascript(*render_run_slideshow_range(starting_slide, ending_slide))
     execute_ui_actions([
-        {
-            "action": "activate_app",
-            "app": "Microsoft PowerPoint",
-        },
-        {
-            "action": "delay",
-            "seconds": 0.5,
-        },
-        {
-            "action": "menu_click",
-            "process": "Microsoft PowerPoint",
-            "menu": "Slide Show",
-            "item": "Play from Start",
-        },
         {
             "action": "delay",
             "seconds": 1,
@@ -839,18 +986,8 @@ def start_slideshow(config):
         },
     ])
     force_slideshow_fullscreen()
-    jump_to_slide(config["items"][0]["identity"]["value"])
     time.sleep(config["slideshow_start_seconds"])
 
-
-def jump_to_slide(slide_number):
-    if slide_number == 1:
-        return
-    execute_ui_actions([{
-        "action": "key_stroke",
-        "text": str(slide_number),
-        "then_key_codes": [36],
-    }])
 
 def close_slideshow_and_deck(config, state):
     if not state["powerpoint_was_running"]:
@@ -968,27 +1105,20 @@ def record(config):
             set_display_resolution(forced_mode["pixel_width"], forced_mode["pixel_height"])
 
         source_width, source_height = probe_capture_dimensions(config["ffmpeg_video_input"], config["ffmpeg_framerate"])
-        try:
-            validate_capture_resolution(
-                source_width,
-                source_height,
-                config["output_width"],
-                config["output_height"],
-                config["ffmpeg_video_input"],
-            )
-        except ValueError:
-            if not config["force_resolution"]:
-                raise
+        if config["force_resolution"] and (source_width, source_height) != (config["output_width"], config["output_height"]):
+            # The user explicitly demanded this exact display mode. Switch to it (when
+            # that mode exists) and re-probe so the capture matches the output exactly,
+            # rather than relying on the centered-crop fallback.
             display_restore_mode = current_display_mode()
             set_display_resolution(config["output_width"], config["output_height"])
             source_width, source_height = probe_capture_dimensions(config["ffmpeg_video_input"], config["ffmpeg_framerate"])
-            validate_capture_resolution(
-                source_width,
-                source_height,
-                config["output_width"],
-                config["output_height"],
-                config["ffmpeg_video_input"],
-            )
+        crop_plan = capture_crop_plan(
+            source_width,
+            source_height,
+            config["output_width"],
+            config["output_height"],
+            config["ffmpeg_video_input"],
+        )
 
         plan = prepare(config)
         work_dir = Path(config["work_dir"])
@@ -1044,6 +1174,20 @@ def record(config):
         close_slideshow_and_deck(config, state)
         state = None
 
+        scale_filter = f"scale={config['output_width']}:{config['output_height']}"
+        if crop_plan is None:
+            video_filter = scale_filter
+        else:
+            crop_width, crop_height, crop_x, crop_y = crop_plan
+            video_filter = f"crop={crop_width}:{crop_height}:{crop_x}:{crop_y},{scale_filter}"
+            print(
+                f"Capture {source_width}x{source_height} != output AR "
+                f"{config['output_width']}x{config['output_height']}; cropping centered "
+                f"{crop_width}x{crop_height} -> scaling to "
+                f"{config['output_width']}x{config['output_height']}",
+                file=sys.stderr,
+            )
+
         run([
             "ffmpeg",
             "-y",
@@ -1057,7 +1201,7 @@ def record(config):
             "-c:v",
             "libx264",
             "-vf",
-            f"scale={config['output_width']}:{config['output_height']}",
+            video_filter,
             "-c:a",
             "aac",
             "-shortest",

@@ -88,6 +88,49 @@ def write_deck(root, slide_animation_counts):
     return deck
 
 
+def write_layout_animation_deck(root, slide_layout_animation_counts):
+    """Build a deck whose slide XML has no timing but whose layout defines the clicks.
+
+    Mirrors Pluralsight-templated decks: each ``slide{N}.xml`` carries no
+    ``<p:timing>`` at all, and the click-build animations live on the referenced
+    slideLayout. Each slide gets its own layout part so per-slide counts differ.
+    """
+    deck = root / "layout-deck.pptx"
+    presentation_namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    relationships_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+    with zipfile.ZipFile(deck, "w") as archive:
+        for slide_number, animation_count in slide_layout_animation_counts.items():
+            slide_xml = f'<p:sld xmlns:p="{presentation_namespace}"><p:cSld/></p:sld>'
+            archive.writestr(f"ppt/slides/slide{slide_number}.xml", slide_xml)
+
+            layout_name = f"slideLayout{slide_number}.xml"
+            rels_xml = (
+                f'<Relationships xmlns="{relationships_namespace}">'
+                f'<Relationship Id="rId1" '
+                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+                f'Target="../slideLayouts/{layout_name}"/>'
+                "</Relationships>"
+            )
+            archive.writestr(f"ppt/slides/_rels/slide{slide_number}.xml.rels", rels_xml)
+
+            click_effects = "".join(
+                f'<p:par><p:cTn id="{index + 2}" nodeType="clickEffect"/></p:par>'
+                for index in range(animation_count)
+            )
+            layout_xml = (
+                f'<p:sldLayout xmlns:p="{presentation_namespace}">'
+                "<p:cSld/>"
+                "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
+                f"<p:childTnLst>{click_effects}</p:childTnLst>"
+                "</p:cTn></p:par></p:tnLst></p:timing>"
+                "</p:sldLayout>"
+            )
+            archive.writestr(f"ppt/slideLayouts/{layout_name}", layout_xml)
+
+    return deck
+
+
 class RecordTests(unittest.TestCase):
     def test_public_cli_uses_default_resolution(self):
         runner = CliRunner()
@@ -288,29 +331,41 @@ Input #0, avfoundation, from '3':
             with self.assertRaisesRegex(RuntimeError, "ffmpeg capture probe exited with code 1: probe failed"):
                 record.probe_capture_dimensions("3", 30)
 
-    def test_validate_capture_resolution_accepts_exact_size(self):
-        record.validate_capture_resolution(1920, 1080, 1920, 1080, "3")
+    def test_capture_crop_plan_accepts_exact_size_without_crop(self):
+        self.assertIsNone(record.capture_crop_plan(1920, 1080, 1920, 1080, "3"))
 
-    def test_validate_capture_resolution_accepts_larger_same_ratio_source(self):
-        record.validate_capture_resolution(3840, 2160, 1920, 1080, "3")
+    def test_capture_crop_plan_accepts_larger_same_ratio_source_without_crop(self):
+        self.assertIsNone(record.capture_crop_plan(3840, 2160, 1920, 1080, "3"))
 
-    def test_validate_capture_resolution_rejects_mismatched_ratio_source(self):
+    def test_centered_crop_returns_none_for_equal_aspect_ratio(self):
+        self.assertIsNone(record.centered_crop_for_output_aspect(3840, 2160, 1920, 1080))
+
+    def test_centered_crop_letterboxes_taller_capture(self):
+        # 16:10 capture, 16:9 output -> full width, bars top/bottom.
+        self.assertEqual(
+            record.centered_crop_for_output_aspect(4112, 2658, 1920, 1080),
+            (4112, 2312, 0, 172),
+        )
+
+    def test_centered_crop_pillarboxes_wider_capture(self):
+        # 21:9 capture, 16:9 output -> full height, bars left/right.
+        self.assertEqual(
+            record.centered_crop_for_output_aspect(5040, 2160, 1920, 1080),
+            (3840, 2160, 600, 0),
+        )
+
+    def test_capture_crop_plan_crops_mismatched_ratio_source(self):
+        self.assertEqual(
+            record.capture_crop_plan(4112, 2658, 1920, 1080, "3"),
+            (4112, 2312, 0, 172),
+        )
+
+    def test_capture_crop_plan_rejects_smaller_source(self):
         with self.assertRaisesRegex(
             ValueError,
-            "Capture source 3 is 4112x2658, which does not match requested output aspect ratio 1920x1080. "
-            "Switch the display mode or --video-input capture source to the same aspect ratio before recording. "
-            "Use --force-aspect-ratio for automatic display switching when a matching display mode is available.",
+            "Capture source 3 is 1280x720 .*which is smaller than requested output 1920x1080",
         ):
-            record.validate_capture_resolution(4112, 2658, 1920, 1080, "3")
-
-    def test_validate_capture_resolution_rejects_smaller_source(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "Capture source 3 is 1280x720, which is smaller than requested output 1920x1080. "
-            "Switch the display mode or --video-input capture source to at least the requested resolution before recording. "
-            "Use --force-resolution for an exact display mode when that mode is available.",
-        ):
-            record.validate_capture_resolution(1280, 720, 1920, 1080, "3")
+            record.capture_crop_plan(1280, 720, 1920, 1080, "3")
 
     def test_parse_display_mode_payload_returns_pixel_dimensions(self):
         payload = '{"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658}'
@@ -445,6 +500,74 @@ Input #0, avfoundation, from '3':
         )
 
         self.assertEqual(record.slide_animation_count_from_xml(slide_xml), 1)
+
+    def test_slide_animation_counts_read_click_effects_from_slide_layout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            deck = write_layout_animation_deck(root, {1: 0, 2: 4, 8: 6})
+
+            counts = record.slide_animation_counts(deck, [1, 2, 8])
+
+        self.assertEqual(counts, {
+            1: 0,
+            2: 4,
+            8: 6,
+        })
+
+    def test_slide_animation_counts_sum_slide_and_layout_click_effects(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            deck = root / "mixed-deck.pptx"
+            presentation_namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
+            relationships_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
+
+            with zipfile.ZipFile(deck, "w") as archive:
+                slide_xml = (
+                    f'<p:sld xmlns:p="{presentation_namespace}">'
+                    "<p:cSld/>"
+                    "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
+                    "<p:childTnLst>"
+                    "<p:par><p:cTn id=\"2\" nodeType=\"clickEffect\"/></p:par>"
+                    "</p:childTnLst>"
+                    "</p:cTn></p:par></p:tnLst></p:timing>"
+                    "</p:sld>"
+                )
+                archive.writestr("ppt/slides/slide1.xml", slide_xml)
+
+                rels_xml = (
+                    f'<Relationships xmlns="{relationships_namespace}">'
+                    '<Relationship Id="rId1" '
+                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+                    'Target="../slideLayouts/slideLayout1.xml"/>'
+                    "</Relationships>"
+                )
+                archive.writestr("ppt/slides/_rels/slide1.xml.rels", rels_xml)
+
+                layout_xml = (
+                    f'<p:sldLayout xmlns:p="{presentation_namespace}">'
+                    "<p:cSld/>"
+                    "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
+                    "<p:childTnLst>"
+                    "<p:par><p:cTn id=\"2\" nodeType=\"clickEffect\"/></p:par>"
+                    "<p:par><p:cTn id=\"3\" nodeType=\"clickEffect\"/></p:par>"
+                    "</p:childTnLst>"
+                    "</p:cTn></p:par></p:tnLst></p:timing>"
+                    "</p:sldLayout>"
+                )
+                archive.writestr("ppt/slideLayouts/slideLayout1.xml", layout_xml)
+
+            counts = record.slide_animation_counts(deck, [1])
+
+        self.assertEqual(counts, {1: 3})
+
+    def test_slide_animation_counts_treat_missing_layout_rels_as_zero(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            deck = write_deck(root, {1: 2})
+
+            counts = record.slide_animation_counts(deck, [1])
+
+        self.assertEqual(counts, {1: 2})
 
     def test_validate_items_uses_deck_animation_count_without_manifest_cue_count(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -583,6 +706,80 @@ Input #0, avfoundation, from '3':
             'tell application "System Events" to key code 53',
         ])
 
+    def test_run_slideshow_range_starts_on_clip_first_slide_via_custom_range(self):
+        # The slideshow must begin on the clip's first deck slide through a custom
+        # slide-show range, not "Play from Start" (always slide 1) followed by a
+        # number-typed jump. Typing the slide number in the live show drops the
+        # digit and lands on slide 2, which desynchronizes every slide from its
+        # narration and fires the per-cue Space presses against the wrong slides
+        # so the click-build reveals never line up.
+        lines = record.render_run_slideshow_range(7, 10)
+
+        self.assertEqual(lines, [
+            'tell application "Microsoft PowerPoint"',
+            "activate",
+            "set slideShowSettings to slide show settings of active presentation",
+            "set range type of slideShowSettings to slide show range",
+            "set starting slide of slideShowSettings to 7",
+            "set ending slide of slideShowSettings to 10",
+            "set advance mode of slideShowSettings to slide show advance manual advance",
+            "run slide show slideShowSettings",
+            "end tell",
+        ])
+        script = "\n".join(lines)
+        # Manual advance keeps an auto-timed deck from self-advancing ahead of audio.
+        self.assertIn("slide show advance manual advance", script)
+        # No legacy "Play from Start" + number jump.
+        self.assertNotIn("Play from Start", script)
+        self.assertNotIn("key code 36", script)
+
+    def test_parse_screen_point_size_reads_desktop_bounds(self):
+        self.assertEqual(record.parse_screen_point_size("0, 0, 2056, 1329"), (2056, 1329))
+
+    def test_parse_screen_point_size_rejects_unexpected_bounds(self):
+        with self.assertRaisesRegex(ValueError, "Unexpected desktop bounds response"):
+            record.parse_screen_point_size("0, 0, 2056")
+
+    def test_fullscreen_action_treats_screen_coverage_as_ready(self):
+        lines = record.render_fullscreen_window_action({
+            "process": "Microsoft PowerPoint",
+            "contains": "Slide Show",
+            "screen_width": 2056,
+            "screen_height": 1329,
+        })
+        script = "\n".join(lines)
+
+        # Readiness is satisfied by full coverage, not only AXFullScreen=true.
+        self.assertIn("set coversScreen to false", script)
+        self.assertIn("set widthGap to 2056 - windowWidth", script)
+        self.assertIn("set heightGap to 1329 - windowHeight", script)
+        self.assertIn(
+            "if widthGap <= 4 and heightGap <= 4 and absX <= 4 and absY <= 4 then set coversScreen to true",
+            script,
+        )
+        self.assertIn("if isFullscreen or coversScreen then set slideshowReady to true", script)
+        # AXFullScreen reads/writes must not hard-fail when PowerPoint refuses them.
+        self.assertIn('try', script)
+        self.assertIn(
+            'error "Window containing Slide Show did not enter fullscreen and does not cover the screen"',
+            script,
+        )
+
+    def test_fullscreen_action_honors_custom_coverage_tolerance(self):
+        lines = record.render_fullscreen_window_action({
+            "process": "Microsoft PowerPoint",
+            "contains": "Slide Show",
+            "screen_width": 1920,
+            "screen_height": 1080,
+            "coverage_tolerance": 10,
+        })
+        script = "\n".join(lines)
+
+        self.assertIn(
+            "if widthGap <= 10 and heightGap <= 10 and absX <= 10 and absY <= 10 then set coversScreen to true",
+            script,
+        )
+
     def test_record_aborts_before_actions_when_ffmpeg_exits(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(Path(temp_dir), items=[], work_dir="/tmp/work")
@@ -607,16 +804,16 @@ Input #0, avfoundation, from '3':
 
         press_space.assert_not_called()
 
-    def test_record_aborts_before_powerpoint_when_probe_fails(self):
+    def test_record_aborts_before_powerpoint_when_capture_too_small(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(Path(temp_dir), work_dir="/tmp/work")
 
-        with mock.patch.object(record, "probe_capture_dimensions", return_value=(1366, 768)), \
+        with mock.patch.object(record, "probe_capture_dimensions", return_value=(1280, 720)), \
                 mock.patch.object(record, "prepare") as prepare, \
                 mock.patch.object(record, "create_powerpoint_state") as create_powerpoint_state, \
                 mock.patch.object(record, "start_slideshow") as start_slideshow, \
                 mock.patch.object(subprocess, "Popen") as popen:
-            with self.assertRaisesRegex(ValueError, "does not match requested output aspect ratio"):
+            with self.assertRaisesRegex(ValueError, "which is smaller than requested output"):
                 record.record(config)
 
         prepare.assert_not_called()
@@ -874,6 +1071,39 @@ Input #0, avfoundation, from '3':
         self.assertEqual(mux_command[mux_command.index("-vf") + 1], "scale=1920:1080")
         self.assertNotIn("pad", mux_command)
         self.assertNotIn("crop", mux_command)
+
+    def test_final_mux_crops_centered_output_aspect_before_scaling(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir), work_dir="/tmp/work", output_width=1920, output_height=1080)
+        ffmpeg_process = FakeProcess([None, None, None], 0)
+        audio_process = FakeProcess([None, 0], 0)
+        commands = []
+
+        def fake_run(command):
+            commands.append(command)
+
+        with mock.patch.object(record, "probe_capture_dimensions", return_value=(3000, 2000)), \
+                mock.patch.object(record, "prepare", return_value={
+                    "narration_audio": "/tmp/narration.wav",
+                    "actions": [],
+                }), \
+                mock.patch.object(record, "create_powerpoint_state", return_value={
+                    "powerpoint_was_running": False,
+                    "deck_was_open": False,
+                }), \
+                mock.patch.object(record, "start_slideshow"), \
+                mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "run", side_effect=fake_run), \
+                mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
+            record.record(config)
+
+        mux_command = commands[0]
+        self.assertIn("-vf", mux_command)
+        # 3000x2000 (3:2) -> centered crop to 16:9 (3000x1688, y=156), then scale.
+        self.assertEqual(
+            mux_command[mux_command.index("-vf") + 1],
+            "crop=3000:1688:0:156,scale=1920:1080",
+        )
 
     def test_presentation_open_check_uses_full_deck_path(self):
         deck_path = "/tmp/course-a/m1.pptx"
