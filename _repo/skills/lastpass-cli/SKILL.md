@@ -23,7 +23,7 @@ lastpass <command-group> <action> [arguments] [options]
 | List vault entries | `lastpass items list --table` |
 | List entries in folder | `lastpass items list Work --table` |
 | List payment cards | `lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table` |
-| Search entries | `lastpass items list --filter "name:like:%github%"` |
+| Search entries (case-insensitive) | `lastpass items list --filter "name:like:%github%" --limit 0` |
 | Get entry details | `lastpass items get <id-or-name>` |
 | Get password only | `lastpass items password <id-or-name>` |
 | Copy password to clipboard | `lastpass items password <id-or-name> --clip` |
@@ -39,6 +39,13 @@ This file contains complete command syntax, all arguments, all options, and usag
 <principle name="Command Groups">
 - **auth** -- Manage LastPass authentication (login, logout, status, sync)
 - **items** -- Manage vault entries (list, get, password, username)
+</principle>
+
+<principle name="Searching the vault (avoid false negatives)">
+`items list` returns metadata only, so `--filter` works **only** on `id`, `name`, `group`, `full_path`.
+- **`name:like`/`ilike` is case-insensitive** -- `name:like:%google%` matches an entry named "Google". Use `%term%` for a contains-style search.
+- **Filtering on a non-metadata field errors.** `Username:`/`URL:` (or any unsupported field) exits non-zero listing supported fields -- it never returns an empty result. To search by username/url, you cannot filter; fetch the entry with `items get`/`items username`.
+- **`--limit` defaults to 50** and silently truncates the ~1000-entry vault. For any real search, pass **`--limit 0`** (unlimited) so a match past the 50th entry is not missed; a truncation notice is printed to stderr when capped. Never conclude an entry is absent from a default-limited or single-field-filtered listing.
 </principle>
 </essential_principles>
 

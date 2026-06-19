@@ -455,13 +455,15 @@
           ]
         },
         "list": {
-          "help": "List vault entries.",
+          "help": "List vault entries. Metadata-only: --filter only supports id, name, group, full_path. The name:like/ilike wildcard match is case-insensitive (name:like:%google% also matches \"Google\"). Filtering on a non-metadata field such as Username or URL is an error, not an empty result. Default --limit is 50; use --limit 0 for unlimited (truncation prints a stderr notice).",
           "examples": [
             "lastpass items list",
             "lastpass items list --table",
             "lastpass items list Work --table",
             "lastpass items list --filter \"name:like:%hsa%\" --category \"Payment Cards\" --table",
-            "lastpass items list --filter \"name:like:%github%\""
+            "lastpass items list --filter \"name:like:%github%\"",
+            "lastpass items list --filter \"name:like:%google%\" --limit 0",
+            "lastpass items list --filter \"group:eq:Home\" --limit 0"
           ],
           "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below.",
           "arguments": [
@@ -484,7 +486,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of entries to return",
+              "help": "Maximum entries to return (default 50; use 0 for unlimited). A truncation notice is printed to stderr when results are capped. The vault can hold ~1000+ entries, so the default silently truncates a full search unless you raise it or pass 0.",
               "short": "-l",
               "default": "50"
             },
@@ -499,7 +501,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "help": "Filter: field:op:value. Only metadata fields are filterable: id, name, group, full_path. name:like/ilike wildcard match is case-insensitive (name:like:%google% matches \"Google\"). A filter on any other field (e.g. Username, URL) errors with a non-zero exit listing supported fields -- it never returns an empty/false-negative result. Examples: name:eq:MyItem, name:like:%github%, group:eq:Home.",
               "short": "-f"
             },
             {

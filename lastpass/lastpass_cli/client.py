@@ -48,10 +48,32 @@ SENSITIVE_ITEM_DETAIL_KEY_MARKERS = (
 )
 CATEGORY_SCAN_LIMIT = 50
 
+# lpass prints this exact sentinel to STDOUT (exit 0) when a name/ID lookup
+# matches more than one vault entry, followed by one "Group/Name [id: <id>]"
+# line per candidate. Detect it so the wrapper can return structured data
+# instead of leaking this prose to a caller that expects a value or JSON.
+MULTIPLE_MATCHES_SENTINEL = "Multiple matches found."
+
 
 class ClientError(Exception):
     """Custom exception for Lastpass wrapper errors."""
     pass
+
+
+class MultipleMatchesError(ClientError):
+    """Raised when an lpass lookup is ambiguous (matched multiple entries).
+
+    Carries the structured candidate list so a caller can disambiguate by ID
+    programmatically instead of parsing lpass's freeform "Multiple matches
+    found." text.
+    """
+
+    def __init__(self, query: str, matches: List[Dict]):
+        self.query = query
+        self.matches = matches
+        super().__init__(
+            f"Multiple entries match '{query}'. Specify the exact entry by ID."
+        )
 
 
 def _is_sensitive_item_detail_key(key: str) -> bool:
@@ -517,6 +539,7 @@ class LastpassClient:
         args = ["show", item_id]
 
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         parsed = self._parse_lpass_show(result.stdout)
 
         if not show_password:
@@ -536,6 +559,7 @@ class LastpassClient:
         """
         args = ["show", "--password", item_id]
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         return result.stdout.strip()
 
     def get_username(self, item_id: str) -> str:
@@ -550,6 +574,7 @@ class LastpassClient:
         """
         args = ["show", "--username", item_id]
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         return result.stdout.strip()
 
     def create_item(
@@ -764,22 +789,56 @@ class LastpassClient:
 
         return items
 
+    # lpass `show` prints a header line before the `Key: Value` fields, in the
+    # same "Group/Name [id: <id>]" / "Name [id: <id>]" shape as `lpass ls`. That
+    # header contains ': ' inside "[id: ...]", so a naive `Key: Value` split
+    # mangles it into a bogus "<name> [id" key. Match the header with the same
+    # pattern `_parse_lpass_ls` uses and structure it instead of emitting junk.
+    _SHOW_HEADER_PATTERN = re.compile(r'^(.+?)\s+\[id:\s*(\d+)\]$')
+
     def _parse_lpass_show(self, output: str) -> Dict:
         """
         Parse lpass show output.
 
         Format:
-            Name: EntryName
+            Group/Name [id: 1234567890123456789]
             URL: https://example.com
             Username: myuser
             Password: secret
             Notes: Some notes here
+
+        The first line is a "Group/Name [id: <id>]" (or "Name [id: <id>]")
+        header, not a real field. It is parsed into structured ``id``,
+        ``full_path``, ``name`` and ``group`` keys rather than being split as a
+        ``Key: Value`` pair. Only the leading header line gets this treatment;
+        every subsequent ``Key: Value`` field (including multiline ``Notes:``)
+        parses exactly as before.
         """
         result = {}
         current_key = None
         current_value = []
 
-        for line in output.strip().split('\n'):
+        lines = output.strip().split('\n')
+
+        # Pull the leading "Group/Name [id: <id>]" header off the top so its
+        # embedded ': ' can't be misread as a field separator. Everything after
+        # it is parsed as normal Key: Value fields.
+        if lines:
+            header_match = self._SHOW_HEADER_PATTERN.match(lines[0].strip())
+            if header_match:
+                full_path = header_match.group(1).strip()
+                result["id"] = header_match.group(2)
+                result["full_path"] = full_path
+                if '/' in full_path:
+                    group, _, name = full_path.rpartition('/')
+                    result["group"] = group
+                    result["name"] = name
+                else:
+                    result["group"] = ""
+                    result["name"] = full_path
+                lines = lines[1:]
+
+        for line in lines:
             if ': ' in line and not line.startswith(' '):
                 # Save previous key-value if exists
                 if current_key:
@@ -798,6 +857,30 @@ class LastpassClient:
             result[current_key] = '\n'.join(current_value).strip()
 
         return result
+
+    def _raise_if_multiple_matches(self, query: str, output: str) -> None:
+        """Raise MultipleMatchesError if lpass returned its ambiguous-match list.
+
+        lpass `show` emits "Multiple matches found." on stdout (exit 0) when a
+        name/ID matches several entries, followed by "Group/Name [id: <id>]"
+        candidate lines in the same format as `lpass ls`. Parse those candidates
+        and raise so the command layer can return structured JSON instead of
+        passing this prose straight through to the caller.
+        """
+        lines = output.split("\n")
+        if not lines or lines[0].strip() != MULTIPLE_MATCHES_SENTINEL:
+            return
+        candidate_block = "\n".join(lines[1:])
+        matches = [
+            item for item in self._parse_lpass_ls(candidate_block)
+            if item.get("id")
+        ]
+        # Only treat this as ambiguous when lpass actually listed candidates.
+        # Without candidates there is nothing to disambiguate, so fall through
+        # and let the normal value/parse path handle the output.
+        if not matches:
+            return
+        raise MultipleMatchesError(query, matches)
 
 
 # Module-level client instance - singleton pattern

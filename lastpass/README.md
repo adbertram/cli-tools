@@ -162,7 +162,32 @@ This CLI wraps the `lpass` CLI:
 | 0 | Success |
 | 1 | General error |
 | 2 | Not authenticated / CLI not available |
+| 3 | Ambiguous lookup — multiple entries matched (see below) |
 | 130 | User interrupted (Ctrl+C) |
+
+## Ambiguous Lookups (Multiple Matches)
+
+`items get`, `items username`, and `items password` take an entry name or ID. When
+a name matches more than one vault entry, the command exits `3` and prints a
+parseable JSON object on stdout (not freeform text) so automation can pick an
+entry by ID and re-run the lookup:
+
+```bash
+lastpass items username google.com
+# exit 3
+# {
+#   "error": "multiple_matches",
+#   "query": "google.com",
+#   "matches": [
+#     {"id": "8969039733861907751", "name": "google.com", "group": "Email", "full_path": "Email/google.com"},
+#     {"id": "7600439653866760487", "name": "google.com", "group": "", "full_path": "google.com"}
+#   ]
+# }
+
+# Disambiguate by ID — single matches return the raw value as before:
+FIRST_ID=$(lastpass items username google.com | jq -r '.matches[0].id')
+lastpass items username "$FIRST_ID"
+```
 
 ## Requirements
 
