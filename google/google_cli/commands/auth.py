@@ -19,8 +19,7 @@ def _print_setup_instructions():
 
 
 def _google_login_handler(config, force: bool):
-    """Handle Google OAuth2 flow — builds credentials.json from prompted client ID/secret."""
-    import json
+    """Handle Google OAuth2 flow using in-memory OAuth client config."""
     import typer
     from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -31,34 +30,17 @@ def _google_login_handler(config, force: bool):
         token_path.unlink()
         reset_client()
 
-    # Build credentials.json from prompted values (saved by create_auth_app via config._set)
-    client_id = config._get("CLIENT_ID")
-    client_secret = config._get("CLIENT_SECRET")
-
-    if not client_id or not client_secret:
+    try:
+        client_config = config.oauth_client_config()
+    except ValueError:
         print_error(
             "OAuth credentials not found. Run 'google auth login' to be prompted."
         )
         _print_setup_instructions()
         raise typer.Exit(2)
 
-    # Write credentials.json to profile data dir
-    creds_data = {
-        "installed": {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uris": ["http://localhost", "urn:ietf:wg:oauth:2.0:oob"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }
-    }
-    creds_path = config.get_profile_data_dir() / "credentials.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(creds_path, "w") as f:
-        json.dump(creds_data, f, indent=2)
-
     # Run OAuth flow
-    flow = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
+    flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
     creds = flow.run_local_server(port=0)
 
     # Save token to profile data dir

@@ -29,7 +29,7 @@ class Config(BaseConfig):
         ("CLIENT_SECRET", "OAuth Client Secret", True),
     ]
     CUSTOM_EPHEMERAL_FIELDS = []
-    CUSTOM_SENSITIVE_FIELDS = ["CLIENT_SECRET"]
+    CUSTOM_SENSITIVE_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
 
     def __init__(self, profile: Optional[str] = None):
         super().__init__(
@@ -42,10 +42,12 @@ class Config(BaseConfig):
         return self.token_path_obj.exists()
 
     def get_missing_credentials(self) -> list[str]:
-        """Return list of what's missing for client initialization."""
+        """Return missing OAuth client setup values."""
         missing = []
-        if not self.credentials_path:
-            missing.append("credentials.json in profile data dir")
+        if not self._get("CLIENT_ID"):
+            missing.append("CLIENT_ID")
+        if not self._get("CLIENT_SECRET"):
+            missing.append("CLIENT_SECRET")
         return missing
 
     def get_browser(self):
@@ -63,13 +65,22 @@ class Config(BaseConfig):
         """String path to token.json (for GoogleClient compatibility)."""
         return str(self.token_path_obj)
 
-    @property
-    def credentials_path(self) -> Optional[str]:
-        """String path to credentials.json in the active profile's data dir."""
-        profile_creds = self.get_profile_data_dir() / "credentials.json"
-        if profile_creds.exists():
-            return str(profile_creds)
-        return None
+    def oauth_client_config(self) -> dict:
+        """Build the Google OAuth client config without writing secrets to disk."""
+        client_id = self._get("CLIENT_ID")
+        client_secret = self._get("CLIENT_SECRET")
+        if not client_id or not client_secret:
+            missing = ", ".join(self.get_missing_credentials())
+            raise ValueError(f"Missing OAuth client setup values: {missing}")
+        return {
+            "installed": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uris": ["http://localhost", "urn:ietf:wg:oauth:2.0:oob"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        }
 
     def test_connection(self) -> Optional[dict]:
         """Test API connectivity and return the authenticated user's email.

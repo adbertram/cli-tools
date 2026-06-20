@@ -136,8 +136,8 @@ class GoogleClient:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 self.creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.config.credentials_path, SCOPES
+                flow = InstalledAppFlow.from_client_config(
+                    self.config.oauth_client_config(), SCOPES
                 )
                 self.creds = flow.run_local_server(port=0)
 

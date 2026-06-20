@@ -51,7 +51,7 @@ pip install -e .
    - Looker Studio API
 4. Go to **Credentials** → **Create Credentials** → **OAuth 2.0 Client ID**
 5. Select **Desktop app** as application type
-6. Download the JSON file and save as `credentials.json` in this directory
+6. Copy the Client ID and Client Secret for `google auth login`
 
 ### 3. Add Shell Alias
 
@@ -86,25 +86,15 @@ exit
 
 ### Authentication
 
-The first time you run any command, you'll be prompted to authenticate via your browser. The token will be saved to `token.json` for subsequent use.
+The first time you run `google auth login`, you'll be prompted for the OAuth Client ID and Client Secret, then authenticated via your browser. The reusable OAuth client values are stored through the CLI-tools secret manager and the active profile keeps only `secret://` references. The token is saved to `token.json` for subsequent use.
 
-**Option 1: Authenticate with OAuth credentials (Recommended)**
-
-If you have OAuth 2.0 Client ID and Client Secret from Google Cloud Console:
-
-```bash
-google auth login --oauth-client-id YOUR_CLIENT_ID --oauth-client-secret YOUR_CLIENT_SECRET
-```
-
-This will automatically create the `credentials.json` file and start the authentication flow.
-
-**Option 2: Manually download credentials.json**
-
-Follow the setup instructions above to download `credentials.json`, then run:
+**Authenticate with OAuth credentials**
 
 ```bash
 google auth login
 ```
+
+This stores the reusable OAuth client values in the CLI-tools secret manager, writes `secret://` references in the active profile, and starts the authentication flow.
 
 **Check authentication status:**
 
@@ -650,15 +640,15 @@ google cache clear
 
 If you encounter authentication issues:
 1. Delete `token.json` to force re-authentication
-2. Verify `credentials.json` is present and valid
+2. Verify the active profile has `secret://` references for `CLIENT_ID` and `CLIENT_SECRET`
 3. Ensure all required APIs are enabled in Google Cloud Console
 
 ### Missing Credentials
 
 If you see "Missing credentials" error:
-1. Download credentials.json from Google Cloud Console
-2. Place it in the `<cli-tools-root>/google/` directory
-3. Or set `GOOGLE_CREDENTIALS_PATH` environment variable
+1. Run `google auth login`
+2. Enter the OAuth Client ID and Client Secret from Google Cloud Console
+3. Confirm the active profile points to `secret://` values for `CLIENT_ID` and `CLIENT_SECRET`
 
 ## API Scopes
 
