@@ -18,6 +18,16 @@ playwright install chromium
 
 After installation, the `doordash` command will be available in your terminal.
 
+### Live browser auth (optional `webwright`)
+
+`doordash auth login` and `doordash reorder` drive real local Chrome over CDP via the shared `WebwrightBrowserAutomation` (`local_cdp` mode), which lazy-imports [microsoft/Webwright](https://github.com/microsoft/Webwright) at browser-open time. Webwright is Git-only (not on PyPI), so it is intentionally **not** a resolved dependency — pinning it would make this CLI's environment non-portable. Install it out-of-band on any host that runs live DoorDash auth:
+
+```bash
+uv tool install -e doordash --with 'webwright @ git+https://github.com/microsoft/Webwright.git'
+```
+
+If webwright is absent, the CLI raises a clear error with this exact install command. Commands that don't open a browser (`orders`, `stores`, `auth status`) work without it.
+
 ## Quick Start
 
 ```bash
