@@ -3,6 +3,7 @@ from . import __version__
 from cli_tools_shared import create_app, run_app, ConfigError
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
+from cli_tools_shared.output import command
 
 from .client import ClientError
 from .config import get_config
@@ -219,6 +220,7 @@ for module_name, cli_command_name, help_text in COMMAND_GROUPS:
 
 
 @app.command("whoami")
+@command
 def whoami_command():
     """
     Get information about the current authenticated user.
