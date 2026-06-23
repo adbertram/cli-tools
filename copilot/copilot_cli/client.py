@@ -10719,8 +10719,18 @@ def get_access_token_from_azure_cli(resource: str) -> str:
         Access token string
 
     Raises:
-        ClientError: If token acquisition fails or user mismatch
+        CredentialError: If token acquisition fails or the active Azure CLI
+            identity does not match the profile's expected user. Subclass of
+            ClientError, so existing ``except ClientError`` callers still catch
+            it; the more specific type lets the shared error handler map auth
+            failures to exit code 2 (consistent with ``copilot auth status``).
     """
+    # CredentialError is a subclass of the shared ClientError. Raising it for
+    # genuine auth/identity failures lets cli_tools_shared.handle_error exit 2
+    # (instead of the generic 1) for any command wrapped by the shared
+    # @command decorator, matching `copilot auth status` semantics.
+    from cli_tools_shared.exceptions import CredentialError
+
     try:
         az = _resolve_az_command()
 
@@ -10734,7 +10744,7 @@ def get_access_token_from_azure_cli(resource: str) -> str:
             )
             actual_user = user_result.stdout.strip()
             if actual_user.lower() != expected_user.lower():
-                raise ClientError(
+                raise CredentialError(
                     f"Azure CLI is logged in as '{actual_user}' but profile "
                     f"'{config.get_active_profile_name()}' requires '{expected_user}'.\n\n"
                     f"  Run: az login --tenant {config.tenant_id or '<tenant-id>'}\n\n"
@@ -10749,12 +10759,12 @@ def get_access_token_from_azure_cli(resource: str) -> str:
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        raise ClientError(
+        raise CredentialError(
             f"Failed to get access token from Azure CLI. "
             f"Make sure you're logged in with 'az login'. Error: {e.stderr}"
         )
     except FileNotFoundError:
-        raise ClientError(
+        raise CredentialError(
             "Azure CLI not found. Please install Azure CLI and login with 'az login'."
         )
 
@@ -10919,6 +10929,12 @@ def get_client(dataverse_url: str = None, config=None) -> DataverseClient:
         _client = DataverseClient(dataverse_url, access_token)
         return _client
     except Exception as e:
+        # Preserve CredentialError so the shared error handler exits 2 for auth
+        # failures (e.g. `copilot whoami` against a profile/identity mismatch),
+        # matching `copilot auth status`. Other failures stay generic.
+        from cli_tools_shared.exceptions import CredentialError
+        if isinstance(e, CredentialError):
+            raise CredentialError(f"Failed to authenticate: {e}")
         raise ClientError(f"Failed to authenticate: {e}")
 
 
