@@ -26,21 +26,26 @@ descript <command-group> <action> [arguments] [options]
 | List compositions for visual inspection | `descript compositions list PROJECT_ID --properties id,name --table` |
 | Show active Descript composition pages | `descript compositions active` |
 | List video assets | `descript compositions assets PROJECT_ID --table` |
+| Import media into a shared folder | `descript import --name "My Project" --media ./voiceover.wav --folder Pluralsight --team-access edit` |
 | Export raw asset | `descript compositions export PROJECT_ID ASSET_ID -o output.mp4` |
 | Export composition | `descript compositions export PROJECT_ID --composition m2c1 -o m2c1.mp4` |
+| Export composition audio as WAV | `descript compositions export PROJECT_ID --composition m2c1 --format wav -o m2c1.wav` |
+| Delete a composition | `descript compositions delete PROJECT_ID --composition m2c1 --yes` (or `--composition-id ID`) |
 | Check auth | `descript auth status` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `descript` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `descript` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
 <principle name="Command Groups">
-- **auth** — Manage authentication (login extracts JWT from running Descript app, status checks token)
-- **projects** — List and inspect Descript projects (find project IDs)
-- **compositions** — Manage compositions within projects (list, get, active, export video, list assets)
+- **auth** — Manage official Descript API CLI authentication (`auth login` auto-provisions the official CLI when needed, then delegates to `descript-api config set api-key`; `auth status` validates official CLI config)
+- **config** — Manage official Descript API CLI configuration (`config set api-key`, `config list`, `config validate`)
+- **root official commands** — Run official `descript-api` commands directly at the root (`import`, `agent`, `job-status`, `list-jobs`, `job-cancel`, `list-projects`, `get-project`, `list-folders`, `publish`, `export-transcript`, `update`, `help`); auto-provisions `@descript/platform-cli@latest` into the Descript CLI user data directory when `descript-api` is not already available
+- **projects** — List and inspect Descript projects through official API CLI summaries (find project IDs)
+- **compositions** — Manage compositions within projects from official project summaries and desktop-only export/delete helpers (list, get, active, export video/audio, delete, list assets)
 - **monitor** — Monitor Descript app network activity for debugging (start, stop, status, tail)
 </principle>
 
@@ -48,8 +53,16 @@ This file contains complete command syntax, all arguments, all options, and usag
 Use default JSON output when an ID will be copied into a follow-up command. Do not copy project, composition, or asset IDs from table output that contains an ellipsis (`...` or `…`). Rich table rendering can shorten UUID cells when several columns are shown. For follow-up commands, first run a JSON command with `--properties id,name`, copy the full UUID from JSON, then call commands such as `descript compositions list PROJECT_ID`.
 </principle>
 
+<principle name="Import Folder Access">
+When importing media into a folder with `descript import --folder`, also pass `--team-access edit`, `--team-access comment`, or `--team-access view`. The Descript API rejects folder imports without drive member access.
+</principle>
+
 <principle name="Composition Export Auto-Open">
 Composition export requires Descript running with CDP on port 9222, but the target project does NOT need to be open. When the project page is not visible, the CLI auto-opens it via the `descript://project/<project-id>` deep link and polls CDP up to 60 seconds for the project page, failing loudly if it never appears. Do not manually open projects before exporting.
+</principle>
+
+<principle name="Composition Delete Is Desktop Automation">
+Descript exposes NO delete API — deleting a composition is an internal collaborative-document (OT) commit the web app computes, with no public or internal REST/GraphQL endpoint to replicate. So `descript compositions delete` drives the desktop app's own UI: it auto-opens the project (same `descript://project/<id>` CDP path as export), locates the id-scoped `composition-sidebar-item`, opens its `composition-context-menu-button`, and clicks the menu's Delete item via real CDP `Input.dispatchMouseEvent` (Radix ignores synthetic `.click()`). Delete is immediate (no confirmation dialog on current builds; a confirm dialog is handled best-effort if present). The command then verifies the composition is gone via `compositions list` and fails loudly if it is not. Prerequisites: Descript running with CDP on port 9222 (`open -na "Descript" --args --remote-debugging-port=9222`). Unlike video export, delete does NOT use the native save dialog, so it needs no Accessibility/Full Disk Access grant. Target with `--composition-id` (UUID) or `--composition` (name or ID); pass `--yes` to skip the confirmation prompt in automation. NOTE: deleting a composition does not remove its underlying uploaded media asset from the project (no media-delete API exists); orphan media is harmless.
 </principle>
 
 <principle name="Composition Export macOS Privacy Grants">

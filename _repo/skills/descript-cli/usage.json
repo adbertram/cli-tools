@@ -1,8 +1,8 @@
 {
   "tool": "descript",
   "description": "CLI interface for Descript API",
-  "discovered_at": "2026-06-12T00:04:55Z",
-  "total_commands": 22,
+  "discovered_at": "2026-06-23T19:35:41Z",
+  "total_commands": 43,
   "global_options": [
     {
       "name": "--version",
@@ -19,15 +19,90 @@
     }
   ],
   "commands": {
+    "agent": {
+      "help": "Run official Underlord agent editing on a project.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--project-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Existing project ID",
+          "short": "-p"
+        },
+        {
+          "name": "--name",
+          "type": "TEXT",
+          "required": false,
+          "help": "Project name for new projects",
+          "short": "-n"
+        },
+        {
+          "name": "--composition-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Composition to edit",
+          "short": "-c"
+        },
+        {
+          "name": "--prompt",
+          "type": "TEXT",
+          "required": false,
+          "help": "Natural language editing instruction"
+        },
+        {
+          "name": "--model",
+          "type": "TEXT",
+          "required": false,
+          "help": "AI model to use"
+        },
+        {
+          "name": "--callback-url",
+          "type": "TEXT",
+          "required": false,
+          "help": "Callback URL"
+        },
+        {
+          "name": "--team-access",
+          "type": "TEXT",
+          "required": false,
+          "help": "Team access level"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Job polling timeout in minutes"
+        },
+        {
+          "name": "--no-wait",
+          "type": "bool",
+          "required": false,
+          "help": "Create job without waiting"
+        },
+        {
+          "name": "--new",
+          "type": "bool",
+          "required": false,
+          "help": "Create new project with default name"
+        }
+      ]
+    },
     "auth": {
       "help": "Manage Descript authentication",
-      "usage_instructions": "Authentication management. Extracts JWT token from the running Descript desktop app. The Descript app must be open for login to work.",
+      "usage_instructions": "Authentication management. Uses the official descript-api CLI configuration. `descript auth login` delegates to `descript-api config set api-key`, and `descript auth status` validates the official CLI config.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Authenticate by extracting JWT from the running Descript app. The Descript desktop app must be open. Use --force/-F to clear the token cache and re-authenticate.",
+          "usage_instructions": "Configure the official Descript API CLI API key. Auto-provisions the official descript-api CLI when needed. Use `descript config set api-key` for direct config access.",
           "arguments": [],
           "options": [
             {
@@ -41,7 +116,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -177,6 +252,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "usage_instructions": "Run `descript auth profiles select --help` for exact arguments and options.",
@@ -193,8 +300,8 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "usage_instructions": "Check if a valid JWT token is available. Shows whether token is cached or needs refresh from the running app.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Validate the official Descript API CLI configuration and report authentication status across profiles.",
           "arguments": [],
           "options": [
             {
@@ -315,6 +422,52 @@
               "short": "-t"
             },
             {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a composition from a project via Descript app automation.",
+          "arguments": [
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID (UUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--composition-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Composition ID (UUID)"
+            },
+            {
+              "name": "--composition",
+              "type": "TEXT",
+              "required": false,
+              "help": "Composition name or ID",
+              "short": "-C"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the confirmation prompt (for automation)",
+              "short": "-y"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -324,7 +477,7 @@
         },
         "export": {
           "help": "Export a video asset or composition as MP4. Two export modes: 1. Asset export (raw recording via API media segment URLs): descript compositions export <project-id> <asset-id>. Rate-limited or interrupted downloads can be resumed by rerunning the same command. 2. Composition export (full video with slides via Descript app): descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4. Composition export requires Descript to be launched with CDP on port 9222. If the target project is not open, the CLI auto-opens it via the descript://project/<project-id> deep link and waits up to 60 seconds for the project page to appear. It automates the app's local export to produce the full rendered video. Example: descript compositions export <project-id> <asset-id> descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4 descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160",
-          "usage_instructions": "Export video in two modes: (1) Asset export (raw recording via API media segment URLs) \u2014 pass PROJECT_ID and ASSET_ID as positional args. Raw asset export does not use the Descript desktop export UI. If rate limiting interrupts the download, rerun the same command; the CLI resumes from matching output.mp4.part and output.mp4.part.json state. (2) Composition export (full rendered video with slides) \u2014 pass PROJECT_ID and use --composition/-C with the composition name or ID. Composition export requires Descript launched with --remote-debugging-port=9222. The CLI auto-opens the target project via the descript://project/<project-id> deep link when it is not already open and polls CDP up to 60 seconds for the project page; it fails loudly if the page never appears. Composition export also requires macOS assistive (Accessibility) access for the responsible host app of the calling process (e.g. when run from Claude desktop, the embedded Claude Code runtime bundle at ~/Library/Application Support/Claude/claude-code/<version>/claude.app \u2014 shown as lowercase 'claude' in the Accessibility list, distinct from capital-C 'Claude'; or Terminal/iTerm for shells); the CLI probes this before triggering the export and fails fast with grant guidance (System Settings > Privacy & Security > Accessibility) when access is missing. The calling app additionally needs Full Disk Access (System Settings > Privacy & Security > Full Disk Access) \u2014 a separate grant from Accessibility. The CLI activates Descript (brings it frontmost) before clicking Export because the native save sheet only appears when Descript is the frontmost app; do not run other foreground UI automation during an export. Preflight: quit Descript, wait for pgrep -x Descript to return no process, run open -na \"Descript\" --args --remote-debugging-port=9222, then verify http://127.0.0.1:9222/json/version returns HTTP 200 before export. Full composition exports wait up to 5 minutes for Descript's native save sheet, then up to 30 minutes after accepting the save dialog before timing out. Default resolution is 1920x1080 at 30fps.",
+          "usage_instructions": "Export video in two modes: (1) Asset export (raw recording via API media segment URLs) — pass PROJECT_ID and ASSET_ID as positional args. Raw asset export does not use the Descript desktop export UI. If rate limiting interrupts the download, rerun the same command; the CLI resumes from matching output.mp4.part and output.mp4.part.json state. (2) Composition export (full rendered video with slides) — pass PROJECT_ID and use --composition/-C with the composition name or ID. Composition export requires Descript launched with --remote-debugging-port=9222. The CLI auto-opens the target project via the descript://project/<project-id> deep link when it is not already open and polls CDP up to 60 seconds for the project page; it fails loudly if the page never appears. Composition export also requires macOS assistive (Accessibility) access for the responsible host app of the calling process (e.g. when run from Claude desktop, the embedded Claude Code runtime bundle at ~/Library/Application Support/Claude/claude-code/<version>/claude.app — shown as lowercase 'claude' in the Accessibility list, distinct from capital-C 'Claude'; or Terminal/iTerm for shells); the CLI probes this before triggering the export and fails fast with grant guidance (System Settings > Privacy & Security > Accessibility) when access is missing. The calling app additionally needs Full Disk Access (System Settings > Privacy & Security > Full Disk Access) — a separate grant from Accessibility. The CLI activates Descript (brings it frontmost) before clicking Export because the native save sheet only appears when Descript is the frontmost app; do not run other foreground UI automation during an export. Preflight: quit Descript, wait for pgrep -x Descript to return no process, run open -na \"Descript\" --args --remote-debugging-port=9222, then verify http://127.0.0.1:9222/json/version returns HTTP 200 before export. Full composition exports wait up to 5 minutes for Descript's native save sheet, then up to 30 minutes after accepting the save dialog before timing out. Default resolution is 1920x1080 at 30fps.",
           "arguments": [
             {
               "name": "project_id",
@@ -381,8 +534,14 @@
               "name": "--format",
               "type": "TEXT",
               "required": false,
-              "help": "Export format",
+              "help": "Export format: 'mp4' (video) or 'wav' (audio-only)",
               "default": "mp4"
+            },
+            {
+              "name": "--audio",
+              "type": "bool",
+              "required": false,
+              "help": "Export audio only as WAV (alias for --format wav)"
             },
             {
               "name": "--profile",
@@ -416,6 +575,13 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
             },
             {
               "name": "--profile",
@@ -475,6 +641,605 @@
           ]
         }
       }
+    },
+    "config": {
+      "help": "Manage official Descript API CLI configuration",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "clear": {
+          "help": "Clear an official configuration value.",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Configuration key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get an official configuration value.",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Configuration key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "list": {
+          "help": "Show all official configuration values.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of values",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "profile": {
+          "help": "Switch to an official Descript API CLI profile.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Profile name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "List official Descript API CLI profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "set": {
+          "help": "Set an official configuration value.",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Configuration key"
+            },
+            {
+              "name": "value",
+              "type": "VALUE",
+              "required": false,
+              "help": "Configuration value"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        },
+        "validate": {
+          "help": "Validate the official Descript API CLI API key.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Official descript-api profile"
+            }
+          ]
+        }
+      }
+    },
+    "export-transcript": {
+      "help": "Export a transcript through the official CLI.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--project-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Project ID to export from",
+          "short": "-p"
+        },
+        {
+          "name": "--format",
+          "type": "TEXT",
+          "required": false,
+          "help": "Transcript format",
+          "short": "-f"
+        },
+        {
+          "name": "--output",
+          "type": "TEXT",
+          "required": false,
+          "help": "Output path or '-' for stdout",
+          "short": "-o"
+        },
+        {
+          "name": "--composition-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Composition ID",
+          "short": "-c"
+        },
+        {
+          "name": "--speaker-labels",
+          "type": "TEXT",
+          "required": false,
+          "help": "Speaker label mode"
+        },
+        {
+          "name": "--timecodes",
+          "type": "bool",
+          "required": false,
+          "help": "Include timecodes"
+        },
+        {
+          "name": "--timecode-on-paragraphs",
+          "type": "bool",
+          "required": false,
+          "help": "Timecodes at paragraph breaks"
+        },
+        {
+          "name": "--timecode-on-speakers",
+          "type": "bool",
+          "required": false,
+          "help": "Timecodes at speaker changes"
+        },
+        {
+          "name": "--markers",
+          "type": "bool",
+          "required": false,
+          "help": "Include markers"
+        }
+      ]
+    },
+    "get-project": {
+      "help": "Get an official project summary.",
+      "arguments": [
+        {
+          "name": "project_id",
+          "type": "PROJECT_ID",
+          "required": false,
+          "help": "Project UUID"
+        }
+      ],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--json",
+          "type": "bool",
+          "required": false,
+          "help": "Output raw JSON response"
+        }
+      ]
+    },
+    "help": {
+      "help": "Show official Descript API CLI help.",
+      "arguments": [
+        {
+          "name": "command",
+          "type": "COMMAND",
+          "required": false,
+          "help": "Official command name"
+        }
+      ],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ]
+    },
+    "import": {
+      "help": "Import media, sequences, and compositions with the official CLI.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--name",
+          "type": "TEXT",
+          "required": false,
+          "help": "Project name for new projects",
+          "short": "-n"
+        },
+        {
+          "name": "--project-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Existing project ID",
+          "short": "-p"
+        },
+        {
+          "name": "--media",
+          "type": "TEXT",
+          "required": false,
+          "help": "Media URL(s) or local file path(s)",
+          "short": "-m"
+        },
+        {
+          "name": "--folder",
+          "type": "TEXT",
+          "required": false,
+          "help": "Folder path for a new project"
+        },
+        {
+          "name": "--team-access",
+          "type": "TEXT",
+          "required": false,
+          "help": "Team access level; required for --folder imports (edit, comment, or view)"
+        },
+        {
+          "name": "--callback-url",
+          "type": "TEXT",
+          "required": false,
+          "help": "Callback URL"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Job polling timeout in minutes"
+        },
+        {
+          "name": "--no-wait",
+          "type": "bool",
+          "required": false,
+          "help": "Create job without waiting"
+        },
+        {
+          "name": "--new",
+          "type": "bool",
+          "required": false,
+          "help": "Create new project with default name"
+        },
+        {
+          "name": "--no-composition",
+          "type": "bool",
+          "required": false,
+          "help": "Skip composition creation"
+        },
+        {
+          "name": "--language",
+          "type": "TEXT",
+          "required": false,
+          "help": "ISO 639-1 transcription language code"
+        }
+      ]
+    },
+    "job-cancel": {
+      "help": "Cancel an official Descript API job.",
+      "arguments": [
+        {
+          "name": "job_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Job ID to cancel"
+        }
+      ],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        }
+      ]
+    },
+    "job-status": {
+      "help": "Get official job status.",
+      "arguments": [
+        {
+          "name": "job_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Job ID to check"
+        }
+      ],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--no-wait",
+          "type": "bool",
+          "required": false,
+          "help": "Show current status without waiting"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Job polling timeout in minutes"
+        }
+      ]
+    },
+    "list-folders": {
+      "help": "List folders through the official Descript API CLI.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--parent-path",
+          "type": "TEXT",
+          "required": false,
+          "help": "Parent folder path"
+        },
+        {
+          "name": "--json",
+          "type": "bool",
+          "required": false,
+          "help": "Output raw JSON response"
+        }
+      ]
+    },
+    "list-jobs": {
+      "help": "List official Descript API jobs.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--project-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by project ID",
+          "short": "-p"
+        },
+        {
+          "name": "--type",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by job type",
+          "short": "-t"
+        },
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Number of jobs per page",
+          "short": "-l"
+        },
+        {
+          "name": "--cursor",
+          "type": "TEXT",
+          "required": false,
+          "help": "Pagination cursor"
+        },
+        {
+          "name": "--created-after",
+          "type": "TEXT",
+          "required": false,
+          "help": "Created after ISO 8601 timestamp"
+        },
+        {
+          "name": "--created-before",
+          "type": "TEXT",
+          "required": false,
+          "help": "Created before ISO 8601 timestamp"
+        },
+        {
+          "name": "--no-interactive",
+          "type": "bool",
+          "required": false,
+          "help": "Disable interactive selection"
+        },
+        {
+          "name": "--json",
+          "type": "bool",
+          "required": false,
+          "help": "Output raw JSON response"
+        }
+      ]
+    },
+    "list-projects": {
+      "help": "List projects through the official Descript API CLI.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--name",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter projects by name",
+          "short": "-n"
+        },
+        {
+          "name": "--folder-path",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by folder path"
+        },
+        {
+          "name": "--created-by",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by creator user ID"
+        },
+        {
+          "name": "--created-after",
+          "type": "TEXT",
+          "required": false,
+          "help": "Created after ISO 8601 timestamp"
+        },
+        {
+          "name": "--created-before",
+          "type": "TEXT",
+          "required": false,
+          "help": "Created before ISO 8601 timestamp"
+        },
+        {
+          "name": "--updated-after",
+          "type": "TEXT",
+          "required": false,
+          "help": "Updated after ISO 8601 timestamp"
+        },
+        {
+          "name": "--updated-before",
+          "type": "TEXT",
+          "required": false,
+          "help": "Updated before ISO 8601 timestamp"
+        },
+        {
+          "name": "--sort",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sort field",
+          "short": "-s"
+        },
+        {
+          "name": "--direction",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sort direction"
+        },
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Number of projects per page",
+          "short": "-l"
+        },
+        {
+          "name": "--cursor",
+          "type": "TEXT",
+          "required": false,
+          "help": "Pagination cursor"
+        },
+        {
+          "name": "--no-interactive",
+          "type": "bool",
+          "required": false,
+          "help": "Disable interactive selection"
+        },
+        {
+          "name": "--json",
+          "type": "bool",
+          "required": false,
+          "help": "Output raw JSON response"
+        }
+      ]
     },
     "monitor": {
       "help": "Monitor Descript network activity",
@@ -598,6 +1363,13 @@
               "short": "-t"
             },
             {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -607,7 +1379,7 @@
         },
         "list": {
           "help": "List your Descript projects. Example: descript projects list descript projects list --limit 10 descript projects list --table descript projects list --filter \"name:contains:Cursor\" descript projects list -p \"name,composition_count\" descript projects list -p \"name,owner.email\"",
-          "usage_instructions": "List all Descript projects. Default limit is 50. Use --filter/-f to search by name (e.g., 'name:contains:Cursor'). Use --properties/-p with dot notation for nested fields (e.g., 'name,owner.email'). Use default JSON output with --properties id,name when a project ID will be copied into a follow-up command; do not copy IDs from table output that contains an ellipsis.",
+          "usage_instructions": "List all Descript projects. Default limit is 20. Use --filter/-f to search by name (e.g., 'name:contains:Cursor'). Use --properties/-p with dot notation for nested fields (e.g., 'name,owner.email'). Use default JSON output with --properties id,name when a project ID will be copied into a follow-up command; do not copy IDs from table output that contains an ellipsis.",
           "arguments": [],
           "options": [
             {
@@ -616,7 +1388,7 @@
               "required": false,
               "help": "Maximum number of projects to list",
               "short": "-l",
-              "default": "50"
+              "default": "20"
             },
             {
               "name": "--table",
@@ -629,7 +1401,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "help": "Filter: field:op:value",
               "short": "-f"
             },
             {
@@ -640,6 +1412,68 @@
               "short": "-p"
             },
             {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects whose name contains this text",
+              "short": "-n"
+            },
+            {
+              "name": "--folder-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects by folder path"
+            },
+            {
+              "name": "--created-by",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by creator user ID; use 'me' for current user"
+            },
+            {
+              "name": "--created-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects created after this ISO 8601 timestamp"
+            },
+            {
+              "name": "--created-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects created before this ISO 8601 timestamp"
+            },
+            {
+              "name": "--updated-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects updated after this ISO 8601 timestamp"
+            },
+            {
+              "name": "--updated-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter projects updated before this ISO 8601 timestamp"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: name, created_at, updated_at, last_viewed_at",
+              "short": "-s"
+            },
+            {
+              "name": "--direction",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction: asc, desc"
+            },
+            {
+              "name": "--cursor",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor from a previous response"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -648,7 +1482,83 @@
           ]
         }
       }
+    },
+    "publish": {
+      "help": "Publish a project composition through the official CLI.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Official descript-api profile"
+        },
+        {
+          "name": "--project-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Project ID to publish",
+          "short": "-p"
+        },
+        {
+          "name": "--composition-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Composition ID to publish",
+          "short": "-c"
+        },
+        {
+          "name": "--media-type",
+          "type": "TEXT",
+          "required": false,
+          "help": "Published media type",
+          "short": "-m"
+        },
+        {
+          "name": "--resolution",
+          "type": "TEXT",
+          "required": false,
+          "help": "Published resolution",
+          "short": "-r"
+        },
+        {
+          "name": "--callback-url",
+          "type": "TEXT",
+          "required": false,
+          "help": "Callback URL"
+        },
+        {
+          "name": "--access-level",
+          "type": "TEXT",
+          "required": false,
+          "help": "Share page access level"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Job polling timeout in minutes"
+        },
+        {
+          "name": "--no-wait",
+          "type": "bool",
+          "required": false,
+          "help": "Create job without waiting"
+        }
+      ]
+    },
+    "update": {
+      "help": "Check for official Descript API CLI updates.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ]
     }
   },
-  "usage_instructions": "Use for managing Descript projects, compositions, and video exports. Commands follow `descript <group> <action>` pattern. Auth requires the Descript desktop app to be running. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Use JSON output, not --table, whenever IDs will be copied into follow-up commands."
+  "usage_instructions": "Use for managing Descript projects, compositions, and video exports. Commands follow `descript <group> <action>` pattern. Auth uses the official descript-api CLI configuration and auto-provisions the official CLI when needed. The Descript desktop app is only required for desktop-only export helpers and monitor operations. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Use JSON output, not --table, whenever IDs will be copied into follow-up commands."
 }

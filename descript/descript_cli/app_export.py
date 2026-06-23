@@ -6,6 +6,7 @@ Descript desktop app. Requires Descript to be running with CDP on port 9222.
 import http.client
 import json
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -23,6 +24,71 @@ SAVE_DIALOG_TIMEOUT_SECONDS = 300
 EXPORT_COMPLETE_TIMEOUT_SECONDS = 1800
 EXPORT_STABLE_TIMEOUT_SECONDS = 300
 MIN_EXPORT_BYTES = 1024
+FFMPEG_BINARY = "ffmpeg"
+AUDIO_EXTRACT_TIMEOUT_SECONDS = 600
+
+
+def extract_audio_wav(source_video: Path, output_wav: Path) -> Path:
+    """Extract a video file's audio track to a 16-bit PCM WAV via ffmpeg.
+
+    Args:
+        source_video: An existing video file (e.g. an exported MP4).
+        output_wav: Destination WAV path.
+
+    Returns:
+        The output WAV path.
+
+    Raises:
+        ClientError: If ffmpeg is unavailable, the source is missing, the
+            ffmpeg run fails, or the produced WAV is empty.
+    """
+    source_video = source_video.expanduser()
+    output_wav = output_wav.expanduser()
+
+    if not source_video.exists():
+        raise ClientError(
+            f"Cannot extract audio: source video does not exist: {source_video}"
+        )
+
+    ffmpeg = shutil.which(FFMPEG_BINARY)
+    if not ffmpeg:
+        raise ClientError(
+            "ffmpeg is required to extract WAV audio from the exported video, "
+            "but it was not found on PATH. Install it (e.g. 'brew install ffmpeg') "
+            "and retry."
+        )
+
+    output_wav.parent.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-i",
+        str(source_video),
+        "-vn",
+        "-acodec",
+        "pcm_s16le",
+        str(output_wav),
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=AUDIO_EXTRACT_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise ClientError(
+            f"ffmpeg failed to extract audio from {source_video}: {detail}"
+        )
+
+    if not output_wav.exists() or output_wav.stat().st_size < MIN_EXPORT_BYTES:
+        size = output_wav.stat().st_size if output_wav.exists() else 0
+        raise ClientError(
+            f"ffmpeg produced an empty or undersized WAV ({size} bytes): {output_wav}"
+        )
+
+    return output_wav
 
 
 def _cdp_preflight_instructions() -> str:
@@ -692,3 +758,159 @@ def export_composition_local(
 
     size_mb = output_path.stat().st_size / (1024 * 1024)
     return output_path
+
+
+DELETE_MENU_TIMEOUT_SECONDS = 10
+DELETE_CONFIRM_WAIT_SECONDS = 3
+
+
+def _cdp_eval_value(ws, msg_id: int, expression: str):
+    """Runtime.evaluate, returning the JS expression's value by value."""
+    result = _send_cdp_message(ws, msg_id, "Runtime.evaluate", {
+        "expression": expression,
+        "returnByValue": True,
+    })
+    return result.get("result", {}).get("result", {}).get("value")
+
+
+def _cdp_click_point(ws, msg_id: int, x: float, y: float) -> None:
+    """Dispatch a real left-click (move/press/release) at page coords via CDP.
+
+    Radix menus and Electron buttons ignore synthetic element.click(); they
+    require dispatched mouse input, matching _trigger_local_export.
+    """
+    for offset, event_type in enumerate(["mouseMoved", "mousePressed", "mouseReleased"]):
+        params = {
+            "type": event_type,
+            "x": x,
+            "y": y,
+            "button": "left",
+            "clickCount": 1,
+        }
+        if event_type == "mousePressed":
+            params["buttons"] = 1
+        _send_cdp_message(ws, msg_id + offset, "Input.dispatchMouseEvent", params)
+        time.sleep(0.05)
+
+
+def delete_composition_local(
+    project_id: str,
+    composition_id: str,
+    composition_name: str,
+) -> None:
+    """Delete a composition by driving the Descript desktop app's own UI.
+
+    Descript exposes no delete API — deleting a composition is a proprietary
+    collaborative-document (OT) commit the app computes internally. So this
+    drives the id-scoped sidebar context menu -> Delete via CDP, letting the
+    app produce the correct document delta. Requires Descript running with CDP
+    on port 9222; the project auto-opens via its descript:// deep link.
+    """
+    _ensure_project_open(project_id)
+
+    print_info("Activating Descript...")
+    _run_applescript('tell application "Descript" to activate')
+    time.sleep(1)
+
+    ws_url = _get_project_page_ws(project_id)
+    if not ws_url:
+        raise ClientError("Lost connection to Descript")
+
+    ws = _connect_cdp(ws_url, timeout=15)
+    try:
+        base = int(time.time() * 1000) % 100000
+
+        # 1. Locate the id-scoped sidebar item and its context-menu button.
+        #    Each composition-sidebar-item's id attribute IS the composition UUID.
+        locate_expr = (
+            "(function(){"
+            "var item=document.querySelector('[data-testid=\"composition-sidebar-item\"][id=\"%s\"]');"
+            "if(!item){var all=Array.from(document.querySelectorAll('[data-testid=\"composition-sidebar-item\"]'));"
+            "return {found:false, ids: all.map(function(e){return e.id;})};}"
+            "item.scrollIntoView({block:'center'});"
+            "var ir=item.getBoundingClientRect();"
+            "var btn=item.querySelector('[data-testid=\"composition-context-menu-button\"]');"
+            "if(!btn) return {found:true, button:false};"
+            "var r=btn.getBoundingClientRect();"
+            "return {found:true, button:true, x:r.x+r.width/2, y:r.y+r.height/2, ix:ir.x+ir.width/2, iy:ir.y+ir.height/2};"
+            "})()"
+        ) % composition_id
+        loc = _cdp_eval_value(ws, base, locate_expr)
+        if not loc or not loc.get("found"):
+            raise ClientError(
+                f"Composition {composition_id} not found in the Descript sidebar. "
+                f"Available sidebar item ids: {loc.get('ids') if loc else None}"
+            )
+        if not loc.get("button"):
+            raise ClientError(
+                f"Composition {composition_id} has no context-menu button in the sidebar DOM."
+            )
+
+        # Hover the item (the options button can be hover-gated), then click it.
+        _send_cdp_message(ws, base + 1, "Input.dispatchMouseEvent", {
+            "type": "mouseMoved", "x": loc["ix"], "y": loc["iy"],
+        })
+        time.sleep(0.3)
+        print_info(f"Opening context menu for '{composition_name}'...")
+        _cdp_click_point(ws, base + 2, loc["x"], loc["y"])
+        time.sleep(0.6)
+
+        # 2. Find and click the Delete item (Radix menuitem).
+        delete_expr = (
+            "(function(){"
+            "var els=Array.from(document.querySelectorAll('[role=\"menuitem\"]'));"
+            "var del=els.find(function(e){var t=(e.textContent||'').trim().toLowerCase(); return t==='delete'||t==='delete composition';});"
+            "if(!del) return {found:false, items: els.map(function(e){return (e.textContent||'').trim();})};"
+            "var r=del.getBoundingClientRect();"
+            "return {found:true, x:r.x+r.width/2, y:r.y+r.height/2, text:del.textContent.trim()};"
+            "})()"
+        )
+        deadline = time.time() + DELETE_MENU_TIMEOUT_SECONDS
+        item = None
+        probe = base + 10
+        while time.time() < deadline:
+            item = _cdp_eval_value(ws, probe, delete_expr)
+            probe += 1
+            if item and item.get("found"):
+                break
+            time.sleep(0.3)
+        if not item or not item.get("found"):
+            raise ClientError(
+                "Delete item did not appear in the composition context menu. "
+                f"Menu items seen: {item.get('items') if item else None}"
+            )
+        print_info("Clicking Delete...")
+        _cdp_click_point(ws, probe + 1, item["x"], item["y"])
+        time.sleep(0.8)
+
+        # 3. Confirm dialog, if Descript shows one (Radix AlertDialog).
+        confirm_expr = (
+            "(function(){"
+            "var dlg=document.querySelector('[role=\"alertdialog\"],[role=\"dialog\"]');"
+            "if(!dlg) return {dialog:false};"
+            "var btns=Array.from(dlg.querySelectorAll('button,[role=\"button\"]'));"
+            "var del=btns.find(function(b){var t=(b.textContent||'').trim().toLowerCase(); return t==='delete'||t==='delete composition'||t==='confirm'||t==='ok'||t==='move to trash';});"
+            "if(!del) return {dialog:true, button:false, buttons: btns.map(function(b){return (b.textContent||'').trim();})};"
+            "var r=del.getBoundingClientRect();"
+            "return {dialog:true, button:true, x:r.x+r.width/2, y:r.y+r.height/2, text:del.textContent.trim()};"
+            "})()"
+        )
+        # Many Descript builds delete immediately on the menu click; some may
+        # show a confirmation dialog. Best-effort: if a confirm dialog WITH a
+        # matching confirm button appears, click it. Otherwise proceed — the
+        # caller verifies the deletion via the compositions list, which is the
+        # source of truth. A non-matching role="dialog" (the app's own panels)
+        # is ignored, never treated as a failure.
+        deadline = time.time() + DELETE_CONFIRM_WAIT_SECONDS
+        probe2 = probe + 20
+        while time.time() < deadline:
+            conf = _cdp_eval_value(ws, probe2, confirm_expr)
+            probe2 += 1
+            if conf and conf.get("dialog") and conf.get("button"):
+                print_info("Confirming deletion...")
+                _cdp_click_point(ws, probe2 + 1, conf["x"], conf["y"])
+                time.sleep(0.8)
+                break
+            time.sleep(0.3)
+    finally:
+        ws.close()

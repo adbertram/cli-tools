@@ -5,7 +5,14 @@ from typing import Optional, List
 import typer
 
 from ..client import get_client, ClientError
-from cli_tools_shared.filters import validate_filters, apply_filters
+from ..platform import (
+    PlatformCLIError,
+    list_compositions_json,
+    list_media_files_json,
+    select_object_properties,
+    select_properties,
+)
+from cli_tools_shared.filters import apply_filters, validate_filters
 from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
 
 app = typer.Typer(help="Manage Descript project compositions", no_args_is_help=True)
@@ -28,23 +35,17 @@ def list_compositions(
         descript compositions list <project-id> --filter "name:m1c1"
     """
     try:
-        client = get_client()
-        compositions = client.list_compositions(project_id)
+        output_data = list_compositions_json(project_id)
 
-        # Apply client-side filtering
         if filter:
-            for f in filter:
-                if ":" in f:
-                    field, value = f.split(":", 1)
-                    compositions = [c for c in compositions if value.lower() in str(getattr(c, field, "")).lower()]
+            try:
+                validate_filters(filter)
+            except Exception as e:
+                print_error(str(e))
+                raise typer.Exit(1)
+            output_data = apply_filters(output_data, filter)
 
-        compositions = compositions[:limit]
-
-        output_data = [c.model_dump() for c in compositions]
-
-        if properties:
-            selected = [p.strip() for p in properties.split(",")]
-            output_data = [{k: v for k, v in row.items() if k in selected} for row in output_data]
+        output_data = select_properties(output_data[:limit], properties)
 
         if table:
             if output_data:
@@ -56,7 +57,7 @@ def list_compositions(
         else:
             print_json(output_data)
 
-    except ClientError as e:
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:
@@ -68,6 +69,7 @@ def get_composition(
     project_id: str = typer.Argument(help="Project ID (UUID)"),
     composition_id: str = typer.Argument(help="Composition ID (UUID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields"),
 ):
     """
     Get a specific composition from a project.
@@ -76,15 +78,14 @@ def get_composition(
         descript compositions get <project-id> <composition-id>
     """
     try:
-        client = get_client()
-        compositions = client.list_compositions(project_id)
+        compositions = list_compositions_json(project_id)
 
-        match = [c for c in compositions if c.id == composition_id]
+        match = [c for c in compositions if c.get("id") == composition_id]
         if not match:
             print_error(f"Composition {composition_id} not found in project")
             raise typer.Exit(1)
 
-        output = match[0].model_dump()
+        output = select_object_properties(match[0], properties)
 
         if table:
             headers = list(output.keys())
@@ -93,7 +94,7 @@ def get_composition(
         else:
             print_json(output)
 
-    except ClientError as e:
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except typer.Exit:
@@ -117,17 +118,16 @@ def active_compositions(
     try:
         from ..app_export import get_visible_compositions
 
-        client = get_client()
         records = get_visible_compositions()
         if project_id:
             records = [record for record in records if record.get("project_id") == project_id]
 
         output_data = []
         for record in records:
-            compositions = client.list_compositions(record["project_id"])
+            compositions = list_compositions_json(record["project_id"])
             matches = [
                 composition for composition in compositions
-                if composition.id.startswith(record["composition_prefix"])
+                if str(composition.get("id", "")).startswith(record["composition_prefix"])
             ]
             if not matches:
                 raise ClientError(
@@ -135,7 +135,7 @@ def active_compositions(
                     f'{record["project_id"]}/{record["composition_prefix"]}'
                 )
             if len(matches) > 1:
-                names = [composition.name for composition in matches]
+                names = [str(composition.get("name", "")) for composition in matches]
                 raise ClientError(
                     "Active Descript page matched multiple API compositions: "
                     f"{', '.join(names)}"
@@ -143,9 +143,9 @@ def active_compositions(
             composition = matches[0]
             output_data.append({
                 **record,
-                "composition_id": composition.id,
-                "composition_name": composition.name,
-                "duration": composition.duration,
+                "composition_id": composition.get("id"),
+                "composition_name": composition.get("name"),
+                "duration": composition.get("duration"),
             })
 
         if table:
@@ -167,23 +167,29 @@ def active_compositions(
     except ClientError as e:
         print_error(str(e))
         raise typer.Exit(1)
+    except PlatformCLIError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 
 
-def _resolve_composition(client, project_id: str, composition: str):
+def _resolve_composition(project_id: str, composition: str):
     """Resolve a composition name or ID to a (id, name) tuple."""
-    compositions = client.list_compositions(project_id)
-    match = [c for c in compositions if c.id == composition or c.name.lower() == composition.lower()]
+    compositions = list_compositions_json(project_id)
+    match = [
+        c for c in compositions
+        if c.get("id") == composition or str(c.get("name", "")).lower() == composition.lower()
+    ]
     if not match:
-        match = [c for c in compositions if composition.lower() in c.name.lower()]
+        match = [c for c in compositions if composition.lower() in str(c.get("name", "")).lower()]
     if not match:
-        names = [c.name for c in compositions]
+        names = [str(c.get("name", "")) for c in compositions]
         raise ClientError(f"No composition matching '{composition}'. Available: {', '.join(names)}")
     if len(match) > 1:
-        names = [c.name for c in match]
+        names = [str(c.get("name", "")) for c in match]
         raise ClientError(f"Multiple compositions match '{composition}': {', '.join(names)}. Be more specific.")
-    return match[0].id, match[0].name
+    return str(match[0].get("id")), str(match[0].get("name", ""))
 
 
 @app.command("export")
@@ -195,10 +201,11 @@ def export_composition(
     fps: int = typer.Option(30, "--fps", help="Frames per second"),
     width: int = typer.Option(1920, "--width", "-W", help="Max width"),
     height: int = typer.Option(1080, "--height", "-H", help="Max height"),
-    fmt: str = typer.Option("mp4", "--format", help="Export format"),
+    fmt: str = typer.Option("mp4", "--format", help="Export format: 'mp4' (video) or 'wav' (audio-only)"),
+    audio: bool = typer.Option(False, "--audio", help="Export audio only as WAV (alias for --format wav)"),
 ):
     """
-    Export a video asset or composition as MP4.
+    Export a video asset or composition as MP4, or its audio track as WAV.
 
     Two export modes:
 
@@ -214,47 +221,68 @@ def export_composition(
     descript://project/<project-id> deep link and waits for the project page.
     It automates the app's local export to produce the full rendered video.
 
+    WAV audio export (--format wav or --audio) runs the same proven MP4 export,
+    then extracts the audio track to the target .wav path with ffmpeg
+    (-vn -acodec pcm_s16le). The intermediate MP4 is removed afterward.
+
     Example:
         descript compositions export <project-id> <asset-id>
         descript compositions export <project-id> --composition m2c1 -o ./m2c1.mp4
+        descript compositions export <project-id> --composition slide_dictation --format wav -o ./slide_dictation.wav
         descript compositions export <project-id> <asset-id> --fps 60 --width 3840 --height 2160
     """
     try:
         client = get_client()
 
+        produce_wav = audio or fmt.lower() == "wav"
+        # The underlying export always renders MP4; WAV is extracted from it.
+        video_fmt = "mp4" if produce_wav else fmt
+
         if composition:
             # Composition export via Descript app automation
-            from ..app_export import export_composition_local
+            from ..app_export import export_composition_local, extract_audio_wav
 
-            comp_id, comp_name = _resolve_composition(client, project_id, composition)
+            comp_id, comp_name = _resolve_composition(project_id, composition)
             print_info(f"Found composition: {comp_name} ({comp_id})")
 
             if output is None:
-                output = f"./{comp_name}.{fmt}"
+                output = f"./{comp_name}.wav" if produce_wav else f"./{comp_name}.{video_fmt}"
 
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
+            video_path = output_path.with_suffix(f".{video_fmt}") if produce_wav else output_path
             result_path = export_composition_local(
-                project_id, comp_id, comp_name, output_path,
+                project_id, comp_id, comp_name, video_path,
             )
-            size_mb = result_path.stat().st_size / (1024 * 1024)
-            print_success(f"Exported to {result_path} ({size_mb:.1f} MB)")
+
+            if produce_wav:
+                print_info(f"Extracting audio to {output_path}...")
+                wav_path = extract_audio_wav(result_path, output_path)
+                result_path.unlink()
+                size_mb = wav_path.stat().st_size / (1024 * 1024)
+                print_success(f"Exported audio to {wav_path} ({size_mb:.1f} MB)")
+            else:
+                size_mb = result_path.stat().st_size / (1024 * 1024)
+                print_success(f"Exported to {result_path} ({size_mb:.1f} MB)")
 
         elif asset_id:
             # Raw asset export via API
+            from ..app_export import extract_audio_wav
+
             print_info(f"Getting export playlist for asset {asset_id[:8]}...")
             playlist = client.get_export_playlist(
-                project_id, asset_id, fmt=fmt, fps=fps, width=width, height=height,
+                project_id, asset_id, fmt=video_fmt, fps=fps, width=width, height=height,
             )
 
             duration_s = playlist.end / 1_000_000
             total_segments = len(playlist.fragment_starts)
 
             if output is None:
-                output = f"./{asset_id}.{fmt}"
+                output = f"./{asset_id}.wav" if produce_wav else f"./{asset_id}.{video_fmt}"
 
             output_path = Path(output)
+            video_path = output_path.with_suffix(f".{video_fmt}") if produce_wav else output_path
             print_info(f"Duration: {duration_s:.1f}s | Segments: {total_segments} | Output: {output_path}")
 
             def on_progress(downloaded, seg_idx, seg_total):
@@ -262,11 +290,18 @@ def export_composition(
                 pct = (seg_idx / seg_total) * 100
                 print(f"\r  Downloading: {pct:5.1f}% ({mb:.1f} MB, segment {seg_idx}/{seg_total})", end="", flush=True)
 
-            result = client.download_export(playlist, str(output_path), progress_callback=on_progress)
+            result = client.download_export(playlist, str(video_path), progress_callback=on_progress)
             print()  # newline after progress
 
-            size_mb = Path(result).stat().st_size / (1024 * 1024)
-            print_success(f"Exported to {result} ({size_mb:.1f} MB)")
+            if produce_wav:
+                print_info(f"Extracting audio to {output_path}...")
+                wav_path = extract_audio_wav(Path(result), output_path)
+                Path(result).unlink()
+                size_mb = wav_path.stat().st_size / (1024 * 1024)
+                print_success(f"Exported audio to {wav_path} ({size_mb:.1f} MB)")
+            else:
+                size_mb = Path(result).stat().st_size / (1024 * 1024)
+                print_success(f"Exported to {result} ({size_mb:.1f} MB)")
 
         else:
             print_error("Provide either an asset_id argument or --composition option.")
@@ -281,10 +316,71 @@ def export_composition(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("delete")
+def delete_composition(
+    project_id: str = typer.Argument(help="Project ID (UUID)"),
+    composition_id: Optional[str] = typer.Option(None, "--composition-id", help="Composition ID (UUID)"),
+    composition: Optional[str] = typer.Option(None, "--composition", "-C", help="Composition name or ID"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt (for automation)"),
+):
+    """
+    Delete a composition from a project via Descript app automation.
+
+    Descript exposes no delete API (deleting a composition is an internal
+    collaborative-document commit), so this drives the desktop app's own
+    id-scoped sidebar context-menu Delete via CDP, then verifies the
+    composition is gone. Requires Descript running with CDP on port 9222;
+    the project auto-opens via its descript://project/<id> deep link.
+
+    Provide the target as --composition-id (UUID) or --composition (name or ID).
+
+    Example:
+        descript compositions delete <project-id> --composition-id <id> --yes
+        descript compositions delete <project-id> --composition m1c1 --yes
+    """
+    try:
+        from ..app_export import delete_composition_local
+
+        target = composition_id or composition
+        if not target:
+            print_error("Provide --composition-id or --composition.")
+            raise typer.Exit(1)
+
+        comp_id, comp_name = _resolve_composition(project_id, target)
+        print_info(f"Target composition: {comp_name} ({comp_id})")
+
+        if not yes:
+            if not typer.confirm(
+                f"Delete composition '{comp_name}' from Descript? This cannot be undone."
+            ):
+                print_info("Aborted.")
+                raise typer.Exit(0)
+
+        delete_composition_local(project_id, comp_id, comp_name)
+
+        remaining = list_compositions_json(project_id)
+        if any(c.get("id") == comp_id for c in remaining):
+            print_error(
+                f"Composition {comp_id} is still present after the delete attempt."
+            )
+            raise typer.Exit(1)
+
+        print_success(f"Deleted composition '{comp_name}' ({comp_id}).")
+
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @app.command("assets")
 def list_assets(
     project_id: str = typer.Argument(help="Project ID (UUID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields"),
 ):
     """
     List video assets in a project for export.
@@ -297,10 +393,7 @@ def list_assets(
         descript compositions assets <project-id> --table
     """
     try:
-        client = get_client()
-        assets = client.list_video_assets(project_id)
-
-        output_data = [a.model_dump() for a in assets]
+        output_data = select_properties(list_media_files_json(project_id), properties)
 
         if table:
             if output_data:
@@ -312,7 +405,7 @@ def list_assets(
         else:
             print_json(output_data)
 
-    except ClientError as e:
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:
@@ -324,6 +417,9 @@ COMMAND_CREDENTIALS = {
         "custom"
     ],
     "assets": [
+        "custom"
+    ],
+    "delete": [
         "custom"
     ],
     "export": [
