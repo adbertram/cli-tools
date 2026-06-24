@@ -1,7 +1,7 @@
 {
   "tool": "ebay",
-  "description": "eBay CLI \u2014 seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-05-12T15:42:31.324442+00:00",
+  "description": "eBay CLI — seller tools, marketplace categories, and account management",
+  "discovered_at": "2026-06-20T19:44:48Z",
   "total_commands": 68,
   "global_options": [
     {
@@ -19,30 +19,14 @@
     }
   ],
   "commands": {
-    "whoami": {
-      "help": "Display current user details and scopes.",
-      "options": [
-        {
-          "name": "--table",
-          "type": "bool",
-          "required": false,
-          "help": "Display as table",
-          "short": "-t"
-        },
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Profile name",
-          "short": "-p"
-        }
-      ]
-    },
     "auth": {
       "help": "Manage eBay API authentication",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -57,18 +41,12 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
           ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,75 +57,66 @@
             }
           ]
         },
-        "status": {
-          "help": "Check authentication status across profiles.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ]
-        },
         "profiles": {
           "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to retrieve"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List all profiles and show which is the default.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -180,75 +149,188 @@
                 }
               ]
             },
-            "get": {
-              "help": "Get details for a specific profile.",
+            "select": {
+              "help": "Activate a profile within its auth type.",
               "arguments": [
                 {
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to retrieve"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ]
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ]
+              "options": []
             }
           }
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": []
         }
       }
     },
     "categories": {
       "help": "Search and browse eBay marketplace categories",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "conditions": {
+          "help": "List valid item conditions for a category. Uses the eBay Metadata API to retrieve which condition values are accepted when listing items in the specified category.",
+          "arguments": [
+            {
+              "name": "category_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category ID to get valid conditions for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--marketplace",
+              "type": "TEXT",
+              "required": false,
+              "help": "eBay marketplace ID (EBAY_US, EBAY_GB, EBAY_AU, etc.)",
+              "short": "-m",
+              "default": "EBAY_US"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific category ID. Returns category details including the full path and whether it's a leaf category. Use --aspects to see required and recommended item specifics for listings.",
+          "arguments": [
+            {
+              "name": "category_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category ID to get details for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--marketplace",
+              "type": "TEXT",
+              "required": false,
+              "help": "eBay marketplace ID (EBAY_US, EBAY_GB, EBAY_AU, etc.)",
+              "short": "-m",
+              "default": "EBAY_US"
+            },
+            {
+              "name": "--aspects",
+              "type": "bool",
+              "required": false,
+              "help": "Include required/recommended item aspects",
+              "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List eBay categories matching a keyword query. Returns leaf category suggestions based on your search query. Use the category ID when creating listings. This is an alias for 'ebay categories search'.",
           "arguments": [
@@ -305,41 +387,6 @@
             }
           ]
         },
-        "get": {
-          "help": "Get details for a specific category ID. Returns category details including the full path and whether it's a leaf category. Use --aspects to see required and recommended item specifics for listings.",
-          "arguments": [
-            {
-              "name": "category_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Category ID to get details for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--marketplace",
-              "type": "TEXT",
-              "required": false,
-              "help": "eBay marketplace ID (EBAY_US, EBAY_GB, EBAY_AU, etc.)",
-              "short": "-m",
-              "default": "EBAY_US"
-            },
-            {
-              "name": "--aspects",
-              "type": "bool",
-              "required": false,
-              "help": "Include required/recommended item aspects",
-              "short": "-a"
-            }
-          ]
-        },
         "tree": {
           "help": "Browse the category tree from a parent category. Shows child categories of the specified parent. Use this to drill down into the category hierarchy to find the right leaf category for your item.",
           "arguments": [
@@ -379,34 +426,12 @@
               "type": "bool",
               "required": false,
               "help": "Flatten hierarchy into a single list"
-            }
-          ]
-        },
-        "conditions": {
-          "help": "List valid item conditions for a category. Uses the eBay Metadata API to retrieve which condition values are accepted when listing items in the specified category.",
-          "arguments": [
-            {
-              "name": "category_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Category ID to get valid conditions for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--marketplace",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "eBay marketplace ID (EBAY_US, EBAY_GB, EBAY_AU, etc.)",
-              "short": "-m",
-              "default": "EBAY_US"
+              "help": "Auth profile name"
             }
           ]
         }
@@ -414,6 +439,15 @@
     },
     "listings": {
       "help": "Search eBay marketplace listings",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "search": {
           "help": "Search eBay completed/sold listings. Searches eBay marketplace for completed listings using browser automation. Returns sold and unsold completed listings by default. Use --sold to filter to only sold items.",
@@ -430,7 +464,7 @@
               "name": "--sold",
               "type": "bool",
               "required": false,
-              "help": "--no-sold             Only show sold items (default: all completed)",
+              "help": "Only show sold items (default: all completed)",
               "default": "no-sold"
             },
             {
@@ -498,42 +532,17 @@
       }
     },
     "seller": {
-      "help": "Seller tools \u2014 listings, orders, inventory, policies, and more",
+      "help": "Seller tools — listings, orders, inventory, policies, and more",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List seller command groups.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of groups to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ]
-        },
         "get": {
           "help": "Get details for a seller command group.",
           "arguments": [
@@ -551,14 +560,56 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
-        "orders": {
-          "help": "Manage eBay seller orders",
+        "images": {
+          "help": "Manage eBay images",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "commands": {
+            "get": {
+              "help": "Get fresh image metadata from eBay API. Fetches current imageUrl and expirationDate from eBay. If the image exists in local storage, updates the stored metadata.",
+              "arguments": [
+                {
+                  "name": "image_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay image ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
-              "help": "List eBay orders with advanced filtering. IMPORTANT: By default, eBay returns orders from the last 90 days only. To see older orders, use a 'created' filter (e.g., --filter \"created:gte:2023-01-01\"). Pagination: Use --limit (max 200) and --offset to page through results. The output includes 'total_matches' to show how many orders are available. Syntax: field:operator:value (e.g., total:gt:100) Default operator is 'eq' (e.g., status:FULFILLED) Server-side filters (efficient): - status: NOT_STARTED, IN_PROGRESS, FULFILLED - created: ISO 8601 date (e.g., 2023-01-01) - modified: ISO 8601 date Client-side filters (any field): - total, buyer, payment_status, cancel_status, etc. Logic: - AND: Comma-separated in one flag: --filter \"status:FULFILLED,total:gt:100\" - OR: Multiple flags: --filter \"status:NOT_STARTED\" --filter \"status:IN_PROGRESS\"",
+              "help": "List all locally-stored uploaded images. Shows images stored in ~/.ebay/images.json from previous uploads. Available fields: image_id, imageUrl, expirationDate, source, original, uploaded_at",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -571,42 +622,9 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "Maximum number of orders to return (max 200)",
+                  "help": "Maximum number of results to return",
                   "short": "-l",
                   "default": "100"
-                },
-                {
-                  "name": "--offset",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Offset for pagination",
-                  "short": "-o",
-                  "default": "0"
-                },
-                {
-                  "name": "--status",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter by fulfillment status: NOT_STARTED, IN_PROGRESS, FULFILLED",
-                  "short": "-s"
-                },
-                {
-                  "name": "--shipped",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Filter for shipped orders (FULFILLED)"
-                },
-                {
-                  "name": "--not-shipped",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Filter for unshipped orders (NOT_STARTED or IN_PROGRESS)"
-                },
-                {
-                  "name": "--order-ids",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of order IDs to retrieve"
                 },
                 {
                   "name": "--filter",
@@ -619,414 +637,34 @@
                   "name": "--properties",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Comma-separated list of fields to include in output",
+                  "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 },
                 {
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Profile name"
+                  "help": "Auth profile name"
                 }
               ]
             },
-            "get": {
-              "help": "Get details for a specific order.",
-              "arguments": [
-                {
-                  "name": "order_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The eBay order ID"
-                }
-              ],
+            "upload": {
+              "help": "Upload images to eBay for use in listings. Images are hosted on eBay's servers and expire after 30 days if not used in a listing. Upload results are stored locally in ~/.ebay/images.json. Use --file for local files or --url for external URLs (cannot mix). Multiple images can be uploaded by comma-separating paths or URLs.",
+              "arguments": [],
               "options": [
                 {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--profile",
+                  "name": "--file",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Profile name"
-                }
-              ]
-            },
-            "fulfillments": {
-              "help": "Get shipping fulfillments for an order.",
-              "arguments": [
-                {
-                  "name": "order_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The eBay order ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
+                  "help": "Local file path(s) to upload (comma-separated for multiple)",
+                  "short": "-f"
                 },
                 {
-                  "name": "--profile",
+                  "name": "--url",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Profile name"
-                }
-              ]
-            }
-          }
-        },
-        "shipping-labels": {
-          "help": "Manage eBay shipping labels",
-          "commands": {
-            "create": {
-              "help": "Create and purchase a USPS shipping label for an eBay order. Uses the eBay Logistics API to get shipping quotes and purchase a label. The buyer's address is automatically fetched from the order.",
-              "arguments": [
-                {
-                  "name": "order_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The eBay order ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--weight",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package weight value"
-                },
-                {
-                  "name": "--weight-unit",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Weight unit: POUND, OUNCE, KILOGRAM, GRAM",
-                  "default": "POUND"
-                },
-                {
-                  "name": "--length",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package length"
-                },
-                {
-                  "name": "--width",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package width"
-                },
-                {
-                  "name": "--height",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package height"
-                },
-                {
-                  "name": "--dimension-unit",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Dimension unit: INCH, CENTIMETER",
-                  "default": "INCH"
-                },
-                {
-                  "name": "--from-name",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender full name (defaults to profile config)"
-                },
-                {
-                  "name": "--from-street",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender street address (defaults to profile config)"
-                },
-                {
-                  "name": "--from-city",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender city (defaults to profile config)"
-                },
-                {
-                  "name": "--from-state",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender state/province code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-zip",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender postal code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-country",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender country code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-phone",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender phone number (defaults to profile config)"
-                },
-                {
-                  "name": "--to-name",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Override recipient name"
-                },
-                {
-                  "name": "--to-phone",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Override recipient phone"
-                },
-                {
-                  "name": "--service",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Preferred USPS service name (substring match)"
-                },
-                {
-                  "name": "--insurance",
-                  "type": "bool",
-                  "required": false,
-                  "help": "--no-insurance                     Add shipping insurance (SHIP_COVER_INSURANCE)",
-                  "default": "no-insurance"
-                },
-                {
-                  "name": "--proof-of-delivery",
-                  "type": "bool",
-                  "required": false,
-                  "help": "--no-proof-of-delivery             Add proof of delivery / signature",
-                  "default": "no-proof-of-delivery"
-                },
-                {
-                  "name": "--label-message",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Custom message on label"
-                },
-                {
-                  "name": "--interactive",
-                  "type": "bool",
-                  "required": false,
-                  "help": "--no-interactive                   Interactively select rate",
-                  "default": "interactive"
-                },
-                {
-                  "name": "--rate-index",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "1-based rate to select",
-                  "default": "1"
-                },
-                {
-                  "name": "--dry-run",
-                  "type": "bool",
-                  "required": false,
-                  "help": "--no-dry-run                       Only show quotes, do not purchase",
-                  "default": "no-dry-run"
-                },
-                {
-                  "name": "--out",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Output file path for the label PDF",
-                  "short": "-o"
-                },
-                {
-                  "name": "--profile",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Profile name"
-                }
-              ]
-            },
-            "void": {
-              "help": "Void a shipping label and receive a refund.",
-              "arguments": [
-                {
-                  "name": "shipment_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The shipment ID to void"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation"
-                }
-              ]
-            },
-            "download": {
-              "help": "Download the shipping label PDF for a shipment.",
-              "arguments": [
-                {
-                  "name": "shipment_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The shipment ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--out",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Output file path (default: label_<shipment_id>.pdf)",
-                  "short": "-o"
-                }
-              ]
-            }
-          }
-        },
-        "shipping-quote": {
-          "help": "Manage eBay shipping quotes",
-          "commands": {
-            "create": {
-              "help": "Get USPS shipping rate quotes for a package. Returns available rates with pricing and estimated delivery dates. Quotes expire after ~10 minutes. An eBay order ID is required.",
-              "options": [
-                {
-                  "name": "--to-name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Recipient full name"
-                },
-                {
-                  "name": "--to-street",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Recipient street address"
-                },
-                {
-                  "name": "--to-city",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Recipient city"
-                },
-                {
-                  "name": "--to-state",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Recipient state/province code"
-                },
-                {
-                  "name": "--to-zip",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Recipient postal code"
-                },
-                {
-                  "name": "--to-country",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Recipient country code",
-                  "default": "US"
-                },
-                {
-                  "name": "--to-phone",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Recipient phone number"
-                },
-                {
-                  "name": "--from-name",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender full name (defaults to profile config)"
-                },
-                {
-                  "name": "--from-street",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender street address (defaults to profile config)"
-                },
-                {
-                  "name": "--from-city",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender city (defaults to profile config)"
-                },
-                {
-                  "name": "--from-state",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender state/province code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-zip",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender postal code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-country",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender country code (defaults to profile config)"
-                },
-                {
-                  "name": "--from-phone",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Sender phone number (defaults to profile config)"
-                },
-                {
-                  "name": "--weight",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package weight value"
-                },
-                {
-                  "name": "--weight-unit",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Weight unit: POUND, OUNCE, KILOGRAM, GRAM",
-                  "default": "POUND"
-                },
-                {
-                  "name": "--length",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package length"
-                },
-                {
-                  "name": "--width",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package width"
-                },
-                {
-                  "name": "--height",
-                  "type": "FLOAT",
-                  "required": true,
-                  "help": "Package height"
-                },
-                {
-                  "name": "--dimension-unit",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Dimension unit: INCH, CENTIMETER",
-                  "default": "INCH"
-                },
-                {
-                  "name": "--order-id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "eBay order ID (required by Logistics API)"
+                  "help": "External image URL(s) to upload (comma-separated for multiple)",
+                  "short": "-u"
                 },
                 {
                   "name": "--table",
@@ -1039,7 +677,7 @@
                   "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Profile name"
+                  "help": "Auth profile name"
                 }
               ]
             }
@@ -1047,69 +685,16 @@
         },
         "inventory": {
           "help": "Manage eBay inventory items",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "commands": {
-            "list": {
-              "help": "List all inventory items.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of items to return (max 200)",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--offset",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Offset for pagination",
-                  "short": "-o",
-                  "default": "0"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific inventory item.",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The SKU of the inventory item"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
-                }
-              ]
-            },
             "create": {
               "help": "Create or update an inventory item. Use --from-json to provide a complete payload for advanced use cases. CLI flags override values from --from-json.",
               "arguments": [
@@ -1181,6 +766,113 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete an inventory item. Note: You cannot delete an inventory item that has active offers. Delete or end the offers first.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The SKU of the inventory item to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific inventory item.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The SKU of the inventory item"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all inventory items.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of items to return (max 200)",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Offset for pagination",
+                  "short": "-o",
+                  "default": "0"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ]
             },
@@ -1271,104 +963,73 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete an inventory item. Note: You cannot delete an inventory item that has active offers. Delete or end the offers first.",
-              "arguments": [
+                },
                 {
-                  "name": "sku",
+                  "name": "--profile",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "The SKU of the inventory item to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
                   "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-f"
+                  "help": "Auth profile name"
                 }
               ]
             }
           }
         },
+        "list": {
+          "help": "List seller command groups.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of groups to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "listings": {
           "help": "Manage eBay listings (drafts and active)",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "commands": {
-            "list": {
-              "help": "List all eBay listings (active and drafts). Combines data from eBay's Inventory API (offers) and Trading API (active listings) into a unified view.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of listings (default: all)",
-                  "short": "-l"
-                },
-                {
-                  "name": "--offset",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Offset for pagination",
-                  "short": "-o",
-                  "default": "0"
-                },
-                {
-                  "name": "--status",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter by status: active, draft, sold, unsold, or all (default: all)",
-                  "short": "-s"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific listing by SKU.",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The SKU of the listing"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ]
-            },
             "create": {
               "help": "Create a new listing. Without --publish: Creates a pseudo-draft using a template. The listing is published briefly at $99,999 then immediately ended, making it visible in eBay Seller Hub for editing. Only --template is required. With --publish: Creates an active listing that stays live. Requires all API parameters (price, category, etc.) either from CLI options or template.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--sku",
@@ -1546,6 +1207,217 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a listing. If the listing is active, it will be withdrawn first. Then the offer is deleted. Optionally keep the inventory item for reuse.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SKU of the listing to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-f"
+                },
+                {
+                  "name": "--keep-inventory",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Keep inventory item, only delete offer"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific listing by SKU.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The SKU of the listing"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all eBay listings (active and drafts). Combines data from eBay's Inventory API (offers) and Trading API (active listings) into a unified view.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of listings (default: all)",
+                  "short": "-l"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Offset for pagination",
+                  "short": "-o",
+                  "default": "0"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status: active, draft, sold, unsold, or all (default: all)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "preview": {
+              "help": "Generate a visual preview of a listing before publishing. Opens an HTML preview in your browser showing how the listing will appear.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SKU of the listing to preview"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--output",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Save HTML to file instead of opening browser",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "publish": {
+              "help": "Publish a draft listing or set final price on a pseudo-draft. For real drafts: Publishes the listing to make it live on eBay. For pseudo-drafts: Use --price to set the final price (required).",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SKU of the listing to publish"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--price",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Set final price (required for pseudo-drafts)",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "unpublish": {
+              "help": "Unpublish (withdraw) an active listing back to draft status. The listing can be republished later.",
+              "arguments": [
+                {
+                  "name": "sku",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SKU of the listing to unpublish"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ]
             },
@@ -1642,116 +1514,203 @@
                   "required": false,
                   "help": "Display result as table",
                   "short": "-t"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a listing. If the listing is active, it will be withdrawn first. Then the offer is deleted. Optionally keep the inventory item for reuse.",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "SKU of the listing to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-f"
                 },
                 {
-                  "name": "--keep-inventory",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Keep inventory item, only delete offer"
-                }
-              ]
-            },
-            "publish": {
-              "help": "Publish a draft listing or set final price on a pseudo-draft. For real drafts: Publishes the listing to make it live on eBay. For pseudo-drafts: Use --price to set the final price (required).",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "SKU of the listing to publish"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--price",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Set final price (required for pseudo-drafts)",
-                  "short": "-p"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display result as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "unpublish": {
-              "help": "Unpublish (withdraw) an active listing back to draft status. The listing can be republished later.",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "SKU of the listing to unpublish"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-f"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display result as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "preview": {
-              "help": "Generate a visual preview of a listing before publishing. Opens an HTML preview in your browser showing how the listing will appear.",
-              "arguments": [
-                {
-                  "name": "sku",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "SKU of the listing to preview"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--output",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Save HTML to file instead of opening browser",
-                  "short": "-o"
+                  "help": "Auth profile name"
                 }
               ]
             }
           }
         },
-        "templates": {
-          "help": "Manage listing templates",
+        "locations": {
+          "help": "Manage eBay merchant locations",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
           "commands": {
+            "create": {
+              "help": "Create a new merchant inventory location. The location key is a unique identifier you define. Use it when creating offers to specify where items ship from.",
+              "arguments": [
+                {
+                  "name": "location_key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Unique identifier for this location (e.g., 'home', 'warehouse-1')"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Display name for the location",
+                  "short": "-n"
+                },
+                {
+                  "name": "--address",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Street address line 1",
+                  "short": "-a"
+                },
+                {
+                  "name": "--city",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "City",
+                  "short": "-c"
+                },
+                {
+                  "name": "--state",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "State or province",
+                  "short": "-s"
+                },
+                {
+                  "name": "--postal",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Postal/ZIP code",
+                  "short": "-p"
+                },
+                {
+                  "name": "--country",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Country code (default: US)",
+                  "default": "US"
+                },
+                {
+                  "name": "--address2",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Street address line 2"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Location type: WAREHOUSE or STORE",
+                  "short": "-t",
+                  "default": "WAREHOUSE"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a merchant inventory location. Note: You cannot delete a location that is associated with active listings or offers. You must first update those listings to use a different location.",
+              "arguments": [
+                {
+                  "name": "location_key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The merchant location key to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "disable": {
+              "help": "Disable a merchant location. Disabled locations cannot be used for new listings but existing listings are not affected.",
+              "arguments": [
+                {
+                  "name": "location_key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The merchant location key to disable"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "enable": {
+              "help": "Enable a disabled merchant location.",
+              "arguments": [
+                {
+                  "name": "location_key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The merchant location key to enable"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific merchant location.",
+              "arguments": [
+                {
+                  "name": "location_key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The merchant location key"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
-              "help": "List all saved templates.",
+              "help": "List all merchant inventory locations. Merchant locations are used to specify where inventory is stored and where items ship from.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -1764,9 +1723,9 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "Maximum number of templates to return",
+                  "help": "Maximum number of locations to return",
                   "short": "-l",
-                  "default": "100"
+                  "default": "25"
                 },
                 {
                   "name": "--filter",
@@ -1781,17 +1740,37 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include in output",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ]
-            },
+            }
+          }
+        },
+        "messages": {
+          "help": "Manage eBay seller messages",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
             "get": {
-              "help": "Get a specific template by name.",
+              "help": "Get specific message(s) by ID.",
               "arguments": [
                 {
-                  "name": "name",
+                  "name": "message_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Template name"
+                  "help": "Message ID or comma-separated list of IDs (max 10)"
                 }
               ],
               "options": [
@@ -1801,9 +1780,1216 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ]
             },
+            "list": {
+              "help": "List all eBay messages (inbox + buyer questions).",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of messages to return (max 200)",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Offset for pagination",
+                  "short": "-o",
+                  "default": "0"
+                },
+                {
+                  "name": "--start-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter messages created after this date (ISO format: 2025-01-01)"
+                },
+                {
+                  "name": "--end-date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter messages created before this date (ISO format: 2025-01-31)"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "reply": {
+              "help": "Reply to a buyer question.",
+              "arguments": [
+                {
+                  "name": "message_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Message ID to reply to"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--body",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Reply body text (max 2000 chars)",
+                  "short": "-b"
+                },
+                {
+                  "name": "--body-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Path to file containing body text, or '-' for stdin"
+                },
+                {
+                  "name": "--public",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display reply publicly on listing"
+                },
+                {
+                  "name": "--email-copy",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Send email copy to seller"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "orders": {
+          "help": "Manage eBay seller orders",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "fulfillments": {
+              "help": "Get shipping fulfillments for an order.",
+              "arguments": [
+                {
+                  "name": "order_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay order ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific order.",
+              "arguments": [
+                {
+                  "name": "order_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay order ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--include-shipping-labels",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Include shipping labels/fulfillments in output",
+                  "short": "-i"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List eBay orders with advanced filtering. IMPORTANT: By default, eBay returns orders from the last 90 days only. To see older orders, use a 'created' filter (e.g., --filter \"created:gte:2023-01-01\"). Pagination: Use --limit (max 200) and --offset to page through results. The output includes 'total_matches' to show how many orders are available. Syntax: field:operator:value (e.g., total:gt:100) Default operator is 'eq' (e.g., status:FULFILLED) Server-side filters (efficient): - status: NOT_STARTED, IN_PROGRESS, FULFILLED - created: ISO 8601 date (e.g., 2023-01-01) - modified: ISO 8601 date Client-side filters (any field): - total, buyer, payment_status, cancel_status, etc. Logic: - AND: Comma-separated in one flag: --filter \"status:FULFILLED,total:gt:100\" - OR: Multiple flags: --filter \"status:NOT_STARTED\" --filter \"status:IN_PROGRESS\"",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of orders to return (max 200)",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Offset for pagination",
+                  "short": "-o",
+                  "default": "0"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by fulfillment status: NOT_STARTED, IN_PROGRESS, FULFILLED",
+                  "short": "-s"
+                },
+                {
+                  "name": "--shipped",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Filter for shipped orders (FULFILLED)"
+                },
+                {
+                  "name": "--not-shipped",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Filter for unshipped orders (NOT_STARTED or IN_PROGRESS)"
+                },
+                {
+                  "name": "--order-ids",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of order IDs to retrieve"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            }
+          }
+        },
+        "payment-policies": {
+          "help": "Manage eBay payment policies",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "get": {
+              "help": "Get details for a specific payment policy.",
+              "arguments": [
+                {
+                  "name": "policy_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The payment policy ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all payment policies for a marketplace.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of policies to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--marketplace",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "eBay marketplace ID",
+                  "short": "-m",
+                  "default": "EBAY_US"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "policies": {
+          "help": "Manage eBay fulfillment policies",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "create": {
+              "help": "Create a new fulfillment policy. Fulfillment policies define how orders are handled and shipped. The handling time specifies how many business days you need to ship after payment. A shipping carrier, service code, and cost type are required by the eBay API.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Policy name (must be unique)",
+                  "short": "-n"
+                },
+                {
+                  "name": "--handling-days",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Handling time in business days (0 = same day)",
+                  "short": "-d"
+                },
+                {
+                  "name": "--carrier",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Shipping carrier code (e.g., USPS, UPS, FedEx)"
+                },
+                {
+                  "name": "--service",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Shipping service code (e.g., USPSParcel, UPSGround, FedExSmartPost)",
+                  "short": "-s"
+                },
+                {
+                  "name": "--cost-type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Shipping cost type: CALCULATED or FLAT_RATE",
+                  "default": "CALCULATED"
+                },
+                {
+                  "name": "--shipping-cost",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Flat-rate shipping cost in USD (e.g., '5.99'). Required when cost-type is FLAT_RATE"
+                },
+                {
+                  "name": "--free-shipping",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Offer free shipping"
+                },
+                {
+                  "name": "--marketplace",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "eBay marketplace ID",
+                  "short": "-m",
+                  "default": "EBAY_US"
+                },
+                {
+                  "name": "--category",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Category type: ALL_EXCLUDING_MOTORS_VEHICLES or MOTORS_VEHICLES",
+                  "short": "-c",
+                  "default": "ALL_EXCLUDING_MOTORS_VEHICLES"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Policy description"
+                },
+                {
+                  "name": "--local-pickup",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable local pickup"
+                },
+                {
+                  "name": "--global-shipping",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable Global Shipping Program (UK only)"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a fulfillment policy. Note: You cannot delete a policy that is associated with active listings. You must first update those listings to use a different policy.",
+              "arguments": [
+                {
+                  "name": "policy_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The fulfillment policy ID to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific fulfillment policy.",
+              "arguments": [
+                {
+                  "name": "policy_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The fulfillment policy ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all fulfillment policies for a marketplace. Fulfillment policies define handling time, shipping options, and other fulfillment-related settings for your listings.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of policies to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--marketplace",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "eBay marketplace ID (e.g., EBAY_US, EBAY_GB, EBAY_DE)",
+                  "short": "-m",
+                  "default": "EBAY_US"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "update": {
+              "help": "Update an existing fulfillment policy. Only the fields you specify will be updated. The policy is fetched first, then merged with your changes.",
+              "arguments": [
+                {
+                  "name": "policy_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The fulfillment policy ID to update"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New policy name",
+                  "short": "-n"
+                },
+                {
+                  "name": "--handling-days",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "New handling time in business days",
+                  "short": "-d"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New policy description"
+                },
+                {
+                  "name": "--local-pickup",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable/disable local pickup"
+                },
+                {
+                  "name": "--global-shipping",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable/disable Global Shipping"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "return-policies": {
+          "help": "Manage eBay return policies",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "get": {
+              "help": "Get details for a specific return policy.",
+              "arguments": [
+                {
+                  "name": "policy_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The return policy ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all return policies for a marketplace.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of policies to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--marketplace",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "eBay marketplace ID",
+                  "short": "-m",
+                  "default": "EBAY_US"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "shipping-labels": {
+          "help": "Manage eBay shipping labels",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "create": {
+              "help": "Create and purchase a USPS shipping label for an eBay order. Uses the eBay Logistics API to get shipping quotes and purchase a label. The buyer's address is automatically fetched from the order.",
+              "arguments": [
+                {
+                  "name": "order_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay order ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--weight",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package weight value"
+                },
+                {
+                  "name": "--weight-unit",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Weight unit: POUND, OUNCE, KILOGRAM, GRAM",
+                  "default": "POUND"
+                },
+                {
+                  "name": "--length",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package length"
+                },
+                {
+                  "name": "--width",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package width"
+                },
+                {
+                  "name": "--height",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package height"
+                },
+                {
+                  "name": "--dimension-unit",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Dimension unit: INCH, CENTIMETER",
+                  "default": "INCH"
+                },
+                {
+                  "name": "--from-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender full name (defaults to profile config)"
+                },
+                {
+                  "name": "--from-street",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender street address (defaults to profile config)"
+                },
+                {
+                  "name": "--from-city",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender city (defaults to profile config)"
+                },
+                {
+                  "name": "--from-state",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender state/province code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-zip",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender postal code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-country",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender country code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-phone",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender phone number (defaults to profile config)"
+                },
+                {
+                  "name": "--to-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Override recipient name"
+                },
+                {
+                  "name": "--to-phone",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Override recipient phone"
+                },
+                {
+                  "name": "--service",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Preferred USPS service name (substring match)"
+                },
+                {
+                  "name": "--insurance",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Add shipping insurance (SHIP_COVER_INSURANCE)",
+                  "default": "no-insurance"
+                },
+                {
+                  "name": "--proof-of-delivery",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Add proof of delivery / signature",
+                  "default": "no-proof-of-delivery"
+                },
+                {
+                  "name": "--label-message",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Custom message on label"
+                },
+                {
+                  "name": "--interactive",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Interactively select rate",
+                  "default": "interactive"
+                },
+                {
+                  "name": "--rate-index",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "1-based rate to select",
+                  "default": "1"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Only show quotes, do not purchase",
+                  "default": "no-dry-run"
+                },
+                {
+                  "name": "--out",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Output file path for the label PDF",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "download": {
+              "help": "Download the shipping label PDF for a shipment.",
+              "arguments": [
+                {
+                  "name": "shipment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The shipment ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--out",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Output file path (default: label_<shipment_id>.pdf)",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "void": {
+              "help": "Void a shipping label and receive a refund.",
+              "arguments": [
+                {
+                  "name": "shipment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The shipment ID to void"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "shipping-quote": {
+          "help": "Manage eBay shipping quotes",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "create": {
+              "help": "Get USPS shipping rate quotes for a package. Returns available rates with pricing and estimated delivery dates. Quotes expire after ~10 minutes. An eBay order ID is required.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--to-name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Recipient full name"
+                },
+                {
+                  "name": "--to-street",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Recipient street address"
+                },
+                {
+                  "name": "--to-city",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Recipient city"
+                },
+                {
+                  "name": "--to-state",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Recipient state/province code"
+                },
+                {
+                  "name": "--to-zip",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Recipient postal code"
+                },
+                {
+                  "name": "--to-country",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Recipient country code",
+                  "default": "US"
+                },
+                {
+                  "name": "--to-phone",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Recipient phone number"
+                },
+                {
+                  "name": "--from-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender full name (defaults to profile config)"
+                },
+                {
+                  "name": "--from-street",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender street address (defaults to profile config)"
+                },
+                {
+                  "name": "--from-city",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender city (defaults to profile config)"
+                },
+                {
+                  "name": "--from-state",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender state/province code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-zip",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender postal code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-country",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender country code (defaults to profile config)"
+                },
+                {
+                  "name": "--from-phone",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Sender phone number (defaults to profile config)"
+                },
+                {
+                  "name": "--weight",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package weight value"
+                },
+                {
+                  "name": "--weight-unit",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Weight unit: POUND, OUNCE, KILOGRAM, GRAM",
+                  "default": "POUND"
+                },
+                {
+                  "name": "--length",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package length"
+                },
+                {
+                  "name": "--width",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package width"
+                },
+                {
+                  "name": "--height",
+                  "type": "FLOAT",
+                  "required": true,
+                  "help": "Package height"
+                },
+                {
+                  "name": "--dimension-unit",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Dimension unit: INCH, CENTIMETER",
+                  "default": "INCH"
+                },
+                {
+                  "name": "--order-id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "eBay order ID (required by Logistics API)"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display results as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            }
+          }
+        },
+        "store": {
+          "help": "Manage eBay store",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "categories": {
+              "help": "Manage eBay store categories",
+              "arguments": [],
+              "options": [],
+              "commands": {
+                "get": {
+                  "help": "Get details for a specific store category by ID. Fetches all store categories and returns the one matching the given ID, including its full path in the category hierarchy.",
+                  "arguments": [
+                    {
+                      "name": "category_id",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "Store category ID to look up"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--table",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Display as table",
+                      "short": "-t"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                },
+                "list": {
+                  "help": "List all store categories for the seller's eBay store. Returns the store category hierarchy (up to 3 levels deep). Use --flat to flatten the hierarchy into a single list.",
+                  "arguments": [],
+                  "options": [
+                    {
+                      "name": "--table",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Display as table",
+                      "short": "-t"
+                    },
+                    {
+                      "name": "--flat",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Flatten category hierarchy into a flat list"
+                    },
+                    {
+                      "name": "--filter",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                      "short": "-f"
+                    },
+                    {
+                      "name": "--properties",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Comma-separated list of fields to include in output",
+                      "short": "-p"
+                    },
+                    {
+                      "name": "--limit",
+                      "type": "INTEGER",
+                      "required": false,
+                      "help": "Maximum number of categories to return (client-side truncation)",
+                      "short": "-l"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "templates": {
+          "help": "Manage listing templates",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
             "create": {
               "help": "Create a listing template. Templates can be created from: - CLI options (--category, --price, etc.) - An existing eBay offer (--from-offer) - A JSON file (--from-json)",
               "arguments": [
@@ -1913,6 +3099,105 @@
                   "type": "bool",
                   "required": false,
                   "help": "Overwrite existing template"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Template name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a specific template by name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Template name"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all saved templates.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of templates to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include in output",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
               ]
             },
@@ -1990,26 +3275,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Merchant location key"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a template.",
-              "arguments": [
+                },
                 {
-                  "name": "name",
+                  "name": "--profile",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "Template name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
                   "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-f"
+                  "help": "Auth profile name"
                 }
               ]
             },
@@ -2022,831 +3293,39 @@
                   "required": true,
                   "help": "Path to JSON template file to validate"
                 }
-              ]
-            }
-          }
-        },
-        "policies": {
-          "help": "Manage eBay fulfillment policies",
-          "commands": {
-            "list": {
-              "help": "List all fulfillment policies for a marketplace. Fulfillment policies define handling time, shipping options, and other fulfillment-related settings for your listings.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of policies to return",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--marketplace",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "eBay marketplace ID (e.g., EBAY_US, EBAY_GB, EBAY_DE)",
-                  "short": "-m",
-                  "default": "EBAY_US"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific fulfillment policy.",
-              "arguments": [
-                {
-                  "name": "policy_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The fulfillment policy ID"
-                }
               ],
               "options": [
                 {
-                  "name": "--table",
-                  "type": "bool",
+                  "name": "--profile",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
+                  "help": "Auth profile name"
                 }
               ]
-            },
-            "create": {
-              "help": "Create a new fulfillment policy. Fulfillment policies define how orders are handled and shipped. The handling time specifies how many business days you need to ship after payment. A shipping carrier, service code, and cost type are required by the eBay API.",
-              "options": [
-                {
-                  "name": "--name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Policy name (must be unique)",
-                  "short": "-n"
-                },
-                {
-                  "name": "--handling-days",
-                  "type": "INTEGER",
-                  "required": true,
-                  "help": "Handling time in business days (0 = same day)",
-                  "short": "-d"
-                },
-                {
-                  "name": "--carrier",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Shipping carrier code (e.g., USPS, UPS, FedEx)"
-                },
-                {
-                  "name": "--service",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Shipping service code (e.g., USPSParcel, UPSGround, FedExSmartPost)",
-                  "short": "-s"
-                },
-                {
-                  "name": "--cost-type",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Shipping cost type: CALCULATED or FLAT_RATE",
-                  "default": "CALCULATED"
-                },
-                {
-                  "name": "--shipping-cost",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Flat-rate shipping cost in USD (e.g., '5.99'). Required when cost-type is FLAT_RATE"
-                },
-                {
-                  "name": "--free-shipping",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Offer free shipping"
-                },
-                {
-                  "name": "--marketplace",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "eBay marketplace ID",
-                  "short": "-m",
-                  "default": "EBAY_US"
-                },
-                {
-                  "name": "--category",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Category type: ALL_EXCLUDING_MOTORS_VEHICLES or MOTORS_VEHICLES",
-                  "short": "-c",
-                  "default": "ALL_EXCLUDING_MOTORS_VEHICLES"
-                },
-                {
-                  "name": "--description",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Policy description"
-                },
-                {
-                  "name": "--local-pickup",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Enable local pickup"
-                },
-                {
-                  "name": "--global-shipping",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Enable Global Shipping Program (UK only)"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display result as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "update": {
-              "help": "Update an existing fulfillment policy. Only the fields you specify will be updated. The policy is fetched first, then merged with your changes.",
-              "arguments": [
-                {
-                  "name": "policy_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The fulfillment policy ID to update"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--name",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "New policy name",
-                  "short": "-n"
-                },
-                {
-                  "name": "--handling-days",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "New handling time in business days",
-                  "short": "-d"
-                },
-                {
-                  "name": "--description",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "New policy description"
-                },
-                {
-                  "name": "--local-pickup",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Enable/disable local pickup"
-                },
-                {
-                  "name": "--global-shipping",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Enable/disable Global Shipping"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display result as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a fulfillment policy. Note: You cannot delete a policy that is associated with active listings. You must first update those listings to use a different policy.",
-              "arguments": [
-                {
-                  "name": "policy_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The fulfillment policy ID to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-f"
-                }
-              ]
-            }
-          }
-        },
-        "payment-policies": {
-          "help": "Manage eBay payment policies",
-          "commands": {
-            "list": {
-              "help": "List all payment policies for a marketplace.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of policies to return",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--marketplace",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "eBay marketplace ID",
-                  "short": "-m",
-                  "default": "EBAY_US"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific payment policy.",
-              "arguments": [
-                {
-                  "name": "policy_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The payment policy ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
-                }
-              ]
-            }
-          }
-        },
-        "return-policies": {
-          "help": "Manage eBay return policies",
-          "commands": {
-            "list": {
-              "help": "List all return policies for a marketplace.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of policies to return",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--marketplace",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "eBay marketplace ID",
-                  "short": "-m",
-                  "default": "EBAY_US"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific return policy.",
-              "arguments": [
-                {
-                  "name": "policy_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The return policy ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
-                }
-              ]
-            }
-          }
-        },
-        "images": {
-          "help": "Manage eBay images",
-          "commands": {
-            "upload": {
-              "help": "Upload images to eBay for use in listings. Images are hosted on eBay's servers and expire after 30 days if not used in a listing. Upload results are stored locally in ~/.ebay/images.json. Use --file for local files or --url for external URLs (cannot mix). Multiple images can be uploaded by comma-separating paths or URLs.",
-              "options": [
-                {
-                  "name": "--file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Local file path(s) to upload (comma-separated for multiple)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--url",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "External image URL(s) to upload (comma-separated for multiple)",
-                  "short": "-u"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display results as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "list": {
-              "help": "List all locally-stored uploaded images. Shows images stored in ~/.ebay/images.json from previous uploads. Available fields: image_id, imageUrl, expirationDate, source, original, uploaded_at",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of results to return",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get fresh image metadata from eBay API. Fetches current imageUrl and expirationDate from eBay. If the image exists in local storage, updates the stored metadata.",
-              "arguments": [
-                {
-                  "name": "image_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The eBay image ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ]
-            }
-          }
-        },
-        "locations": {
-          "help": "Manage eBay merchant locations",
-          "commands": {
-            "list": {
-              "help": "List all merchant inventory locations. Merchant locations are used to specify where inventory is stored and where items ship from.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of locations to return",
-                  "short": "-l",
-                  "default": "25"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get details for a specific merchant location.",
-              "arguments": [
-                {
-                  "name": "location_key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The merchant location key"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display summary as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "create": {
-              "help": "Create a new merchant inventory location. The location key is a unique identifier you define. Use it when creating offers to specify where items ship from.",
-              "arguments": [
-                {
-                  "name": "location_key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Unique identifier for this location (e.g., 'home', 'warehouse-1')"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Display name for the location",
-                  "short": "-n"
-                },
-                {
-                  "name": "--address",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Street address line 1",
-                  "short": "-a"
-                },
-                {
-                  "name": "--city",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "City",
-                  "short": "-c"
-                },
-                {
-                  "name": "--state",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "State or province",
-                  "short": "-s"
-                },
-                {
-                  "name": "--postal",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Postal/ZIP code",
-                  "short": "-p"
-                },
-                {
-                  "name": "--country",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Country code (default: US)",
-                  "default": "US"
-                },
-                {
-                  "name": "--address2",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Street address line 2"
-                },
-                {
-                  "name": "--type",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Location type: WAREHOUSE or STORE",
-                  "short": "-t",
-                  "default": "WAREHOUSE"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display result as table"
-                }
-              ]
-            },
-            "delete": {
-              "help": "Delete a merchant inventory location. Note: You cannot delete a location that is associated with active listings or offers. You must first update those listings to use a different location.",
-              "arguments": [
-                {
-                  "name": "location_key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The merchant location key to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-f"
-                }
-              ]
-            },
-            "enable": {
-              "help": "Enable a disabled merchant location.",
-              "arguments": [
-                {
-                  "name": "location_key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The merchant location key to enable"
-                }
-              ]
-            },
-            "disable": {
-              "help": "Disable a merchant location. Disabled locations cannot be used for new listings but existing listings are not affected.",
-              "arguments": [
-                {
-                  "name": "location_key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The merchant location key to disable"
-                }
-              ]
-            }
-          }
-        },
-        "messages": {
-          "help": "Manage eBay seller messages",
-          "commands": {
-            "list": {
-              "help": "List all eBay messages (inbox + buyer questions).",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of messages to return (max 200)",
-                  "short": "-l",
-                  "default": "100"
-                },
-                {
-                  "name": "--offset",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Offset for pagination",
-                  "short": "-o",
-                  "default": "0"
-                },
-                {
-                  "name": "--start-date",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter messages created after this date (ISO format: 2025-01-01)"
-                },
-                {
-                  "name": "--end-date",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter messages created before this date (ISO format: 2025-01-31)"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include in output",
-                  "short": "-p"
-                }
-              ]
-            },
-            "get": {
-              "help": "Get specific message(s) by ID.",
-              "arguments": [
-                {
-                  "name": "message_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Message ID or comma-separated list of IDs (max 10)"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ]
-            },
-            "reply": {
-              "help": "Reply to a buyer question.",
-              "arguments": [
-                {
-                  "name": "message_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Message ID to reply to"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--body",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Reply body text (max 2000 chars)",
-                  "short": "-b"
-                },
-                {
-                  "name": "--body-file",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Path to file containing body text, or '-' for stdin"
-                },
-                {
-                  "name": "--public",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display reply publicly on listing"
-                },
-                {
-                  "name": "--email-copy",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Send email copy to seller"
-                }
-              ]
-            }
-          }
-        },
-        "store": {
-          "help": "Manage eBay store",
-          "commands": {
-            "categories": {
-              "help": "Manage eBay store categories",
-              "commands": {
-                "list": {
-                  "help": "List all store categories for the seller's eBay store. Returns the store category hierarchy (up to 3 levels deep). Use --flat to flatten the hierarchy into a single list.",
-                  "options": [
-                    {
-                      "name": "--table",
-                      "type": "bool",
-                      "required": false,
-                      "help": "Display as table",
-                      "short": "-t"
-                    },
-                    {
-                      "name": "--flat",
-                      "type": "bool",
-                      "required": false,
-                      "help": "Flatten category hierarchy into a flat list"
-                    },
-                    {
-                      "name": "--filter",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "Filter (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, nin, like, ilike, null, notnull",
-                      "short": "-f"
-                    },
-                    {
-                      "name": "--properties",
-                      "type": "TEXT",
-                      "required": false,
-                      "help": "Comma-separated list of fields to include in output",
-                      "short": "-p"
-                    },
-                    {
-                      "name": "--limit",
-                      "type": "INTEGER",
-                      "required": false,
-                      "help": "Maximum number of categories to return (client-side truncation)",
-                      "short": "-l"
-                    }
-                  ]
-                },
-                "get": {
-                  "help": "Get details for a specific store category by ID. Fetches all store categories and returns the one matching the given ID, including its full path in the category hierarchy.",
-                  "arguments": [
-                    {
-                      "name": "category_id",
-                      "type": "TEXT",
-                      "required": true,
-                      "help": "Store category ID to look up"
-                    }
-                  ],
-                  "options": [
-                    {
-                      "name": "--table",
-                      "type": "bool",
-                      "required": false,
-                      "help": "Display as table",
-                      "short": "-t"
-                    }
-                  ]
-                }
-              }
             }
           }
         }
       }
     },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
+    "whoami": {
+      "help": "Display current user details and scopes.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Profile name",
+          "short": "-p"
         }
-      }
+      ]
     }
   }
 }

@@ -33,7 +33,7 @@ Common commands:
 
 <principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `codex-sessions` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `codex-sessions` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

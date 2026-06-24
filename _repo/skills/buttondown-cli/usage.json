@@ -1,8 +1,8 @@
 {
   "tool": "buttondown",
   "description": "CLI interface for Buttondown API",
-  "discovered_at": "2026-05-20T16:14:04.304624+00:00",
-  "total_commands": 40,
+  "discovered_at": "2026-06-20T19:40:28Z",
+  "total_commands": 41,
   "global_options": [
     {
       "name": "--version",
@@ -27,9 +27,14 @@
   "commands": {
     "auth": {
       "help": "Manage authentication",
+      "usage_instructions": "Use `buttondown auth` for manage authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `buttondown auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -44,19 +49,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'api_key')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Run `buttondown auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Run `buttondown auth logout` to clear stored credentials. Common options: `--profile/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -65,11 +64,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `buttondown auth logout` to clear stored credentials. Common options: `--profile/-p`."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `buttondown auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `buttondown auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `buttondown auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `buttondown auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `buttondown auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Run `buttondown auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -85,11 +215,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Run `buttondown auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `buttondown auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -112,196 +243,27 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `buttondown auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `buttondown auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `buttondown auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `buttondown auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `buttondown auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `buttondown auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
-            }
-          },
-          "usage_instructions": "Use `buttondown auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+          ]
         }
-      },
-      "usage_instructions": "Use `buttondown auth` for manage authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `buttondown cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
-        }
-      },
-      "usage_instructions": "Use `buttondown cache` for manage response cache. Available subcommands here are `clear`."
+      }
     },
     "automations": {
       "help": "Manage automations",
+      "usage_instructions": "Use `buttondown automations` for manage automations. Available subcommands here are `list`, `get`, `create`, `update`, `delete`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List automations.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of automations",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown automations list` to list automations. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "Get a single automation.",
-          "arguments": [
-            {
-              "name": "automation_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Automation ID (aut_...)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown automations get` to get a single automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
         "create": {
           "help": "Create an automation.",
+          "usage_instructions": "Run `buttondown automations create` to create an automation. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--name",
@@ -345,7 +307,7 @@
               "name": "--reevaluate-filter",
               "type": "bool",
               "required": false,
-              "help": "--no-reevaluate-filter          Re-evaluate filter after delay"
+              "help": "Re-evaluate filter after delay"
             },
             {
               "name": "--table",
@@ -360,12 +322,128 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete an automation.",
+          "usage_instructions": "Run `buttondown automations delete` to delete an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--force/-F`.",
+          "arguments": [
+            {
+              "name": "automation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Automation ID (aut_...)"
             }
           ],
-          "usage_instructions": "Run `buttondown automations create` to create an automation. Common options: `--table/-t`, `--properties/-p`."
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Delete without confirmation",
+              "short": "-F"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a single automation.",
+          "usage_instructions": "Run `buttondown automations get` to get a single automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "automation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Automation ID (aut_...)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List automations.",
+          "usage_instructions": "Run `buttondown automations list` to list automations. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of automations",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update an automation.",
+          "usage_instructions": "Run `buttondown automations update` to update an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
               "name": "automation_id",
@@ -423,7 +501,7 @@
               "name": "--reevaluate-filter",
               "type": "bool",
               "required": false,
-              "help": "--no-reevaluate-filter          Re-evaluate filter after delay"
+              "help": "Re-evaluate filter after delay"
             },
             {
               "name": "--table",
@@ -438,18 +516,141 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown automations update` to update an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "delete": {
-          "help": "Delete an automation.",
-          "arguments": [
+            },
             {
-              "name": "automation_id",
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `buttondown cache` for manage response cache. Available subcommands here are `clear`.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `buttondown cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "emails": {
+      "help": "Manage emails",
+      "usage_instructions": "Use `buttondown emails` for manage emails. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `send-draft`, `render`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create an email.",
+          "usage_instructions": "Run `buttondown emails create` to create an email. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--subject",
               "type": "TEXT",
               "required": true,
-              "help": "Automation ID (aut_...)"
+              "help": "Email subject",
+              "short": "-s"
+            },
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email body"
+            },
+            {
+              "name": "--body-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Read email body from file"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email status"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email slug"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive description"
+            },
+            {
+              "name": "--publish-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publish date"
+            },
+            {
+              "name": "--email-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email audience type"
+            },
+            {
+              "name": "--archival-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive visibility mode"
+            },
+            {
+              "name": "--metadata",
+              "type": "TEXT",
+              "required": false,
+              "help": "Metadata JSON object"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete an email.",
+          "usage_instructions": "Run `buttondown emails delete` to delete an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--force/-F`.",
+          "arguments": [
+            {
+              "name": "email_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email ID"
             }
           ],
           "options": [
@@ -466,18 +667,53 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get an email.",
+          "usage_instructions": "Run `buttondown emails get` to get an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "email_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email ID"
             }
           ],
-          "usage_instructions": "Run `buttondown automations delete` to delete an automation. Required arguments: `AUTOMATION_ID`. Common options: `--table/-t`, `--force/-F`."
-        }
-      },
-      "usage_instructions": "Use `buttondown automations` for manage automations. Available subcommands here are `list`, `get`, `create`, `update`, `delete`."
-    },
-    "emails": {
-      "help": "Manage emails",
-      "commands": {
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List emails.",
+          "usage_instructions": "Run `buttondown emails list` to list emails. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -507,12 +743,18 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown emails list` to list emails. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+          ]
         },
-        "get": {
-          "help": "Get an email.",
+        "render": {
+          "help": "Retrieve the rendered HTML of an email from the Buttondown API.",
+          "usage_instructions": "Run `buttondown emails render` to retrieve the rendered HTML of an email from the Buttondown API. Required arguments: `EMAIL_ID`. Options: `--target`, `--output/-o`, `--open`.",
           "arguments": [
             {
               "name": "email_id",
@@ -523,222 +765,36 @@
           ],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
+              "name": "--target",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown emails get` to get an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "create": {
-          "help": "Create an email.",
-          "options": [
-            {
-              "name": "--subject",
-              "type": "TEXT",
-              "required": true,
-              "help": "Email subject",
-              "short": "-s"
+              "help": "Render target: 'email' (inlined for inbox) or 'html' (web archive chrome)",
+              "default": "email"
             },
             {
-              "name": "--body",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email body"
-            },
-            {
-              "name": "--body-file",
+              "name": "--output",
               "type": "PATH",
               "required": false,
-              "help": "Read email body from file"
+              "help": "Write rendered HTML to this file instead of stdout",
+              "short": "-o"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email status"
-            },
-            {
-              "name": "--slug",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email slug"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Archive description"
-            },
-            {
-              "name": "--publish-date",
-              "type": "TEXT",
-              "required": false,
-              "help": "Publish date"
-            },
-            {
-              "name": "--email-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email audience type"
-            },
-            {
-              "name": "--archival-mode",
-              "type": "TEXT",
-              "required": false,
-              "help": "Archive visibility mode"
-            },
-            {
-              "name": "--metadata",
-              "type": "TEXT",
-              "required": false,
-              "help": "Metadata JSON object"
-            },
-            {
-              "name": "--table",
+              "name": "--open",
               "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Open the rendered HTML in the default browser"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown emails create` to create an email. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "update": {
-          "help": "Update an email.",
-          "arguments": [
-            {
-              "name": "email_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Email ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--subject",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email subject",
-              "short": "-s"
-            },
-            {
-              "name": "--body",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email body"
-            },
-            {
-              "name": "--body-file",
-              "type": "PATH",
-              "required": false,
-              "help": "Read email body from file"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email status"
-            },
-            {
-              "name": "--slug",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email slug"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Archive description"
-            },
-            {
-              "name": "--publish-date",
-              "type": "TEXT",
-              "required": false,
-              "help": "Publish date"
-            },
-            {
-              "name": "--email-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Email audience type"
-            },
-            {
-              "name": "--archival-mode",
-              "type": "TEXT",
-              "required": false,
-              "help": "Archive visibility mode"
-            },
-            {
-              "name": "--metadata",
-              "type": "TEXT",
-              "required": false,
-              "help": "Metadata JSON object"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown emails update` to update an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "delete": {
-          "help": "Delete an email.",
-          "arguments": [
-            {
-              "name": "email_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Email ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Delete without confirmation",
-              "short": "-F"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `buttondown emails delete` to delete an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--force/-F`."
+          ]
         },
         "send-draft": {
           "help": "Send a draft email.",
+          "usage_instructions": "Run `buttondown emails send-draft` to send a draft email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
               "name": "email_id",
@@ -768,12 +824,18 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown emails send-draft` to send a draft email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`."
+          ]
         },
-        "render": {
-          "help": "Retrieve the rendered HTML of an email from the Buttondown API.",
+        "update": {
+          "help": "Update an email.",
+          "usage_instructions": "Run `buttondown emails update` to update an email. Required arguments: `EMAIL_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
               "name": "email_id",
@@ -784,99 +846,107 @@
           ],
           "options": [
             {
-              "name": "--target",
+              "name": "--subject",
               "type": "TEXT",
               "required": false,
-              "help": "Render target: 'email' (inlined for inbox) or 'html' (web archive chrome)",
-              "default": "email"
+              "help": "Email subject",
+              "short": "-s"
             },
             {
-              "name": "--output",
+              "name": "--body",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email body"
+            },
+            {
+              "name": "--body-file",
               "type": "PATH",
               "required": false,
-              "help": "Write rendered HTML to this file instead of stdout",
-              "short": "-o"
+              "help": "Read email body from file"
             },
             {
-              "name": "--open",
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email status"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email slug"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive description"
+            },
+            {
+              "name": "--publish-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publish date"
+            },
+            {
+              "name": "--email-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Email audience type"
+            },
+            {
+              "name": "--archival-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive visibility mode"
+            },
+            {
+              "name": "--metadata",
+              "type": "TEXT",
+              "required": false,
+              "help": "Metadata JSON object"
+            },
+            {
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Open the rendered HTML in the default browser"
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown emails render` to retrieve the rendered HTML of an email from the Buttondown API. Required arguments: `EMAIL_ID`. Options: `--target`, `--output/-o`, `--open`."
+          ]
         }
-      },
-      "usage_instructions": "Use `buttondown emails` for manage emails. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `send-draft`, `render`."
+      }
     },
     "feeds": {
       "help": "Manage RSS-to-email external feeds",
+      "usage_instructions": "Use `buttondown feeds` for manage rss-to-email external feeds. Available subcommands here are `list`, `get`, `create`, `update`, `delete`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List external RSS feeds.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of feeds",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown feeds list` to list external RSS feeds. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "Get a single RSS feed.",
-          "arguments": [
-            {
-              "name": "feed_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "External feed ID (rss_...)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown feeds get` to get a single RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
         "create": {
           "help": "Create a new RSS feed.",
+          "usage_instructions": "Run `buttondown feeds create` to create a new RSS feed. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--url",
@@ -946,7 +1016,7 @@
               "name": "--skip-old-items",
               "type": "bool",
               "required": false,
-              "help": "--no-skip-old-items          Skip old items"
+              "help": "Skip old items"
             },
             {
               "name": "--table",
@@ -961,12 +1031,128 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete an RSS feed.",
+          "usage_instructions": "Run `buttondown feeds delete` to delete an RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--force/-F`.",
+          "arguments": [
+            {
+              "name": "feed_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "External feed ID (rss_...)"
             }
           ],
-          "usage_instructions": "Run `buttondown feeds create` to create a new RSS feed. Common options: `--table/-t`, `--properties/-p`."
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Delete without confirmation",
+              "short": "-F"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a single RSS feed.",
+          "usage_instructions": "Run `buttondown feeds get` to get a single RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "feed_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "External feed ID (rss_...)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List external RSS feeds.",
+          "usage_instructions": "Run `buttondown feeds list` to list external RSS feeds. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of feeds",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update an existing RSS feed.",
+          "usage_instructions": "Run `buttondown feeds update` to update an existing RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
               "name": "feed_id",
@@ -1043,7 +1229,7 @@
               "name": "--skip-old-items",
               "type": "bool",
               "required": false,
-              "help": "--no-skip-old-items          Skip old items"
+              "help": "Skip old items"
             },
             {
               "name": "--table",
@@ -1058,109 +1244,34 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown feeds update` to update an existing RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "delete": {
-          "help": "Delete an RSS feed.",
-          "arguments": [
-            {
-              "name": "feed_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "External feed ID (rss_...)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Delete without confirmation",
-              "short": "-F"
             },
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown feeds delete` to delete an RSS feed. Required arguments: `FEED_ID`. Common options: `--table/-t`, `--force/-F`."
+          ]
         }
-      },
-      "usage_instructions": "Use `buttondown feeds` for manage rss-to-email external feeds. Available subcommands here are `list`, `get`, `create`, `update`, `delete`."
+      }
     },
     "subscribers": {
       "help": "Manage subscribers",
+      "usage_instructions": "Use `buttondown subscribers` for manage subscribers. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `send-link`, `remind`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List subscribers.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of subscribers",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown subscribers list` to list subscribers. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "Get a subscriber.",
-          "arguments": [
-            {
-              "name": "id_or_email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Subscriber ID or email address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown subscribers get` to get a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`."
-        },
         "create": {
           "help": "Create a subscriber.",
+          "usage_instructions": "Run `buttondown subscribers create` to create a subscriber. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--email",
@@ -1206,12 +1317,182 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a subscriber.",
+          "usage_instructions": "Run `buttondown subscribers delete` to delete a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--force/-F`.",
+          "arguments": [
+            {
+              "name": "id_or_email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscriber ID or email address"
             }
           ],
-          "usage_instructions": "Run `buttondown subscribers create` to create a subscriber. Common options: `--table/-t`, `--properties/-p`."
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Delete without confirmation",
+              "short": "-F"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a subscriber.",
+          "usage_instructions": "Run `buttondown subscribers get` to get a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "id_or_email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscriber ID or email address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List subscribers.",
+          "usage_instructions": "Run `buttondown subscribers list` to list subscribers. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of subscribers",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "remind": {
+          "help": "Send a subscriber reminder.",
+          "usage_instructions": "Run `buttondown subscribers remind` to send a subscriber reminder. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`.",
+          "arguments": [
+            {
+              "name": "id_or_email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscriber ID or email address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "send-link": {
+          "help": "Send a subscriber magic link.",
+          "usage_instructions": "Run `buttondown subscribers send-link` to send a subscriber magic link. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`.",
+          "arguments": [
+            {
+              "name": "id_or_email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscriber ID or email address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update a subscriber.",
+          "usage_instructions": "Run `buttondown subscribers update` to update a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
               "name": "id_or_email",
@@ -1256,7 +1537,7 @@
               "name": "--commenting-disabled",
               "type": "bool",
               "required": false,
-              "help": "--commenting-enabled          Commenting state"
+              "help": "Commenting state"
             },
             {
               "name": "--table",
@@ -1271,18 +1552,132 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown subscribers update` to update a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "delete": {
-          "help": "Delete a subscriber.",
+          ]
+        }
+      }
+    },
+    "tags": {
+      "help": "Manage tags",
+      "usage_instructions": "Use `buttondown tags` for manage tags. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `analytics`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "analytics": {
+          "help": "Get tag analytics.",
+          "usage_instructions": "Run `buttondown tags analytics` to get tag analytics. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
-              "name": "id_or_email",
+              "name": "tag_id",
               "type": "TEXT",
               "required": true,
-              "help": "Subscriber ID or email address"
+              "help": "Tag ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create": {
+          "help": "Create a tag.",
+          "usage_instructions": "Run `buttondown tags create` to create a tag. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tag name",
+              "short": "-n"
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Hex color",
+              "short": "-c"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Internal description"
+            },
+            {
+              "name": "--public-description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Subscriber-facing description"
+            },
+            {
+              "name": "--subscriber-editable",
+              "type": "bool",
+              "required": false,
+              "help": "Subscriber editability"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a tag.",
+          "usage_instructions": "Run `buttondown tags delete` to delete a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--force/-F`.",
+          "arguments": [
+            {
+              "name": "tag_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tag ID"
             }
           ],
           "options": [
@@ -1299,18 +1694,24 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown subscribers delete` to delete a subscriber. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`, `--force/-F`."
+          ]
         },
-        "send-link": {
-          "help": "Send a subscriber magic link.",
+        "get": {
+          "help": "Get a tag.",
+          "usage_instructions": "Run `buttondown tags get` to get a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
-              "name": "id_or_email",
+              "name": "tag_id",
               "type": "TEXT",
               "required": true,
-              "help": "Subscriber ID or email address"
+              "help": "Tag ID"
             }
           ],
           "options": [
@@ -1320,39 +1721,26 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `buttondown subscribers send-link` to send a subscriber magic link. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`."
-        },
-        "remind": {
-          "help": "Send a subscriber reminder.",
-          "arguments": [
+            },
             {
-              "name": "id_or_email",
+              "name": "--properties",
               "type": "TEXT",
-              "required": true,
-              "help": "Subscriber ID or email address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown subscribers remind` to send a subscriber reminder. Required arguments: `ID_OR_EMAIL`. Common options: `--table/-t`."
-        }
-      },
-      "usage_instructions": "Use `buttondown subscribers` for manage subscribers. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `send-link`, `remind`."
-    },
-    "tags": {
-      "help": "Manage tags",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List tags.",
+          "usage_instructions": "Run `buttondown tags list` to list tags. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -1382,92 +1770,18 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown tags list` to list tags. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "Get a tag.",
-          "arguments": [
-            {
-              "name": "tag_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tag ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown tags get` to get a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "create": {
-          "help": "Create a tag.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tag name",
-              "short": "-n"
-            },
-            {
-              "name": "--color",
-              "type": "TEXT",
-              "required": true,
-              "help": "Hex color",
-              "short": "-c"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Internal description"
-            },
-            {
-              "name": "--public-description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Subscriber-facing description"
-            },
-            {
-              "name": "--subscriber-editable",
-              "type": "bool",
-              "required": false,
-              "help": "--not-subscriber-editable          Subscriber editability"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown tags create` to create a tag. Common options: `--table/-t`, `--properties/-p`."
+          ]
         },
         "update": {
           "help": "Update a tag.",
+          "usage_instructions": "Run `buttondown tags update` to update a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
               "name": "tag_id",
@@ -1507,7 +1821,7 @@
               "name": "--subscriber-editable",
               "type": "bool",
               "required": false,
-              "help": "--not-subscriber-editable          Subscriber editability"
+              "help": "Subscriber editability"
             },
             {
               "name": "--table",
@@ -1522,68 +1836,16 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `buttondown tags update` to update a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "delete": {
-          "help": "Delete a tag.",
-          "arguments": [
-            {
-              "name": "tag_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tag ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Delete without confirmation",
-              "short": "-F"
             },
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `buttondown tags delete` to delete a tag. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--force/-F`."
-        },
-        "analytics": {
-          "help": "Get tag analytics.",
-          "arguments": [
-            {
-              "name": "tag_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tag ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `buttondown tags analytics` to get tag analytics. Required arguments: `TAG_ID`. Common options: `--table/-t`, `--properties/-p`."
+          ]
         }
-      },
-      "usage_instructions": "Use `buttondown tags` for manage tags. Available subcommands here are `list`, `get`, `create`, `update`, `delete`, `analytics`."
+      }
     }
   },
   "usage_instructions": "Use for cli interface for buttondown api. Commands follow `buttondown <group> <action>`. Primary groups here are `buttondown auth`, `buttondown cache`, `buttondown automations`, `buttondown emails`, `buttondown feeds`, `buttondown subscribers`, `buttondown tags`."

@@ -1,8 +1,8 @@
 {
   "tool": "roomba",
   "description": "CLI to control iRobot Roomba vacuums",
-  "discovered_at": "2026-05-20T16:14:08.859522+00:00",
-  "total_commands": 21,
+  "discovered_at": "2026-06-20T19:54:40Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -19,43 +19,16 @@
     }
   ],
   "commands": {
-    "status": {
-      "help": "Get live status from a robot (shortcut for 'control status').",
-      "arguments": [
-        {
-          "name": "robot",
-          "type": "TEXT",
-          "required": true,
-          "help": "Robot name or IP address"
-        }
-      ],
-      "options": [
-        {
-          "name": "--table",
-          "type": "bool",
-          "required": false,
-          "help": "Display as table",
-          "short": "-t"
-        },
-        {
-          "name": "--timeout",
-          "type": "FLOAT",
-          "required": false,
-          "help": "Connection timeout in seconds",
-          "default": "10.0"
-        }
-      ],
-      "examples": [
-        "roomba status \"Living Room\"",
-        "roomba status \"Living Room\" --table"
-      ],
-      "usage_instructions": "Shortcut for `control status`. Use to quickly get live robot status (battery, cleaning state, etc.)."
-    },
     "auth": {
       "help": "Manage robot authentication and discovery",
+      "usage_instructions": "Authentication and robot discovery -- login discovers robots on your network, stores credentials.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to discover robots on your network and authenticate. Use --profile/-p for a named profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -70,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Use to discover robots on your network and authenticate. Use --profile/-p for a named profile."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use to clear stored credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -91,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to clear stored credentials."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management -- list, get, create, set default, and delete profiles.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a new profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to delete a profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to get profile details. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use to list all profiles.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use to check authentication status.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -111,11 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Use to check authentication status."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to verify credentials are valid.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -138,133 +237,352 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to verify credentials are valid."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use to list all profiles."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use to get profile details. NAME is required."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a new profile. NAME is required."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use to switch the active profile. NAME is required."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to delete a profile. NAME is required."
-            }
-          },
-          "usage_instructions": "Profile management -- list, get, create, set default, and delete profiles."
+          ]
         }
-      },
-      "usage_instructions": "Authentication and robot discovery -- login discovers robots on your network, stores credentials."
+      }
     },
     "cache": {
       "help": "Manage CLI cache",
+      "usage_instructions": "Run `roomba cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `roomba cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `roomba cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `roomba cache --help` for exact arguments and options."
+      }
+    },
+    "control": {
+      "help": "Control robots (start, stop, dock, etc.)",
+      "usage_instructions": "Robot control -- start/stop/pause/resume cleaning, dock, find (beep), evacuate bin, and check live status.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "dock": {
+          "help": "Send robot to dock.",
+          "examples": [
+            "roomba control dock \"Living Room\""
+          ],
+          "usage_instructions": "Use to send the robot back to the dock/base.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "evac": {
+          "help": "Empty bin (for models with Clean Base).",
+          "examples": [
+            "roomba control evac \"Living Room\""
+          ],
+          "usage_instructions": "Use to trigger bin evacuation (Clean Base models only).",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "find": {
+          "help": "Play sound to locate robot.",
+          "examples": [
+            "roomba control find \"Living Room\""
+          ],
+          "usage_instructions": "Use to make the robot beep so you can locate it.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "pause": {
+          "help": "Pause cleaning.",
+          "examples": [
+            "roomba control pause \"Living Room\""
+          ],
+          "usage_instructions": "Use to pause the current cleaning job.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "resume": {
+          "help": "Resume cleaning after pause.",
+          "examples": [
+            "roomba control resume \"Living Room\""
+          ],
+          "usage_instructions": "Use to resume a paused cleaning job.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "start": {
+          "help": "Start cleaning.",
+          "examples": [
+            "roomba control start \"Living Room\"",
+            "roomba control start 192.168.1.50"
+          ],
+          "usage_instructions": "Use to start a cleaning job. Use --rooms for specific room cleaning.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Get live status from robot. Connects to the robot and retrieves current state including battery level, cleaning phase, and bin status.",
+          "examples": [
+            "roomba control status \"Living Room\"",
+            "roomba control status \"Living Room\" --table",
+            "roomba control status \"Living Room\" --timeout 15"
+          ],
+          "usage_instructions": "Use to get live status from the robot (battery, state, etc.).",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Connection timeout in seconds",
+              "default": "10.0"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stop": {
+          "help": "Stop cleaning.",
+          "examples": [
+            "roomba control stop \"Living Room\""
+          ],
+          "usage_instructions": "Use to stop the current cleaning job.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "robots": {
       "help": "List and view robot information",
+      "usage_instructions": "Robot information -- list discovered robots and get details for a specific robot.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific robot.",
+          "examples": [
+            "roomba robots get \"Living Room\"",
+            "roomba robots get 192.168.1.50",
+            "roomba robots get \"Living Room\" --table",
+            "roomba robots get \"Living Room\" --properties \"name,ip,blid\""
+          ],
+          "usage_instructions": "Use to get details of a specific robot.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List configured or discovered Roomba robots.",
+          "examples": [
+            "roomba robots list                   # List configured robots",
+            "roomba robots list --table           # Display as table",
+            "roomba robots list --discover        # Discover robots on network",
+            "roomba robots list --properties \"name,ip,blid\""
+          ],
+          "usage_instructions": "Use to list all discovered robots with their status.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -301,260 +619,48 @@
               "required": false,
               "help": "Discover robots on network instead of listing configured",
               "short": "-d"
-            }
-          ],
-          "examples": [
-            "roomba robots list                   # List configured robots",
-            "roomba robots list --table           # Display as table",
-            "roomba robots list --discover        # Discover robots on network",
-            "roomba robots list --properties \"name,ip,blid\""
-          ],
-          "usage_instructions": "Use to list all discovered robots with their status."
-        },
-        "get": {
-          "help": "Get details for a specific robot.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to display",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "roomba robots get \"Living Room\"",
-            "roomba robots get 192.168.1.50",
-            "roomba robots get \"Living Room\" --table",
-            "roomba robots get \"Living Room\" --properties \"name,ip,blid\""
-          ],
-          "usage_instructions": "Use to get details of a specific robot."
+          ]
         }
-      },
-      "usage_instructions": "Robot information -- list discovered robots and get details for a specific robot."
+      }
     },
-    "control": {
-      "help": "Control robots (start, stop, dock, etc.)",
-      "commands": {
-        "start": {
-          "help": "Start cleaning.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control start \"Living Room\"",
-            "roomba control start 192.168.1.50"
-          ],
-          "usage_instructions": "Use to start a cleaning job. Use --rooms for specific room cleaning."
-        },
-        "stop": {
-          "help": "Stop cleaning.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control stop \"Living Room\""
-          ],
-          "usage_instructions": "Use to stop the current cleaning job."
-        },
-        "pause": {
-          "help": "Pause cleaning.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control pause \"Living Room\""
-          ],
-          "usage_instructions": "Use to pause the current cleaning job."
-        },
-        "resume": {
-          "help": "Resume cleaning after pause.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control resume \"Living Room\""
-          ],
-          "usage_instructions": "Use to resume a paused cleaning job."
-        },
-        "dock": {
-          "help": "Send robot to dock.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control dock \"Living Room\""
-          ],
-          "usage_instructions": "Use to send the robot back to the dock/base."
-        },
-        "find": {
-          "help": "Play sound to locate robot.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control find \"Living Room\""
-          ],
-          "usage_instructions": "Use to make the robot beep so you can locate it."
-        },
-        "evac": {
-          "help": "Empty bin (for models with Clean Base).",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "roomba control evac \"Living Room\""
-          ],
-          "usage_instructions": "Use to trigger bin evacuation (Clean Base models only)."
-        },
-        "status": {
-          "help": "Get live status from robot. Connects to the robot and retrieves current state including battery level, cleaning phase, and bin status.",
-          "arguments": [
-            {
-              "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Connection timeout in seconds",
-              "default": "10.0"
-            }
-          ],
-          "examples": [
-            "roomba control status \"Living Room\"",
-            "roomba control status \"Living Room\" --table",
-            "roomba control status \"Living Room\" --timeout 15"
-          ],
-          "usage_instructions": "Use to get live status from the robot (battery, state, etc.)."
+    "status": {
+      "help": "Get live status from a robot (shortcut for 'control status').",
+      "examples": [
+        "roomba status \"Living Room\"",
+        "roomba status \"Living Room\" --table"
+      ],
+      "usage_instructions": "Shortcut for `control status`. Use to quickly get live robot status (battery, cleaning state, etc.).",
+      "arguments": [
+        {
+          "name": "robot",
+          "type": "TEXT",
+          "required": true,
+          "help": "Robot name or IP address"
         }
-      },
-      "usage_instructions": "Robot control -- start/stop/pause/resume cleaning, dock, find (beep), evacuate bin, and check live status."
+      ],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--timeout",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Connection timeout in seconds",
+          "default": "10.0"
+        }
+      ]
     }
   },
   "usage_instructions": "Use for controlling iRobot Roomba vacuums. Commands follow `roomba <group> <action>` pattern. Use `roomba status` as a shortcut for quick status checks. Use `roomba control start` to begin cleaning. Requires authentication via `roomba auth login` (discovers robots on local network)."

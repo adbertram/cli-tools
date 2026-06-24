@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-05-20T16:39:23.477406+00:00",
-  "total_commands": 10,
+  "discovered_at": "2026-06-20T19:56:00Z",
+  "total_commands": 11,
   "global_options": [
     {
       "name": "--version",
@@ -13,11 +13,244 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Manage tiktok authentication",
+      "usage_instructions": "Use `tiktok auth` to inspect the shared auth/profile surface for this wrapper. The tool does not store TikTok credentials itself; these commands report whether the upstream yt-dlp dependency is available and manage local profiles.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `tiktok auth login` to initialize or refresh the default shared auth/profile record for this wrapper. Key options: --profile/-p, --force/-F, --credential-type/-c.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Use `tiktok auth logout` to clear stored auth/profile data for this wrapper. Key options: --profile/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `tiktok auth profiles` to manage shared auth profiles for this wrapper. Consult the leaf commands in this group for the exact action.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use `tiktok auth profiles create` to create a new shared auth profile from the template. Required argument: NAME.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use `tiktok auth profiles delete` to remove one shared auth profile and its stored data. Required argument: NAME. Key options: --force/-F.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use `tiktok auth profiles get` when you need to inspect one shared auth profile. Required argument: NAME. Key options: --table/-t.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use `tiktok auth profiles list` to list available shared auth profiles and show which one is default. Key options: --table/-t, --limit/-l, --filter/-f, --properties/-p.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `tiktok auth status` to run live readiness checks for the upstream yt-dlp dependency across profiles. Key options: --profile/-p, --table/-t.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `tiktok auth test` to verify the upstream yt-dlp dependency is installed and callable across profiles. Key options: --table/-t, --verbose/-v, --profile/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "transcripts": {
       "help": "Download TikTok video transcripts",
+      "usage_instructions": "Use `tiktok transcripts` for TikTok transcript download operations. Consult the leaf commands in this group for the exact action.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "download": {
           "help": "Download transcripts for one or more TikTok videos.",
+          "usage_instructions": "Use `tiktok transcripts download` to fetch one or more TikTok transcripts through yt-dlp. Required argument: URLS. Key options: --output-dir/-o, --format/-f, --lang/-l, --manual-sub, --table/-t.",
           "arguments": [
             {
               "name": "urls",
@@ -55,7 +288,7 @@
               "name": "--auto-sub",
               "type": "bool",
               "required": false,
-              "help": "--no-auto-sub          Download auto-generated subtitles",
+              "help": "Download auto-generated subtitles",
               "default": "auto-sub"
             },
             {
@@ -70,211 +303,16 @@
               "required": false,
               "help": "Display results as a table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use `tiktok transcripts download` to fetch one or more TikTok transcripts through yt-dlp. Required argument: URLS. Key options: --output-dir/-o, --format/-f, --lang/-l, --manual-sub, --table/-t."
+          ]
         }
-      },
-      "usage_instructions": "Use `tiktok transcripts` for TikTok transcript download operations. Consult the leaf commands in this group for the exact action."
-    },
-    "auth": {
-      "help": "Manage tiktok authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Use `tiktok auth login` to initialize or refresh the default shared auth/profile record for this wrapper. Key options: --profile/-p, --force/-F, --credential-type/-c."
-        },
-        "logout": {
-          "help": "Clear stored credentials.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `tiktok auth logout` to clear stored auth/profile data for this wrapper. Key options: --profile/-p."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use `tiktok auth status` to run live readiness checks for the upstream yt-dlp dependency across profiles. Key options: --profile/-p, --table/-t."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `tiktok auth test` to verify the upstream yt-dlp dependency is installed and callable across profiles. Key options: --table/-t, --verbose/-v, --profile/-p."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use `tiktok auth profiles list` to list available shared auth profiles and show which one is default. Key options: --table/-t, --limit/-l, --filter/-f, --properties/-p."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use `tiktok auth profiles get` when you need to inspect one shared auth profile. Required argument: NAME. Key options: --table/-t."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use `tiktok auth profiles create` to create a new shared auth profile from the template. Required argument: NAME."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use `tiktok auth profiles set-default` to mark one shared auth profile as the default profile. Required argument: NAME."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use `tiktok auth profiles delete` to remove one shared auth profile and its stored data. Required argument: NAME. Key options: --force/-F."
-            }
-          },
-          "usage_instructions": "Use `tiktok auth profiles` to manage shared auth profiles for this wrapper. Consult the leaf commands in this group for the exact action."
-        }
-      },
-      "usage_instructions": "Use `tiktok auth` to inspect the shared auth/profile surface for this wrapper. The tool does not store TikTok credentials itself; these commands report whether the upstream yt-dlp dependency is available and manage local profiles."
+      }
     }
   },
   "usage_instructions": "Use `tiktok` when you need to download TikTok video transcripts or inspect the wrapper's shared auth/profile surface. Use `tiktok transcripts download` for transcript work and `tiktok auth ...` to verify upstream yt-dlp readiness or inspect profiles."

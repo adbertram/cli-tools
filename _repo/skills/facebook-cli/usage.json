@@ -1,7 +1,7 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-06-12T05:00:19Z",
+  "discovered_at": "2026-06-21T19:58:12Z",
   "total_commands": 24,
   "global_options": [
     {
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]

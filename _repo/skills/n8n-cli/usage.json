@@ -1,7 +1,7 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-06-12T18:55:39Z",
+  "discovered_at": "2026-06-20T19:51:45Z",
   "total_commands": 61,
   "global_options": [
     {
@@ -1420,7 +1420,7 @@
                   "name": "--restart",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-restart          Restart n8n after changing config",
+                  "help": "Restart n8n after changing config",
                   "default": "restart"
                 },
                 {
@@ -1636,7 +1636,7 @@
                   "name": "--restart",
                   "type": "bool",
                   "required": false,
-                  "help": "--no-restart          Restart n8n after changing config",
+                  "help": "Restart n8n after changing config",
                   "default": "restart"
                 },
                 {
@@ -2239,7 +2239,7 @@
               "name": "--activate",
               "type": "bool",
               "required": false,
-              "help": "--deactivate          Activate or deactivate the workflow"
+              "help": "Activate or deactivate the workflow"
             },
             {
               "name": "--profile",

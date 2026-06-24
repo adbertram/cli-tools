@@ -22,17 +22,20 @@ manus <command-group> <action> [arguments] [options]
 | Get task metadata | `manus task get TASK_ID` |
 | List recent tasks | `manus task list --table` |
 | List task messages | `manus task messages TASK_ID --limit 20` |
+| Check available credits | `manus usage available-credits` |
 | Confirm a waiting task | `manus task confirm TASK_ID EVENT_ID` |
 | List profiles | `manus auth profiles list --table` |
 | Set default profile | `manus auth profiles select PROFILE_NAME` |
 | Inspect cache commands | `manus cache --help` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
+
+`manus task create` performs a `usage.availableCredits` preflight and fails before creating a task when `total_credits <= 0`.
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `manus` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `manus` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -44,6 +47,25 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Wait Semantics">
 `task create`, `task send`, and `task wait` with `--wait` (the default) poll until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id`, for example `messageAskUser`). A `waiting` status without a confirmation event (queued task that has not started running) is non-terminal; the CLI keeps polling. Do not add manual `task get` polling loops around `--wait`. On `--timeout` expiry the command exits non-zero with a timeout error.
+</principle>
+
+<principle name="Preserve Producer Status">
+When wrapping `manus task create`, `manus task send`, `manus task wait`, or any other Manus producer command with trailing reporting, raw-output printing, cleanup, or JSON inspection, capture the Manus command status immediately and exit with that status after reporting. Do not let a later successful `printf`, `cat`, `jq`, `rm`, or summary command mask a timeout or API failure.
+
+Use this shape:
+```bash
+set +e
+manus task create --prompt-file "$prompt_file" --agent-profile manus-1.6 --timeout 1200 --poll 5 --title "$title" >"$output_file" 2>"$stderr_file"
+manus_rc=$?
+set -e
+
+if [ "$manus_rc" -ne 0 ]; then
+  printf '%s\n' 'MANUS_COMMAND_FAILED'
+  cat "$stderr_file" >&2
+fi
+
+exit "$manus_rc"
+```
 </principle>
 </essential_principles>
 

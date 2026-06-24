@@ -1,8 +1,8 @@
 {
   "tool": "manus",
   "description": "CLI interface for Manus API v2",
-  "discovered_at": "2026-06-12T19:34:33Z",
-  "total_commands": 22,
+  "discovered_at": "2026-06-20T22:10:15Z",
+  "total_commands": 23,
   "global_options": [
     {
       "name": "--version",
@@ -351,7 +351,7 @@
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait           Wait until the task stops, errors, or pauses for confirmation",
+              "help": "Wait until the task stops, errors, or pauses for confirmation",
               "short": "-w",
               "default": "wait"
             },
@@ -458,14 +458,14 @@
               "name": "--interactive",
               "type": "bool",
               "required": false,
-              "help": "--no-interactive           Allow the agent to pause and ask follow-up questions",
+              "help": "Allow the agent to pause and ask follow-up questions",
               "default": "no-interactive"
             },
             {
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait                  Wait until the task stops, errors, or pauses for confirmation",
+              "help": "Wait until the task stops, errors, or pauses for confirmation",
               "short": "-w",
               "default": "wait"
             },
@@ -805,7 +805,7 @@
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait           Wait until the task stops, errors, or pauses for confirmation",
+              "help": "Wait until the task stops, errors, or pauses for confirmation",
               "short": "-w",
               "default": "wait"
             },
@@ -976,6 +976,26 @@
               "type": "TEXT",
               "required": false,
               "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "usage": {
+      "help": "Inspect Manus credit usage",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "available-credits": {
+          "help": "Get current available Manus credits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             }
           ]
         }

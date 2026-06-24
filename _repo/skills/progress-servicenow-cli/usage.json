@@ -1,8 +1,8 @@
 {
   "tool": "progress-servicenow",
   "description": "CLI interface for Progress ServiceNow Employee Center (browser automation)",
-  "discovered_at": "2026-05-20T16:34:17.528344+00:00",
-  "total_commands": 25,
+  "discovered_at": "2026-06-21T20:51:40Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -19,11 +19,669 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Manage progress-servicenow authentication",
+      "usage_instructions": "Manage browser-session authentication. Use `auth login` to start a browser session (use --force/-F to re-authenticate). Use `auth status` to check current auth state. Use `auth test` to verify credentials work.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Start authentication. Use --force/-F to clear existing ephemeral auth state and re-authenticate. Use --profile/-p to save to a named profile. Use --credential-type/-c to authenticate only a specific credential type.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Clear stored credentials and browser sessions. Use --profile/-p to target a specific profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Manage named authentication profiles for switching between environments. Use `auth profiles list` to see all profiles, `auth profiles set-default` to change the active profile.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new named profile (positional argument, required). Creates from the .env.example template. Then use `auth login --profile <name>` to configure credentials.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete a profile by name (positional argument, required). Use --force/-F to skip confirmation prompt.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Get details for a specific profile by name (positional argument, required). Use --table/-t for formatted output.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all authentication profiles with their default status. Use --table/-t for formatted output. Use --filter/-f to filter (e.g., \"is_default:eq:True\").",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Check whether the CLI is currently authenticated. Returns JSON with \"authenticated\": true/false. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Test that stored credentials actually work by making a live verification request. Use --verbose/-v for detailed checks.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Manage the local response cache. Use `cache clear` to remove all cached responses and free disk space.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses from the local cache directory. Reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "catalog": {
+      "help": "Browse the ServiceNow catalog",
+      "usage_instructions": "Browse and search the ServiceNow service catalog. Use `catalog list` to browse by category (it, business-operations, workplace-operations), `catalog search` for keyword search, `catalog get` for item details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific catalog item by sys_id.",
+          "examples": [
+            "progress-servicenow catalog get abc123def456789012345678abcdef01",
+            "progress-servicenow catalog get abc123... --table",
+            "progress-servicenow catalog get abc123... --properties \"name,type,description\""
+          ],
+          "usage_instructions": "Get full details for a catalog item by its sys_id. Use --table/-t for formatted output. Use --properties/-p to select specific fields.",
+          "arguments": [
+            {
+              "name": "sys_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Catalog item sys_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List catalog items, optionally filtered by category.",
+          "examples": [
+            "progress-servicenow catalog list",
+            "progress-servicenow catalog list --category it --table",
+            "progress-servicenow catalog list --category business-operations --limit 20",
+            "progress-servicenow catalog list --filter \"type:eq:Request\"",
+            "progress-servicenow catalog list --properties \"name,type,sys_id\""
+          ],
+          "usage_instructions": "List catalog items. Use --category/-C to filter by category: it, business-operations, workplace-operations, or a topic_id. Default limit is 100. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Category: it, business-operations, workplace-operations, or a topic_id",
+              "short": "-C"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search the ServiceNow catalog.",
+          "examples": [
+            "progress-servicenow catalog search \"application access\"",
+            "progress-servicenow catalog search \"vpn\" --table",
+            "progress-servicenow catalog search \"password\" --limit 5",
+            "progress-servicenow catalog search \"hardware\" --properties \"name,type\""
+          ],
+          "usage_instructions": "Search the catalog by keyword query (positional argument, required). Use --limit/-l to control result count (default 100). Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "ticket": {
       "help": "Manage ServiceNow tickets",
+      "usage_instructions": "Ticket operations — listing, viewing, commenting on, closing, and creating ServiceNow RITM requests. Use `ticket list` to see open/closed/watchlist tickets, `ticket get` for details on a specific RITM. Use `ticket template list/get/fields` for offline form schemas (no auth needed).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "close": {
+          "help": "Close a ticket.",
+          "examples": [
+            "progress-servicenow ticket close RITM0352332",
+            "progress-servicenow ticket close abc123def456..."
+          ],
+          "usage_instructions": "Close a ticket by RITM number or sys_id. No confirmation prompt — closes immediately.",
+          "arguments": [
+            {
+              "name": "number",
+              "type": "TEXT",
+              "required": true,
+              "help": "RITM number or sys_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "comment": {
+          "help": "Post a comment on a ticket.",
+          "examples": [
+            "progress-servicenow ticket comment RITM0352332 \"Please update the status\"",
+            "progress-servicenow ticket comment abc123... \"Thank you for the update\""
+          ],
+          "usage_instructions": "Post a comment on a ticket. Requires RITM number (or sys_id) and the comment message text as positional arguments.",
+          "arguments": [
+            {
+              "name": "number",
+              "type": "TEXT",
+              "required": true,
+              "help": "RITM number or sys_id"
+            },
+            {
+              "name": "message",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment text to post"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create": {
+          "help": "Create a ServiceNow ticket. Without --template, opens a headed browser for manual ticket creation. With --template, creates a ticket programmatically by filling in the catalog item form via browser automation and submitting it.",
+          "examples": [
+            "progress-servicenow ticket create",
+            "progress-servicenow ticket create --template development_cloud_issue --field product=Azure --field description=\"Request to create Document Intelligence resource\"",
+            "progress-servicenow ticket create -T development_cloud_issue -F product=Azure -F impact=High",
+            "progress-servicenow ticket create --template development_cloud_issue --field product=Azure --dry-run"
+          ],
+          "usage_instructions": "Opens a headed browser window at the ServiceNow portal for manual ticket creation. Use when you need to fill out a catalog request form interactively.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--template",
+              "type": "TEXT",
+              "required": false,
+              "help": "Template key for programmatic creation (e.g., 'development_cloud_issue'). Use 'ticket template list' to see all keys",
+              "short": "-T"
+            },
+            {
+              "name": "--field",
+              "type": "TEXT",
+              "required": false,
+              "help": "Field key=value pair. Repeatable. Use 'ticket template fields <key>' to see available fields",
+              "short": "-F"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Validate fields against the template without submitting"
+            },
+            {
+              "name": "--draft",
+              "type": "bool",
+              "required": false,
+              "help": "Save as draft instead of submitting"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "form": {
+          "help": "Inspect live catalog item forms (discover fields, search lookups)",
+          "usage_instructions": "Live browser-backed form introspection. Use when ticket_template.json has an empty or stale `fields: {}` block, or when you need to know the exact value of a Select2/reference field (e.g., application name) before creating a ticket. Unlike `template fields`, these hit the real form via the authenticated browser.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "inspect": {
+              "help": "Inspect the live fields on a catalog item form. Opens the form in the authenticated browser, reads the accessibility tree, and returns every form field as a JSON record with its label, type (dropdown/reference/textarea/checkbox/text), required flag, and a snake_case key suggestion suitable for ticket_template.json. Use this when a template's `fields: {}` block is empty or stale, or when you want to confirm the real field structure before creating a ticket.",
+              "examples": [
+                "progress-servicenow ticket form inspect -T other_development_request",
+                "progress-servicenow ticket form inspect -T request_application_assistance --table",
+                "progress-servicenow ticket form inspect --url \"https://progress1.service-now.com/esc?id=sc_cat_item&sys_id=69a04cbfdb02109086e95f77489619bf\""
+              ],
+              "usage_instructions": "Navigates to a catalog item form, reads the accessibility tree, and returns every form field with label, type (dropdown/reference/textarea/checkbox/text), required flag, and a snake_case key suggestion. Provide exactly one of --template or --url.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--template",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Template key (e.g., 'request_application_assistance'). Mutually exclusive with --url",
+                  "short": "-T"
+                },
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Direct catalog item form URL. Mutually exclusive with --template",
+                  "short": "-u"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "lookup": {
+              "help": "Search a Select2/reference field on a catalog item form. Opens the form, clicks the named field, types the search string, and returns the matching option labels from the dropdown. Use this to find the exact value to pass to a reference field when creating a ticket (e.g., the exact application name in Request Application Assistance).",
+              "examples": [
+                "progress-servicenow ticket form lookup \\",
+                "progress-servicenow ticket form lookup \\"
+              ],
+              "usage_instructions": "Navigates to a catalog item form, finds the dropdown/reference field by its visible label, types the search string, and returns the matching option labels. Use this to find the exact value to pass to a reference field when creating a ticket. Provide exactly one of --template or --url.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--field",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact label of the dropdown/reference field to search (e.g., 'Please select the application from the list')",
+                  "short": "-f"
+                },
+                {
+                  "name": "--search",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Search string to type into the lookup (e.g., 'Copilot')",
+                  "short": "-s"
+                },
+                {
+                  "name": "--template",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Template key. Mutually exclusive with --url",
+                  "short": "-T"
+                },
+                {
+                  "name": "--url",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Direct catalog item form URL. Mutually exclusive with --template",
+                  "short": "-u"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "get": {
+          "help": "Get details for a specific ticket.",
+          "examples": [
+            "progress-servicenow ticket get RITM0352332",
+            "progress-servicenow ticket get RITM0352332 --table",
+            "progress-servicenow ticket get RITM0352332 --comments",
+            "progress-servicenow ticket get abc123def456... --properties \"number,state,assigned_to\""
+          ],
+          "usage_instructions": "Get full details for a specific ticket by RITM number (e.g., RITM0352332) or sys_id. Use --comments/-c to include activity comments. Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "number",
+              "type": "TEXT",
+              "required": true,
+              "help": "RITM number (e.g., RITM0352332) or sys_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--comments",
+              "type": "bool",
+              "required": false,
+              "help": "Include comments",
+              "short": "-c"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List tickets from My Requests page.",
+          "examples": [
+            "progress-servicenow ticket list",
+            "progress-servicenow ticket list --view open --table",
+            "progress-servicenow ticket list --view closed --limit 10",
+            "progress-servicenow ticket list --filter \"state:eq:Open\"",
+            "progress-servicenow ticket list --properties \"number,description,state\""
+          ],
+          "usage_instructions": "List tickets from the My Requests page. Use --view/-V to switch between open, closed, watchlist-open (default), watchlist-closed. Use --table/-t for formatted output. Default limit is 100.",
+          "arguments": [],
           "options": [
             {
               "name": "--view",
@@ -61,139 +719,63 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "progress-servicenow ticket list",
-            "progress-servicenow ticket list --view open --table",
-            "progress-servicenow ticket list --view closed --limit 10",
-            "progress-servicenow ticket list --filter \"state:eq:Open\"",
-            "progress-servicenow ticket list --properties \"number,description,state\""
-          ],
-          "usage_instructions": "List tickets from the My Requests page. Use --view/-V to switch between open, closed, watchlist-open (default), watchlist-closed. Use --table/-t for formatted output. Default limit is 100."
+          ]
         },
-        "get": {
-          "help": "Get details for a specific ticket.",
-          "arguments": [
-            {
-              "name": "number",
-              "type": "TEXT",
-              "required": true,
-              "help": "RITM number (e.g., RITM0352332) or sys_id"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--comments",
-              "type": "bool",
-              "required": false,
-              "help": "Include comments",
-              "short": "-c"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "progress-servicenow ticket get RITM0352332",
-            "progress-servicenow ticket get RITM0352332 --table",
-            "progress-servicenow ticket get RITM0352332 --comments",
-            "progress-servicenow ticket get abc123def456... --properties \"number,state,assigned_to\""
-          ],
-          "usage_instructions": "Get full details for a specific ticket by RITM number (e.g., RITM0352332) or sys_id. Use --comments/-c to include activity comments. Use --table/-t for formatted output."
-        },
-        "comment": {
-          "help": "Post a comment on a ticket.",
-          "arguments": [
-            {
-              "name": "number",
-              "type": "TEXT",
-              "required": true,
-              "help": "RITM number or sys_id"
-            },
-            {
-              "name": "message",
-              "type": "TEXT",
-              "required": true,
-              "help": "Comment text to post"
-            }
-          ],
-          "examples": [
-            "progress-servicenow ticket comment RITM0352332 \"Please update the status\"",
-            "progress-servicenow ticket comment abc123... \"Thank you for the update\""
-          ],
-          "usage_instructions": "Post a comment on a ticket. Requires RITM number (or sys_id) and the comment message text as positional arguments."
-        },
-        "close": {
-          "help": "Close a ticket.",
-          "arguments": [
-            {
-              "name": "number",
-              "type": "TEXT",
-              "required": true,
-              "help": "RITM number or sys_id"
-            }
-          ],
-          "examples": [
-            "progress-servicenow ticket close RITM0352332",
-            "progress-servicenow ticket close abc123def456..."
-          ],
-          "usage_instructions": "Close a ticket by RITM number or sys_id. No confirmation prompt \u2014 closes immediately."
-        },
-        "create": {
-          "help": "Create a ServiceNow ticket. Without --template, opens a headed browser for manual ticket creation. With --template, creates a ticket programmatically by filling in the catalog item form via browser automation and submitting it.",
-          "options": [
-            {
-              "name": "--template",
-              "type": "TEXT",
-              "required": false,
-              "help": "Template key for programmatic creation (e.g., 'development_cloud_issue'). Use 'ticket template list' to see all keys",
-              "short": "-T"
-            },
-            {
-              "name": "--field",
-              "type": "TEXT",
-              "required": false,
-              "help": "Field key=value pair. Repeatable. Use 'ticket template fields <key>' to see available fields",
-              "short": "-F"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Validate fields against the template without submitting"
-            },
-            {
-              "name": "--draft",
-              "type": "bool",
-              "required": false,
-              "help": "Save as draft instead of submitting"
-            }
-          ],
-          "examples": [
-            "progress-servicenow ticket create",
-            "progress-servicenow ticket create --template development_cloud_issue --field product=Azure --field description=\"Request to create Document Intelligence resource\"",
-            "progress-servicenow ticket create -T development_cloud_issue -F product=Azure -F impact=High",
-            "progress-servicenow ticket create --template development_cloud_issue --field product=Azure --dry-run"
-          ],
-          "usage_instructions": "Opens a headed browser window at the ServiceNow portal for manual ticket creation. Use when you need to fill out a catalog request form interactively."
-        },
-        "template": {
-          "help": "Ticket form templates (offline \u2014 no auth required)",
+        "product": {
+          "help": "Product field options for catalog items",
+          "usage_instructions": "Run `progress-servicenow ticket product --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "get": {
+              "help": "Get one configured Product dropdown option by exact name.",
+              "usage_instructions": "Run `progress-servicenow ticket product get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "product",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact product name"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
-              "help": "List all available catalog item templates. Shows every catalog item that can be used to create a ticket, along with its key, description, category, and number of documented fields.",
+              "help": "List configured Product dropdown options from packaged template metadata.",
+              "examples": [
+                "progress-servicenow ticket product list",
+                "progress-servicenow ticket product list --table"
+              ],
+              "usage_instructions": "Lists Product dropdown options configured in the packaged ticket template metadata. Returns an empty list when no Product options are configured.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--limit",
@@ -223,50 +805,32 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
-                }
-              ],
-              "examples": [
-                "progress-servicenow ticket template list --table",
-                "progress-servicenow ticket template list --filter \"category:eq:IT\"",
-                "progress-servicenow ticket template list --properties \"key,name,category\""
-              ],
-              "usage_instructions": "Lists every catalog item that can be used to create a ticket, with key, name, description, category, field count, and required fields. No auth required."
-            },
-            "get": {
-              "help": "Get the full template for a specific catalog item. Returns the catalog item metadata and all its form fields with types, defaults, placeholders, help text, and required status.",
-              "arguments": [
-                {
-                  "name": "key",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Catalog item key (e.g., 'development_cloud_issue', 'purchase_request'). Use 'ticket template list' to see all keys"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
                 },
                 {
-                  "name": "--properties",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Comma-separated fields to include",
-                  "short": "-p"
+                  "help": "Auth profile name"
                 }
-              ],
-              "examples": [
-                "progress-servicenow ticket template get development_cloud_issue",
-                "progress-servicenow ticket template get purchase_request --table",
-                "progress-servicenow ticket template get purchase_request --properties \"name,description,fields\""
-              ],
-              "usage_instructions": "Returns catalog item metadata and all form fields. Use the key from `ticket template list`."
-            },
+              ]
+            }
+          }
+        },
+        "template": {
+          "help": "Ticket form templates (offline — no auth required)",
+          "usage_instructions": "Offline access to catalog item form schemas. Use BEFORE creating a ticket to know exactly which fields are available. No browser session or authentication needed.",
+          "arguments": [],
+          "options": [],
+          "commands": {
             "fields": {
               "help": "List all form fields for a specific catalog item template. Shows field names, types, required status, defaults, placeholders, and help text for every field on the form.",
+              "examples": [
+                "progress-servicenow ticket template fields development_cloud_issue --table",
+                "progress-servicenow ticket template fields purchase_request --required --table",
+                "progress-servicenow ticket template fields purchase_request --filter \"type:eq:dropdown\"",
+                "progress-servicenow ticket template fields purchase_request --properties \"key,label,type,required\""
+              ],
+              "usage_instructions": "Shows field names, types, required status, defaults, options, and help text. Use --required/-r to show only required fields.",
               "arguments": [
                 {
                   "name": "key",
@@ -303,24 +867,63 @@
                   "required": false,
                   "help": "Show only required fields",
                   "short": "-r"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get the full template for a specific catalog item. Returns the catalog item metadata and all its form fields with types, defaults, placeholders, help text, and required status.",
+              "examples": [
+                "progress-servicenow ticket template get development_cloud_issue",
+                "progress-servicenow ticket template get purchase_request --table",
+                "progress-servicenow ticket template get purchase_request --properties \"name,description,fields\""
+              ],
+              "usage_instructions": "Returns catalog item metadata and all form fields. Use the key from `ticket template list`.",
+              "arguments": [
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Catalog item key (e.g., 'development_cloud_issue', 'purchase_request')"
                 }
               ],
-              "examples": [
-                "progress-servicenow ticket template fields development_cloud_issue --table",
-                "progress-servicenow ticket template fields purchase_request --required --table",
-                "progress-servicenow ticket template fields purchase_request --filter \"type:eq:dropdown\"",
-                "progress-servicenow ticket template fields purchase_request --properties \"key,label,type,required\""
-              ],
-              "usage_instructions": "Shows field names, types, required status, defaults, options, and help text. Use --required/-r to show only required fields."
-            }
-          },
-          "usage_instructions": "Offline access to catalog item form schemas. Use BEFORE creating a ticket to know exactly which fields are available. No browser session or authentication needed."
-        },
-        "product": {
-          "help": "Product field options for catalog items",
-          "commands": {
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
-              "help": "List available Product dropdown options from the Development Cloud Issue form. Scrapes the Product Select2 dropdown via browser automation.",
+              "help": "List all available catalog item templates. Shows every catalog item that can be used to create a ticket, along with its key, description, category, and number of documented fields.",
+              "examples": [
+                "progress-servicenow ticket template list --table",
+                "progress-servicenow ticket template list --filter \"category:eq:IT\"",
+                "progress-servicenow ticket template list --properties \"id,key,name,category\""
+              ],
+              "usage_instructions": "Lists every catalog item that can be used to create a ticket, with id/key, name, description, category, field count, and required fields. No auth required.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--limit",
@@ -350,470 +953,19 @@
                   "required": false,
                   "help": "Comma-separated fields to include",
                   "short": "-p"
-                }
-              ],
-              "examples": [
-                "progress-servicenow ticket product list",
-                "progress-servicenow ticket product list --table"
-              ],
-              "usage_instructions": "Run `progress-servicenow ticket product list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get one Product dropdown option by exact name.",
-              "arguments": [
-                {
-                  "name": "product",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Exact product name"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
                 },
                 {
-                  "name": "--properties",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Comma-separated fields to include",
-                  "short": "-p"
+                  "help": "Auth profile name"
                 }
-              ],
-              "usage_instructions": "Run `progress-servicenow ticket product get --help` for exact arguments and options."
+              ]
             }
-          },
-          "usage_instructions": "Run `progress-servicenow ticket product --help` for exact arguments and options."
-        },
-        "form": {
-          "help": "Inspect live catalog item forms (discover fields, search lookups)",
-          "commands": {
-            "inspect": {
-              "help": "Inspect the live fields on a catalog item form. Opens the form in the authenticated browser, reads the accessibility tree, and returns every form field as a JSON record with its label, type (dropdown/reference/textarea/checkbox/text), required flag, and a snake_case key suggestion suitable for ticket_template.json. Use this when a template's `fields: {}` block is empty or stale, or when you want to confirm the real field structure before creating a ticket.",
-              "options": [
-                {
-                  "name": "--template",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Template key (e.g., 'request_application_assistance'). Mutually exclusive with --url",
-                  "short": "-T"
-                },
-                {
-                  "name": "--url",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Direct catalog item form URL. Mutually exclusive with --template",
-                  "short": "-u"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "examples": [
-                "progress-servicenow ticket form inspect -T other_development_request",
-                "progress-servicenow ticket form inspect -T request_application_assistance --table",
-                "progress-servicenow ticket form inspect --url \"https://progress1.service-now.com/esc?id=sc_cat_item&sys_id=69a04cbfdb02109086e95f77489619bf\""
-              ],
-              "usage_instructions": "Navigates to a catalog item form, reads the accessibility tree, and returns every form field with label, type (dropdown/reference/textarea/checkbox/text), required flag, and a snake_case key suggestion. Provide exactly one of --template or --url."
-            },
-            "lookup": {
-              "help": "Search a Select2/reference field on a catalog item form. Opens the form, clicks the named field, types the search string, and returns the matching option labels from the dropdown. Use this to find the exact value to pass to a reference field when creating a ticket (e.g., the exact application name in Request Application Assistance).",
-              "options": [
-                {
-                  "name": "--field",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Exact label of the dropdown/reference field to search (e.g., 'Please select the application from the list')",
-                  "short": "-f"
-                },
-                {
-                  "name": "--search",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Search string to type into the lookup (e.g., 'Copilot')",
-                  "short": "-s"
-                },
-                {
-                  "name": "--template",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Template key. Mutually exclusive with --url",
-                  "short": "-T"
-                },
-                {
-                  "name": "--url",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Direct catalog item form URL. Mutually exclusive with --template",
-                  "short": "-u"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "examples": [
-                "progress-servicenow ticket form lookup \\",
-                "progress-servicenow ticket form lookup \\"
-              ],
-              "usage_instructions": "Navigates to a catalog item form, finds the dropdown/reference field by its visible label, types the search string, and returns the matching option labels. Use this to find the exact value to pass to a reference field when creating a ticket. Provide exactly one of --template or --url."
-            }
-          },
-          "usage_instructions": "Live browser-backed form introspection. Use when ticket_template.json has an empty or stale `fields: {}` block, or when you need to know the exact value of a Select2/reference field (e.g., application name) before creating a ticket. Unlike `template fields`, these hit the real form via the authenticated browser."
+          }
         }
-      },
-      "usage_instructions": "Ticket operations \u2014 listing, viewing, commenting on, closing, and creating ServiceNow RITM requests. Use `ticket list` to see open/closed/watchlist tickets, `ticket get` for details on a specific RITM. Use `ticket template list/get/fields` for offline form schemas (no auth needed)."
-    },
-    "catalog": {
-      "help": "Browse the ServiceNow catalog",
-      "commands": {
-        "list": {
-          "help": "List catalog items, optionally filtered by category.",
-          "options": [
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Category: it, business-operations, workplace-operations, or a topic_id",
-              "short": "-C"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "progress-servicenow catalog list",
-            "progress-servicenow catalog list --category it --table",
-            "progress-servicenow catalog list --category business-operations --limit 20",
-            "progress-servicenow catalog list --filter \"type:eq:Request\"",
-            "progress-servicenow catalog list --properties \"name,type,sys_id\""
-          ],
-          "usage_instructions": "List catalog items. Use --category/-C to filter by category: it, business-operations, workplace-operations, or a topic_id. Default limit is 100. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific catalog item by sys_id.",
-          "arguments": [
-            {
-              "name": "sys_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Catalog item sys_id"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "progress-servicenow catalog get abc123def456789012345678abcdef01",
-            "progress-servicenow catalog get abc123... --table",
-            "progress-servicenow catalog get abc123... --properties \"name,type,description\""
-          ],
-          "usage_instructions": "Get full details for a catalog item by its sys_id. Use --table/-t for formatted output. Use --properties/-p to select specific fields."
-        },
-        "search": {
-          "help": "Search the ServiceNow catalog.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query"
-            }
-          ],
-          "options": [
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "progress-servicenow catalog search \"application access\"",
-            "progress-servicenow catalog search \"vpn\" --table",
-            "progress-servicenow catalog search \"password\" --limit 5",
-            "progress-servicenow catalog search \"hardware\" --properties \"name,type\""
-          ],
-          "usage_instructions": "Search the catalog by keyword query (positional argument, required). Use --limit/-l to control result count (default 100). Use --table/-t for formatted output."
-        }
-      },
-      "usage_instructions": "Browse and search the ServiceNow service catalog. Use `catalog list` to browse by category (it, business-operations, workplace-operations), `catalog search` for keyword search, `catalog get` for item details."
-    },
-    "auth": {
-      "help": "Manage progress-servicenow authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Start authentication. Use --force/-F to clear existing credentials and re-authenticate. Use --profile/-p to save to a named profile. Use --credential-type/-c to authenticate only a specific credential type."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Clear stored credentials and browser sessions. Use --profile/-p to target a specific profile."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Check whether the CLI is currently authenticated. Returns JSON with \"authenticated\": true/false. Use --table/-t for formatted output."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Test that stored credentials actually work by making a live verification request. Use --verbose/-v for detailed checks."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all authentication profiles with their default status. Use --table/-t for formatted output. Use --filter/-f to filter (e.g., \"is_default:eq:True\")."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Get details for a specific profile by name (positional argument, required). Use --table/-t for formatted output."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new named profile (positional argument, required). Creates from the .env.example template. Then use `auth login --profile <name>` to configure credentials."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Set a profile as the default by name (positional argument, required). All subsequent commands will use this profile unless --profile is specified."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete a profile by name (positional argument, required). Use --force/-F to skip confirmation prompt."
-            }
-          },
-          "usage_instructions": "Manage named authentication profiles for switching between environments. Use `auth profiles list` to see all profiles, `auth profiles set-default` to change the active profile."
-        }
-      },
-      "usage_instructions": "Manage browser-session authentication. Use `auth login` to start a browser session (use --force/-F to re-authenticate). Use `auth status` to check current auth state. Use `auth test` to verify credentials work."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Remove all cached responses from the local cache directory. Reports how many files and bytes were freed."
-        }
-      },
-      "usage_instructions": "Manage the local response cache. Use `cache clear` to remove all cached responses and free disk space."
+      }
     }
   },
-  "usage_instructions": "Use for interacting with Progress ServiceNow Employee Center \u2014 managing tickets (RITM requests), browsing the service catalog, and handling authentication. Commands follow `progress-servicenow <group> <action>` pattern. This is a browser-automation CLI; auth uses a browser session. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. IMPORTANT: Before creating a ticket, ALWAYS use `template list` and `template fields <key>` to discover available catalog items and their form fields \u2014 this is offline (no auth) and avoids unnecessary browser lookups."
+  "usage_instructions": "Use for interacting with Progress ServiceNow Employee Center — managing tickets (RITM requests), browsing the service catalog, and handling authentication. Commands follow `progress-servicenow <group> <action>` pattern. This is a browser-automation CLI; auth uses a browser session. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. IMPORTANT: Before creating a ticket, ALWAYS use `template list` and `template fields <key>` to discover available catalog items and their form fields — this is offline (no auth) and avoids unnecessary browser lookups."
 }

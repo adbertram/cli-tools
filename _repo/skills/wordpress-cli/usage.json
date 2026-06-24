@@ -1,7 +1,7 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-06-18T21:04:20Z",
+  "discovered_at": "2026-06-20T19:56:59Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -279,7 +279,7 @@
           "options": [],
           "commands": {
             "file-push": {
-              "help": "Push a local file to a remote WordPress theme through SSH/SFTP.",
+              "help": "Push a local file to a remote WordPress theme through SSH.",
               "arguments": [
                 {
                   "name": "theme",

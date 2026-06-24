@@ -60,7 +60,7 @@ Find `WEBSITE_ID` and `PUBLISHER_ACCOUNT_ID` on members.cj.com.  The CLI fail-fa
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `cj` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `cj` command.**
 It contains complete command syntax, all arguments, all options, and per-command usage instructions. Never guess at command syntax.
 </principle>
 

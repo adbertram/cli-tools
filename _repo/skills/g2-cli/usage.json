@@ -1,8 +1,8 @@
 {
   "tool": "g2",
   "description": "CLI interface for G2 API",
-  "discovered_at": "2026-05-19T17:17:14.154125+00:00",
-  "total_commands": 16,
+  "discovered_at": "2026-06-20T19:45:48Z",
+  "total_commands": 17,
   "usage_instructions": "Use `g2` for authenticated G2 API access when you need product discovery or review mining without scraping public pages. Product commands use the live v2 products API, and review commands use the Data Solutions reviews endpoint when the token is entitled. Commands follow `g2 <group> <action>`; product and review list or search commands support --limit/-l, --filter/-f, --table/-t, and --properties/-p, and review discovery commonly pairs with `--stars 1 --stars 2`.",
   "global_options": [
     {
@@ -20,12 +20,293 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Manage g2 authentication",
+      "usage_instructions": "Use `g2 auth` to manage the stored personal access token and profile data before running product or review commands. `auth status` is the read-only check, `auth login` writes credentials, `auth test` verifies them, and `auth profiles` manages named profile files.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Save or replace the G2 personal access token. Use --profile/-p to target a named profile, --force/-F to clear existing credentials before re-entering them, and --credential-type/-c only when you need to scope the login flow explicitly.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Remove saved credentials for one profile or the active default profile. Use --profile/-p when you need to clear a non-default profile without switching defaults.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `g2 auth profiles` to inspect, create, switch, and remove named credential profiles. These commands manage profile files; they do not fetch product or review data themselves.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new empty profile using the repo's `.env.example` template. Required argument: name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete one saved profile and its associated runtime data. Required argument: name; use --force/-F to skip the confirmation prompt.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Inspect one named profile's metadata. Required argument: name; use --table/-t for key-value output.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List saved G2 auth profiles and identify the default. Use --table/-t for a readable matrix, --limit/-l and --filter/-f to narrow the collection, and --properties/-p when only a few fields matter.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Check whether saved G2 credentials are actually usable. Use --profile/-p to scope the report to one profile or --table/-t for a human-readable summary; otherwise consume the JSON shape directly.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run explicit credential verification checks without changing any saved data. Use --profile/-p for one profile, --table/-t for summary output, and --verbose/-v when you need per-check details.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `g2 cache` when you need to remove stale cached API results. This group is operational only; it does not fetch data from G2.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Delete all cached G2 API responses for the active profile. Use it when list or get commands must ignore previously cached data and you want a clean next request.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
     "products": {
       "help": "Find and inspect G2 products",
       "usage_instructions": "Use `g2 products` when the task starts from a product name, domain, or slug. `products list` and `products search` return collections; `products get` resolves the user-facing product slug to the canonical G2 product record.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a product by slug.",
+          "usage_instructions": "Get one product by its public slug, not by UUID. Required argument: slug; use --table/-t for key-value output or --properties/-p to restrict fields.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Product slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List G2 products.",
+          "usage_instructions": "List G2 products from the official API. Use --limit/-l to cap pagination, --filter/-f for normalized field filtering, --table/-t for a compact view, and --properties/-p to reduce the output fields.",
+          "arguments": [],
           "options": [
             {
               "name": "--limit",
@@ -55,40 +336,18 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List G2 products from the official API. Use --limit/-l to cap pagination, --filter/-f for normalized field filtering, --table/-t for a compact view, and --properties/-p to reduce the output fields."
-        },
-        "get": {
-          "help": "Get a product by slug.",
-          "arguments": [
-            {
-              "name": "slug",
-              "type": "TEXT",
-              "required": true,
-              "help": "Product slug"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get one product by its public slug, not by UUID. Required argument: slug; use --table/-t for key-value output or --properties/-p to restrict fields."
+          ]
         },
         "search": {
           "help": "Search G2 products using the official API search filter.",
+          "usage_instructions": "Search products through the official v2 products API. Required argument: query; the CLI sends it to G2's server-side search filter, then you can refine the normalized output with --limit/-l, --table/-t, --filter/-f, and --properties/-p.",
           "arguments": [
             {
               "name": "query",
@@ -126,18 +385,67 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Search products through the official v2 products API. Required argument: query; the CLI sends it to G2's server-side search filter, then you can refine the normalized output with --limit/-l, --table/-t, --filter/-f, and --properties/-p."
+          ]
         }
       }
     },
     "reviews": {
       "help": "Find and inspect G2 product reviews",
       "usage_instructions": "Use `g2 reviews` when you already know the product slug and want review evidence, especially negative reviews. Review collection commands use the official Data Solutions reviews endpoint and require the token to have review-data entitlement. `reviews get` does not call a separate by-ID endpoint; it searches the accessible review dataset by ID, survey response ID, or slug.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get one accessible review by ID, survey response ID, or review slug.",
+          "usage_instructions": "Get one accessible review from the Data Solutions review dataset. Required argument: review_id; the CLI matches it against the review resource ID, survey response ID, or review slug, then use --table/-t or --properties/-p to shape the output. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403.",
+          "arguments": [
+            {
+              "name": "review_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Review ID, survey response ID, or review slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List reviews for a product slug.",
+          "usage_instructions": "List reviews for one product slug through the official Data Solutions reviews endpoint. Required argument: product_slug; pass `--stars 1 --stars 2` for negative-review discovery, then refine with --limit/-l, --filter/-f, --table/-t, or --properties/-p. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403.",
           "arguments": [
             {
               "name": "product_slug",
@@ -181,40 +489,18 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List reviews for one product slug through the official Data Solutions reviews endpoint. Required argument: product_slug; pass `--stars 1 --stars 2` for negative-review discovery, then refine with --limit/-l, --filter/-f, --table/-t, or --properties/-p. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403."
-        },
-        "get": {
-          "help": "Get one accessible review by ID, survey response ID, or review slug.",
-          "arguments": [
-            {
-              "name": "review_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Review ID, survey response ID, or review slug"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get one accessible review from the Data Solutions review dataset. Required argument: review_id; the CLI matches it against the review resource ID, survey response ID, or review slug, then use --table/-t or --properties/-p to shape the output. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403."
+          ]
         },
         "search": {
           "help": "Search accessible reviews for a product slug by normalized output fields.",
+          "usage_instructions": "Search one product's accessible review fields for matching text after loading reviews from the Data Solutions endpoint. Required arguments: product_slug and query; pair it with `--stars 1 --stars 2` for negative reviews, then use --limit/-l, --filter/-f, --table/-t, or --properties/-p to shape the result. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403.",
           "arguments": [
             {
               "name": "product_slug",
@@ -264,218 +550,14 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Search one product's accessible review fields for matching text after loading reviews from the Data Solutions endpoint. Required arguments: product_slug and query; pair it with `--stars 1 --stars 2` for negative reviews, then use --limit/-l, --filter/-f, --table/-t, or --properties/-p to shape the result. If the token lacks review entitlement, the command fails with G2's upstream HTTP 403."
-        }
-      }
-    },
-    "auth": {
-      "help": "Manage g2 authentication",
-      "usage_instructions": "Use `g2 auth` to manage the stored personal access token and profile data before running product or review commands. `auth status` is the read-only check, `auth login` writes credentials, `auth test` verifies them, and `auth profiles` manages named profile files.",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'personal_access_token')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Save or replace the G2 personal access token. Use --profile/-p to target a named profile, --force/-F to clear existing credentials before re-entering them, and --credential-type/-c only when you need to scope the login flow explicitly."
-        },
-        "logout": {
-          "help": "Clear stored credentials.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Remove saved credentials for one profile or the active default profile. Use --profile/-p when you need to clear a non-default profile without switching defaults."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Check whether saved G2 credentials are actually usable. Use --profile/-p to scope the report to one profile or --table/-t for a human-readable summary; otherwise consume the JSON shape directly."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run explicit credential verification checks without changing any saved data. Use --profile/-p for one profile, --table/-t for summary output, and --verbose/-v when you need per-check details."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "usage_instructions": "Use `g2 auth profiles` to inspect, create, switch, and remove named credential profiles. These commands manage profile files; they do not fetch product or review data themselves.",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List saved G2 auth profiles and identify the default. Use --table/-t for a readable matrix, --limit/-l and --filter/-f to narrow the collection, and --properties/-p when only a few fields matter."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Inspect one named profile's metadata. Required argument: name; use --table/-t for key-value output."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new empty profile using the repo's `.env.example` template. Required argument: name."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Switch the default profile that the CLI uses when no profile is specified. Required argument: name."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete one saved profile and its associated runtime data. Required argument: name; use --force/-F to skip the confirmation prompt."
-            }
-          }
-        }
-      }
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "usage_instructions": "Use `g2 cache` when you need to remove stale cached API results. This group is operational only; it does not fetch data from G2.",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Delete all cached G2 API responses for the active profile. Use it when list or get commands must ignore previously cached data and you want a clean next request."
+          ]
         }
       }
     }

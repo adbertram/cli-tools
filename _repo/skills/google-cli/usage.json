@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-06-13T12:47:31Z",
-  "total_commands": 99,
+  "discovered_at": "2026-06-20T22:42:35Z",
+  "total_commands": 101,
   "global_options": [
     {
       "name": "--version",
@@ -186,7 +186,7 @@
               "name": "--desc",
               "type": "bool",
               "required": false,
-              "help": "--asc             Sort descending (default) or ascending",
+              "help": "Sort descending (default) or ascending",
               "default": "desc"
             },
             {
@@ -325,7 +325,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             },
             {
@@ -1441,6 +1441,94 @@
         }
       }
     },
+    "contacts": {
+      "help": "Access Google Contacts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a Google Contact by resource name.",
+          "arguments": [
+            {
+              "name": "resource_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contact resource name, for example people/c123"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Google Contacts.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of contacts to list",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., organization:contains:Acme)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Properties to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
     "docs": {
       "help": "Manage Google Docs documents",
       "usage_instructions": "Google Docs document management -- create, read, update, export, and manage tables.",
@@ -2423,7 +2511,7 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments, body with --include-body",
+              "help": "Properties to include in output: id, name, from, to, subject, date, threadId, labelIds, attachments, body with --include-body",
               "short": "-p"
             },
             {
@@ -3440,7 +3528,7 @@
               "required": false,
               "help": "Range to append to",
               "short": "-r",
-              "default": "Sheet1"
+              "default": "A:Z"
             },
             {
               "name": "--values",
@@ -3548,7 +3636,7 @@
         },
         "read": {
           "help": "Read values from a spreadsheet.",
-          "usage_instructions": "Read cell data from a sheet. SPREADSHEET_ID is required (positional). Use --range/-r (e.g., 'Sheet1!A1:D10'). Use --table/-t for formatted output.",
+          "usage_instructions": "Read cell data from a sheet. SPREADSHEET_ID is required (positional). Use --range/-r with an unqualified first-sheet range such as 'A1:D10', or run `google sheets get SPREADSHEET_ID` to inspect tab names before using a sheet-qualified range such as 'TabName!A1:D10'. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "spreadsheet_id_or_url",
@@ -3562,9 +3650,9 @@
               "name": "--range",
               "type": "TEXT",
               "required": false,
-              "help": "Range to read (e.g., Sheet1!A1:D10)",
+              "help": "Range to read (e.g., A1:D10 or TabName!A1:D10)",
               "short": "-r",
-              "default": "Sheet1"
+              "default": "A:Z"
             },
             {
               "name": "--table",

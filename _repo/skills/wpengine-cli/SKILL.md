@@ -44,7 +44,7 @@ wpengine <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `wpengine` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `wpengine` command.**
 This file contains the complete command tree with arguments and options. Never guess command syntax.
 </principle>
 

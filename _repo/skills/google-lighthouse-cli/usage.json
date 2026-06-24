@@ -1,8 +1,8 @@
 {
   "tool": "google-lighthouse",
   "description": "Run and manage Google Lighthouse audits",
-  "discovered_at": "2026-05-20T15:54:45.296779+00:00",
-  "total_commands": 12,
+  "discovered_at": "2026-06-20T19:47:53Z",
+  "total_commands": 13,
   "global_options": [
     {
       "name": "--version",
@@ -15,7 +15,90 @@
   "commands": {
     "audits": {
       "help": "Manage Lighthouse audits",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a saved Lighthouse audit summary.",
+          "arguments": [
+            {
+              "name": "audit_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Audit ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved Lighthouse audits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of audits to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "run": {
           "help": "Run a Lighthouse audit and save JSON/HTML artifacts.",
           "arguments": [
@@ -61,67 +144,12 @@
               "required": false,
               "help": "Comma-separated fields to include (supports dot-notation)",
               "short": "-p"
-            }
-          ]
-        },
-        "list": {
-          "help": "List saved Lighthouse audits.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of audits to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include (supports dot-notation)",
-              "short": "-p"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get a saved Lighthouse audit summary.",
-          "arguments": [
-            {
-              "name": "audit_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Audit ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include (supports dot-notation)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
           ]
         }
@@ -129,9 +157,12 @@
     },
     "auth": {
       "help": "Manage google-lighthouse authentication",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -146,18 +177,12 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom')",
-              "short": "-c"
             }
           ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -168,84 +193,40 @@
             }
           ]
         },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ]
-        },
         "profiles": {
           "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
           "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
               "options": [
                 {
-                  "name": "--table",
+                  "name": "--force",
                   "type": "bool",
                   "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
+                  "help": "Skip confirmation",
+                  "short": "-F"
                 }
               ]
             },
@@ -269,29 +250,41 @@
                 }
               ]
             },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "arguments": [],
+              "options": [
                 {
-                  "name": "name",
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
                 }
               ]
             },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ]
-            },
-            "delete": {
+            "remove": {
               "help": "Delete a profile and its data.",
               "arguments": [
                 {
@@ -310,8 +303,67 @@
                   "short": "-F"
                 }
               ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
           }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
       }
     }

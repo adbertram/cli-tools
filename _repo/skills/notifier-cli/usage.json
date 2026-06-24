@@ -1,7 +1,7 @@
 {
   "tool": "notifier",
   "description": "CLI wrapper for terminal-notifier - macOS desktop notifications",
-  "discovered_at": "2026-05-06T15:19:38.895462+00:00",
+  "discovered_at": "2026-06-20T19:51:46Z",
   "total_commands": 1,
   "global_options": [
     {
@@ -15,6 +15,13 @@
   "commands": {
     "send": {
       "help": "Send a desktop notification. The message can be provided via --message or piped from stdin.",
+      "examples": [
+        "notifier send --message \"Hello World\"",
+        "notifier send -m \"Build complete\" -T \"CI/CD\" --sound default",
+        "notifier send -m \"Urgent\" --ignore-dnd"
+      ],
+      "usage_instructions": "Send a macOS desktop notification. Provide the message with --message/-m or pipe from stdin. Use --title/-T for a custom title, --subtitle/-s for a subtitle, --sound for an alert sound (e.g., 'default', 'Basso', 'Blow', 'Bottle'), and --ignore-dnd to bypass Do Not Disturb mode.",
+      "arguments": [],
       "options": [
         {
           "name": "--message",
@@ -49,13 +56,7 @@
           "required": false,
           "help": "Send even if Do Not Disturb is enabled"
         }
-      ],
-      "examples": [
-        "notifier send --message \"Hello World\"",
-        "notifier send -m \"Build complete\" -T \"CI/CD\" --sound default",
-        "notifier send -m \"Urgent\" --ignore-dnd"
-      ],
-      "usage_instructions": "Send a macOS desktop notification. Provide the message with --message/-m or pipe from stdin. Use --title/-T for a custom title, --subtitle/-s for a subtitle, --sound for an alert sound (e.g., 'default', 'Basso', 'Blow', 'Bottle'), and --ignore-dnd to bypass Do Not Disturb mode."
+      ]
     }
   },
   "usage_instructions": "Use for sending macOS desktop notifications. The primary command is `notifier send`. Messages can be passed via --message/-m or piped from stdin. Supports custom titles, subtitles, sounds, and Do Not Disturb override."

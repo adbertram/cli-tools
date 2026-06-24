@@ -1,7 +1,7 @@
 {
   "tool": "codex-sessions",
   "description": "Query and analyze OpenAI Codex session data from ~/.codex",
-  "discovered_at": "2026-06-11T16:28:34Z",
+  "discovered_at": "2026-06-20T19:41:33Z",
   "total_commands": 28,
   "global_options": [
     {
@@ -949,7 +949,7 @@
               "name": "--show-agent-tools",
               "type": "bool",
               "required": false,
-              "help": "--hide-agent-tools             Accepted for CLI parity",
+              "help": "Accepted for CLI parity",
               "default": "show-agent-tools"
             },
             {

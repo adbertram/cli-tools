@@ -29,9 +29,6 @@ ata-blog <command-group> <action> [arguments] [options]
 | List WordPress plugins | `ata-blog wordpress-admin plugins list --properties "name,status,version"` |
 | Get WordPress plugin | `ata-blog wordpress-admin plugins get <plugin> --properties "name,status,version"` |
 | Upgrade WordPress plugin | `ata-blog wordpress-admin plugins upgrade <plugin>` |
-| List WordPress themes | `ata-blog wordpress-admin themes list --table` |
-| Preview theme file push | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --dry-run` |
-| Push theme file | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --backup --yes` |
 | Upload media | `ata-blog media upload <file_path>` |
 | Check ad earnings | `ata-blog earnings get` |
 | Set schema on post | `ata-blog schema set <post_id> <type>` |
@@ -67,8 +64,21 @@ Incompatible with `--table` (JSON only). Scan takes ~20-60s per post depending o
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `ata-blog` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ata-blog` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Source Change Validation">
+This service skill is not the lifecycle owner. For any ata-blog CLI source edit,
+testing, or troubleshooting task, use the repo-owned `cli-tool` skill and its
+`workflows/test-cli.md` procedure. The ata-blog source project lives at
+`<cli-tools-root>/_personal/ata-blog`; do not run ambient `python -m pytest` from
+that directory. Focused source tests must use the uv project environment, for
+example:
+
+```bash
+uv run --project /Users/adam/Dropbox/GitRepos/cli-tools/_personal/ata-blog --with pytest python -m pytest /Users/adam/Dropbox/GitRepos/cli-tools/_personal/ata-blog/tests/test_notion_statuses.py
+```
 </principle>
 
 <principle name="WordPress Passthrough Constraints">
@@ -82,16 +92,8 @@ If a diagnostic task must import WordPress CLI internals, there is no
 interpreter and the actual module documented by the `wordpress-cli` skill.
 </principle>
 
-<principle name="WP Engine Boundary">
-When an ATA Blog task needs WP Engine Hosting Platform data or operations
-(accounts, sites, environments/installs, WP Engine cache purge, SSH key API, or
-SSH/SFTP connection helper details), route that portion through the repo-owned
-`wpengine-cli` skill and execute the `wpengine` CLI after consulting
-`_repo/skills/wpengine-cli/usage.json`.
-
-Keep `ata-blog` as the owner for ATA Blog WordPress, Notion, Raptive, schema,
-media, and theme file-push workflows. Do not use `wpengine` for deploy or theme
-file mutation; use the existing ATA Blog/WordPress file-push path for that.
+<principle name="Plugin Maintenance Batch Runtime Limits">
+When running ATA WordPress plugin maintenance batches from Hermes, do not use a foreground `terminal` timeout above 600 seconds. For short commands, keep foreground `timeout` at `600` or lower. For long or multi-plugin batches, launch the command with `background=true` and `notify_on_complete=true`, then use `process` polling/waiting to collect the result. This prevents Hermes foreground timeout rejection while preserving real completion evidence.
 </principle>
 
 <principle name="Command Groups">
@@ -100,7 +102,7 @@ file mutation; use the existing ATA Blog/WordPress file-push path for that.
 - **notion-page** -- Notion page management (list, get, publish, update, search, statuses, comments, content)
 - **wordpress-post** -- WordPress post CRUD (list, get, create, update, schedule, delete)
 - **wordpress-page** -- WordPress page CRUD (list, get, create, update, delete). Passthrough to `wordpress pages`; pages support `parent`, `menu_order`, `template` (no tags/categories/format).
-- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through the delegated `wordpress` CLI.
+- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade.
 - **media** -- WordPress media management (list, get, upload, delete)
 - **categories** -- WordPress categories (list, get, create)
 - **tags** -- WordPress tags (list, get, create)

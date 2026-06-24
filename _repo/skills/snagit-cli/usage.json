@@ -1,7 +1,7 @@
 {
   "tool": "snagit",
   "description": "CLI for managing Snagit capture files (.snagx format)",
-  "discovered_at": "2026-05-20T16:14:17.727241+00:00",
+  "discovered_at": "2026-06-20T19:55:36Z",
   "total_commands": 3,
   "global_options": [
     {
@@ -15,59 +15,26 @@
   "commands": {
     "capture": {
       "help": "Manage Snagit capture files",
+      "usage_instructions": "Manage .snagx capture files: list all captures, view extracted images, and export PNGs. All commands accept --path/-p to override the default captures folder location.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all .snagx capture files.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Path to Snagit captures folder",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "snagit capture list",
-            "snagit capture list --table",
-            "snagit capture list --path ~/Pictures/Snagit/Archive"
-          ],
-          "usage_instructions": "List all .snagx capture files in the captures folder. Use --path/-p to specify a custom folder (default is the standard Snagit captures directory). Use --table/-t for formatted output."
-        },
-        "view": {
-          "help": "Extract a .snagx capture file and output the path to the main image. Extracts the .snagx archive and outputs the path to the main PNG image. The extracted files are kept in a temp directory for viewing.",
-          "arguments": [
-            {
-              "name": "filename",
-              "type": "TEXT",
-              "required": true,
-              "help": "Filename or path to .snagx file"
-            }
-          ],
-          "options": [
-            {
-              "name": "--path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Path to Snagit captures folder",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "snagit capture view capture.snagx",
-            "snagit capture view /full/path/to/capture.snagx"
-          ],
-          "usage_instructions": "Extract a .snagx file and get the path to its main PNG image. FILENAME is required (positional) \u2014 can be just the filename or full path. Use --path/-p to specify captures folder. Extracted files are kept in a temp directory."
-        },
         "export": {
           "help": "Export the main PNG image from a .snagx capture file. Extracts only the main PNG image from the .snagx archive. If no output path is specified, saves to current directory with capture name.",
+          "examples": [
+            "snagit capture export capture.snagx",
+            "snagit capture export capture.snagx --output ./image.png",
+            "snagit capture export capture.snagx --output ./exports/",
+            "snagit capture export /full/path/to/capture.snagx -o ~/Desktop/"
+          ],
+          "usage_instructions": "Export the main PNG from a .snagx capture. FILENAME is required (positional). Use --output/-o to specify output path (defaults to ./<filename>.png). Use --path/-p for captures folder. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "filename",
@@ -97,18 +64,79 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all .snagx capture files.",
+          "examples": [
+            "snagit capture list",
+            "snagit capture list --table",
+            "snagit capture list --path ~/Pictures/Snagit/Archive"
+          ],
+          "usage_instructions": "List all .snagx capture files in the captures folder. Use --path/-p to specify a custom folder (default is the standard Snagit captures directory). Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to Snagit captures folder",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "view": {
+          "help": "Extract a .snagx capture file and output the path to the main image. Extracts the .snagx archive and outputs the path to the main PNG image. The extracted files are kept in a temp directory for viewing.",
+          "examples": [
+            "snagit capture view capture.snagx",
+            "snagit capture view /full/path/to/capture.snagx"
+          ],
+          "usage_instructions": "Extract a .snagx file and get the path to its main PNG image. FILENAME is required (positional) — can be just the filename or full path. Use --path/-p to specify captures folder. Extracted files are kept in a temp directory.",
+          "arguments": [
+            {
+              "name": "filename",
+              "type": "TEXT",
+              "required": true,
+              "help": "Filename or path to .snagx file"
             }
           ],
-          "examples": [
-            "snagit capture export capture.snagx",
-            "snagit capture export capture.snagx --output ./image.png",
-            "snagit capture export capture.snagx --output ./exports/",
-            "snagit capture export /full/path/to/capture.snagx -o ~/Desktop/"
-          ],
-          "usage_instructions": "Export the main PNG from a .snagx capture. FILENAME is required (positional). Use --output/-o to specify output path (defaults to ./<filename>.png). Use --path/-p for captures folder. Use --table/-t for formatted output."
+          "options": [
+            {
+              "name": "--path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to Snagit captures folder",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Manage .snagx capture files: list all captures, view extracted images, and export PNGs. All commands accept --path/-p to override the default captures folder location."
+      }
     }
   },
   "usage_instructions": "Use for managing Snagit screen capture files (.snagx format). Commands follow `snagit capture <action>` pattern. List captures, view extracted images, and export PNGs from .snagx archives. Most commands accept --path/-p to specify a custom captures folder."

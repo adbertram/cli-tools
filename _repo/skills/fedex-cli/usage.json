@@ -1,8 +1,8 @@
 {
   "tool": "fedex",
   "description": "CLI interface for Fedex API",
-  "discovered_at": "2026-05-20T16:10:35.127570+00:00",
-  "total_commands": 14,
+  "discovered_at": "2026-06-20T19:45:18Z",
+  "total_commands": 15,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Fedex API authentication",
+      "usage_instructions": "Authentication management — login, logout, check status, refresh tokens, and test credentials.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Set up or reconfigure FedEx API credentials. Use --force/-F to clear and re-authenticate. Use --profile/-p for a named profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Set up or reconfigure FedEx API credentials. Use --force/-F to clear and re-authenticate. Use --profile/-p for a named profile."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Clear stored FedEx credentials. Use --profile/-p to target a specific profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,31 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Clear stored FedEx credentials. Use --profile/-p to target a specific profile."
+          ]
         },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Manage named configuration profiles for different FedEx accounts or environments.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new profile. NAME is a required positional argument.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
             },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete a profile. NAME is required. Use --force/-F to skip confirmation.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Get details for a named profile. NAME is a required positional argument.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all configured profiles.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          ],
-          "usage_instructions": "Check whether FedEx credentials are configured and valid."
+          }
         },
         "refresh": {
           "help": "Refresh OAuth access token using stored refresh token.",
+          "usage_instructions": "Refresh an expired OAuth access token.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -99,11 +209,33 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Refresh an expired OAuth access token."
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Check whether FedEx credentials are configured and valid.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Verify that stored credentials work by making a test API call. Use --verbose/-v for detailed output.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,133 +258,46 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Verify that stored credentials work by making a test API call. Use --verbose/-v for detailed output."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all configured profiles."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Get details for a named profile. NAME is a required positional argument."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new profile. NAME is a required positional argument."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Set a profile as the default. NAME is a required positional argument."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete a profile. NAME is required. Use --force/-F to skip confirmation."
-            }
-          },
-          "usage_instructions": "Manage named configuration profiles for different FedEx accounts or environments."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management \u2014 login, logout, check status, refresh tokens, and test credentials."
+      }
     },
     "cache": {
       "help": "Manage CLI cache",
+      "usage_instructions": "Run `fedex cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `fedex cache clear --help` for exact arguments and options."
+          "usage_instructions": "Run `fedex cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Run `fedex cache --help` for exact arguments and options."
+      }
     },
     "pickup": {
       "help": "Schedule and manage FedEx pickups",
+      "usage_instructions": "Schedule, check availability, and cancel FedEx pickups. Address defaults to .env file values. Supports Express (FDXE) and Ground (FDXG) carriers.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "availability": {
           "help": "Check pickup availability for a location. Address defaults to values in .env file if not specified.",
+          "examples": [
+            "fedex pickup availability",
+            "fedex pickup availability --carrier FDXG",
+            "fedex pickup availability --street \"123 Main St\" --city \"Columbus\" --state OH --postal 43215"
+          ],
+          "usage_instructions": "Check if FedEx pickup is available at a location. Address defaults to .env values. Use --carrier to specify FDXE (Express) or FDXG (Ground). Use --date/-d for a specific date (defaults to today). Default ready time is 15:30, close time is 18:00.",
+          "arguments": [],
           "options": [
             {
               "name": "--street",
@@ -321,17 +366,76 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "cancel": {
+          "help": "Cancel a scheduled pickup.",
+          "examples": [
+            "fedex pickup cancel ABC123 --account 123456789 --date 2024-01-15",
+            "fedex pickup cancel ABC123 -a 123456789 -d 2024-01-15 --carrier FDXG",
+            "fedex pickup cancel ABC123 -a 123456789 -d 2024-01-15 --location NQAA"
+          ],
+          "usage_instructions": "Cancel a scheduled pickup. CONFIRMATION_CODE is a required positional argument. --date/-d (YYYY-MM-DD) is required. Use --account/-a for the FedEx account number. Use --location/-l for Express pickups.",
+          "arguments": [
+            {
+              "name": "confirmation_code",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pickup confirmation code"
             }
           ],
-          "examples": [
-            "fedex pickup availability",
-            "fedex pickup availability --carrier FDXG",
-            "fedex pickup availability --street \"123 Main St\" --city \"Columbus\" --state OH --postal 43215"
-          ],
-          "usage_instructions": "Check if FedEx pickup is available at a location. Address defaults to .env values. Use --carrier to specify FDXE (Express) or FDXG (Ground). Use --date/-d for a specific date (defaults to today). Default ready time is 15:30, close time is 18:00."
+          "options": [
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "FedEx account number (default from .env)",
+              "short": "-a"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Scheduled pickup date (YYYY-MM-DD)",
+              "short": "-d"
+            },
+            {
+              "name": "--carrier",
+              "type": "TEXT",
+              "required": false,
+              "help": "Carrier: FDXE (Express) or FDXG (Ground) (default from .env)"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Location code (required for Express)",
+              "short": "-l"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "schedule": {
           "help": "Schedule a new FedEx pickup. Address defaults to values in .env file if not specified.",
+          "examples": [
+            "fedex pickup schedule --account 123456789",
+            "fedex pickup schedule -a 123456789 --packages 2 --weight 10.5",
+            "fedex pickup schedule -a 123456789 --street \"123 Main St\" --city \"Columbus\" --state OH --postal 43215"
+          ],
+          "usage_instructions": "Schedule a FedEx pickup. Address defaults to .env values. Use --account/-a for the FedEx account number (default from .env). Use --packages/-n for package count (default 1). Use --weight/-w for total weight. Use --remarks for delivery instructions (max 60 chars). Use --package-location for where to find packages (FRONT, REAR, SIDE, NONE).",
+          "arguments": [],
           "options": [
             {
               "name": "--account",
@@ -434,63 +538,16 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "fedex pickup schedule --account 123456789",
-            "fedex pickup schedule -a 123456789 --packages 2 --weight 10.5",
-            "fedex pickup schedule -a 123456789 --street \"123 Main St\" --city \"Columbus\" --state OH --postal 43215"
-          ],
-          "usage_instructions": "Schedule a FedEx pickup. Address defaults to .env values. Use --account/-a for the FedEx account number (default from .env). Use --packages/-n for package count (default 1). Use --weight/-w for total weight. Use --remarks for delivery instructions (max 60 chars). Use --package-location for where to find packages (FRONT, REAR, SIDE, NONE)."
-        },
-        "cancel": {
-          "help": "Cancel a scheduled pickup.",
-          "arguments": [
-            {
-              "name": "confirmation_code",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pickup confirmation code"
-            }
-          ],
-          "options": [
-            {
-              "name": "--account",
-              "type": "TEXT",
-              "required": false,
-              "help": "FedEx account number (default from .env)",
-              "short": "-a"
             },
             {
-              "name": "--date",
-              "type": "TEXT",
-              "required": true,
-              "help": "Scheduled pickup date (YYYY-MM-DD)",
-              "short": "-d"
-            },
-            {
-              "name": "--carrier",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Carrier: FDXE (Express) or FDXG (Ground) (default from .env)"
-            },
-            {
-              "name": "--location",
-              "type": "TEXT",
-              "required": false,
-              "help": "Location code (required for Express)",
-              "short": "-l"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "fedex pickup cancel ABC123 --account 123456789 --date 2024-01-15",
-            "fedex pickup cancel ABC123 -a 123456789 -d 2024-01-15 --carrier FDXG",
-            "fedex pickup cancel ABC123 -a 123456789 -d 2024-01-15 --location NQAA"
-          ],
-          "usage_instructions": "Cancel a scheduled pickup. CONFIRMATION_CODE is a required positional argument. --date/-d (YYYY-MM-DD) is required. Use --account/-a for the FedEx account number. Use --location/-l for Express pickups."
+          ]
         }
-      },
-      "usage_instructions": "Schedule, check availability, and cancel FedEx pickups. Address defaults to .env file values. Supports Express (FDXE) and Ground (FDXG) carriers."
+      }
     }
   },
   "usage_instructions": "Use for scheduling and managing FedEx pickups. Commands follow `fedex <group> <action>` pattern. Address details default to values in .env file. Supports both FedEx Express (FDXE) and FedEx Ground (FDXG) carriers."

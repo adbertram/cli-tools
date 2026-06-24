@@ -32,12 +32,14 @@ notion <command-group> <action> [arguments] [options]
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
 | List page/block children | `notion pages blocks list --page-id PAGE_ID` |
+| List blocks with IDs (database page) | `notion database page content list-blocks PAGE_ID --table` |
+| Edit one block in place (keeps comments) | `notion database page content update-block --block-id BLOCK_ID --text "New text"` |
 | Toggle existing heading on/off | `notion pages blocks update BLOCK_ID --toggleable` (or `--no-toggleable`) |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `notion` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `notion` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 Do not run a Notion command in the same parallel batch as the `usage.json` inspection; inspect the target command node first, then execute the exact syntax it shows.
 
@@ -45,6 +47,52 @@ For `pages blocks list`, the page or block ID is a required option, not a positi
 ```bash
 notion pages blocks list --page-id PAGE_ID --markdown
 ```
+
+For page Markdown reads, `pages get` does not accept output-format flags. Before
+adding any output-format option to `notion pages get`, inspect
+`commands.pages.commands.get` in `usage.json` or run `notion pages get --help`.
+Use `notion pages get PAGE_ID --include-blocks --markdown` (or `-b -m
+--out-file file.md`) to fetch Markdown content from a page. Use
+`notion pages export PAGE_ID --output file.md --format md` only when exporting
+a page through the `pages export` command.
+
+When `pages get` uses `--out-file`, the Markdown file is the command output.
+Do not redirect stdout to a `.json` file and do not parse stdout with
+`python3 -m json.tool` or `jq`; stdout/stderr can contain only a human status
+line or be empty. Verify the read by checking that the `--out-file` path exists
+and is non-empty, then inspect or print that Markdown file separately. If JSON
+page metadata is needed, run a separate `notion pages get PAGE_ID` command
+without `--markdown` or `--out-file` and parse that command's stdout.
+</principle>
+
+<principle name="Database Page Create Options">
+`notion database page create` accepts only the options listed at
+`commands.database.commands.page.commands.create` in `usage.json`: `--title`,
+`--status`, `--select`, `--content-file`, `--blocks-file`, `--from-template`,
+`--properties`, and `--profile`.
+
+Do not borrow convenience flags from `notion database create` or
+`notion database page update`. Flags such as `--number`, `--checkbox`, `--text`,
+and `--date` are invalid for `database page create`. For any page property type
+not covered by `--status` or `--select`, build the Notion API property object
+and pass it through `--properties`.
+
+```bash
+notion database page create DB_ID --title "Storyline" \
+  --select "Resource:Course" \
+  --properties '{"Build Product Order":{"number":1},"For Kid Review":{"checkbox":false}}'
+```
+</principle>
+
+<principle name="Database Metadata JSON Shape">
+When parsing `notion database get` JSON, inspect the actual field type before
+extracting nested values. The CLI can expose database metadata fields such as
+`title` as a plain string, even though the raw Notion API commonly represents
+title text as a rich_text list. Do not run rich_text-only code such as
+`t.get("plain_text") for t in data["title"]` until the saved JSON proves that
+field is a list of objects. For database titles, accept only the proven CLI
+contract shapes: string title, or list of rich_text objects; fail clearly with
+`JSON_CONTRACT_MISMATCH: database.title` for any other shape.
 </principle>
 
 <principle name="Section Updates vs Full Replace">
@@ -60,6 +108,38 @@ notion pages content replace-section PAGE_ID --heading "## Section Title" --file
 ```
 
 Only use `pages content set` when you intend to replace the ENTIRE page content.
+</principle>
+
+<principle name="Edit a Single Block In Place to Preserve Comments">
+**`content set` destroys ALL inline comments.** Notion anchors inline/block-scoped
+comments to a block's ID. `content set` (and `clear`) delete every block and
+recreate them with NEW ids, so every comment is orphaned and disappears from the
+page. To change a block's text while keeping the block — and therefore every
+comment anchored anywhere on the page — edit the block IN PLACE. The CLI PATCHes
+`/v1/blocks/{block_id}` (the block ID is unchanged), so comments survive.
+
+Two equivalent surfaces:
+```bash
+# 1. Map paragraphs/headings to block IDs (id, type, text):
+notion database page content list-blocks PAGE_ID --table   # database-page tree
+notion pages blocks list --page-id PAGE_ID --table         # standalone-pages tree
+
+# 2. Edit one block in place (same block ID, comments preserved):
+notion database page content update-block --block-id BLOCK_ID --text "Revised."
+notion pages blocks update BLOCK_ID --text "Revised."
+```
+Editable block types (single rich_text array): `paragraph`, `heading_1/2/3`,
+`bulleted_list_item`, `numbered_list_item`, `quote`, `callout`, `to_do`, `toggle`.
+Other types (image, table, table_row, code with structured payloads, etc.) cannot
+be edited with `--text`; use `pages blocks update BLOCK_ID --json '...'` for those.
+
+CAVEAT: `pages blocks update BLOCK_ID --toggleable` (without `--no-nest`)
+RE-CREATES the heading's section siblings to nest them, which assigns NEW block
+IDs and DROPS their comments. Plain `--text` (and `--toggleable --no-nest`) never
+recreate blocks. Verified: editing block A in place leaves block B's comment
+intact (`comments list --page-id PAGE_ID --with-context` still resolves it to its
+block); a `content set` on the same page trashes the block (`archived: true`) and
+orphans the comment.
 </principle>
 
 <principle name="content set Is Non-Destructive on Oversize Blocks">
@@ -161,7 +241,7 @@ If you see "Resource not found" against a database you know exists, the integrat
 </principle>
 
 <principle name="Creating a Database">
-`notion database create PARENT_PAGE_ID -t "Title"` creates a database under a parent page (POST `/v1/databases`). The property schema is supplied via `initial_data_source.properties`, which the CLI builds from `--properties` (raw JSON) and/or convenience flags. A title property is always added (named by `--title-property`, default `Name`) unless `--properties` already defines one.
+`notion database create PARENT_PAGE_ID -t "Title"` creates a database under a parent page (POST `/v1/databases`). `PARENT_PAGE_ID` must be a page ID; Notion rejects database and data_source IDs as database parents. The property schema is supplied via `initial_data_source.properties`, which the CLI builds from `--properties` (raw JSON) and/or convenience flags. A title property is always added (named by `--title-property`, default `Name`) unless `--properties` already defines one.
 
 - Simple flags: `--text`, `--number`, `--date`, `--checkbox`, `--url`, `--email`, `--phone`, `--people`, `--files` take `Name`.
 - Choice flags: `--select`, `--multi-select`, `--status` take `Name` or `Name:Opt1|Opt2`.

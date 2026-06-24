@@ -1,8 +1,8 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-05-20T15:49:02.890828+00:00",
-  "total_commands": 56,
+  "discovered_at": "2026-06-20T19:39:44Z",
+  "total_commands": 57,
   "global_options": [
     {
       "name": "--version",
@@ -19,397 +19,202 @@
     }
   ],
   "commands": {
-    "order": {
-      "help": "Manage orders",
+    "auth": {
+      "help": "Manage bricklink authentication",
+      "usage_instructions": "Use `bricklink auth` with one of: confirm, login, logout, profiles, status, test.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List orders with optional filters.",
+        "confirm": {
+          "help": "Clear the legacy pending-confirmation flag from older Bricklink builds. Current browser commands do not store confirmation codes locally. If BrickLink redirects to ``confirmation_code_required``, the command fails immediately and tells the user to check email and retry.",
+          "usage_instructions": "Run `bricklink auth confirm`.",
+          "arguments": [],
+          "options": []
+        },
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For browser sessions, BrickLink opens the LEGO account login; use the LEGO.com account email address and password, not the legacy BrickLink username. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `bricklink auth login`. For browser-session login, enter the LEGO.com account email address and password.",
+          "arguments": [],
           "options": [
             {
-              "name": "--status",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by status (e.g., PAID,PACKED)",
-              "short": "-s"
-            },
-            {
-              "name": "--direction",
-              "type": "TEXT",
-              "required": false,
-              "help": "'in' (received) or 'out' (placed)",
-              "short": "-d"
-            },
-            {
-              "name": "--filed",
-              "type": "bool",
-              "required": false,
-              "help": "Filter by filed status"
-            },
-            {
-              "name": "--shipped",
-              "type": "bool",
-              "required": false,
-              "help": "Filter shipped orders"
-            },
-            {
-              "name": "--not-shipped",
-              "type": "bool",
-              "required": false,
-              "help": "Filter not shipped orders"
-            },
-            {
-              "name": "--not-picked",
-              "type": "bool",
-              "required": false,
-              "help": "Filter not picked orders"
-            },
-            {
-              "name": "--include-messages",
-              "type": "bool",
-              "required": false,
-              "help": "Include order messages (API-based)"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max results",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Fields to include",
+              "help": "Profile name to save credentials to",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "bricklink order list",
-            "bricklink order list --status PAID,PACKED",
-            "bricklink order list --direction in --not-shipped",
-            "bricklink order list --not-picked --table",
-            "bricklink order list --include-messages",
-            "bricklink order list --filter \"buyer_name:contains:John\" --limit 10",
-            "bricklink order list --properties \"order_id,status,buyer_name\""
-          ],
-          "usage_instructions": "Run `bricklink order list`. Use options such as --status, --direction, --table, --filter, --limit, --properties as needed. Example: `bricklink order list`."
-        },
-        "get": {
-          "help": "Get order details by ID.",
-          "arguments": [
+            },
             {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--include-messages",
+              "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Include order messages (API-based)"
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
             },
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink order get 12345678",
-            "bricklink order get 12345678 --include-messages",
-            "bricklink order get 12345678 --table"
-          ],
-          "usage_instructions": "Run `bricklink order get`. with required arguments order_id. Use options such as --table as needed. Example: `bricklink order get 12345678`."
-        },
-        "items": {
-          "help": "Get items in an order. The API returns items in nested batch lists. This command flattens them into a single list.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
+              "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max results",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "bricklink order items 12345678",
-            "bricklink order items 12345678 --table",
-            "bricklink order items 12345678 --filter \"quantity:gte:2\"",
-            "bricklink order items 12345678 --properties \"item.no,item.name,quantity\""
-          ],
-          "usage_instructions": "Run `bricklink order items`. with required arguments order_id. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink order items 12345678`."
-        },
-        "update-status": {
-          "help": "Update order status. Valid statuses: PENDING, UPDATED, PROCESSING, READY, PAID, PACKED, SHIPPED, RECEIVED, COMPLETED, OCR, NPB, NPX, NRS, NSS, CANCELLED",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            },
-            {
-              "name": "status",
-              "type": "TEXT",
-              "required": true,
-              "help": "New status (PENDING,UPDATED,PROCESSING,READY,PAID,PACKED,SHIPPED,RECEIVED,COMPLETED)"
-            }
-          ],
-          "examples": [
-            "bricklink order update-status 12345678 PACKED",
-            "bricklink order update-status 12345678 SHIPPED"
-          ],
-          "usage_instructions": "Run `bricklink order update-status`. with required arguments order_id, status. Example: `bricklink order update-status 12345678 PACKED`."
-        },
-        "ship": {
-          "help": "Mark order as shipped, optionally with tracking info. Updates shipping details first (if provided), then sets status to SHIPPED.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--tracking",
-              "type": "TEXT",
-              "required": false,
-              "help": "Tracking number"
-            },
-            {
-              "name": "--link",
-              "type": "TEXT",
-              "required": false,
-              "help": "Tracking URL"
-            }
-          ],
-          "examples": [
-            "bricklink order ship 12345678",
-            "bricklink order ship 12345678 --tracking 9400111899223456789012",
-            "bricklink order ship 12345678 --tracking 9400111899223456789012 --link \"https://tools.usps.com/go/TrackConfirmAction?tLabels=9400111899223456789012\""
-          ],
-          "usage_instructions": "Run `bricklink order ship`. with required arguments order_id. Use options such as --tracking, --link as needed. Example: `bricklink order ship 12345678`."
-        },
-        "file": {
-          "help": "File an order (set is_filed to true).",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            }
-          ],
-          "examples": [
-            "bricklink order file 12345678"
-          ],
-          "usage_instructions": "Run `bricklink order file`. with required arguments order_id. Example: `bricklink order file 12345678`."
-        },
-        "search": {
-          "help": "Search orders by item number (browser-based). Finds all orders containing the specified item. Uses browser automation since this feature is not available via the API.",
-          "arguments": [
-            {
-              "name": "item_no",
-              "type": "TEXT",
-              "required": true,
-              "help": "Item number to search for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Item type (PART, SET, MINIFIG, etc.)"
-            },
-            {
-              "name": "--color",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Color ID",
+              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
               "short": "-c"
-            },
-            {
-              "name": "--condition",
-              "type": "TEXT",
-              "required": false,
-              "help": "Condition (N=new, U=used)"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Order status filter",
-              "short": "-s"
-            },
-            {
-              "name": "--direction",
-              "type": "TEXT",
-              "required": false,
-              "help": "'in' (received) or 'out' (placed)",
-              "short": "-d",
-              "default": "out"
-            },
-            {
-              "name": "--from",
-              "type": "TEXT",
-              "required": false,
-              "help": "From date (MM/DD/YYYY)"
-            },
-            {
-              "name": "--to",
-              "type": "TEXT",
-              "required": false,
-              "help": "To date (MM/DD/YYYY)"
-            },
-            {
-              "name": "--ids-only",
-              "type": "bool",
-              "required": false,
-              "help": "Output only order IDs"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             }
-          ],
-          "examples": [
-            "bricklink order search 3001",
-            "bricklink order search 3001 --type PART --color 11",
-            "bricklink order search 3001 --direction in",
-            "bricklink order search 75192 --type SET --table",
-            "bricklink order search 3001 --from \"01/01/2024\" --to \"12/31/2024\"",
-            "bricklink order search 3001 --ids-only"
-          ],
-          "usage_instructions": "Run `bricklink order search`. with required arguments item_no. Use options such as --type, --color, --condition, --status, --direction, --table as needed. Example: `bricklink order search 3001`."
-        }
-      },
-      "usage_instructions": "Use `bricklink order` with one of: file, get, items, list, search, ship, update-status."
-    },
-    "inventory": {
-      "help": "Manage store inventory",
-      "commands": {
-        "list": {
-          "help": "List store inventories.",
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Run `bricklink auth logout`.",
+          "arguments": [],
           "options": [
             {
-              "name": "--type",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Item type (PART,SET,MINIFIG,etc.)"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Status (Y=available,S=stockroomA,B,C,N=unavailable,R=reserved)",
-              "short": "-s"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max results",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Fields to include",
+              "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "examples": [
-            "bricklink inventory list",
-            "bricklink inventory list --type PART",
-            "bricklink inventory list --status Y --limit 50",
-            "bricklink inventory list --table",
-            "bricklink inventory list --filter \"quantity:gt:5\"",
-            "bricklink inventory list --properties \"inventory_id,quantity,unit_price\""
-          ],
-          "usage_instructions": "Run `bricklink inventory list`. Use options such as --type, --status, --table, --filter, --limit, --properties as needed. Example: `bricklink inventory list`."
+          ]
         },
-        "get": {
-          "help": "Get inventory item by ID.",
-          "arguments": [
-            {
-              "name": "inventory_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Inventory ID"
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `bricklink auth profiles` with one of: create, delete, get, list, set-default.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `bricklink auth profiles create`. with required arguments name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `bricklink auth profiles delete`. with required arguments name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `bricklink auth profiles get`. with required arguments name. Use options such as --table as needed.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `bricklink auth profiles list`. Use options such as --table, --limit, --filter, --properties as needed.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          ],
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Run `bricklink auth status`. Use options such as --table as needed.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -417,15 +222,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "examples": [
-            "bricklink inventory get 123456",
-            "bricklink inventory get 123456 --table"
-          ],
-          "usage_instructions": "Run `bricklink inventory get`. with required arguments inventory_id. Use options such as --table as needed. Example: `bricklink inventory get 123456`."
+          ]
         },
-        "stats": {
-          "help": "Get inventory statistics. Computes totals for lots, items, and value across all available inventory, broken down by item type.",
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `bricklink auth test`. Use options such as --table as needed.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -433,282 +235,77 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `bricklink cache` with one of: clear.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `bricklink cache clear`.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "catalog": {
+      "help": "Browse catalog data",
+      "usage_instructions": "Use `bricklink catalog` with one of: colors, get, list, minifig, part, price, set, subsets, supersets.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "colors": {
+          "help": "Get known colors for an item.",
           "examples": [
-            "bricklink inventory stats",
-            "bricklink inventory stats --table"
+            "bricklink catalog colors PART 3001",
+            "bricklink catalog colors PART 3001 --table",
+            "bricklink catalog colors PART 3001 --filter \"quantity:gt:100\"",
+            "bricklink catalog colors PART 3001 --limit 10"
           ],
-          "usage_instructions": "Run `bricklink inventory stats`. Use options such as --table as needed. Example: `bricklink inventory stats`."
-        },
-        "update": {
-          "help": "Update an inventory item.",
-          "arguments": [
-            {
-              "name": "inventory_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Inventory ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--price",
-              "type": "TEXT",
-              "required": false,
-              "help": "New unit price"
-            },
-            {
-              "name": "--quantity",
-              "type": "TEXT",
-              "required": false,
-              "help": "Quantity change (+5, -3, or absolute with --absolute-qty)",
-              "short": "-q"
-            },
-            {
-              "name": "--absolute-qty",
-              "type": "bool",
-              "required": false,
-              "help": "Treat quantity as absolute value"
-            },
-            {
-              "name": "--sale",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Sale percentage (0-99)"
-            },
-            {
-              "name": "--remarks",
-              "type": "TEXT",
-              "required": false,
-              "help": "Remarks/notes (typically location)"
-            },
-            {
-              "name": "--stockroom",
-              "type": "TEXT",
-              "required": false,
-              "help": "Move to stockroom (A, B, C, or 'none' to remove)"
-            }
-          ],
-          "examples": [
-            "bricklink inventory update 123456 --price 0.15",
-            "bricklink inventory update 123456 --quantity +5",
-            "bricklink inventory update 123456 --quantity -3",
-            "bricklink inventory update 123456 --quantity 10 --absolute-qty",
-            "bricklink inventory update 123456 --sale 20",
-            "bricklink inventory update 123456 --remarks G-0283",
-            "bricklink inventory update 123456 --stockroom A",
-            "bricklink inventory update 123456 --stockroom none"
-          ],
-          "usage_instructions": "Run `bricklink inventory update`. with required arguments inventory_id. Example: `bricklink inventory update 123456 --price 0.15`."
-        },
-        "update-qty": {
-          "help": "Bulk update inventory quantities. Expects input as JSON array of objects with inventory_id and quantity fields. By default, quantity is treated as a relative change (+/-). Use --set-qty for absolute.",
-          "options": [
-            {
-              "name": "--input",
-              "type": "TEXT",
-              "required": false,
-              "help": "JSON file with items"
-            },
-            {
-              "name": "--stdin",
-              "type": "bool",
-              "required": false,
-              "help": "Read from stdin"
-            },
-            {
-              "name": "--set-qty",
-              "type": "bool",
-              "required": false,
-              "help": "Set absolute quantity"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Preview without executing"
-            },
-            {
-              "name": "--concurrency",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max parallel operations",
-              "default": "5"
-            },
-            {
-              "name": "--delay",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Delay between requests (ms)",
-              "default": "0"
-            }
-          ],
-          "examples": [
-            "bricklink inventory update-qty --input items.json",
-            "bricklink inventory update-qty --stdin < items.json",
-            "bricklink inventory update-qty --input items.json --set-qty",
-            "bricklink inventory update-qty --input items.json --dry-run"
-          ],
-          "usage_instructions": "Run `bricklink inventory update-qty`. Example: `bricklink inventory update-qty --input items.json`."
-        },
-        "create": {
-          "help": "Create inventory item(s). Single item: provide type, item_no, and options. Bulk: provide --input or --stdin with JSON array.",
+          "usage_instructions": "Run `bricklink catalog colors`. with required arguments type, item_no. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink catalog colors PART 3001`.",
           "arguments": [
             {
               "name": "type",
-              "type": "TYPE",
-              "required": false,
-              "help": "Item type (PART,SET,MINIFIG)"
+              "type": "TEXT",
+              "required": true,
+              "help": "Item type"
             },
             {
               "name": "item_no",
-              "type": "ITEM_NO",
-              "required": false,
+              "type": "TEXT",
+              "required": true,
               "help": "Item number"
             }
           ],
           "options": [
             {
-              "name": "--color",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Color ID",
-              "short": "-c"
-            },
-            {
-              "name": "--quantity",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Quantity",
-              "short": "-q"
-            },
-            {
-              "name": "--price",
-              "type": "TEXT",
-              "required": false,
-              "help": "Unit price"
-            },
-            {
-              "name": "--condition",
-              "type": "TEXT",
-              "required": false,
-              "help": "N=new, U=used"
-            },
-            {
-              "name": "--remarks",
-              "type": "TEXT",
-              "required": false,
-              "help": "Remarks",
-              "short": "-r"
-            },
-            {
-              "name": "--input",
-              "type": "TEXT",
-              "required": false,
-              "help": "JSON file for bulk create"
-            },
-            {
-              "name": "--stdin",
-              "type": "bool",
-              "required": false,
-              "help": "Read from stdin"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Preview without executing"
-            }
-          ],
-          "examples": [
-            "bricklink inventory create PART 3001 --color 11 --quantity 10 --price 0.05 --condition N",
-            "bricklink inventory create --input items.json",
-            "bricklink inventory create --stdin < items.json",
-            "bricklink inventory create PART 3001 --color 11 --quantity 5 --price 0.10 --condition N --dry-run"
-          ],
-          "usage_instructions": "Run `bricklink inventory create`. and optional arguments type, item_no. Use options such as --color, --condition as needed. Example: `bricklink inventory create PART 3001 --color 11 --quantity 10 --price 0.05 --condition N`."
-        },
-        "delete": {
-          "help": "Delete an inventory item.",
-          "arguments": [
-            {
-              "name": "inventory_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Inventory ID"
-            }
-          ],
-          "examples": [
-            "bricklink inventory delete 123456"
-          ],
-          "usage_instructions": "Run `bricklink inventory delete`. with required arguments inventory_id. Example: `bricklink inventory delete 123456`."
-        },
-        "search": {
-          "help": "Search inventory by part number. Fetches all inventories and filters client-side by item number.",
-          "arguments": [
-            {
-              "name": "part_no",
-              "type": "TEXT",
-              "required": true,
-              "help": "Part number to search for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--color",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Filter by color ID",
-              "short": "-c"
-            },
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by item type"
-            },
-            {
-              "name": "--condition",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by condition (N=new, U=used)",
-              "short": "-n"
-            },
-            {
-              "name": "--prefix",
-              "type": "bool",
-              "required": false,
-              "help": "Match items starting with part_no (e.g., 2495 matches 2495c01)"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink inventory search 3001",
-            "bricklink inventory search 3001 --color 11",
-            "bricklink inventory search 3001 --type PART",
-            "bricklink inventory search 3001 --condition U",
-            "bricklink inventory search 3001 --table",
-            "bricklink inventory search 2495 --prefix"
-          ],
-          "usage_instructions": "Run `bricklink inventory search`. with required arguments part_no. Use options such as --color, --type, --condition, --table as needed. Example: `bricklink inventory search 3001`."
-        },
-        "stockroom": {
-          "help": "List stockroom items. Shows items in stockroom A, B, C, or all stockrooms.",
-          "options": [
-            {
-              "name": "--room",
-              "type": "TEXT",
-              "required": false,
-              "help": "Stockroom ID (A, B, or C)"
-            },
-            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -726,33 +323,32 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Max results",
+              "help": "Maximum results",
               "short": "-l"
             },
             {
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Fields to include",
+              "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink inventory stockroom",
-            "bricklink inventory stockroom --room A",
-            "bricklink inventory stockroom --room B --table",
-            "bricklink inventory stockroom --limit 20"
-          ],
-          "usage_instructions": "Run `bricklink inventory stockroom`. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink inventory stockroom`."
-        }
-      },
-      "usage_instructions": "Use `bricklink inventory` with one of: create, delete, get, list, search, stats, stockroom, update, update-qty."
-    },
-    "catalog": {
-      "help": "Browse catalog data",
-      "commands": {
+          ]
+        },
         "get": {
           "help": "Get catalog item info by type and item number.",
+          "examples": [
+            "bricklink catalog get PART 3001",
+            "bricklink catalog get SET 75192-1",
+            "bricklink catalog get MINIFIG sw0001 --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog get`. with required arguments type, item_no. Use options such as --table as needed. Example: `bricklink catalog get PART 3001`.",
           "arguments": [
             {
               "name": "type",
@@ -774,17 +370,23 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink catalog get PART 3001",
-            "bricklink catalog get SET 75192-1",
-            "bricklink catalog get MINIFIG sw0001 --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog get`. with required arguments type, item_no. Use options such as --table as needed. Example: `bricklink catalog get PART 3001`."
+          ]
         },
         "list": {
           "help": "List catalog items by type using store inventory. The Bricklink API does not provide a catalog search endpoint. This command lists catalog items found in your store inventory, filtered by item type. Use 'catalog get' for direct lookups.",
+          "examples": [
+            "bricklink catalog list PART",
+            "bricklink catalog list SET --limit 10",
+            "bricklink catalog list MINIFIG --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog list`. with required arguments item_type. Use options such as --table, --limit, --filter, --properties as needed. Example: `bricklink catalog list PART`.",
           "arguments": [
             {
               "name": "item_type",
@@ -829,67 +431,22 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "bricklink catalog list PART",
-            "bricklink catalog list SET --limit 10",
-            "bricklink catalog list MINIFIG --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog list`. with required arguments item_type. Use options such as --table, --limit, --filter, --properties as needed. Example: `bricklink catalog list PART`."
-        },
-        "part": {
-          "help": "Shortcut to get catalog info for a PART.",
-          "arguments": [
+            },
             {
-              "name": "part_no",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Part number"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink catalog part 3001",
-            "bricklink catalog part 3001 --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog part`. with required arguments part_no. Use options such as --table as needed. Example: `bricklink catalog part 3001`."
-        },
-        "set": {
-          "help": "Shortcut to get catalog info for a SET.",
-          "arguments": [
-            {
-              "name": "set_no",
-              "type": "TEXT",
-              "required": true,
-              "help": "Set number"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink catalog set 75192-1",
-            "bricklink catalog set 10294-1 --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog set`. with required arguments set_no. Use options such as --table as needed. Example: `bricklink catalog set 75192-1`."
+          ]
         },
         "minifig": {
           "help": "Shortcut to get catalog info for a MINIFIG.",
+          "examples": [
+            "bricklink catalog minifig sw0001",
+            "bricklink catalog minifig sh0001 --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog minifig`. with required arguments fig_no. Use options such as --table as needed. Example: `bricklink catalog minifig sw0001`.",
           "arguments": [
             {
               "name": "fig_no",
@@ -905,16 +462,49 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "part": {
+          "help": "Shortcut to get catalog info for a PART.",
+          "examples": [
+            "bricklink catalog part 3001",
+            "bricklink catalog part 3001 --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog part`. with required arguments part_no. Use options such as --table as needed. Example: `bricklink catalog part 3001`.",
+          "arguments": [
+            {
+              "name": "part_no",
+              "type": "TEXT",
+              "required": true,
+              "help": "Part number"
             }
           ],
-          "examples": [
-            "bricklink catalog minifig sw0001",
-            "bricklink catalog minifig sh0001 --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog minifig`. with required arguments fig_no. Use options such as --table as needed. Example: `bricklink catalog minifig sw0001`."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "price": {
           "help": "Get price guide for an item. Supports bulk via --input or --stdin. Single item: bricklink catalog price PART 3001 bricklink catalog price PART 3001 --color 11 --condition N bricklink catalog price SET 75192-1 --sold Bulk (JSON file with list of {type, item_no, color?, condition?}): bricklink catalog price --input items.json cat items.json | bricklink catalog price --stdin",
+          "usage_instructions": "Run `bricklink catalog price`. and optional arguments type, item_no. Use options such as --color, --condition, --table as needed.",
           "arguments": [
             {
               "name": "type",
@@ -997,24 +587,28 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `bricklink catalog price`. and optional arguments type, item_no. Use options such as --color, --condition, --table as needed."
-        },
-        "colors": {
-          "help": "Get known colors for an item.",
-          "arguments": [
-            {
-              "name": "type",
-              "type": "TEXT",
-              "required": true,
-              "help": "Item type"
             },
             {
-              "name": "item_no",
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set": {
+          "help": "Shortcut to get catalog info for a SET.",
+          "examples": [
+            "bricklink catalog set 75192-1",
+            "bricklink catalog set 10294-1 --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog set`. with required arguments set_no. Use options such as --table as needed. Example: `bricklink catalog set 75192-1`.",
+          "arguments": [
+            {
+              "name": "set_no",
               "type": "TEXT",
               "required": true,
-              "help": "Item number"
+              "help": "Set number"
             }
           ],
           "options": [
@@ -1026,37 +620,22 @@
               "short": "-t"
             },
             {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink catalog colors PART 3001",
-            "bricklink catalog colors PART 3001 --table",
-            "bricklink catalog colors PART 3001 --filter \"quantity:gt:100\"",
-            "bricklink catalog colors PART 3001 --limit 10"
-          ],
-          "usage_instructions": "Run `bricklink catalog colors`. with required arguments type, item_no. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink catalog colors PART 3001`."
+          ]
         },
         "subsets": {
           "help": "Get items contained in a set or item (subsets).",
+          "examples": [
+            "bricklink catalog subsets SET 75192-1",
+            "bricklink catalog subsets SET 75192-1 --break-minifigs",
+            "bricklink catalog subsets SET 75192-1 --table",
+            "bricklink catalog subsets MINIFIG sw0001 --limit 20"
+          ],
+          "usage_instructions": "Run `bricklink catalog subsets`. with required arguments type, item_no. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink catalog subsets SET 75192-1`.",
           "arguments": [
             {
               "name": "type",
@@ -1105,18 +684,23 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink catalog subsets SET 75192-1",
-            "bricklink catalog subsets SET 75192-1 --break-minifigs",
-            "bricklink catalog subsets SET 75192-1 --table",
-            "bricklink catalog subsets MINIFIG sw0001 --limit 20"
-          ],
-          "usage_instructions": "Run `bricklink catalog subsets`. with required arguments type, item_no. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink catalog subsets SET 75192-1`."
+          ]
         },
         "supersets": {
           "help": "Get sets or items that contain this item (supersets).",
+          "examples": [
+            "bricklink catalog supersets PART 3001",
+            "bricklink catalog supersets PART 3001 --color 11",
+            "bricklink catalog supersets MINIFIG sw0001 --table"
+          ],
+          "usage_instructions": "Run `bricklink catalog supersets`. with required arguments type, item_no. Use options such as --color, --table, --filter, --limit, --properties as needed. Example: `bricklink catalog supersets PART 3001`.",
           "arguments": [
             {
               "name": "type",
@@ -1166,116 +750,151 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "bricklink catalog supersets PART 3001",
-            "bricklink catalog supersets PART 3001 --color 11",
-            "bricklink catalog supersets MINIFIG sw0001 --table"
-          ],
-          "usage_instructions": "Run `bricklink catalog supersets`. with required arguments type, item_no. Use options such as --color, --table, --filter, --limit, --properties as needed. Example: `bricklink catalog supersets PART 3001`."
-        }
-      },
-      "usage_instructions": "Use `bricklink catalog` with one of: colors, get, list, minifig, part, price, set, subsets, supersets."
-    },
-    "member": {
-      "help": "Member information",
-      "commands": {
-        "ratings": {
-          "help": "Get member feedback/ratings.",
-          "arguments": [
-            {
-              "name": "username",
-              "type": "TEXT",
-              "required": true,
-              "help": "Bricklink username"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink member ratings some_user",
-            "bricklink member ratings some_user --table"
-          ],
-          "usage_instructions": "Run `bricklink member ratings`. with required arguments username. Use options such as --table as needed. Example: `bricklink member ratings some_user`."
-        },
-        "note": {
-          "help": "Get personal note for a member.",
-          "arguments": [
-            {
-              "name": "username",
-              "type": "TEXT",
-              "required": true,
-              "help": "Bricklink username"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink member note some_user",
-            "bricklink member note some_user --table"
-          ],
-          "usage_instructions": "Run `bricklink member note`. with required arguments username. Use options such as --table as needed. Example: `bricklink member note some_user`."
-        },
-        "set-note": {
-          "help": "Create or update a personal note for a member.",
-          "arguments": [
-            {
-              "name": "username",
-              "type": "TEXT",
-              "required": true,
-              "help": "Bricklink username"
             },
             {
-              "name": "text",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Note text"
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink member set-note some_user \"Good buyer, fast payment\"",
-            "bricklink member set-note some_user \"Problem buyer - opened dispute\""
-          ],
-          "usage_instructions": "Run `bricklink member set-note`. with required arguments username, text. Example: `bricklink member set-note some_user \"Good buyer, fast payment\"`."
-        },
-        "delete-note": {
-          "help": "Delete personal note for a member.",
-          "arguments": [
-            {
-              "name": "username",
-              "type": "TEXT",
-              "required": true,
-              "help": "Bricklink username"
-            }
-          ],
-          "examples": [
-            "bricklink member delete-note some_user"
-          ],
-          "usage_instructions": "Run `bricklink member delete-note`. with required arguments username. Example: `bricklink member delete-note some_user`."
+          ]
         }
-      },
-      "usage_instructions": "Use `bricklink member` with one of: delete-note, note, ratings, set-note."
+      }
     },
     "coupon": {
       "help": "Manage coupons",
+      "usage_instructions": "Use `bricklink coupon` with one of: create, delete, get, list.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a coupon for a buyer.",
+          "examples": [
+            "bricklink coupon create some_user --rate 5.00",
+            "bricklink coupon create some_user --type S --rate 10 --max 20.00",
+            "bricklink coupon create some_user --rate 3.00 --expires 2025-12-31 --remarks \"Apology for missing part\""
+          ],
+          "usage_instructions": "Run `bricklink coupon create`. with required arguments buyer. Use options such as --type as needed. Example: `bricklink coupon create some_user --rate 5.00`.",
+          "arguments": [
+            {
+              "name": "buyer",
+              "type": "TEXT",
+              "required": true,
+              "help": "Buyer username"
+            }
+          ],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "F=fixed amount, S=percentage",
+              "default": "F"
+            },
+            {
+              "name": "--rate",
+              "type": "TEXT",
+              "required": true,
+              "help": "Discount amount or percentage",
+              "short": "-r"
+            },
+            {
+              "name": "--max",
+              "type": "TEXT",
+              "required": false,
+              "help": "Max discount amount (for percentage type)"
+            },
+            {
+              "name": "--expires",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expiry date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--remarks",
+              "type": "TEXT",
+              "required": false,
+              "help": "Coupon remarks/description"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a coupon.",
+          "examples": [
+            "bricklink coupon delete 12345"
+          ],
+          "usage_instructions": "Run `bricklink coupon delete`. with required arguments coupon_id. Example: `bricklink coupon delete 12345`.",
+          "arguments": [
+            {
+              "name": "coupon_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Coupon ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get coupon details by ID.",
+          "examples": [
+            "bricklink coupon get 12345",
+            "bricklink coupon get 12345 --table"
+          ],
+          "usage_instructions": "Run `bricklink coupon get`. with required arguments coupon_id. Use options such as --table as needed. Example: `bricklink coupon get 12345`.",
+          "arguments": [
+            {
+              "name": "coupon_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Coupon ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List coupons.",
+          "examples": [
+            "bricklink coupon list",
+            "bricklink coupon list --direction out",
+            "bricklink coupon list --status O --table",
+            "bricklink coupon list --filter \"buyer_name:contains:John\""
+          ],
+          "usage_instructions": "Run `bricklink coupon list`. Use options such as --direction, --status, --table, --filter, --limit, --properties as needed. Example: `bricklink coupon list`.",
+          "arguments": [],
           "options": [
             {
               "name": "--direction",
@@ -1318,24 +937,149 @@
               "required": false,
               "help": "Fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "inventory": {
+      "help": "Manage store inventory",
+      "usage_instructions": "Use `bricklink inventory` with one of: create, delete, get, list, search, stats, stockroom, update, update-qty.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create inventory item(s). Single item: provide type, item_no, and options. Bulk: provide --input or --stdin with JSON array.",
           "examples": [
-            "bricklink coupon list",
-            "bricklink coupon list --direction out",
-            "bricklink coupon list --status O --table",
-            "bricklink coupon list --filter \"buyer_name:contains:John\""
+            "bricklink inventory create PART 3001 --color 11 --quantity 10 --price 0.05 --condition N",
+            "bricklink inventory create --input items.json",
+            "bricklink inventory create --stdin < items.json",
+            "bricklink inventory create PART 3001 --color 11 --quantity 5 --price 0.10 --condition N --dry-run"
           ],
-          "usage_instructions": "Run `bricklink coupon list`. Use options such as --direction, --status, --table, --filter, --limit, --properties as needed. Example: `bricklink coupon list`."
-        },
-        "get": {
-          "help": "Get coupon details by ID.",
+          "usage_instructions": "Run `bricklink inventory create`. and optional arguments type, item_no. Use options such as --color, --condition as needed. Example: `bricklink inventory create PART 3001 --color 11 --quantity 10 --price 0.05 --condition N`.",
           "arguments": [
             {
-              "name": "coupon_id",
+              "name": "type",
+              "type": "TYPE",
+              "required": false,
+              "help": "Item type (PART,SET,MINIFIG)"
+            },
+            {
+              "name": "item_no",
+              "type": "ITEM_NO",
+              "required": false,
+              "help": "Item number"
+            }
+          ],
+          "options": [
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Color ID",
+              "short": "-c"
+            },
+            {
+              "name": "--quantity",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Quantity",
+              "short": "-q"
+            },
+            {
+              "name": "--price",
+              "type": "TEXT",
+              "required": false,
+              "help": "Unit price"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N=new, U=used"
+            },
+            {
+              "name": "--remarks",
+              "type": "TEXT",
+              "required": false,
+              "help": "Remarks",
+              "short": "-r"
+            },
+            {
+              "name": "--input",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON file for bulk create"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read from stdin"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview without executing"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete an inventory item.",
+          "examples": [
+            "bricklink inventory delete 123456"
+          ],
+          "usage_instructions": "Run `bricklink inventory delete`. with required arguments inventory_id. Example: `bricklink inventory delete 123456`.",
+          "arguments": [
+            {
+              "name": "inventory_id",
               "type": "TEXT",
               "required": true,
-              "help": "Coupon ID"
+              "help": "Inventory ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get inventory item by ID.",
+          "examples": [
+            "bricklink inventory get 123456",
+            "bricklink inventory get 123456 --table"
+          ],
+          "usage_instructions": "Run `bricklink inventory get`. with required arguments inventory_id. Use options such as --table as needed. Example: `bricklink inventory get 123456`.",
+          "arguments": [
+            {
+              "name": "inventory_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inventory ID"
             }
           ],
           "options": [
@@ -1345,88 +1089,549 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink coupon get 12345",
-            "bricklink coupon get 12345 --table"
-          ],
-          "usage_instructions": "Run `bricklink coupon get`. with required arguments coupon_id. Use options such as --table as needed. Example: `bricklink coupon get 12345`."
-        },
-        "create": {
-          "help": "Create a coupon for a buyer.",
-          "arguments": [
+            },
             {
-              "name": "buyer",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Buyer username"
+              "required": false,
+              "help": "Auth profile name"
             }
+          ]
+        },
+        "list": {
+          "help": "List store inventories.",
+          "examples": [
+            "bricklink inventory list",
+            "bricklink inventory list --type PART",
+            "bricklink inventory list --status Y --limit 50",
+            "bricklink inventory list --table",
+            "bricklink inventory list --filter \"quantity:gt:5\"",
+            "bricklink inventory list --properties \"inventory_id,quantity,unit_price\""
           ],
+          "usage_instructions": "Run `bricklink inventory list`. Use options such as --type, --status, --table, --filter, --limit, --properties as needed. Example: `bricklink inventory list`.",
+          "arguments": [],
           "options": [
             {
               "name": "--type",
               "type": "TEXT",
               "required": false,
-              "help": "F=fixed amount, S=percentage",
-              "default": "F"
+              "help": "Item type (PART,SET,MINIFIG,etc.)"
             },
             {
-              "name": "--rate",
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Status (Y=available,S=stockroomA,B,C,N=unavailable,R=reserved)",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search inventory by part number. Fetches all inventories and filters client-side by item number.",
+          "examples": [
+            "bricklink inventory search 3001",
+            "bricklink inventory search 3001 --color 11",
+            "bricklink inventory search 3001 --type PART",
+            "bricklink inventory search 3001 --condition U",
+            "bricklink inventory search 3001 --table",
+            "bricklink inventory search 2495 --prefix"
+          ],
+          "usage_instructions": "Run `bricklink inventory search`. with required arguments part_no. Use options such as --color, --type, --condition, --table as needed. Example: `bricklink inventory search 3001`.",
+          "arguments": [
+            {
+              "name": "part_no",
               "type": "TEXT",
               "required": true,
-              "help": "Discount amount or percentage",
-              "short": "-r"
+              "help": "Part number to search for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by color ID",
+              "short": "-c"
             },
             {
-              "name": "--max",
+              "name": "--type",
               "type": "TEXT",
               "required": false,
-              "help": "Max discount amount (for percentage type)"
+              "help": "Filter by item type"
             },
             {
-              "name": "--expires",
+              "name": "--condition",
               "type": "TEXT",
               "required": false,
-              "help": "Expiry date (YYYY-MM-DD)"
+              "help": "Filter by condition (N=new, U=used)",
+              "short": "-n"
+            },
+            {
+              "name": "--prefix",
+              "type": "bool",
+              "required": false,
+              "help": "Match items starting with part_no (e.g., 2495 matches 2495c01)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stats": {
+          "help": "Get inventory statistics. Computes totals for lots, items, and value across all available inventory, broken down by item type.",
+          "examples": [
+            "bricklink inventory stats",
+            "bricklink inventory stats --table"
+          ],
+          "usage_instructions": "Run `bricklink inventory stats`. Use options such as --table as needed. Example: `bricklink inventory stats`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stockroom": {
+          "help": "List stockroom items. Shows items in stockroom A, B, C, or all stockrooms.",
+          "examples": [
+            "bricklink inventory stockroom",
+            "bricklink inventory stockroom --room A",
+            "bricklink inventory stockroom --room B --table",
+            "bricklink inventory stockroom --limit 20"
+          ],
+          "usage_instructions": "Run `bricklink inventory stockroom`. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink inventory stockroom`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--room",
+              "type": "TEXT",
+              "required": false,
+              "help": "Stockroom ID (A, B, or C)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an inventory item.",
+          "examples": [
+            "bricklink inventory update 123456 --price 0.15",
+            "bricklink inventory update 123456 --quantity +5",
+            "bricklink inventory update 123456 --quantity -3",
+            "bricklink inventory update 123456 --quantity 10 --absolute-qty",
+            "bricklink inventory update 123456 --sale 20",
+            "bricklink inventory update 123456 --remarks G-0283",
+            "bricklink inventory update 123456 --stockroom A",
+            "bricklink inventory update 123456 --stockroom none"
+          ],
+          "usage_instructions": "Run `bricklink inventory update`. with required arguments inventory_id. Example: `bricklink inventory update 123456 --price 0.15`.",
+          "arguments": [
+            {
+              "name": "inventory_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inventory ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--price",
+              "type": "TEXT",
+              "required": false,
+              "help": "New unit price"
+            },
+            {
+              "name": "--quantity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Quantity change (+5, -3, or absolute with --absolute-qty)",
+              "short": "-q"
+            },
+            {
+              "name": "--absolute-qty",
+              "type": "bool",
+              "required": false,
+              "help": "Treat quantity as absolute value"
+            },
+            {
+              "name": "--sale",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Sale percentage (0-99)"
             },
             {
               "name": "--remarks",
               "type": "TEXT",
               "required": false,
-              "help": "Coupon remarks/description"
+              "help": "Remarks/notes (typically location)"
+            },
+            {
+              "name": "--stockroom",
+              "type": "TEXT",
+              "required": false,
+              "help": "Move to stockroom (A, B, C, or 'none' to remove)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink coupon create some_user --rate 5.00",
-            "bricklink coupon create some_user --type S --rate 10 --max 20.00",
-            "bricklink coupon create some_user --rate 3.00 --expires 2025-12-31 --remarks \"Apology for missing part\""
-          ],
-          "usage_instructions": "Run `bricklink coupon create`. with required arguments buyer. Use options such as --type as needed. Example: `bricklink coupon create some_user --rate 5.00`."
+          ]
         },
-        "delete": {
-          "help": "Delete a coupon.",
+        "update-qty": {
+          "help": "Bulk update inventory quantities. Expects input as JSON array of objects with inventory_id and quantity fields. By default, quantity is treated as a relative change (+/-). Use --set-qty for absolute.",
+          "examples": [
+            "bricklink inventory update-qty --input items.json",
+            "bricklink inventory update-qty --stdin < items.json",
+            "bricklink inventory update-qty --input items.json --set-qty",
+            "bricklink inventory update-qty --input items.json --dry-run"
+          ],
+          "usage_instructions": "Run `bricklink inventory update-qty`. Example: `bricklink inventory update-qty --input items.json`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON file with items"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read from stdin"
+            },
+            {
+              "name": "--set-qty",
+              "type": "bool",
+              "required": false,
+              "help": "Set absolute quantity"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview without executing"
+            },
+            {
+              "name": "--concurrency",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max parallel operations",
+              "default": "5"
+            },
+            {
+              "name": "--delay",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Delay between requests (ms)",
+              "default": "0"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "member": {
+      "help": "Member information",
+      "usage_instructions": "Use `bricklink member` with one of: delete-note, note, ratings, set-note.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "delete-note": {
+          "help": "Delete personal note for a member.",
+          "examples": [
+            "bricklink member delete-note some_user"
+          ],
+          "usage_instructions": "Run `bricklink member delete-note`. with required arguments username. Example: `bricklink member delete-note some_user`.",
           "arguments": [
             {
-              "name": "coupon_id",
+              "name": "username",
               "type": "TEXT",
               "required": true,
-              "help": "Coupon ID"
+              "help": "Bricklink username"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "note": {
+          "help": "Get personal note for a member.",
           "examples": [
-            "bricklink coupon delete 12345"
+            "bricklink member note some_user",
+            "bricklink member note some_user --table"
           ],
-          "usage_instructions": "Run `bricklink coupon delete`. with required arguments coupon_id. Example: `bricklink coupon delete 12345`."
+          "usage_instructions": "Run `bricklink member note`. with required arguments username. Use options such as --table as needed. Example: `bricklink member note some_user`.",
+          "arguments": [
+            {
+              "name": "username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Bricklink username"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "ratings": {
+          "help": "Get member feedback/ratings.",
+          "examples": [
+            "bricklink member ratings some_user",
+            "bricklink member ratings some_user --table"
+          ],
+          "usage_instructions": "Run `bricklink member ratings`. with required arguments username. Use options such as --table as needed. Example: `bricklink member ratings some_user`.",
+          "arguments": [
+            {
+              "name": "username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Bricklink username"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set-note": {
+          "help": "Create or update a personal note for a member.",
+          "examples": [
+            "bricklink member set-note some_user \"Good buyer, fast payment\"",
+            "bricklink member set-note some_user \"Problem buyer - opened dispute\""
+          ],
+          "usage_instructions": "Run `bricklink member set-note`. with required arguments username, text. Example: `bricklink member set-note some_user \"Good buyer, fast payment\"`.",
+          "arguments": [
+            {
+              "name": "username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Bricklink username"
+            },
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Note text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `bricklink coupon` with one of: create, delete, get, list."
+      }
     },
     "messages": {
       "help": "Manage messages (browser)",
+      "usage_instructions": "Use `bricklink messages` with one of: get, list, mark-read, mark-unread, reply, send.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get message details by ID (browser-based).",
+          "examples": [
+            "bricklink messages get 12345678",
+            "bricklink messages get 12345678 --table",
+            "bricklink messages get 12345678 --folder o",
+            "bricklink messages get 12345678 --include-history"
+          ],
+          "usage_instructions": "Run `bricklink messages get`. with required arguments message_id. Use options such as --table as needed. Example: `bricklink messages get 12345678`.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "i=inbox, o=outbox",
+              "default": "i"
+            },
+            {
+              "name": "--include-history",
+              "type": "bool",
+              "required": false,
+              "help": "Include message history thread"
+            },
+            {
+              "name": "--max-search-messages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max messages to scan when building history (default 50)",
+              "default": "50"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List messages (browser-based, or API-based with --order-id).",
+          "examples": [
+            "bricklink messages list",
+            "bricklink messages list --folder outbox",
+            "bricklink messages list --page 2 --table",
+            "bricklink messages list --filter \"is_unread:eq:true\"",
+            "bricklink messages list --include-history",
+            "bricklink messages list --order-id 31235160"
+          ],
+          "usage_instructions": "Run `bricklink messages list`. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink messages list`.",
+          "arguments": [],
           "options": [
             {
               "name": "--folder",
@@ -1489,20 +1694,21 @@
               "required": false,
               "help": "Fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "bricklink messages list",
-            "bricklink messages list --folder outbox",
-            "bricklink messages list --page 2 --table",
-            "bricklink messages list --filter \"is_unread:eq:true\"",
-            "bricklink messages list --include-history",
-            "bricklink messages list --order-id 31235160"
-          ],
-          "usage_instructions": "Run `bricklink messages list`. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink messages list`."
+          ]
         },
-        "get": {
-          "help": "Get message details by ID (browser-based).",
+        "mark-read": {
+          "help": "Mark a message as read (browser-based).",
+          "examples": [
+            "bricklink messages mark-read 12345678"
+          ],
+          "usage_instructions": "Run `bricklink messages mark-read`. with required arguments message_id. Example: `bricklink messages mark-read 12345678`.",
           "arguments": [
             {
               "name": "message_id",
@@ -1513,43 +1719,93 @@
           ],
           "options": [
             {
-              "name": "--folder",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "i=inbox, o=outbox",
-              "default": "i"
-            },
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-unread": {
+          "help": "Mark a message as unread (browser-based).",
+          "examples": [
+            "bricklink messages mark-unread 12345678"
+          ],
+          "usage_instructions": "Run `bricklink messages mark-unread`. with required arguments message_id. Example: `bricklink messages mark-unread 12345678`.",
+          "arguments": [
             {
-              "name": "--include-history",
-              "type": "bool",
-              "required": false,
-              "help": "Include message history thread"
-            },
-            {
-              "name": "--max-search-messages",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max messages to scan when building history (default 50)",
-              "default": "50"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID"
             }
           ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reply": {
+          "help": "Reply to a message (browser-based).",
           "examples": [
-            "bricklink messages get 12345678",
-            "bricklink messages get 12345678 --table",
-            "bricklink messages get 12345678 --folder o",
-            "bricklink messages get 12345678 --include-history"
+            "bricklink messages reply 12345678 \"Thank you for your message!\"",
+            "bricklink messages reply 12345678 \"Here is the tracking info\" --copy"
           ],
-          "usage_instructions": "Run `bricklink messages get`. with required arguments message_id. Use options such as --table as needed. Example: `bricklink messages get 12345678`."
+          "usage_instructions": "Run `bricklink messages reply`. with required arguments message_id, body. Example: `bricklink messages reply 12345678 \"Thank you for your message!\"`.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID to reply to"
+            },
+            {
+              "name": "body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply body"
+            }
+          ],
+          "options": [
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override subject",
+              "short": "-s"
+            },
+            {
+              "name": "--priority",
+              "type": "bool",
+              "required": false,
+              "help": "Send as high priority"
+            },
+            {
+              "name": "--copy",
+              "type": "bool",
+              "required": false,
+              "help": "Send a copy to yourself"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "send": {
           "help": "Send a message to a member or linked to an order (browser-based). When sending to an order:  bricklink messages send ORDER_ID BODY When sending to a member:  bricklink messages send --member USERNAME BODY",
+          "examples": [
+            "bricklink messages send 12345678 \"Your order has been shipped!\"",
+            "bricklink messages send --member sydneybrickemp \"Hello!\" --subject \"Re: Your message\"",
+            "bricklink messages send 12345678 \"Hello\" --subject \"Question about order\""
+          ],
+          "usage_instructions": "Run `bricklink messages send`. and optional arguments arg1, arg2. Example: `bricklink messages send 12345678 \"Your order has been shipped!\"`.",
           "arguments": [
             {
               "name": "arg1",
@@ -1590,96 +1846,211 @@
               "type": "bool",
               "required": false,
               "help": "Send a copy to yourself"
-            }
-          ],
-          "examples": [
-            "bricklink messages send 12345678 \"Your order has been shipped!\"",
-            "bricklink messages send --member sydneybrickemp \"Hello!\" --subject \"Re: Your message\"",
-            "bricklink messages send 12345678 \"Hello\" --subject \"Question about order\""
-          ],
-          "usage_instructions": "Run `bricklink messages send`. and optional arguments arg1, arg2. Example: `bricklink messages send 12345678 \"Your order has been shipped!\"`."
-        },
-        "reply": {
-          "help": "Reply to a message (browser-based).",
-          "arguments": [
-            {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message ID to reply to"
             },
             {
-              "name": "body",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Reply body"
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "notification": {
+      "help": "Manage notifications (browser)",
+      "usage_instructions": "Use `bricklink notification` with one of: get, list, send-wanted-list.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details about a notification type.",
+          "examples": [
+            "bricklink notification get wanted_list",
+            "bricklink notification get wanted_list --table"
+          ],
+          "usage_instructions": "Run `bricklink notification get`. and optional arguments notification_type. Use options such as --table as needed. Example: `bricklink notification get wanted_list`.",
+          "arguments": [
+            {
+              "name": "notification_type",
+              "type": "NOTIFICATION_TYPE",
+              "required": false,
+              "help": "Notification type",
+              "default": "wanted_list"
             }
           ],
           "options": [
             {
-              "name": "--subject",
-              "type": "TEXT",
-              "required": false,
-              "help": "Override subject",
-              "short": "-s"
-            },
-            {
-              "name": "--priority",
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Send as high priority"
+              "help": "Display as table",
+              "short": "-t"
             },
             {
-              "name": "--copy",
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List available notification actions. Shows the notification types that can be sent via the browser.",
+          "examples": [
+            "bricklink notification list",
+            "bricklink notification list --table",
+            "bricklink notification list --filter type:eq:wanted_list",
+            "bricklink notification list --properties type,name"
+          ],
+          "usage_instructions": "Run `bricklink notification list`. Use options such as --table, --limit, --filter, --properties as needed. Example: `bricklink notification list`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Send a copy to yourself"
-            }
-          ],
-          "examples": [
-            "bricklink messages reply 12345678 \"Thank you for your message!\"",
-            "bricklink messages reply 12345678 \"Here is the tracking info\" --copy"
-          ],
-          "usage_instructions": "Run `bricklink messages reply`. with required arguments message_id, body. Example: `bricklink messages reply 12345678 \"Thank you for your message!\"`."
-        },
-        "mark-read": {
-          "help": "Mark a message as read (browser-based).",
-          "arguments": [
+              "help": "Display as table",
+              "short": "-t"
+            },
             {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message ID"
-            }
-          ],
-          "examples": [
-            "bricklink messages mark-read 12345678"
-          ],
-          "usage_instructions": "Run `bricklink messages mark-read`. with required arguments message_id. Example: `bricklink messages mark-read 12345678`."
-        },
-        "mark-unread": {
-          "help": "Mark a message as unread (browser-based).",
-          "arguments": [
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
             {
-              "name": "message_id",
+              "name": "--filter",
               "type": "TEXT",
-              "required": true,
-              "help": "Message ID"
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "send-wanted-list": {
+          "help": "Send wanted list notification to all matching stores.",
           "examples": [
-            "bricklink messages mark-unread 12345678"
+            "bricklink notification send-wanted-list"
           ],
-          "usage_instructions": "Run `bricklink messages mark-unread`. with required arguments message_id. Example: `bricklink messages mark-unread 12345678`."
+          "usage_instructions": "Run `bricklink notification send-wanted-list`. Example: `bricklink notification send-wanted-list`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `bricklink messages` with one of: get, list, mark-read, mark-unread, reply, send."
+      }
     },
-    "refund": {
-      "help": "Manage refunds (browser)",
+    "order": {
+      "help": "Manage orders",
+      "usage_instructions": "Use `bricklink order` with one of: file, get, items, list, search, ship, update-status.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "info": {
-          "help": "Get refund page info for an order (browser-based). Shows transaction ID, payment processor, prior refunds, buyer info, and refund activity history.",
+        "file": {
+          "help": "File an order (set is_filed to true).",
+          "examples": [
+            "bricklink order file 12345678"
+          ],
+          "usage_instructions": "Run `bricklink order file`. with required arguments order_id. Example: `bricklink order file 12345678`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get order details by ID.",
+          "examples": [
+            "bricklink order get 12345678",
+            "bricklink order get 12345678 --include-messages",
+            "bricklink order get 12345678 --table"
+          ],
+          "usage_instructions": "Run `bricklink order get`. with required arguments order_id. Use options such as --table as needed. Example: `bricklink order get 12345678`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--include-messages",
+              "type": "bool",
+              "required": false,
+              "help": "Include order messages (API-based)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "items": {
+          "help": "Get items in an order. The API returns items in nested batch lists. This command flattens them into a single list.",
+          "examples": [
+            "bricklink order items 12345678",
+            "bricklink order items 12345678 --table",
+            "bricklink order items 12345678 --filter \"quantity:gte:2\"",
+            "bricklink order items 12345678 --properties \"item.no,item.name,quantity\""
+          ],
+          "usage_instructions": "Run `bricklink order items`. with required arguments order_id. Use options such as --table, --filter, --limit, --properties as needed. Example: `bricklink order items 12345678`.",
           "arguments": [
             {
               "name": "order_id",
@@ -1695,16 +2066,377 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List orders with optional filters.",
+          "examples": [
+            "bricklink order list",
+            "bricklink order list --status PAID,PACKED",
+            "bricklink order list --direction in --not-shipped",
+            "bricklink order list --not-picked --table",
+            "bricklink order list --include-messages",
+            "bricklink order list --filter \"buyer_name:contains:John\" --limit 10",
+            "bricklink order list --properties \"order_id,status,buyer_name\""
+          ],
+          "usage_instructions": "Run `bricklink order list`. Use options such as --status, --direction, --table, --filter, --limit, --properties as needed. Example: `bricklink order list`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (e.g., PAID,PACKED)",
+              "short": "-s"
+            },
+            {
+              "name": "--direction",
+              "type": "TEXT",
+              "required": false,
+              "help": "'in' (received) or 'out' (placed)",
+              "short": "-d"
+            },
+            {
+              "name": "--filed",
+              "type": "bool",
+              "required": false,
+              "help": "Filter by filed status"
+            },
+            {
+              "name": "--shipped",
+              "type": "bool",
+              "required": false,
+              "help": "Filter shipped orders"
+            },
+            {
+              "name": "--not-shipped",
+              "type": "bool",
+              "required": false,
+              "help": "Filter not shipped orders"
+            },
+            {
+              "name": "--not-picked",
+              "type": "bool",
+              "required": false,
+              "help": "Filter not picked orders"
+            },
+            {
+              "name": "--include-messages",
+              "type": "bool",
+              "required": false,
+              "help": "Include order messages (API-based)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search orders by item number (browser-based). Finds all orders containing the specified item. Uses browser automation since this feature is not available via the API.",
+          "examples": [
+            "bricklink order search 3001",
+            "bricklink order search 3001 --type PART --color 11",
+            "bricklink order search 3001 --direction in",
+            "bricklink order search 75192 --type SET --table",
+            "bricklink order search 3001 --from \"01/01/2024\" --to \"12/31/2024\"",
+            "bricklink order search 3001 --ids-only"
+          ],
+          "usage_instructions": "Run `bricklink order search`. with required arguments item_no. Use options such as --type, --color, --condition, --status, --direction, --table as needed. Example: `bricklink order search 3001`.",
+          "arguments": [
+            {
+              "name": "item_no",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item number to search for"
             }
           ],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Item type (PART, SET, MINIFIG, etc.)"
+            },
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Color ID",
+              "short": "-c"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "Condition (N=new, U=used)"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Order status filter",
+              "short": "-s"
+            },
+            {
+              "name": "--direction",
+              "type": "TEXT",
+              "required": false,
+              "help": "'in' (received) or 'out' (placed)",
+              "short": "-d",
+              "default": "out"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "From date (MM/DD/YYYY)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "To date (MM/DD/YYYY)"
+            },
+            {
+              "name": "--ids-only",
+              "type": "bool",
+              "required": false,
+              "help": "Output only order IDs"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "ship": {
+          "help": "Mark order as shipped, optionally with tracking info. Updates shipping details first (if provided), then sets status to SHIPPED.",
+          "examples": [
+            "bricklink order ship 12345678",
+            "bricklink order ship 12345678 --tracking 9400111899223456789012",
+            "bricklink order ship 12345678 --tracking 9400111899223456789012 --link \"https://tools.usps.com/go/TrackConfirmAction?tLabels=9400111899223456789012\""
+          ],
+          "usage_instructions": "Run `bricklink order ship`. with required arguments order_id. Use options such as --tracking, --link as needed. Example: `bricklink order ship 12345678`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--tracking",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tracking number"
+            },
+            {
+              "name": "--link",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tracking URL"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update-status": {
+          "help": "Update order status. Valid statuses: PENDING, UPDATED, PROCESSING, READY, PAID, PACKED, SHIPPED, RECEIVED, COMPLETED, OCR, NPB, NPX, NRS, NSS, CANCELLED",
+          "examples": [
+            "bricklink order update-status 12345678 PACKED",
+            "bricklink order update-status 12345678 SHIPPED"
+          ],
+          "usage_instructions": "Run `bricklink order update-status`. with required arguments order_id, status. Example: `bricklink order update-status 12345678 PACKED`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "required": true,
+              "help": "New status (PENDING,UPDATED,PROCESSING,READY,PAID,PACKED,SHIPPED,RECEIVED,COMPLETED)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "refund": {
+      "help": "Manage refunds (browser)",
+      "usage_instructions": "Use `bricklink refund` with one of: full, info, issue.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "full": {
+          "help": "Issue a full refund for an order (browser-based). Default reason: \"Buyer and Seller agreed to cancel order\"",
+          "examples": [
+            "bricklink refund full 12345678",
+            "bricklink refund full 12345678 --reason \"Seller cannot complete transaction\"",
+            "bricklink refund full 12345678 --details \"Out of stock on multiple items\""
+          ],
+          "usage_instructions": "Run `bricklink refund full`. with required arguments order_id. Example: `bricklink refund full 12345678`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Refund reason",
+              "short": "-r"
+            },
+            {
+              "name": "--details",
+              "type": "TEXT",
+              "required": false,
+              "help": "Refund details (max 200 chars)",
+              "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "info": {
+          "help": "Get refund page info for an order (browser-based). Shows transaction ID, payment processor, prior refunds, buyer info, and refund activity history.",
           "examples": [
             "bricklink refund info 12345678",
             "bricklink refund info 12345678 --table"
           ],
-          "usage_instructions": "Run `bricklink refund info`. with required arguments order_id. Use options such as --table as needed. Example: `bricklink refund info 12345678`."
+          "usage_instructions": "Run `bricklink refund info`. with required arguments order_id. Use options such as --table as needed. Example: `bricklink refund info 12345678`.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "issue": {
           "help": "Issue a partial refund for an order (browser-based). Default reason: \"Item was missing or unsatisfactory\"",
+          "examples": [
+            "bricklink refund issue 12345678 5.00",
+            "bricklink refund issue 12345678 3.50 --reason \"Overcharged shipping\"",
+            "bricklink refund issue 12345678 2.00 --details \"Missing 1x brick 3001\""
+          ],
+          "usage_instructions": "Run `bricklink refund issue`. with required arguments order_id, amount. Example: `bricklink refund issue 12345678 5.00`.",
           "arguments": [
             {
               "name": "order_id",
@@ -1739,343 +2471,16 @@
               "type": "bool",
               "required": false,
               "help": "Fill form and verify Review is enabled; do NOT submit"
-            }
-          ],
-          "examples": [
-            "bricklink refund issue 12345678 5.00",
-            "bricklink refund issue 12345678 3.50 --reason \"Overcharged shipping\"",
-            "bricklink refund issue 12345678 2.00 --details \"Missing 1x brick 3001\""
-          ],
-          "usage_instructions": "Run `bricklink refund issue`. with required arguments order_id, amount. Example: `bricklink refund issue 12345678 5.00`."
-        },
-        "full": {
-          "help": "Issue a full refund for an order (browser-based). Default reason: \"Buyer and Seller agreed to cancel order\"",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--reason",
-              "type": "TEXT",
-              "required": false,
-              "help": "Refund reason",
-              "short": "-r"
-            },
-            {
-              "name": "--details",
-              "type": "TEXT",
-              "required": false,
-              "help": "Refund details (max 200 chars)",
-              "short": "-d"
-            }
-          ],
-          "examples": [
-            "bricklink refund full 12345678",
-            "bricklink refund full 12345678 --reason \"Seller cannot complete transaction\"",
-            "bricklink refund full 12345678 --details \"Out of stock on multiple items\""
-          ],
-          "usage_instructions": "Run `bricklink refund full`. with required arguments order_id. Example: `bricklink refund full 12345678`."
-        }
-      },
-      "usage_instructions": "Use `bricklink refund` with one of: full, info, issue."
-    },
-    "notification": {
-      "help": "Manage notifications (browser)",
-      "commands": {
-        "list": {
-          "help": "List available notification actions. Shows the notification types that can be sent via the browser.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to display",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "bricklink notification list",
-            "bricklink notification list --table",
-            "bricklink notification list --filter type:eq:wanted_list",
-            "bricklink notification list --properties type,name"
-          ],
-          "usage_instructions": "Run `bricklink notification list`. Use options such as --table, --limit, --filter, --properties as needed. Example: `bricklink notification list`."
-        },
-        "get": {
-          "help": "Get details about a notification type.",
-          "arguments": [
-            {
-              "name": "notification_type",
-              "type": "NOTIFICATION_TYPE",
-              "required": false,
-              "help": "Notification type",
-              "default": "wanted_list"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "bricklink notification get wanted_list",
-            "bricklink notification get wanted_list --table"
-          ],
-          "usage_instructions": "Run `bricklink notification get`. and optional arguments notification_type. Use options such as --table as needed. Example: `bricklink notification get wanted_list`."
-        },
-        "send-wanted-list": {
-          "help": "Send wanted list notification to all matching stores.",
-          "examples": [
-            "bricklink notification send-wanted-list"
-          ],
-          "usage_instructions": "Run `bricklink notification send-wanted-list`. Example: `bricklink notification send-wanted-list`."
-        }
-      },
-      "usage_instructions": "Use `bricklink notification` with one of: get, list, send-wanted-list."
-    },
-    "auth": {
-      "help": "Manage bricklink authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For browser sessions, BrickLink opens the LEGO account login; use the LEGO.com account email address and password, not the legacy BrickLink username. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Run `bricklink auth login`. For browser-session login, enter the LEGO.com account email address and password."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `bricklink auth logout`."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `bricklink auth status`. Use options such as --table as needed."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `bricklink auth test`. Use options such as --table as needed."
-        },
-        "confirm": {
-          "help": "Clear the legacy pending-confirmation flag from older Bricklink builds. Current browser commands do not store confirmation codes locally. If BrickLink redirects to ``confirmation_code_required``, the command fails immediately and tells the user to check email and retry.",
-          "usage_instructions": "Run `bricklink auth confirm`."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `bricklink auth profiles list`. Use options such as --table, --limit, --filter, --properties as needed."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `bricklink auth profiles get`. with required arguments name. Use options such as --table as needed."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `bricklink auth profiles create`. with required arguments name."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `bricklink auth profiles set-default`. with required arguments name."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `bricklink auth profiles delete`. with required arguments name."
-            }
-          },
-          "usage_instructions": "Use `bricklink auth profiles` with one of: create, delete, get, list, set-default."
+          ]
         }
-      },
-      "usage_instructions": "Use `bricklink auth` with one of: confirm, login, logout, profiles, status, test."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `bricklink cache clear`."
-        }
-      },
-      "usage_instructions": "Use `bricklink cache` with one of: clear."
+      }
     }
   },
   "usage_instructions": "Use `bricklink <command>` to access Bricklink API and browser workflows. Top-level command groups: auth, cache, catalog, coupon, inventory, member, messages, notification, order, refund. Run `bricklink <command> --help` for command-specific arguments and options."

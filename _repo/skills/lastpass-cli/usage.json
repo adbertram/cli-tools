@@ -1,7 +1,7 @@
 {
   "tool": "lastpass",
   "description": "LastPass password manager CLI wrapper",
-  "discovered_at": "2026-06-17T13:35:35Z",
+  "discovered_at": "2026-06-20T19:49:46Z",
   "total_commands": 20,
   "global_options": [
     {
@@ -455,7 +455,7 @@
           ]
         },
         "list": {
-          "help": "List vault entries. Metadata-only: --filter only supports id, name, group, full_path. The name:like/ilike wildcard match is case-insensitive (name:like:%google% also matches \"Google\"). Filtering on a non-metadata field such as Username or URL is an error, not an empty result. Default --limit is 50; use --limit 0 for unlimited (truncation prints a stderr notice).",
+          "help": "List vault entries. Metadata-only: --filter only supports id, name, group, full_path. The name:like/ilike wildcard match is case-insensitive (name:like:%google% also matches \"Google\"). Filtering on a non-metadata field such as Username or URL is an error, not an empty result. Default --limit is 50; use --limit 0 for unlimited metadata searches (truncation prints a stderr notice). Category filtering checks each remaining candidate's NoteType and refuses more than 50 candidates, so pass a group argument or metadata --filter before --category; do not run category-only scans with --limit 0.",
           "examples": [
             "lastpass items list",
             "lastpass items list --table",
@@ -465,7 +465,7 @@
             "lastpass items list --filter \"name:like:%google%\" --limit 0",
             "lastpass items list --filter \"group:eq:Home\" --limit 0"
           ],
-          "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below.",
+          "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below. When using `--category`, first narrow candidates with a group argument or metadata `--filter`; category-only scans fail above 50 candidates.",
           "arguments": [
             {
               "name": "group",
@@ -486,7 +486,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum entries to return (default 50; use 0 for unlimited). A truncation notice is printed to stderr when results are capped. The vault can hold ~1000+ entries, so the default silently truncates a full search unless you raise it or pass 0.",
+              "help": "Maximum entries to return (default 50; use 0 for unlimited). A truncation notice is printed to stderr when results are capped",
               "short": "-l",
               "default": "50"
             },
@@ -494,14 +494,14 @@
               "name": "--category",
               "type": "TEXT",
               "required": false,
-              "help": "Filter narrowed entries by LastPass category/note type",
+              "help": "Filter already-narrowed entries by LastPass category/note type; broad category scans over 50 candidates are refused",
               "short": "-c"
             },
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value. Only metadata fields are filterable: id, name, group, full_path. name:like/ilike wildcard match is case-insensitive (name:like:%google% matches \"Google\"). A filter on any other field (e.g. Username, URL) errors with a non-zero exit listing supported fields -- it never returns an empty/false-negative result. Examples: name:eq:MyItem, name:like:%github%, group:eq:Home.",
+              "help": "Filter: field:op:value. Only metadata fields are filterable (id, name, group, full_path); name:like/ilike is case-insensitive. An unsupported field (e.g. Username, URL) errors instead of returning empty. E.g. name:like:%github%, group:eq:Home",
               "short": "-f"
             },
             {

@@ -1,8 +1,8 @@
 {
   "tool": "clickbank",
   "description": "CLI interface for ClickBank API",
-  "discovered_at": "2026-05-20T15:56:34.264659+00:00",
-  "total_commands": 26,
+  "discovered_at": "2026-06-20T19:40:59Z",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -19,45 +19,209 @@
     }
   ],
   "commands": {
-    "orders": {
-      "help": "Work with ClickBank orders",
+    "auth": {
+      "help": "Manage clickbank authentication",
+      "usage_instructions": "Use `clickbank auth` with one of: login, logout, profiles, status, test.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "get": {
-          "help": "Get order details for a receipt.",
-          "arguments": [
-            {
-              "name": "receipt",
-              "type": "TEXT",
-              "required": true,
-              "help": "Receipt number"
-            }
-          ],
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `clickbank auth login`.",
+          "arguments": [],
           "options": [
             {
-              "name": "--sku",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "SKU for multi-item cart receipts"
+              "help": "Profile name to save credentials to",
+              "short": "-p"
             },
             {
-              "name": "--table",
+              "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
             },
             {
-              "name": "--properties",
+              "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
+              "help": "Authenticate only this credential type (e.g., 'api_key', 'browser_session')",
+              "short": "-c"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Run `clickbank auth logout`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `clickbank orders get`. with required arguments receipt. Use options such as --table, --properties as needed."
+          ]
         },
-        "list": {
-          "help": "List orders visible to the authenticated ClickBank API key.",
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `clickbank auth profiles` with one of: create, delete, get, list, set-default.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `clickbank auth profiles create`. with required arguments name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `clickbank auth profiles delete`. with required arguments name.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `clickbank auth profiles get`. with required arguments name. Use options such as --table as needed.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `clickbank auth profiles list`. Use options such as --table, --limit, --filter, --properties as needed.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Run `clickbank auth status`. Use options such as --table as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `clickbank auth test`. Use options such as --table as needed.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -67,337 +231,54 @@
               "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
+              "name": "--verbose",
+              "type": "bool",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum orders to return",
-              "short": "-l",
-              "default": "100"
+              "help": "Show detailed checks",
+              "short": "-v"
             },
             {
-              "name": "--page",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [x>=1]  Starting ClickBank page number",
-              "default": "1"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
+              "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `clickbank orders list`. Use options such as --table, --limit, --page, --filter, --properties as needed."
-        },
-        "count": {
-          "help": "Count orders matching documented ClickBank filters.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value",
-              "short": "-f"
-            }
-          ],
-          "usage_instructions": "Run `clickbank orders count`. Use options such as --table, --filter as needed."
-        },
-        "upsells": {
-          "help": "List upsell transactions for a parent receipt.",
-          "arguments": [
-            {
-              "name": "receipt",
-              "type": "TEXT",
-              "required": true,
-              "help": "Initial transaction receipt"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank orders upsells`. with required arguments receipt. Use options such as --table, --properties as needed."
+          ]
         }
-      },
-      "usage_instructions": "Use `clickbank orders` with one of: count, get, list, upsells."
+      }
     },
-    "products": {
-      "help": "Work with ClickBank products",
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `clickbank cache` with one of: clear.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "get": {
-          "help": "Get a product by SKU.",
-          "arguments": [
-            {
-              "name": "sku",
-              "type": "TEXT",
-              "required": true,
-              "help": "Product SKU"
-            }
-          ],
-          "options": [
-            {
-              "name": "--site",
-              "type": "TEXT",
-              "required": true,
-              "help": "Owning ClickBank account nickname"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank products get`. with required arguments sku. Use options such as --site, --table, --properties as needed."
-        },
-        "list": {
-          "help": "List products for a ClickBank account nickname.",
-          "options": [
-            {
-              "name": "--site",
-              "type": "TEXT",
-              "required": true,
-              "help": "Owning ClickBank account nickname"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [x>=1]  Maximum products to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--page",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [x>=1]  Starting ClickBank page number",
-              "default": "1"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank products list`. Use options such as --site, --table, --limit, --page, --filter, --properties as needed."
-        },
-        "create": {
-          "help": "Create a product using documented ClickBank query parameters.",
-          "arguments": [
-            {
-              "name": "sku",
-              "type": "TEXT",
-              "required": true,
-              "help": "Product SKU to create"
-            }
-          ],
-          "options": [
-            {
-              "name": "--param",
-              "type": "TEXT",
-              "required": true,
-              "help": "Documented ClickBank product field as key=value. Repeat as needed"
-            }
-          ],
-          "usage_instructions": "Run `clickbank products create`. with required arguments sku."
-        },
-        "delete": {
-          "help": "Delete a product by SKU.",
-          "arguments": [
-            {
-              "name": "sku",
-              "type": "TEXT",
-              "required": true,
-              "help": "Product SKU"
-            }
-          ],
-          "options": [
-            {
-              "name": "--site",
-              "type": "TEXT",
-              "required": true,
-              "help": "Owning ClickBank account nickname"
-            }
-          ],
-          "usage_instructions": "Run `clickbank products delete`. with required arguments sku. Use options such as --site as needed."
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `clickbank cache clear`.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Use `clickbank products` with one of: create, delete, get, list."
-    },
-    "quickstats": {
-      "help": "Work with ClickBank quickstats",
-      "commands": {
-        "accounts": {
-          "help": "List account nicknames visible to the API key.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank quickstats accounts`. Use options such as --table, --properties as needed."
-        },
-        "get": {
-          "help": "Get quickstats rows for a single ClickBank account nickname.",
-          "arguments": [
-            {
-              "name": "account",
-              "type": "TEXT",
-              "required": true,
-              "help": "ClickBank account nickname"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank quickstats get`. with required arguments account. Use options such as --table, --properties as needed."
-        },
-        "count": {
-          "help": "Return summed quickstats for the requested period.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value",
-              "short": "-f"
-            }
-          ],
-          "usage_instructions": "Run `clickbank quickstats count`. Use options such as --table, --filter as needed."
-        },
-        "list": {
-          "help": "List quickstats grouped by account nickname.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [x>=1]  Maximum account rows to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--page",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [x>=1]  Starting ClickBank page number",
-              "default": "1"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `clickbank quickstats list`. Use options such as --table, --limit, --page, --filter, --properties as needed."
-        }
-      },
-      "usage_instructions": "Use `clickbank quickstats` with one of: accounts, count, get, list."
+      }
     },
     "marketplace": {
       "help": "Search the public ClickBank affiliate marketplace",
+      "usage_instructions": "Use `clickbank marketplace` with one of: categories, hoplink, product, search.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "categories": {
           "help": "List the marketplace categories (and subcategories when --flat is off). The full category tree is cached on disk -- it changes rarely (every few weeks at most), so subsequent runs return instantly.  Use ``clickbank cache clear`` to force a refresh.",
+          "usage_instructions": "Run `clickbank marketplace categories`. Use options such as --table, --limit, --filter, --properties as needed.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -433,12 +314,82 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "hoplink": {
+          "help": "Generate the affiliate tracking URL (hoplink) for a vendor. Offline -- does not call the marketplace.  Substitutes the affiliate nickname from ``CLICKBANK_AFFILIATE_NICKNAME`` if configured; otherwise emits a ``{affiliate}`` placeholder so the URL is clearly incomplete.",
+          "usage_instructions": "Run `clickbank marketplace hoplink`. with required arguments vendor.",
+          "arguments": [
+            {
+              "name": "vendor",
+              "type": "TEXT",
+              "required": true,
+              "help": "Vendor nickname (uppercase)"
             }
           ],
-          "usage_instructions": "Run `clickbank marketplace categories`. Use options such as --table, --limit, --filter, --properties as needed."
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "product": {
+          "help": "Show the full marketplace record for a single vendor. Combines the search-result snapshot with the historical metrics (returns / refunds / chargebacks / rank-and-gravity ranges) the marketplace UI shows on a product's detail page.",
+          "examples": [
+            "clickbank marketplace product BRAINSONGX",
+            "clickbank marketplace product YUSLEEP --table"
+          ],
+          "usage_instructions": "Run `clickbank marketplace product`. with required arguments vendor. Use options such as --table, --properties as needed. Example: `clickbank marketplace product BRAINSONGX`.",
+          "arguments": [
+            {
+              "name": "vendor",
+              "type": "TEXT",
+              "required": true,
+              "help": "Vendor nickname (uppercase)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "search": {
           "help": "Search the ClickBank affiliate marketplace.",
+          "examples": [
+            "clickbank marketplace search --category 'Health & Fitness' --limit 10",
+            "clickbank marketplace search --query keto --min-gravity 20 --table",
+            "clickbank marketplace search --recurring --sort gravity --limit 25"
+          ],
+          "usage_instructions": "Run `clickbank marketplace search`. Use options such as --category, --subcategory, --query, --recurring, --sort, --limit, --page, --table, --filter, --properties as needed. Example: `clickbank marketplace search --category 'Health & Fitness' --limit 10`.",
+          "arguments": [],
           "options": [
             {
               "name": "--category",
@@ -537,23 +488,155 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "clickbank marketplace search --category 'Health & Fitness' --limit 10",
-            "clickbank marketplace search --query keto --min-gravity 20 --table",
-            "clickbank marketplace search --recurring --sort gravity --limit 25"
-          ],
-          "usage_instructions": "Run `clickbank marketplace search`. Use options such as --category, --subcategory, --query, --recurring, --sort, --limit, --page, --table, --filter, --properties as needed. Example: `clickbank marketplace search --category 'Health & Fitness' --limit 10`."
+          ]
+        }
+      }
+    },
+    "orders": {
+      "help": "Work with ClickBank orders",
+      "usage_instructions": "Use `clickbank orders` with one of: count, get, list, upsells.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "count": {
+          "help": "Count orders matching documented ClickBank filters.",
+          "usage_instructions": "Run `clickbank orders count`. Use options such as --table, --filter as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
-        "product": {
-          "help": "Show the full marketplace record for a single vendor. Combines the search-result snapshot with the historical metrics (returns / refunds / chargebacks / rank-and-gravity ranges) the marketplace UI shows on a product's detail page.",
+        "get": {
+          "help": "Get order details for a receipt.",
+          "usage_instructions": "Run `clickbank orders get`. with required arguments receipt. Use options such as --table, --properties as needed.",
           "arguments": [
             {
-              "name": "vendor",
+              "name": "receipt",
               "type": "TEXT",
               "required": true,
-              "help": "Vendor nickname (uppercase)"
+              "help": "Receipt number"
+            }
+          ],
+          "options": [
+            {
+              "name": "--sku",
+              "type": "TEXT",
+              "required": false,
+              "help": "SKU for multi-item cart receipts"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List orders visible to the authenticated ClickBank API key.",
+          "usage_instructions": "Run `clickbank orders list`. Use options such as --table, --limit, --page, --filter, --properties as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum orders to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Starting ClickBank page number",
+              "default": "1"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "upsells": {
+          "help": "List upsell transactions for a parent receipt.",
+          "usage_instructions": "Run `clickbank orders upsells`. with required arguments receipt. Use options such as --table, --properties as needed.",
+          "arguments": [
+            {
+              "name": "receipt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Initial transaction receipt"
             }
           ],
           "options": [
@@ -570,95 +653,100 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "clickbank marketplace product BRAINSONGX",
-            "clickbank marketplace product YUSLEEP --table"
-          ],
-          "usage_instructions": "Run `clickbank marketplace product`. with required arguments vendor. Use options such as --table, --properties as needed. Example: `clickbank marketplace product BRAINSONGX`."
-        },
-        "hoplink": {
-          "help": "Generate the affiliate tracking URL (hoplink) for a vendor. Offline -- does not call the marketplace.  Substitutes the affiliate nickname from ``CLICKBANK_AFFILIATE_NICKNAME`` if configured; otherwise emits a ``{affiliate}`` placeholder so the URL is clearly incomplete.",
+          ]
+        }
+      }
+    },
+    "products": {
+      "help": "Work with ClickBank products",
+      "usage_instructions": "Use `clickbank products` with one of: create, delete, get, list.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a product using documented ClickBank query parameters.",
+          "usage_instructions": "Run `clickbank products create`. with required arguments sku.",
           "arguments": [
             {
-              "name": "vendor",
+              "name": "sku",
               "type": "TEXT",
               "required": true,
-              "help": "Vendor nickname (uppercase)"
+              "help": "Product SKU to create"
             }
           ],
-          "usage_instructions": "Run `clickbank marketplace hoplink`. with required arguments vendor."
-        }
-      },
-      "usage_instructions": "Use `clickbank marketplace` with one of: categories, hoplink, product, search."
-    },
-    "auth": {
-      "help": "Manage clickbank authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "options": [
+            {
+              "name": "--param",
+              "type": "TEXT",
+              "required": true,
+              "help": "Documented ClickBank product field as key=value. Repeat as needed"
+            },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a product by SKU.",
+          "usage_instructions": "Run `clickbank products delete`. with required arguments sku. Use options such as --site as needed.",
+          "arguments": [
             {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
+              "name": "sku",
               "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'api_key', 'browser_session')",
-              "short": "-c"
+              "required": true,
+              "help": "Product SKU"
             }
           ],
-          "usage_instructions": "Run `clickbank auth login`."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
           "options": [
+            {
+              "name": "--site",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owning ClickBank account nickname"
+            },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `clickbank auth logout`."
+          ]
         },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "options": [
+        "get": {
+          "help": "Get a product by SKU.",
+          "usage_instructions": "Run `clickbank products get`. with required arguments sku. Use options such as --site, --table, --properties as needed.",
+          "arguments": [
             {
-              "name": "--profile",
+              "name": "sku",
               "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "required": true,
+              "help": "Product SKU"
             }
           ],
-          "usage_instructions": "Run `clickbank auth status`. Use options such as --table as needed."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
           "options": [
+            {
+              "name": "--site",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owning ClickBank account nickname"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -667,140 +755,228 @@
               "short": "-t"
             },
             {
-              "name": "--verbose",
-              "type": "bool",
+              "name": "--properties",
+              "type": "TEXT",
               "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
+              "help": "Comma-separated fields to include",
+              "short": "-p"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List products for a ClickBank account nickname.",
+          "usage_instructions": "Run `clickbank products list`. Use options such as --site, --table, --limit, --page, --filter, --properties as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--site",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owning ClickBank account nickname"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum products to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Starting ClickBank page number",
+              "default": "1"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "quickstats": {
+      "help": "Work with ClickBank quickstats",
+      "usage_instructions": "Use `clickbank quickstats` with one of: accounts, count, get, list.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "accounts": {
+          "help": "List account nicknames visible to the API key.",
+          "usage_instructions": "Run `clickbank quickstats accounts`. Use options such as --table, --properties as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "count": {
+          "help": "Return summed quickstats for the requested period.",
+          "usage_instructions": "Run `clickbank quickstats count`. Use options such as --table, --filter as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get quickstats rows for a single ClickBank account nickname.",
+          "usage_instructions": "Run `clickbank quickstats get`. with required arguments account. Use options such as --table, --properties as needed.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": "ClickBank account nickname"
             }
           ],
-          "usage_instructions": "Run `clickbank auth test`. Use options such as --table as needed."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `clickbank auth profiles list`. Use options such as --table, --limit, --filter, --properties as needed."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `clickbank auth profiles get`. with required arguments name. Use options such as --table as needed."
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
             },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `clickbank auth profiles create`. with required arguments name."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `clickbank auth profiles set-default`. with required arguments name."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `clickbank auth profiles delete`. with required arguments name."
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          },
-          "usage_instructions": "Use `clickbank auth profiles` with one of: create, delete, get, list, set-default."
+          ]
+        },
+        "list": {
+          "help": "List quickstats grouped by account nickname.",
+          "usage_instructions": "Run `clickbank quickstats list`. Use options such as --table, --limit, --page, --filter, --properties as needed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Maximum account rows to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Starting ClickBank page number",
+              "default": "1"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `clickbank auth` with one of: login, logout, profiles, status, test."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `clickbank cache clear`."
-        }
-      },
-      "usage_instructions": "Use `clickbank cache` with one of: clear."
+      }
     }
   },
   "usage_instructions": "Use `clickbank <command>` for ClickBank REST API and marketplace browser workflows. Top-level command groups: auth, cache, marketplace, orders, products, quickstats. Run `clickbank <command> --help` for command-specific arguments and options."

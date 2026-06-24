@@ -23,7 +23,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -714,5 +714,5 @@
       }
     }
   },
-  "discovered_at": "2026-06-08T18:37:37Z"
+  "discovered_at": "2026-06-21T20:12:04Z"
 }

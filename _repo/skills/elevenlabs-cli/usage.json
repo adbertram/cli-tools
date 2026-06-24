@@ -1,8 +1,8 @@
 {
   "tool": "elevenlabs",
   "description": "CLI interface for ElevenLabs API",
-  "discovered_at": "2026-05-20T16:14:43.214818+00:00",
-  "total_commands": 26,
+  "discovered_at": "2026-06-20T19:45:00Z",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -19,113 +19,202 @@
     }
   ],
   "commands": {
-    "voices": {
-      "help": "Manage ElevenLabs voices",
+    "auth": {
+      "help": "Manage elevenlabs authentication",
+      "usage_instructions": "Use `elevenlabs auth` for manage elevenlabs authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List available voices.",
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Run `elevenlabs auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`.",
+          "arguments": [],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum voices to return",
-              "short": "-l",
-              "default": "10"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:ilike:%Rachel%, category:eq:generated)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
+              "help": "Profile name to save credentials to",
               "short": "-p"
             },
             {
-              "name": "--search",
-              "type": "TEXT",
+              "name": "--force",
+              "type": "bool",
               "required": false,
-              "help": "Server-side search across voice metadata",
-              "short": "-s"
-            },
-            {
-              "name": "--voice-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Voice type filter"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Voice category filter"
-            },
-            {
-              "name": "--sort",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort field: created_at_unix or name"
-            },
-            {
-              "name": "--sort-direction",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort direction: asc or desc"
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
             }
-          ],
-          "usage_instructions": "Run `elevenlabs voices list` to list available voices. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+          ]
         },
-        "get": {
-          "help": "Get metadata for a voice.",
-          "arguments": [
-            {
-              "name": "voice_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Voice ID"
-            }
-          ],
+        "logout": {
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Run `elevenlabs auth logout` to clear stored credentials. Common options: `--profile/-p`.",
+          "arguments": [],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
+              "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `elevenlabs voices get` to get metadata for a voice. Required arguments: `VOICE_ID`. Common options: `--table/-t`, `--properties/-p`."
+          ]
         },
-        "settings": {
-          "help": "Get stored settings for a voice.",
-          "arguments": [
-            {
-              "name": "voice_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Voice ID"
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `elevenlabs auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `elevenlabs auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `elevenlabs auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `elevenlabs auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `elevenlabs auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          ],
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Run `elevenlabs auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `elevenlabs auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -135,23 +224,88 @@
               "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
+              "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `elevenlabs voices settings` to get stored settings for a voice. Required arguments: `VOICE_ID`. Common options: `--table/-t`, `--properties/-p`."
+          ]
         }
-      },
-      "usage_instructions": "Use `elevenlabs voices` for manage elevenlabs voices. Available subcommands here are `list`, `get`, `settings`."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `elevenlabs cache` for manage response cache. Available subcommands here are `clear`.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `elevenlabs cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": []
+        }
+      }
     },
     "models": {
       "help": "Manage ElevenLabs models",
+      "usage_instructions": "Use `elevenlabs models` for manage elevenlabs models. Available subcommands here are `list`, `get`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get a model from the model list by ID.",
+          "usage_instructions": "Run `elevenlabs models get` to get a model from the model list by ID. Required arguments: `MODEL_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "model_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Model ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List available models.",
+          "usage_instructions": "Run `elevenlabs models list` to list available models. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -181,18 +335,229 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `elevenlabs models list` to list available models. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "Get a model from the model list by ID.",
+          ]
+        }
+      }
+    },
+    "pronunciation-dictionaries": {
+      "help": "Manage pronunciation dictionaries",
+      "usage_instructions": "Use `elevenlabs pronunciation-dictionaries` for manage pronunciation dictionaries. Available subcommands here are `list`, `get`, `create-from-rules`, `create-from-file`, `update`, `set-rules`, `add-rules`, `remove-rules`, `download`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add-rules": {
+          "help": "_DICTIONARY_ID Add or replace rules in a pronunciation dictionary.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries add-rules` to _DICTIONARY_ID Add or replace rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
-              "name": "model_id",
+              "name": "pronunciation_dictionary_id",
               "type": "TEXT",
               "required": true,
-              "help": "Model ID"
+              "help": "Pronunciation dictionary ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--alias-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
+            },
+            {
+              "name": "--phoneme-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create-from-file": {
+          "help": "[OPTIONS] Create a pronunciation dictionary from a PLS lexicon file.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-file` to [OPTIONS] Create a pronunciation dictionary from a PLS lexicon file. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary name",
+              "short": "-n"
+            },
+            {
+              "name": "--file",
+              "type": "FILE",
+              "required": true,
+              "help": "PLS file path",
+              "short": "-f"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Dictionary description"
+            },
+            {
+              "name": "--workspace-access",
+              "type": "TEXT",
+              "required": false,
+              "help": "admin, editor, commenter, or viewer"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create-from-rules": {
+          "help": "[OPTIONS] Create a pronunciation dictionary from alias and phoneme rules.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-rules` to [OPTIONS] Create a pronunciation dictionary from alias and phoneme rules. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary name",
+              "short": "-n"
+            },
+            {
+              "name": "--alias-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
+            },
+            {
+              "name": "--phoneme-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Dictionary description"
+            },
+            {
+              "name": "--workspace-access",
+              "type": "TEXT",
+              "required": false,
+              "help": "admin, editor, commenter, or viewer"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "download": {
+          "help": "DICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries download` to dICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file. Required arguments: `PRONUNCIATION_DICTIONARY_ID`, `VERSION_ID`. Common options: `--table/-t`.",
+          "arguments": [
+            {
+              "name": "pronunciation_dictionary_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary ID"
+            },
+            {
+              "name": "version_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary version ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to write the PLS file",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "PRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries get` to pRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "pronunciation_dictionary_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary ID"
             }
           ],
           "options": [
@@ -209,18 +574,214 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List pronunciation dictionaries.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries list` to list pronunciation dictionaries. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=100]  Maximum dictionaries to return",
+              "short": "-l",
+              "default": "30"
+            },
+            {
+              "name": "--cursor",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pagination cursor"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: creation_time_unix or name",
+              "default": "creation_time_unix"
+            },
+            {
+              "name": "--sort-direction",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort direction",
+              "default": "DESCENDING"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "remove-rules": {
+          "help": "ION_DICTIONARY_ID Remove rules from a pronunciation dictionary.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries remove-rules` to iON_DICTIONARY_ID Remove rules from a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
+          "arguments": [
+            {
+              "name": "pronunciation_dictionary_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary ID"
             }
           ],
-          "usage_instructions": "Run `elevenlabs models get` to get a model from the model list by ID. Required arguments: `MODEL_ID`. Common options: `--table/-t`, `--properties/-p`."
+          "options": [
+            {
+              "name": "--rule-string",
+              "type": "TEXT",
+              "required": true,
+              "help": "Rule string_to_replace value to remove"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set-rules": {
+          "help": "_DICTIONARY_ID Replace all rules in a pronunciation dictionary.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries set-rules` to _DICTIONARY_ID Replace all rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
+          "arguments": [
+            {
+              "name": "pronunciation_dictionary_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--alias-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
+            },
+            {
+              "name": "--phoneme-rule",
+              "type": "TEXT",
+              "required": false,
+              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "CTIONARY_ID Update pronunciation dictionary metadata without changing its version.",
+          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries update` to cTIONARY_ID Update pronunciation dictionary metadata without changing its version. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "pronunciation_dictionary_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Pronunciation dictionary ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pronunciation dictionary name",
+              "short": "-n"
+            },
+            {
+              "name": "--archived",
+              "type": "bool",
+              "required": false,
+              "help": "Archive state"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `elevenlabs models` for manage elevenlabs models. Available subcommands here are `list`, `get`."
+      }
     },
     "speech": {
       "help": "Generate speech audio",
+      "usage_instructions": "Use `elevenlabs speech` for generate speech audio. Available subcommands here are `create`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create": {
           "help": "Convert text into speech and write the audio file.",
+          "usage_instructions": "Run `elevenlabs speech create` to convert text into speech and write the audio file. Required arguments: `VOICE_ID`, `TEXT`. Common options: `--table/-t`.",
           "arguments": [
             {
               "name": "voice_id",
@@ -286,7 +847,7 @@
               "name": "--speaker-boost",
               "type": "bool",
               "required": false,
-              "help": "--no-speaker-boost                                      Speaker boost"
+              "help": "Speaker boost"
             },
             {
               "name": "--speed",
@@ -316,7 +877,7 @@
               "name": "--enable-logging",
               "type": "bool",
               "required": false,
-              "help": "--disable-logging                                       Enable request logging",
+              "help": "Enable request logging",
               "default": "enable-logging"
             },
             {
@@ -325,59 +886,131 @@
               "required": false,
               "help": "Display result as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `elevenlabs speech create` to convert text into speech and write the audio file. Required arguments: `VOICE_ID`, `TEXT`. Common options: `--table/-t`."
+          ]
         }
-      },
-      "usage_instructions": "Use `elevenlabs speech` for generate speech audio. Available subcommands here are `create`."
+      }
     },
-    "pronunciation-dictionaries": {
-      "help": "Manage pronunciation dictionaries",
+    "user": {
+      "help": "Inspect ElevenLabs user account data",
+      "usage_instructions": "Use `elevenlabs user` for inspect elevenlabs user account data. Available subcommands here are `subscription`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List pronunciation dictionaries.",
+        "subscription": {
+          "help": "Get the current user subscription and quota state.",
+          "usage_instructions": "Run `elevenlabs user subscription` to get the current user subscription and quota state. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [],
           "options": [
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "RANGE [1<=x<=100]  Maximum dictionaries to return",
-              "short": "-l",
-              "default": "30"
-            },
-            {
-              "name": "--cursor",
-              "type": "TEXT",
-              "required": false,
-              "help": "Pagination cursor"
-            },
-            {
-              "name": "--sort",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort field: creation_time_unix or name",
-              "default": "creation_time_unix"
-            },
-            {
-              "name": "--sort-direction",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort direction",
-              "default": "DESCENDING"
-            },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "voices": {
+      "help": "Manage ElevenLabs voices",
+      "usage_instructions": "Use `elevenlabs voices` for manage elevenlabs voices. Available subcommands here are `list`, `get`, `settings`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get metadata for a voice.",
+          "usage_instructions": "Run `elevenlabs voices get` to get metadata for a voice. Required arguments: `VOICE_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "voice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Voice ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List available voices.",
+          "usage_instructions": "Run `elevenlabs voices list` to list available voices. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=1000]  Maximum voices to return",
+              "short": "-l",
+              "default": "10"
             },
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "help": "Filter: field:op:value (e.g., name:ilike:%Rachel%, category:eq:generated)",
               "short": "-f"
             },
             {
@@ -386,540 +1019,81 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries list` to list pronunciation dictionaries. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
-        },
-        "get": {
-          "help": "PRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--search",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries get` to pRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "create-from-rules": {
-          "help": "[OPTIONS] Create a pronunciation dictionary from alias and phoneme rules.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary name",
-              "short": "-n"
+              "help": "Server-side search across voice metadata",
+              "short": "-s"
             },
             {
-              "name": "--alias-rule",
+              "name": "--voice-type",
               "type": "TEXT",
               "required": false,
-              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
+              "help": "Voice type filter"
             },
             {
-              "name": "--phoneme-rule",
+              "name": "--category",
               "type": "TEXT",
               "required": false,
-              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
+              "help": "Voice category filter"
             },
             {
-              "name": "--description",
+              "name": "--sort",
               "type": "TEXT",
               "required": false,
-              "help": "Dictionary description"
+              "help": "Sort field: created_at_unix or name"
             },
             {
-              "name": "--workspace-access",
+              "name": "--sort-direction",
               "type": "TEXT",
               "required": false,
-              "help": "admin, editor, commenter, or viewer"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-rules` to [OPTIONS] Create a pronunciation dictionary from alias and phoneme rules. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "create-from-file": {
-          "help": "[OPTIONS] Create a pronunciation dictionary from a PLS lexicon file.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary name",
-              "short": "-n"
-            },
-            {
-              "name": "--file",
-              "type": "FILE",
-              "required": true,
-              "help": "PLS file path",
-              "short": "-f"
-            },
-            {
-              "name": "--description",
-              "type": "TEXT",
-              "required": false,
-              "help": "Dictionary description"
-            },
-            {
-              "name": "--workspace-access",
-              "type": "TEXT",
-              "required": false,
-              "help": "admin, editor, commenter, or viewer"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-file` to [OPTIONS] Create a pronunciation dictionary from a PLS lexicon file. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "update": {
-          "help": "CTIONARY_ID Update pronunciation dictionary metadata without changing its version.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Pronunciation dictionary name",
-              "short": "-n"
-            },
-            {
-              "name": "--archived",
-              "type": "bool",
-              "required": false,
-              "help": "--not-archived          Archive state"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries update` to cTIONARY_ID Update pronunciation dictionary metadata without changing its version. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`."
-        },
-        "set-rules": {
-          "help": "_DICTIONARY_ID Replace all rules in a pronunciation dictionary.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--alias-rule",
-              "type": "TEXT",
-              "required": false,
-              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
-            },
-            {
-              "name": "--phoneme-rule",
-              "type": "TEXT",
-              "required": false,
-              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries set-rules` to _DICTIONARY_ID Replace all rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`."
-        },
-        "add-rules": {
-          "help": "_DICTIONARY_ID Add or replace rules in a pronunciation dictionary.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--alias-rule",
-              "type": "TEXT",
-              "required": false,
-              "help": "Alias rule in string_to_replace=alias form. Repeat for multiple rules"
-            },
-            {
-              "name": "--phoneme-rule",
-              "type": "TEXT",
-              "required": false,
-              "help": "Phoneme rule in string_to_replace|alphabet|phoneme form. Repeat for multiple rules"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries add-rules` to _DICTIONARY_ID Add or replace rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`."
-        },
-        "remove-rules": {
-          "help": "ION_DICTIONARY_ID Remove rules from a pronunciation dictionary.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--rule-string",
-              "type": "TEXT",
-              "required": true,
-              "help": "Rule string_to_replace value to remove"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries remove-rules` to iON_DICTIONARY_ID Remove rules from a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`."
-        },
-        "download": {
-          "help": "DICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file.",
-          "arguments": [
-            {
-              "name": "pronunciation_dictionary_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary ID"
-            },
-            {
-              "name": "version_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Pronunciation dictionary version ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--output",
-              "type": "PATH",
-              "required": true,
-              "help": "Path to write the PLS file",
-              "short": "-o"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display result as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs pronunciation-dictionaries download` to dICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file. Required arguments: `PRONUNCIATION_DICTIONARY_ID`, `VERSION_ID`. Common options: `--table/-t`."
-        }
-      },
-      "usage_instructions": "Use `elevenlabs pronunciation-dictionaries` for manage pronunciation dictionaries. Available subcommands here are `list`, `get`, `create-from-rules`, `create-from-file`, `update`, `set-rules`, `add-rules`, `remove-rules`, `download`."
-    },
-    "user": {
-      "help": "Inspect ElevenLabs user account data",
-      "commands": {
-        "subscription": {
-          "help": "Get the current user subscription and quota state.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs user subscription` to get the current user subscription and quota state. Common options: `--table/-t`, `--properties/-p`."
-        }
-      },
-      "usage_instructions": "Use `elevenlabs user` for inspect elevenlabs user account data. Available subcommands here are `subscription`."
-    },
-    "auth": {
-      "help": "Manage elevenlabs authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'api_key')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`."
-        },
-        "logout": {
-          "help": "Clear stored credentials.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs auth logout` to clear stored credentials. Common options: `--profile/-p`."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `elevenlabs auth status` to check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. Common options: `--table/-t`, `--profile/-p`."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
+              "help": "Sort direction: asc or desc"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "settings": {
+          "help": "Get stored settings for a voice.",
+          "usage_instructions": "Run `elevenlabs voices settings` to get stored settings for a voice. Required arguments: `VOICE_ID`. Common options: `--table/-t`, `--properties/-p`.",
+          "arguments": [
+            {
+              "name": "voice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Voice ID"
             }
           ],
-          "usage_instructions": "Run `elevenlabs auth test` to test authentication by verifying credentials work across profiles. Common options: `--table/-t`, `--profile/-p`."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `elevenlabs auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `elevenlabs auth profiles get` to get details for a specific profile. Required arguments: `NAME`. Common options: `--table/-t`."
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
             },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `elevenlabs auth profiles create` to create a new profile from .env.example template. Required arguments: `NAME`."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `elevenlabs auth profiles set-default` to set a profile as the default (IS_DEFAULT_PROFILE=1). Required arguments: `NAME`."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `elevenlabs auth profiles delete` to delete a profile and its data. Required arguments: `NAME`. Common options: `--force/-F`."
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          },
-          "usage_instructions": "Use `elevenlabs auth profiles` for manage authentication profiles. Available subcommands here are `list`, `get`, `create`, `set-default`, `delete`."
+          ]
         }
-      },
-      "usage_instructions": "Use `elevenlabs auth` for manage elevenlabs authentication. Available subcommands here are `login`, `logout`, `status`, `test`, `profiles`."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `elevenlabs cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed."
-        }
-      },
-      "usage_instructions": "Use `elevenlabs cache` for manage response cache. Available subcommands here are `clear`."
+      }
     }
   },
   "usage_instructions": "Use for cli interface for elevenlabs api. Commands follow `elevenlabs <group> <action>`. Primary groups here are `elevenlabs voices`, `elevenlabs models`, `elevenlabs speech`, `elevenlabs pronunciation-dictionaries`, `elevenlabs user`, `elevenlabs auth`, `elevenlabs cache`."

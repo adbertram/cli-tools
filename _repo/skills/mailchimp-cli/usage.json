@@ -1,7 +1,7 @@
 {
   "tool": "mailchimp",
   "description": "CLI interface for Mailchimp API",
-  "discovered_at": "2026-05-06T15:18:34.346613+00:00",
+  "discovered_at": "2026-06-20T19:50:14Z",
   "total_commands": 34,
   "global_options": [
     {
@@ -19,289 +19,23 @@
     }
   ],
   "commands": {
-    "auth": {
-      "help": "Manage Mailchimp API authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Use to configure Mailchimp API credentials. Provide API key with --api-key/-k. If omitted, will prompt interactively."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to remove stored API credentials from the local config."
-        },
-        "status": {
-          "help": "Check authentication status across profiles.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to verify API credentials are configured and valid. Use --table/-t for formatted output."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `mailchimp auth refresh --help` for exact arguments and options."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `mailchimp auth test --help` for exact arguments and options."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `mailchimp auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `mailchimp auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `mailchimp auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `mailchimp auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `mailchimp auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `mailchimp auth profiles --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Authentication management -- login with API key, logout, and check status. Always check `auth status` before running other operations."
-    },
     "audiences": {
       "help": "Manage Mailchimp audiences/lists",
+      "usage_instructions": "Audience/list management -- list, get details, and create audiences. Audiences are the top-level containers for subscribers in Mailchimp.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all audiences/lists in the account.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--count",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Number of audiences to return",
-              "short": "-c",
-              "default": "10"
-            },
-            {
-              "name": "--offset",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Offset for pagination",
-              "short": "-o",
-              "default": "0"
-            }
-          ],
-          "examples": [
-            "mailchimp audiences list",
-            "mailchimp audiences list --table",
-            "mailchimp audiences list --count 20"
-          ],
-          "usage_instructions": "Use to browse all audiences. Default returns 10; increase with --count/-c. Use --offset/-o for pagination. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific audience/list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "mailchimp audiences get LIST_ID",
-            "mailchimp audiences get LIST_ID --table"
-          ],
-          "usage_instructions": "Use to get full details of an audience by its LIST_ID. Use --table/-t for formatted summary. See also: members list to view subscribers in this audience."
-        },
         "create": {
           "help": "Create a new audience/list. Example: mailchimp audiences create --name \"Newsletter\" --company \"ACME Inc\" \\ --address1 \"123 Main St\" --city \"New York\" --state \"NY\" \\ --zip \"10001\" --country \"US\" --from-email \"news@example.com\" \\ --from-name \"ACME Newsletter\"",
+          "usage_instructions": "Use to create a new audience. All contact info fields are required: --name/-n, --company/-c, --address1, --city, --state, --zip, --country (2-letter code), --from-email, --from-name. Optional --permission-reminder has a default.",
+          "arguments": [],
           "options": [
             {
               "name": "--name",
@@ -365,26 +99,55 @@
               "required": false,
               "help": "Permission reminder text",
               "default": "You are receiving this email because you signed up."
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific audience/list.",
+          "examples": [
+            "mailchimp audiences get LIST_ID",
+            "mailchimp audiences get LIST_ID --table"
           ],
-          "usage_instructions": "Use to create a new audience. All contact info fields are required: --name/-n, --company/-c, --address1, --city, --state, --zip, --country (2-letter code), --from-email, --from-name. Optional --permission-reminder has a default."
-        }
-      },
-      "usage_instructions": "Audience/list management -- list, get details, and create audiences. Audiences are the top-level containers for subscribers in Mailchimp."
-    },
-    "forms": {
-      "help": "Manage list signup forms",
-      "commands": {
-        "list": {
-          "help": "List signup forms for an audience/list.",
+          "usage_instructions": "Use to get full details of an audience by its LIST_ID. Use --table/-t for formatted summary. See also: members list to view subscribers in this audience.",
           "arguments": [
             {
               "name": "list_id",
-              "type": "LIST_ID",
-              "required": false,
+              "type": "TEXT",
+              "required": true,
               "help": "The list/audience ID"
             }
           ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all audiences/lists in the account.",
+          "examples": [
+            "mailchimp audiences list",
+            "mailchimp audiences list --table",
+            "mailchimp audiences list --count 20"
+          ],
+          "usage_instructions": "Use to browse all audiences. Default returns 10; increase with --count/-c. Use --offset/-o for pagination. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -397,9 +160,17 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Max forms to return",
+              "help": "Maximum number of audiences to return",
               "short": "-l",
-              "default": "100"
+              "default": "10"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "short": "-o",
+              "default": "0"
             },
             {
               "name": "--filter",
@@ -412,27 +183,209 @@
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated list of fields to include in output",
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage Mailchimp API authentication",
+      "usage_instructions": "Authentication management -- login with API key, logout, and check status. Always check `auth status` before running other operations.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to configure Mailchimp API credentials. Provide API key with --api-key/-k. If omitted, will prompt interactively.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--api-key",
+              "type": "TEXT",
+              "required": false,
+              "help": "Mailchimp API key to save without prompting",
+              "short": "-k"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Use to remove stored API credentials from the local config.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "examples": [
-            "mailchimp forms list LIST_ID",
-            "mailchimp forms list LIST_ID --table"
-          ],
-          "usage_instructions": "Run `mailchimp forms list --help` for exact arguments and options."
+          ]
         },
-        "get": {
-          "help": "Get the default signup form for an audience/list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `mailchimp auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `mailchimp auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `mailchimp auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `mailchimp auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `mailchimp auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          ],
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "usage_instructions": "Use to verify API credentials are configured and valid. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -440,307 +393,81 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "examples": [
-            "mailchimp forms get LIST_ID",
-            "mailchimp forms get LIST_ID --table"
-          ],
-          "usage_instructions": "Run `mailchimp forms get --help` for exact arguments and options."
+          ]
         },
-        "create": {
-          "help": "Create or update the default signup form for an audience/list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            }
-          ],
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `mailchimp auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
-            {
-              "name": "--header-text",
-              "type": "TEXT",
-              "required": true,
-              "help": "Signup form header text"
-            },
-            {
-              "name": "--signup-message",
-              "type": "TEXT",
-              "required": true,
-              "help": "Signup form message"
-            },
-            {
-              "name": "--thank-you-title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Signup form thank-you title"
-            },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
             }
-          ],
-          "examples": [
-            "mailchimp forms create LIST_ID --header-text \"BrickBuddy beta\" \\"
-          ],
-          "usage_instructions": "Run `mailchimp forms create --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `mailchimp forms --help` for exact arguments and options."
+      }
     },
-    "members": {
-      "help": "Manage list members/subscribers",
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `mailchimp cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List members of a specific audience/list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--count",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Number of members to return",
-              "short": "-c",
-              "default": "10"
-            },
-            {
-              "name": "--offset",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Offset for pagination",
-              "short": "-o",
-              "default": "0"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by status (subscribed, unsubscribed, cleaned, pending)",
-              "short": "-s"
-            }
-          ],
-          "examples": [
-            "mailchimp members list LIST_ID",
-            "mailchimp members list LIST_ID --table",
-            "mailchimp members list LIST_ID --status subscribed",
-            "mailchimp members list LIST_ID --count 50"
-          ],
-          "usage_instructions": "Use to browse subscribers in an audience. LIST_ID is required. Filter by subscription status with --status/-s (subscribed, unsubscribed, cleaned, pending). Default returns 10; increase with --count/-c. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get information about a specific list member.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            },
-            {
-              "name": "email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Member email address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "mailchimp members get LIST_ID user@example.com",
-            "mailchimp members get LIST_ID user@example.com --table"
-          ],
-          "usage_instructions": "Use to get full details of a subscriber by LIST_ID and email address. Use --table/-t for formatted summary."
-        },
-        "add": {
-          "help": "Add a new member to a list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Member email address",
-              "short": "-e"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Subscription status (subscribed, pending)",
-              "short": "-s",
-              "default": "subscribed"
-            },
-            {
-              "name": "--first-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "First name",
-              "short": "-f"
-            },
-            {
-              "name": "--last-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Last name",
-              "short": "-l"
-            }
-          ],
-          "examples": [
-            "mailchimp members add LIST_ID --email user@example.com",
-            "mailchimp members add LIST_ID --email user@example.com --status pending",
-            "mailchimp members add LIST_ID --email user@example.com \\"
-          ],
-          "usage_instructions": "Use to subscribe a new member. LIST_ID is positional, email is required via --email/-e. Default status is 'subscribed'; use --status/-s 'pending' for double opt-in. Optionally set --first-name/-f and --last-name/-l."
-        },
-        "update": {
-          "help": "Update a list member.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            },
-            {
-              "name": "email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Member email address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Subscription status",
-              "short": "-s"
-            },
-            {
-              "name": "--first-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "First name",
-              "short": "-f"
-            },
-            {
-              "name": "--last-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Last name",
-              "short": "-l"
-            }
-          ],
-          "examples": [
-            "mailchimp members update LIST_ID user@example.com --status unsubscribed",
-            "mailchimp members update LIST_ID user@example.com --first-name Jane"
-          ],
-          "usage_instructions": "Use to modify a subscriber's status or merge fields. Both LIST_ID and email are positional and required. Update status with --status/-s, name with --first-name/-f and --last-name/-l."
-        },
-        "remove": {
-          "help": "Remove a member from a list.",
-          "arguments": [
-            {
-              "name": "list_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The list/audience ID"
-            },
-            {
-              "name": "email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Member email address"
-            }
-          ],
-          "options": [
-            {
-              "name": "--yes",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-y"
-            }
-          ],
-          "examples": [
-            "mailchimp members remove LIST_ID user@example.com",
-            "mailchimp members remove LIST_ID user@example.com --yes"
-          ],
-          "usage_instructions": "Use to permanently remove a subscriber from an audience. Both LIST_ID and email are positional and required. Use --yes/-y to skip the confirmation prompt."
-        },
-        "search": {
-          "help": "Search for list members by email address.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Email address to search for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--list-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Search within specific list",
-              "short": "-l"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "mailchimp members search user@example.com",
-            "mailchimp members search user@example.com --list-id LIST_ID",
-            "mailchimp members search user@example.com --table"
-          ],
-          "usage_instructions": "Use to find a subscriber by email across all lists or within a specific list via --list-id/-l. QUERY is a positional email argument. Use --table/-t for formatted output."
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `mailchimp cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Subscriber management -- list, get, add, update, remove, and search members within audiences. Most commands require a LIST_ID argument. Use `members search` to find subscribers by email across all lists."
+      }
     },
     "campaigns": {
       "help": "Manage email campaigns",
+      "usage_instructions": "Campaign management -- list, get details, create, send, view reports, get content, and list RSS child campaigns. RSS campaigns create child campaigns for each send; use `campaigns children` to browse them.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all campaigns in the account. RSS campaigns in Mailchimp create child campaigns for each send. Use --include-rss-child-campaigns to include these in the output, or --rss-parent-id to filter to a specific RSS campaign's children.",
+        "children": {
+          "help": "List all child campaigns (individual sends) for an RSS campaign. Each time an RSS campaign sends, Mailchimp creates a child campaign. This command lists all historical sends for a given RSS campaign.",
+          "examples": [
+            "mailchimp campaigns children RSS_CAMPAIGN_ID",
+            "mailchimp campaigns children RSS_CAMPAIGN_ID --table",
+            "mailchimp campaigns children RSS_CAMPAIGN_ID --table --with-reports"
+          ],
+          "usage_instructions": "Use to list historical sends for an RSS campaign. CAMPAIGN_ID is the parent RSS campaign ID. Use --with-reports/-r to include open/click/bounce/unsub metrics. Filter by status with --status/-s. Default returns 100; change with --count/-c.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The parent RSS campaign ID"
+            }
+          ],
           "options": [
             {
               "name": "--table",
@@ -753,56 +480,40 @@
               "name": "--count",
               "type": "INTEGER",
               "required": false,
-              "help": "Number of campaigns to return",
+              "help": "Maximum number of child campaigns to return",
               "short": "-c",
-              "default": "10"
-            },
-            {
-              "name": "--offset",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Offset for pagination",
-              "short": "-o",
-              "default": "0"
+              "default": "100"
             },
             {
               "name": "--status",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by status (save, paused, schedule, sending, sent)",
+              "help": "Filter by status (sent)",
               "short": "-s"
             },
             {
-              "name": "--include-rss-child-campaigns",
+              "name": "--with-reports",
               "type": "bool",
               "required": false,
-              "help": "Include RSS child campaigns (individual sends from RSS campaigns)"
+              "help": "Include report metrics (open/click/bounce/unsub rates)",
+              "short": "-r"
             },
             {
-              "name": "--rss-parent-id",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to only show child campaigns of a specific RSS campaign"
-            },
-            {
-              "name": "--sponsor-domain",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sponsor domain to detect in campaign sponsor content. Repeat for multiple domains"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "mailchimp campaigns list",
-            "mailchimp campaigns list --table",
-            "mailchimp campaigns list --status sent",
-            "mailchimp campaigns list --count 20",
-            "mailchimp campaigns list --include-rss-child-campaigns",
-            "mailchimp campaigns list --rss-parent-id CAMPAIGN_ID --table"
-          ],
-          "usage_instructions": "Use to browse campaigns. Filter by status with --status/-s (save, paused, schedule, sending, sent). Default returns 10; increase with --count/-c. RSS child campaigns are excluded by default; include with --include-rss-child-campaigns or filter to a specific parent with --rss-parent-id."
+          ]
         },
-        "get": {
-          "help": "Get details for a specific campaign.",
+        "content": {
+          "help": "Get the content (HTML/text) for a campaign.",
+          "examples": [
+            "mailchimp campaigns content CAMPAIGN_ID",
+            "mailchimp campaigns content CAMPAIGN_ID --html",
+            "mailchimp campaigns content CAMPAIGN_ID --text"
+          ],
+          "usage_instructions": "Use to retrieve the email content of a campaign. Use --html for just HTML content, --text for just plain text. Without flags, returns both.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -813,21 +524,29 @@
           ],
           "options": [
             {
-              "name": "--table",
+              "name": "--html",
               "type": "bool",
               "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
+              "help": "Output only the HTML content"
+            },
+            {
+              "name": "--text",
+              "type": "bool",
+              "required": false,
+              "help": "Output only the plain text content"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "mailchimp campaigns get CAMPAIGN_ID",
-            "mailchimp campaigns get CAMPAIGN_ID --table"
-          ],
-          "usage_instructions": "Use to get full details of a campaign by CAMPAIGN_ID. Use --table/-t for formatted summary."
+          ]
         },
         "create": {
           "help": "Create a new campaign. Example: mailchimp campaigns create --list-id LIST_ID \\ --subject \"Monthly Newsletter\" \\ --from-name \"ACME Inc\" \\ --reply-to \"support@example.com\" \\ --title \"January Newsletter\"",
+          "usage_instructions": "Use to create a new email campaign. Requires --list-id/-l, --subject/-s, --from-name, and --reply-to. Default type is 'regular'; change with --type/-t (regular, plaintext, absplit, rss, variate). Optional --title sets internal campaign name.",
+          "arguments": [],
           "options": [
             {
               "name": "--type",
@@ -868,12 +587,22 @@
               "type": "TEXT",
               "required": false,
               "help": "Campaign title (internal)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to create a new email campaign. Requires --list-id/-l, --subject/-s, --from-name, and --reply-to. Default type is 'regular'; change with --type/-t (regular, plaintext, absplit, rss, variate). Optional --title sets internal campaign name."
+          ]
         },
-        "send": {
-          "help": "Send a campaign.",
+        "get": {
+          "help": "Get details for a specific campaign.",
+          "examples": [
+            "mailchimp campaigns get CAMPAIGN_ID",
+            "mailchimp campaigns get CAMPAIGN_ID --table"
+          ],
+          "usage_instructions": "Use to get full details of a campaign by CAMPAIGN_ID. Use --table/-t for formatted summary.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -884,21 +613,106 @@
           ],
           "options": [
             {
-              "name": "--yes",
+              "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-y"
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "list": {
+          "help": "List all campaigns in the account. RSS campaigns in Mailchimp create child campaigns for each send. Use --include-rss-child-campaigns to include these in the output, or --rss-parent-id to filter to a specific RSS campaign's children.",
           "examples": [
-            "mailchimp campaigns send CAMPAIGN_ID",
-            "mailchimp campaigns send CAMPAIGN_ID --yes"
+            "mailchimp campaigns list",
+            "mailchimp campaigns list --table",
+            "mailchimp campaigns list --status sent",
+            "mailchimp campaigns list --count 20",
+            "mailchimp campaigns list --include-rss-child-campaigns",
+            "mailchimp campaigns list --rss-parent-id CAMPAIGN_ID --table"
           ],
-          "usage_instructions": "Use to send a campaign by CAMPAIGN_ID. Will prompt for confirmation; use --yes/-y to skip. Campaign must be in 'save' status to send."
+          "usage_instructions": "Use to browse campaigns. Filter by status with --status/-s (save, paused, schedule, sending, sent). Default returns 10; increase with --count/-c. RSS child campaigns are excluded by default; include with --include-rss-child-campaigns or filter to a specific parent with --rss-parent-id.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of campaigns to return",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (save, paused, schedule, sending, sent)",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--include-rss-child-campaigns",
+              "type": "bool",
+              "required": false,
+              "help": "Include RSS child campaigns (individual sends from RSS campaigns)"
+            },
+            {
+              "name": "--rss-parent-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter to only show child campaigns of a specific RSS campaign"
+            },
+            {
+              "name": "--sponsor-domain",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sponsor domain to detect in campaign sponsor content. Repeat for multiple domains"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "pause": {
           "help": "Pause an RSS-Driven campaign. Only applies to campaigns of type \"rss\". Stops further scheduled sends until resumed. Example: mailchimp campaigns pause CAMPAIGN_ID",
+          "usage_instructions": "Use to pause/disable an RSS campaign by CAMPAIGN_ID. Only applies to campaigns of type 'rss'. Stops further scheduled sends until resumed.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -907,22 +721,23 @@
               "help": "The RSS campaign ID"
             }
           ],
-          "usage_instructions": "Use to pause/disable an RSS campaign by CAMPAIGN_ID. Only applies to campaigns of type 'rss'. Stops further scheduled sends until resumed."
-        },
-        "resume": {
-          "help": "Resume a paused RSS-Driven campaign. Example: mailchimp campaigns resume CAMPAIGN_ID",
-          "arguments": [
+          "options": [
             {
-              "name": "campaign_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "The RSS campaign ID"
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to resume a previously paused RSS campaign by CAMPAIGN_ID. Only applies to campaigns of type 'rss'."
+          ]
         },
         "report": {
           "help": "Get report/analytics for a campaign. For RSS campaigns, this shows reports from child campaigns (most recent first).",
+          "examples": [
+            "mailchimp campaigns report CAMPAIGN_ID",
+            "mailchimp campaigns report CAMPAIGN_ID --table",
+            "mailchimp campaigns report RSS_CAMPAIGN_ID --table --count 20"
+          ],
+          "usage_instructions": "Use to view campaign performance metrics (opens, clicks, bounces, unsubscribes). For RSS campaigns, shows reports from child campaigns most recent first; control count with --count/-c. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -952,17 +767,42 @@
               "type": "TEXT",
               "required": false,
               "help": "Sponsor domain to detect in campaign sponsor content. Repeat for multiple domains"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "resume": {
+          "help": "Resume a paused RSS-Driven campaign. Example: mailchimp campaigns resume CAMPAIGN_ID",
+          "usage_instructions": "Use to resume a previously paused RSS campaign by CAMPAIGN_ID. Only applies to campaigns of type 'rss'.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The RSS campaign ID"
             }
           ],
-          "examples": [
-            "mailchimp campaigns report CAMPAIGN_ID",
-            "mailchimp campaigns report CAMPAIGN_ID --table",
-            "mailchimp campaigns report RSS_CAMPAIGN_ID --table --count 20"
-          ],
-          "usage_instructions": "Use to view campaign performance metrics (opens, clicks, bounces, unsubscribes). For RSS campaigns, shows reports from child campaigns most recent first; control count with --count/-c. Use --table/-t for formatted output."
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
-        "content": {
-          "help": "Get the content (HTML/text) for a campaign.",
+        "send": {
+          "help": "Send a campaign.",
+          "examples": [
+            "mailchimp campaigns send CAMPAIGN_ID",
+            "mailchimp campaigns send CAMPAIGN_ID --yes"
+          ],
+          "usage_instructions": "Use to send a campaign by CAMPAIGN_ID. Will prompt for confirmation; use --yes/-y to skip. Campaign must be in 'save' status to send.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -973,33 +813,96 @@
           ],
           "options": [
             {
-              "name": "--html",
+              "name": "--yes",
               "type": "bool",
               "required": false,
-              "help": "Output only the HTML content"
+              "help": "Skip confirmation prompt",
+              "short": "-y"
             },
             {
-              "name": "--text",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Output only the plain text content"
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "forms": {
+      "help": "Manage list signup forms",
+      "usage_instructions": "Run `mailchimp forms --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create or update the default signup form for an audience/list.",
           "examples": [
-            "mailchimp campaigns content CAMPAIGN_ID",
-            "mailchimp campaigns content CAMPAIGN_ID --html",
-            "mailchimp campaigns content CAMPAIGN_ID --text"
+            "mailchimp forms create LIST_ID --header-text \"BrickBuddy beta\" \\"
           ],
-          "usage_instructions": "Use to retrieve the email content of a campaign. Use --html for just HTML content, --text for just plain text. Without flags, returns both."
-        },
-        "children": {
-          "help": "List all child campaigns (individual sends) for an RSS campaign. Each time an RSS campaign sends, Mailchimp creates a child campaign. This command lists all historical sends for a given RSS campaign.",
+          "usage_instructions": "Run `mailchimp forms create --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "campaign_id",
+              "name": "list_id",
               "type": "TEXT",
               "required": true,
-              "help": "The parent RSS campaign ID"
+              "help": "The list/audience ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--header-text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Signup form header text"
+            },
+            {
+              "name": "--signup-message",
+              "type": "TEXT",
+              "required": true,
+              "help": "Signup form message"
+            },
+            {
+              "name": "--thank-you-title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Signup form thank-you title"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the default signup form for an audience/list.",
+          "examples": [
+            "mailchimp forms get LIST_ID",
+            "mailchimp forms get LIST_ID --table"
+          ],
+          "usage_instructions": "Run `mailchimp forms get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
             }
           ],
           "options": [
@@ -1011,43 +914,189 @@
               "short": "-t"
             },
             {
-              "name": "--count",
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List signup forms for an audience/list.",
+          "examples": [
+            "mailchimp forms list LIST_ID",
+            "mailchimp forms list LIST_ID --table"
+          ],
+          "usage_instructions": "Run `mailchimp forms list --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "LIST_ID",
+              "required": false,
+              "help": "The list/audience ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of child campaigns to return",
-              "short": "-c",
+              "help": "Max forms to return",
+              "short": "-l",
               "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "members": {
+      "help": "Manage list members/subscribers",
+      "usage_instructions": "Subscriber management -- list, get, add, update, remove, and search members within audiences. Most commands require a LIST_ID argument. Use `members search` to find subscribers by email across all lists.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add": {
+          "help": "Add a new member to a list.",
+          "examples": [
+            "mailchimp members add LIST_ID --email user@example.com",
+            "mailchimp members add LIST_ID --email user@example.com --status pending",
+            "mailchimp members add LIST_ID --email user@example.com \\"
+          ],
+          "usage_instructions": "Use to subscribe a new member. LIST_ID is positional, email is required via --email/-e. Default status is 'subscribed'; use --status/-s 'pending' for double opt-in. Optionally set --first-name/-f and --last-name/-l.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Member email address",
+              "short": "-e"
             },
             {
               "name": "--status",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by status (sent)",
-              "short": "-s"
+              "help": "Subscription status (subscribed, pending)",
+              "short": "-s",
+              "default": "subscribed"
             },
             {
-              "name": "--with-reports",
-              "type": "bool",
+              "name": "--first-name",
+              "type": "TEXT",
               "required": false,
-              "help": "Include report metrics (open/click/bounce/unsub rates)",
-              "short": "-r"
+              "help": "First name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Last name",
+              "short": "-l"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get information about a specific list member.",
+          "examples": [
+            "mailchimp members get LIST_ID user@example.com",
+            "mailchimp members get LIST_ID user@example.com --table"
+          ],
+          "usage_instructions": "Use to get full details of a subscriber by LIST_ID and email address. Use --table/-t for formatted summary.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Member email address"
             }
           ],
-          "examples": [
-            "mailchimp campaigns children RSS_CAMPAIGN_ID",
-            "mailchimp campaigns children RSS_CAMPAIGN_ID --table",
-            "mailchimp campaigns children RSS_CAMPAIGN_ID --table --with-reports"
-          ],
-          "usage_instructions": "Use to list historical sends for an RSS campaign. CAMPAIGN_ID is the parent RSS campaign ID. Use --with-reports/-r to include open/click/bounce/unsub metrics. Filter by status with --status/-s. Default returns 100; change with --count/-c."
-        }
-      },
-      "usage_instructions": "Campaign management -- list, get details, create, send, view reports, get content, and list RSS child campaigns. RSS campaigns create child campaigns for each send; use `campaigns children` to browse them."
-    },
-    "templates": {
-      "help": "Manage email templates",
-      "commands": {
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
-          "help": "List all templates.",
+          "help": "List members of a specific audience/list.",
+          "examples": [
+            "mailchimp members list LIST_ID",
+            "mailchimp members list LIST_ID --table",
+            "mailchimp members list LIST_ID --status subscribed",
+            "mailchimp members list LIST_ID --count 50"
+          ],
+          "usage_instructions": "Use to browse subscribers in an audience. LIST_ID is required. Filter by subscription status with --status/-s (subscribed, unsubscribed, cleaned, pending). Default returns 10; increase with --count/-c. Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
+            }
+          ],
           "options": [
             {
               "name": "--table",
@@ -1057,11 +1106,11 @@
               "short": "-t"
             },
             {
-              "name": "--count",
+              "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Number of templates to return",
-              "short": "-c",
+              "help": "Maximum number of members to return",
+              "short": "-l",
               "default": "10"
             },
             {
@@ -1073,22 +1122,183 @@
               "default": "0"
             },
             {
-              "name": "--type",
+              "name": "--status",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by type (user, base, gallery)"
+              "help": "Filter by status (subscribed, unsubscribed, cleaned, pending)",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "remove": {
+          "help": "Remove a member from a list.",
+          "examples": [
+            "mailchimp members remove LIST_ID user@example.com",
+            "mailchimp members remove LIST_ID user@example.com --yes"
+          ],
+          "usage_instructions": "Use to permanently remove a subscriber from an audience. Both LIST_ID and email are positional and required. Use --yes/-y to skip the confirmation prompt.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Member email address"
             }
           ],
-          "examples": [
-            "mailchimp templates list",
-            "mailchimp templates list --table",
-            "mailchimp templates list --type user",
-            "mailchimp templates list --count 20"
-          ],
-          "usage_instructions": "Use to browse email templates. Filter by type with --type (user, base, gallery). Default returns 10; increase with --count/-c. Use --table/-t for formatted output."
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
+        "search": {
+          "help": "Search for list members by email address.",
+          "examples": [
+            "mailchimp members search user@example.com",
+            "mailchimp members search user@example.com --list-id LIST_ID",
+            "mailchimp members search user@example.com --table"
+          ],
+          "usage_instructions": "Use to find a subscriber by email across all lists or within a specific list via --list-id/-l. QUERY is a positional email argument. Use --table/-t for formatted output.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email address to search for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--list-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search within specific list",
+              "short": "-l"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update a list member.",
+          "examples": [
+            "mailchimp members update LIST_ID user@example.com --status unsubscribed",
+            "mailchimp members update LIST_ID user@example.com --first-name Jane"
+          ],
+          "usage_instructions": "Use to modify a subscriber's status or merge fields. Both LIST_ID and email are positional and required. Update status with --status/-s, name with --first-name/-f and --last-name/-l.",
+          "arguments": [
+            {
+              "name": "list_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The list/audience ID"
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Member email address"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Subscription status",
+              "short": "-s"
+            },
+            {
+              "name": "--first-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "First name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Last name",
+              "short": "-l"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "templates": {
+      "help": "Manage email templates",
+      "usage_instructions": "Template management -- list and get details of email templates. Filter by type (user, base, gallery) to find custom vs built-in templates.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
           "help": "Get details for a specific template.",
+          "examples": [
+            "mailchimp templates get TEMPLATE_ID",
+            "mailchimp templates get TEMPLATE_ID --table"
+          ],
+          "usage_instructions": "Use to get full details of a template by TEMPLATE_ID. Use --table/-t for formatted summary.",
           "arguments": [
             {
               "name": "template_id",
@@ -1104,26 +1314,78 @@
               "required": false,
               "help": "Display summary as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "list": {
+          "help": "List all templates.",
           "examples": [
-            "mailchimp templates get TEMPLATE_ID",
-            "mailchimp templates get TEMPLATE_ID --table"
+            "mailchimp templates list",
+            "mailchimp templates list --table",
+            "mailchimp templates list --type user",
+            "mailchimp templates list --count 20"
           ],
-          "usage_instructions": "Use to get full details of a template by TEMPLATE_ID. Use --table/-t for formatted summary."
+          "usage_instructions": "Use to browse email templates. Filter by type with --type (user, base, gallery). Default returns 10; increase with --count/-c. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of templates to return",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Offset for pagination",
+              "short": "-o",
+              "default": "0"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by type (user, base, gallery)"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Template management -- list and get details of email templates. Filter by type (user, base, gallery) to find custom vs built-in templates."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `mailchimp cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `mailchimp cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use for managing Mailchimp audiences, subscribers, campaigns, templates, and sponsor-domain detection. Commands follow `mailchimp <group> <action>` pattern. Most list commands support --table/-t, --count/-c, and --offset/-o for pagination. Check `auth status` before operations."

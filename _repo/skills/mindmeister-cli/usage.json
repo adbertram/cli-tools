@@ -1,7 +1,7 @@
 {
   "tool": "mindmeister",
   "description": "CLI interface for Mindmeister API",
-  "discovered_at": "2026-05-06T15:18:46.814049+00:00",
+  "discovered_at": "2026-06-20T19:50:40Z",
   "total_commands": 23,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage MindMeister authentication",
+      "usage_instructions": "Personal Access Token authentication for MindMeister API. Get tokens from https://www.mindmeister.com/api.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Configure auth with a Personal Access Token. Use --token/-t to provide the token, or run interactively. Use --force/-F to clear and re-authenticate.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Configure auth with a Personal Access Token. Use --token/-t to provide the token, or run interactively. Use --force/-F to clear and re-authenticate."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Remove all stored MindMeister API credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Remove all stored MindMeister API credentials."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `mindmeister auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `mindmeister auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `mindmeister auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `mindmeister auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `mindmeister auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Check if API token is configured and valid.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check if API token is configured and valid."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Run `mindmeister auth refresh --help` for exact arguments and options."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `mindmeister auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,123 +237,378 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Run `mindmeister auth test --help` for exact arguments and options."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Run `mindmeister auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `mindmeister auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `mindmeister auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `mindmeister auth profiles set-default --help` for exact arguments and options."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `mindmeister auth profiles delete --help` for exact arguments and options."
-            }
-          },
-          "usage_instructions": "Run `mindmeister auth profiles --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Personal Access Token authentication for MindMeister API. Get tokens from https://www.mindmeister.com/api."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `mindmeister cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `mindmeister cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "ideas": {
+      "help": "Manage ideas/nodes in mind maps",
+      "usage_instructions": "Manage nodes within mind maps. List nodes (as table or tree), toggle collapsed state, create maps with structured nodes, and import from files.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create-annotated": {
+          "help": "Create a mind map with notes/comments on each node from a JSON file. The JSON file should contain a list with a root node object. Each node can have: - title: Node display text (required) - note: Note/comment for the node (optional) - children: List of child nodes (optional) Example JSON structure: [ { \"title\": \"Root Topic\", \"note\": \"Description of the root\", \"children\": [ { \"title\": \"Branch 1\", \"note\": \"What this branch covers\", \"children\": [ {\"title\": \"Leaf\", \"note\": \"Leaf node description\"} ] } ] } ]",
+          "examples": [
+            "mindmeister ideas create-annotated my_mindmap.json"
+          ],
+          "usage_instructions": "Create a map from a JSON file with nodes that include titles and notes. FILE_PATH is positional. JSON format: list with root node object containing title, note, and children fields.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to JSON file with annotated node structure"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create-map": {
+          "help": "Create a new map with ideas/nodes. This uses the import workaround since the API doesn't support adding ideas directly.",
+          "examples": [
+            "mindmeister ideas create-map \"My Project\" -c \"Phase 1\" -c \"Phase 2\" -c \"Phase 3\"",
+            "mindmeister ideas create-map \"Root\" --json '{\"Root\": {\"Branch1\": [\"Leaf1\", \"Leaf2\"]}}'"
+          ],
+          "usage_instructions": "Create a new map with nodes. TITLE is positional (root node title). Use --child/-c to add first-level children (repeatable). Use --json/-j for hierarchical structure.",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Title for the root node and map"
+            }
+          ],
+          "options": [
+            {
+              "name": "--child",
+              "type": "TEXT",
+              "required": false,
+              "help": "Add first-level child nodes (can be repeated)",
+              "short": "-c"
+            },
+            {
+              "name": "--json",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON structure for hierarchical map",
+              "short": "-j"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Import a mind map from a file. Supported formats: .mm (FreeMind), .mmap, .xmind",
+          "examples": [
+            "mindmeister ideas import my_mindmap.mm",
+            "mindmeister ideas import project.xmind"
+          ],
+          "usage_instructions": "Import from FreeMind (.mm), .mmap, or .xmind files. FILE_PATH is positional.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to FreeMind (.mm) or other mind map file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all ideas/nodes in a map.",
+          "examples": [
+            "mindmeister ideas list 123456",
+            "mindmeister ideas list 123456 --table",
+            "mindmeister ideas list 123456 --tree"
+          ],
+          "usage_instructions": "List all nodes in a map. MAP_ID is positional. Use --tree to display as a tree structure, or --table/-t for flat table.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID to list ideas from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--tree",
+              "type": "bool",
+              "required": false,
+              "help": "Display as tree structure"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "toggle-closed": {
+          "help": "Toggle or set the collapsed state of a branch.",
+          "examples": [
+            "mindmeister ideas toggle-closed 123456 789  # Toggle",
+            "mindmeister ideas toggle-closed 123456 789 --closed  # Collapse",
+            "mindmeister ideas toggle-closed 123456 789 --open  # Expand"
+          ],
+          "usage_instructions": "Toggle or explicitly set collapsed/expanded state of a node. MAP_ID and IDEA_ID are positional. Use --closed to collapse or --open to expand.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID"
+            },
+            {
+              "name": "idea_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The idea/node ID to toggle"
+            }
+          ],
+          "options": [
+            {
+              "name": "--closed",
+              "type": "bool",
+              "required": false,
+              "help": "Set specific state"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "maps": {
       "help": "Manage MindMeister mind maps",
+      "usage_instructions": "CRUD operations on mind maps. List, get (with full node tree), create, update metadata, duplicate, delete, and export maps.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a new mind map. Create an empty map with --title, or create a structured map with nodes and notes using --json-file. JSON file format - a list containing the root node: [ { \"title\": \"Root Topic\", \"note\": \"Description of the root node\", \"children\": [ { \"title\": \"Branch 1\", \"note\": \"What this branch covers\", \"children\": [ {\"title\": \"Leaf Node\", \"note\": \"Leaf description\"} ] }, {\"title\": \"Branch 2\", \"note\": \"Another branch\"} ] } ]",
+          "examples": [
+            "mindmeister maps create --title \"My New Map\"",
+            "mindmeister maps create -T \"Project Planning\"",
+            "mindmeister maps create --json-file my_mindmap.json"
+          ],
+          "usage_instructions": "Create a new map. Use --title/-T for a simple empty map, or --json-file/-j to create a structured map with nodes and notes from a JSON file.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Title for the new map",
+              "short": "-T"
+            },
+            {
+              "name": "--json-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON file with node structure",
+              "short": "-j"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a map.",
+          "examples": [
+            "mindmeister maps delete 123456",
+            "mindmeister maps delete 123456 --force"
+          ],
+          "usage_instructions": "Delete a map by ID. Use --force/-F to skip confirmation.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "duplicate": {
+          "help": "Duplicate an existing map.",
+          "examples": [
+            "mindmeister maps duplicate 123456"
+          ],
+          "usage_instructions": "Create a copy of an existing map. MAP_ID is positional.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID to duplicate"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "export": {
+          "help": "Get export URLs for a map in various formats.",
+          "examples": [
+            "mindmeister maps export 123456",
+            "mindmeister maps export 123456 --table"
+          ],
+          "usage_instructions": "Get download URLs for exporting a map in various formats. MAP_ID is positional.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID to export"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a map with full structure including all ideas/nodes.",
+          "examples": [
+            "mindmeister maps get 123456",
+            "mindmeister maps get 123456 --table",
+            "mindmeister maps get 123456 --properties \"id,title,node_count\""
+          ],
+          "usage_instructions": "Get full map details including the complete node tree. MAP_ID is a positional argument.",
+          "arguments": [
+            {
+              "name": "map_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The map ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List all mind maps.",
+          "examples": [
+            "mindmeister maps list",
+            "mindmeister maps list --table",
+            "mindmeister maps list --limit 10",
+            "mindmeister maps list --properties \"id,title,modified\""
+          ],
+          "usage_instructions": "List all accessible mind maps. Supports --filter/-f, --properties/-p, --limit/-l (default 100), and --table/-t.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -272,76 +638,23 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "mindmeister maps list",
-            "mindmeister maps list --table",
-            "mindmeister maps list --limit 10",
-            "mindmeister maps list --properties \"id,title,modified\""
-          ],
-          "usage_instructions": "List all accessible mind maps. Supports --filter/-f, --properties/-p, --limit/-l (default 100), and --table/-t."
-        },
-        "get": {
-          "help": "Get a map with full structure including all ideas/nodes.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "mindmeister maps get 123456",
-            "mindmeister maps get 123456 --table",
-            "mindmeister maps get 123456 --properties \"id,title,node_count\""
-          ],
-          "usage_instructions": "Get full map details including the complete node tree. MAP_ID is a positional argument."
-        },
-        "create": {
-          "help": "Create a new mind map. Create an empty map with --title, or create a structured map with nodes and notes using --json-file. JSON file format - a list containing the root node: [ { \"title\": \"Root Topic\", \"note\": \"Description of the root node\", \"children\": [ { \"title\": \"Branch 1\", \"note\": \"What this branch covers\", \"children\": [ {\"title\": \"Leaf Node\", \"note\": \"Leaf description\"} ] }, {\"title\": \"Branch 2\", \"note\": \"Another branch\"} ] } ]",
-          "options": [
-            {
-              "name": "--title",
-              "type": "TEXT",
-              "required": false,
-              "help": "Title for the new map",
-              "short": "-T"
-            },
-            {
-              "name": "--json-file",
-              "type": "TEXT",
-              "required": false,
-              "help": "JSON file with node structure",
-              "short": "-j"
-            }
-          ],
-          "examples": [
-            "mindmeister maps create --title \"My New Map\"",
-            "mindmeister maps create -T \"Project Planning\"",
-            "mindmeister maps create --json-file my_mindmap.json"
-          ],
-          "usage_instructions": "Create a new map. Use --title/-T for a simple empty map, or --json-file/-j to create a structured map with nodes and notes from a JSON file."
+          ]
         },
         "update": {
           "help": "Update map metadata (title, description).",
+          "examples": [
+            "mindmeister maps update 123456 --title \"Updated Title\"",
+            "mindmeister maps update 123456 --description \"New description\"",
+            "mindmeister maps update 123456 -T \"New Title\" -d \"New description\""
+          ],
+          "usage_instructions": "Update map title and/or description. MAP_ID is positional. Use --title/-T and --description/-d.",
           "arguments": [
             {
               "name": "map_id",
@@ -364,224 +677,16 @@
               "required": false,
               "help": "New description",
               "short": "-d"
-            }
-          ],
-          "examples": [
-            "mindmeister maps update 123456 --title \"Updated Title\"",
-            "mindmeister maps update 123456 --description \"New description\"",
-            "mindmeister maps update 123456 -T \"New Title\" -d \"New description\""
-          ],
-          "usage_instructions": "Update map title and/or description. MAP_ID is positional. Use --title/-T and --description/-d."
-        },
-        "duplicate": {
-          "help": "Duplicate an existing map.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID to duplicate"
-            }
-          ],
-          "examples": [
-            "mindmeister maps duplicate 123456"
-          ],
-          "usage_instructions": "Create a copy of an existing map. MAP_ID is positional."
-        },
-        "delete": {
-          "help": "Delete a map.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID to delete"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation",
-              "short": "-F"
-            }
-          ],
-          "examples": [
-            "mindmeister maps delete 123456",
-            "mindmeister maps delete 123456 --force"
-          ],
-          "usage_instructions": "Delete a map by ID. Use --force/-F to skip confirmation."
-        },
-        "export": {
-          "help": "Get export URLs for a map in various formats.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID to export"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "mindmeister maps export 123456",
-            "mindmeister maps export 123456 --table"
-          ],
-          "usage_instructions": "Get download URLs for exporting a map in various formats. MAP_ID is positional."
-        }
-      },
-      "usage_instructions": "CRUD operations on mind maps. List, get (with full node tree), create, update metadata, duplicate, delete, and export maps."
-    },
-    "ideas": {
-      "help": "Manage ideas/nodes in mind maps",
-      "commands": {
-        "list": {
-          "help": "List all ideas/nodes in a map.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID to list ideas from"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--tree",
-              "type": "bool",
-              "required": false,
-              "help": "Display as tree structure"
-            }
-          ],
-          "examples": [
-            "mindmeister ideas list 123456",
-            "mindmeister ideas list 123456 --table",
-            "mindmeister ideas list 123456 --tree"
-          ],
-          "usage_instructions": "List all nodes in a map. MAP_ID is positional. Use --tree to display as a tree structure, or --table/-t for flat table."
-        },
-        "toggle-closed": {
-          "help": "Toggle or set the collapsed state of a branch.",
-          "arguments": [
-            {
-              "name": "map_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The map ID"
-            },
-            {
-              "name": "idea_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The idea/node ID to toggle"
-            }
-          ],
-          "options": [
-            {
-              "name": "--closed",
-              "type": "bool",
-              "required": false,
-              "help": "--open      Set specific state"
-            }
-          ],
-          "examples": [
-            "mindmeister ideas toggle-closed 123456 789  # Toggle",
-            "mindmeister ideas toggle-closed 123456 789 --closed  # Collapse",
-            "mindmeister ideas toggle-closed 123456 789 --open  # Expand"
-          ],
-          "usage_instructions": "Toggle or explicitly set collapsed/expanded state of a node. MAP_ID and IDEA_ID are positional. Use --closed to collapse or --open to expand."
-        },
-        "create-map": {
-          "help": "Create a new map with ideas/nodes. This uses the import workaround since the API doesn't support adding ideas directly.",
-          "arguments": [
-            {
-              "name": "title",
-              "type": "TEXT",
-              "required": true,
-              "help": "Title for the root node and map"
-            }
-          ],
-          "options": [
-            {
-              "name": "--child",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Add first-level child nodes (can be repeated)",
-              "short": "-c"
-            },
-            {
-              "name": "--json",
-              "type": "TEXT",
-              "required": false,
-              "help": "JSON structure for hierarchical map",
-              "short": "-j"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "mindmeister ideas create-map \"My Project\" -c \"Phase 1\" -c \"Phase 2\" -c \"Phase 3\"",
-            "mindmeister ideas create-map \"Root\" --json '{\"Root\": {\"Branch1\": [\"Leaf1\", \"Leaf2\"]}}'"
-          ],
-          "usage_instructions": "Create a new map with nodes. TITLE is positional (root node title). Use --child/-c to add first-level children (repeatable). Use --json/-j for hierarchical structure."
-        },
-        "import": {
-          "help": "Import a mind map from a file. Supported formats: .mm (FreeMind), .mmap, .xmind",
-          "arguments": [
-            {
-              "name": "file_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Path to FreeMind (.mm) or other mind map file"
-            }
-          ],
-          "examples": [
-            "mindmeister ideas import my_mindmap.mm",
-            "mindmeister ideas import project.xmind"
-          ],
-          "usage_instructions": "Import from FreeMind (.mm), .mmap, or .xmind files. FILE_PATH is positional."
-        },
-        "create-annotated": {
-          "help": "Create a mind map with notes/comments on each node from a JSON file. The JSON file should contain a list with a root node object. Each node can have: - title: Node display text (required) - note: Note/comment for the node (optional) - children: List of child nodes (optional) Example JSON structure: [ { \"title\": \"Root Topic\", \"note\": \"Description of the root\", \"children\": [ { \"title\": \"Branch 1\", \"note\": \"What this branch covers\", \"children\": [ {\"title\": \"Leaf\", \"note\": \"Leaf node description\"} ] } ] } ]",
-          "arguments": [
-            {
-              "name": "file_path",
-              "type": "TEXT",
-              "required": true,
-              "help": "Path to JSON file with annotated node structure"
-            }
-          ],
-          "examples": [
-            "mindmeister ideas create-annotated my_mindmap.json"
-          ],
-          "usage_instructions": "Create a map from a JSON file with nodes that include titles and notes. FILE_PATH is positional. JSON format: list with root node object containing title, note, and children fields."
+          ]
         }
-      },
-      "usage_instructions": "Manage nodes within mind maps. List nodes (as table or tree), toggle collapsed state, create maps with structured nodes, and import from files."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `mindmeister cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `mindmeister cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use for managing MindMeister mind maps -- create, list, update, export maps and manage ideas/nodes within them. Commands follow `mindmeister <group> <action>` pattern. Requires Personal Access Token via `mindmeister auth login`."

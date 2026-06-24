@@ -1,7 +1,7 @@
 {
   "tool": "ring",
-  "description": "CLI for Ring doorbells, cameras, chimes \u2014 devices, events, snapshots, recordings, motion, lights, siren",
-  "discovered_at": "2026-05-12T18:29:58.069255+00:00",
+  "description": "CLI for Ring doorbells, cameras, chimes — devices, events, snapshots, recordings, motion, lights, siren",
+  "discovered_at": "2026-06-20T19:54:31Z",
   "total_commands": 28,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Ring authentication",
+      "usage_instructions": "Ring authentication -- login (with 2FA prompt), logout, status, refresh. Supports multiple profiles via --profile/-p. Use `ring auth login --force` to clear the cached OAuth token and re-run the 2FA challenge.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Set up Ring credentials. Prompts for email, password, and a 6-digit 2FA code that Ring delivers via SMS/email at login time. The OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs. Use --force/-F to clear the cached token and re-prompt; use --profile/-p to save to a non-default profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Set up Ring credentials. Prompts for email, password, and a 6-digit 2FA code that Ring delivers via SMS/email at login time. The OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs. Use --force/-F to clear the cached token and re-prompt; use --profile/-p to save to a non-default profile."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Drop stored credentials and the cached OAuth token for the given profile (default: active profile).",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Drop stored credentials and the cached OAuth token for the given profile (default: active profile)."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Manage Ring auth profiles -- list, get, create, set-default, delete. Use to track multiple Ring accounts.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new auth profile to log a different Ring account into.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete an auth profile and its cached token.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Show the contents (credentials + token presence) of a single profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all auth profiles for the ring CLI.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Report whether each profile has saved credentials and a usable Ring token. Add --table/-t for a human-readable table.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Report whether each profile has saved credentials and a usable Ring token. Add --table/-t for a human-readable table."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Force a refresh of the Ring OAuth access token using the stored refresh token. Useful when verifying the token-rotation path; normal commands refresh automatically."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Test authentication by hitting Ring with the cached token and counting visible devices. Pass --verbose for the full check set; --table for a human-readable summary.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,123 +237,158 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Test authentication by hitting Ring with the cached token and counting visible devices. Pass --verbose for the full check set; --table for a human-readable summary."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all auth profiles for the ring CLI."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Show the contents (credentials + token presence) of a single profile."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new auth profile to log a different Ring account into."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Mark the named profile as the active default for `ring auth login`."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete an auth profile and its cached token."
-            }
-          },
-          "usage_instructions": "Manage Ring auth profiles -- list, get, create, set-default, delete. Use to track multiple Ring accounts."
+          ]
         }
-      },
-      "usage_instructions": "Ring authentication -- login (with 2FA prompt), logout, status, refresh. Supports multiple profiles via --profile/-p. Use `ring auth login --force` to clear the cached OAuth token and re-run the 2FA challenge."
+      }
+    },
+    "cache": {
+      "help": "Manage local response cache",
+      "usage_instructions": "Local response cache. `cache clear` removes every cached response. Use the global --no-cache flag on any command to bypass the cache for a single call.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses for this CLI.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "chime": {
+      "help": "Control Ring chime devices",
+      "usage_instructions": "Play test sounds on Ring chime devices. `chime test --device <name> --kind ding|motion` plays the selected test sound on the chime speaker.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "test": {
+          "help": "Play a test sound on a chime.",
+          "usage_instructions": "Play a test sound on a Ring chime device. Use --kind ding for the doorbell tone, --kind motion for the motion alert tone.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Chime device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--kind",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sound to play: 'ding' or 'motion'",
+              "short": "-k",
+              "default": "ding"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "devices": {
       "help": "Manage Ring devices",
+      "usage_instructions": "Manage Ring devices (doorbells, cameras, chimes, intercoms). `devices list` enumerates everything on the account; `devices get <name-or-id>` returns full detail including battery and wifi; `devices health <name-or-id>` returns connectivity only. Filter by family with --family (doorbots, stickup_cams, chimes, authorized_doorbots, other).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get full details (including health) for a single device.",
+          "usage_instructions": "Get full detail (including health, battery, wifi) for a single device. Accepts the device name (case-insensitive) or numeric ID.",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "health": {
+          "help": "Show battery, wifi, and connection status for a device.",
+          "usage_instructions": "Battery, wifi signal, and connection status for a single device. Lighter weight than `devices get` -- skips capability introspection.",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List all Ring devices on the account.",
+          "examples": [
+            "ring devices list",
+            "ring devices list --table",
+            "ring devices list --family stickup_cams",
+            "ring devices list --filter \"family:eq:doorbots\""
+          ],
+          "usage_instructions": "Enumerate every device on the account across all families. Filter to a single family with --family (doorbots, stickup_cams, chimes, authorized_doorbots, other). Use --table/-t for a table; --filter/-f for field:op:value; --properties/-p to limit columns.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -278,163 +424,38 @@
               "type": "TEXT",
               "required": false,
               "help": "Restrict to a single device family (doorbots, authorized_doorbots, stickup_cams, chimes, other)"
-            }
-          ],
-          "examples": [
-            "ring devices list",
-            "ring devices list --table",
-            "ring devices list --family stickup_cams",
-            "ring devices list --filter \"family:eq:doorbots\""
-          ],
-          "usage_instructions": "Enumerate every device on the account across all families. Filter to a single family with --family (doorbots, stickup_cams, chimes, authorized_doorbots, other). Use --table/-t for a table; --filter/-f for field:op:value; --properties/-p to limit columns."
-        },
-        "get": {
-          "help": "Get full details (including health) for a single device.",
-          "arguments": [
-            {
-              "name": "identifier",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Get full detail (including health, battery, wifi) for a single device. Accepts the device name (case-insensitive) or numeric ID."
-        },
-        "health": {
-          "help": "Show battery, wifi, and connection status for a device.",
-          "arguments": [
-            {
-              "name": "identifier",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Battery, wifi signal, and connection status for a single device. Lighter weight than `devices get` -- skips capability introspection."
+          ]
         }
-      },
-      "usage_instructions": "Manage Ring devices (doorbells, cameras, chimes, intercoms). `devices list` enumerates everything on the account; `devices get <name-or-id>` returns full detail including battery and wifi; `devices health <name-or-id>` returns connectivity only. Filter by family with --family (doorbots, stickup_cams, chimes, authorized_doorbots, other)."
+      }
     },
     "events": {
       "help": "List and download Ring events",
+      "usage_instructions": "Ring event history (dings, motion, on-demand). `events list` lists recent events across all video devices unless restricted with --device/-d; `events get EVENT_ID --device <name>` retrieves a specific event; `events download` saves MP4 recordings. Pass --recent N --device <name> to grab the last N recordings without first looking up an event id.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List recent Ring events.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": false,
-              "help": "Limit to a single device (name or numeric ID)",
-              "short": "-d"
-            },
-            {
-              "name": "--kind",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by event kind (ding, motion, on_demand, alarm)",
-              "short": "-k"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum events per device",
-              "short": "-l",
-              "default": "25"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "ring events list",
-            "ring events list --device \"Front Door\"",
-            "ring events list --kind motion --limit 50",
-            "ring events list --device \"Back Yard\" --kind ding --table"
-          ],
-          "usage_instructions": "List recent events (dings, motion, on-demand). Defaults to all video devices; restrict with --device/-d. Filter by event kind with --kind/-k (ding, motion, on_demand, alarm)."
-        },
-        "get": {
-          "help": "Look up a single event by ID under a specific device. Ring's history endpoint is per-device, so we scan the last 200 events on the given device and return the matching entry.",
-          "arguments": [
-            {
-              "name": "event_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Event ID (from `events list`)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID the event belongs to",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Look up a single event by ID under a specific device. Scans the last 200 events on that device for the matching ID."
-        },
         "download": {
           "help": "Download recordings as MP4 files.",
+          "examples": [
+            "ring events download EVENT_ID --device \"Front Door\"",
+            "ring events download --device \"Front Door\" --recent 5",
+            "ring events download --device \"Back Yard\" --recent 10 --kind motion --output ./clips"
+          ],
+          "usage_instructions": "Download recordings as MP4 files. Either pass an EVENT_ID positional argument, OR pass --recent/-r N to grab the last N events. Output defaults to ~/Downloads/ring/ but can be overridden with --output/-o.",
           "arguments": [
             {
               "name": "event_id",
@@ -478,23 +499,417 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Look up a single event by ID under a specific device. Ring's history endpoint is per-device, so we scan the last 200 events on the given device and return the matching entry.",
+          "usage_instructions": "Look up a single event by ID under a specific device. Scans the last 200 events on that device for the matching ID.",
+          "arguments": [
+            {
+              "name": "event_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Event ID (from `events list`)"
             }
           ],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID the event belongs to",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List recent Ring events.",
           "examples": [
-            "ring events download EVENT_ID --device \"Front Door\"",
-            "ring events download --device \"Front Door\" --recent 5",
-            "ring events download --device \"Back Yard\" --recent 10 --kind motion --output ./clips"
+            "ring events list",
+            "ring events list --device \"Front Door\"",
+            "ring events list --kind motion --limit 50",
+            "ring events list --device \"Back Yard\" --kind ding --table"
           ],
-          "usage_instructions": "Download recordings as MP4 files. Either pass an EVENT_ID positional argument, OR pass --recent/-r N to grab the last N events. Output defaults to ~/Downloads/ring/ but can be overridden with --output/-o."
+          "usage_instructions": "List recent events (dings, motion, on-demand). Defaults to all video devices; restrict with --device/-d. Filter by event kind with --kind/-k (ding, motion, on_demand, alarm).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": false,
+              "help": "Limit to a single device (name or numeric ID)",
+              "short": "-d"
+            },
+            {
+              "name": "--kind",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by event kind (ding, motion, on_demand, alarm)",
+              "short": "-k"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum events per device",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Ring event history (dings, motion, on-demand). `events list` lists recent events across all video devices unless restricted with --device/-d; `events get EVENT_ID --device <name>` retrieves a specific event; `events download` saves MP4 recordings. Pass --recent N --device <name> to grab the last N recordings without first looking up an event id."
+      }
+    },
+    "lights": {
+      "help": "Control floodlights (stickup_cams)",
+      "usage_instructions": "Control floodlights on Ring stickup_cams. `lights on --device <name>` and `lights off --device <name>`. Fails with a clear error if used against a device that does not have lights (e.g. a doorbell or chime).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "off": {
+          "help": "Turn the floodlights off.",
+          "usage_instructions": "Turn the floodlights off for a Ring stickup_cam with lights.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "on": {
+          "help": "Turn the floodlights on.",
+          "usage_instructions": "Turn the floodlights on for a Ring stickup_cam with lights. Fails if the device does not have lights (e.g. doorbell, chime).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "motion": {
+      "help": "Manage motion detection",
+      "usage_instructions": "Toggle motion detection per device. Use `motion status --device <name>` to inspect, `motion enable` / `motion disable` to change. Motion zones and sensitivity sliders are not exposed by the ring-doorbell library; edit them in the Ring mobile app.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "disable": {
+          "help": "Disable motion detection on a doorbell or camera.",
+          "usage_instructions": "Turn motion detection OFF for a doorbell or camera.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "enable": {
+          "help": "Enable motion detection on a doorbell or camera.",
+          "usage_instructions": "Turn motion detection ON for a doorbell or camera.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Show whether motion detection is currently enabled.",
+          "usage_instructions": "Show whether motion detection is currently enabled for a device.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "siren": {
+      "help": "Control siren (stickup_cams)",
+      "usage_instructions": "Sound or silence the siren on Ring stickup_cams. `siren on --device <name> --duration 30` triggers it for N seconds (default 30); `siren off --device <name>` silences it. Ring enforces an upper bound around 300s server-side.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "off": {
+          "help": "Silence an active siren by setting its remaining duration to 0.",
+          "usage_instructions": "Silence an active siren. Stickup_cams only.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "on": {
+          "help": "Trigger the siren for ``duration`` seconds.",
+          "usage_instructions": "Trigger the siren for --duration seconds (default 30). Stickup_cams only.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--duration",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Siren duration in seconds (Ring enforces a max around 300s)",
+              "short": "-u",
+              "default": "30"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "snapshot": {
       "help": "Capture device snapshots",
+      "usage_instructions": "Capture snapshots from doorbells and cameras. `snapshot list` shows snapshot-capable devices; `snapshot get --device <name>` triggers a fresh JPEG capture (defaults to ~/Downloads/ring/<device>_snapshot.jpg unless --output is given).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Trigger a fresh snapshot capture and save it locally.",
+          "examples": [
+            "ring snapshot get --device \"Front Door\"",
+            "ring snapshot get --device \"Back Yard\" --output ./back-yard.jpg"
+          ],
+          "usage_instructions": "Trigger a fresh JPEG capture from a doorbell or camera and save it locally. Defaults to ~/Downloads/ring/<device>_snapshot.jpg; override with --output/-o.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name or numeric ID",
+              "short": "-d"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": false,
+              "help": "Output path (default: ~/Downloads/ring/<device>_snapshot.jpg)",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List devices that support snapshot capture (doorbells and cameras).",
+          "usage_instructions": "List devices that support snapshot capture (doorbells and cameras).",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -524,249 +939,34 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "usage_instructions": "List devices that support snapshot capture (doorbells and cameras)."
-        },
-        "get": {
-          "help": "Trigger a fresh snapshot capture and save it locally.",
-          "options": [
+            },
             {
-              "name": "--device",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--output",
-              "type": "PATH",
               "required": false,
-              "help": "Output path (default: ~/Downloads/ring/<device>_snapshot.jpg)",
-              "short": "-o"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display result as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "ring snapshot get --device \"Front Door\"",
-            "ring snapshot get --device \"Back Yard\" --output ./back-yard.jpg"
-          ],
-          "usage_instructions": "Trigger a fresh JPEG capture from a doorbell or camera and save it locally. Defaults to ~/Downloads/ring/<device>_snapshot.jpg; override with --output/-o."
+          ]
         }
-      },
-      "usage_instructions": "Capture snapshots from doorbells and cameras. `snapshot list` shows snapshot-capable devices; `snapshot get --device <name>` triggers a fresh JPEG capture (defaults to ~/Downloads/ring/<device>_snapshot.jpg unless --output is given)."
-    },
-    "motion": {
-      "help": "Manage motion detection",
-      "commands": {
-        "enable": {
-          "help": "Enable motion detection on a doorbell or camera.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Turn motion detection ON for a doorbell or camera."
-        },
-        "disable": {
-          "help": "Disable motion detection on a doorbell or camera.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Turn motion detection OFF for a doorbell or camera."
-        },
-        "status": {
-          "help": "Show whether motion detection is currently enabled.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Show whether motion detection is currently enabled for a device."
-        }
-      },
-      "usage_instructions": "Toggle motion detection per device. Use `motion status --device <name>` to inspect, `motion enable` / `motion disable` to change. Motion zones and sensitivity sliders are not exposed by the ring-doorbell library; edit them in the Ring mobile app."
-    },
-    "lights": {
-      "help": "Control floodlights (stickup_cams)",
-      "commands": {
-        "on": {
-          "help": "Turn the floodlights on.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Turn the floodlights on for a Ring stickup_cam with lights. Fails if the device does not have lights (e.g. doorbell, chime)."
-        },
-        "off": {
-          "help": "Turn the floodlights off.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Turn the floodlights off for a Ring stickup_cam with lights."
-        }
-      },
-      "usage_instructions": "Control floodlights on Ring stickup_cams. `lights on --device <name>` and `lights off --device <name>`. Fails with a clear error if used against a device that does not have lights (e.g. a doorbell or chime)."
-    },
-    "siren": {
-      "help": "Control siren (stickup_cams)",
-      "commands": {
-        "on": {
-          "help": "Trigger the siren for ``duration`` seconds.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--duration",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Siren duration in seconds (Ring enforces a max around 300s)",
-              "short": "-u",
-              "default": "30"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Trigger the siren for --duration seconds (default 30). Stickup_cams only."
-        },
-        "off": {
-          "help": "Silence an active siren by setting its remaining duration to 0.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Silence an active siren. Stickup_cams only."
-        }
-      },
-      "usage_instructions": "Sound or silence the siren on Ring stickup_cams. `siren on --device <name> --duration 30` triggers it for N seconds (default 30); `siren off --device <name>` silences it. Ring enforces an upper bound around 300s server-side."
-    },
-    "chime": {
-      "help": "Control Ring chime devices",
-      "commands": {
-        "test": {
-          "help": "Play a test sound on a chime.",
-          "options": [
-            {
-              "name": "--device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Chime device name or numeric ID",
-              "short": "-d"
-            },
-            {
-              "name": "--kind",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sound to play: 'ding' or 'motion'",
-              "short": "-k",
-              "default": "ding"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Play a test sound on a Ring chime device. Use --kind ding for the doorbell tone, --kind motion for the motion alert tone."
-        }
-      },
-      "usage_instructions": "Play test sounds on Ring chime devices. `chime test --device <name> --kind ding|motion` plays the selected test sound on the chime speaker."
+      }
     },
     "volume": {
       "help": "Manage device volume",
+      "usage_instructions": "Set device volume (0-10). `volume set --device <name> --value <0-10>` -- applies to doorbell speakers, chime speakers, and intercom speakers.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "set": {
           "help": "Set the device volume to ``value`` (0-10).",
+          "usage_instructions": "Set the device speaker volume to --value (0-10 inclusive).",
+          "arguments": [],
           "options": [
             {
               "name": "--device",
@@ -788,22 +988,16 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Set the device speaker volume to --value (0-10 inclusive)."
+          ]
         }
-      },
-      "usage_instructions": "Set device volume (0-10). `volume set --device <name> --value <0-10>` -- applies to doorbell speakers, chime speakers, and intercom speakers."
-    },
-    "cache": {
-      "help": "Manage local response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Remove all cached responses for this CLI."
-        }
-      },
-      "usage_instructions": "Local response cache. `cache clear` removes every cached response. Use the global --no-cache flag on any command to bypass the cache for a single call."
+      }
     }
   },
   "usage_instructions": "Use the `ring` CLI for ALL Ring doorbell, camera, chime, and intercom operations on Adam's Ring account. The CLI wraps the ring-doorbell Python library (same library that powers the Home Assistant integration). First-time use requires `ring auth login` which prompts for email, password, and a 6-digit 2FA code Ring delivers via SMS/email; subsequent runs use the cached OAuth refresh token. Pass --table/-t on any read command for a human-readable table; default output is JSON on stdout. Device identifiers in commands accept either the case-insensitive device name (e.g. 'Front Door') or the numeric device ID. OUT OF SCOPE: Ring Alarm arm/disarm and motion-zone editing -- these are not exposed by the ring-doorbell library."

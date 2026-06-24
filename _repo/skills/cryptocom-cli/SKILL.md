@@ -31,7 +31,7 @@ cryptocom <command-group> <action> [arguments] [options]
 
 <principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `cryptocom` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `cryptocom` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

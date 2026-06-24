@@ -27,7 +27,7 @@ things <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `things` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `things` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -132,7 +132,7 @@ Exclude WF-tagged items by default when listing todos: pipe output through `jq '
 
 Reinstall after editing the editable source:
 ```bash
-/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**
@@ -168,7 +168,7 @@ things projects delete <returned-uuid> --yes
 
 **Fix:** Rewrote `_date_int_to_iso` to decode the packed format and `_iso_to_date_int` to encode it (the inverse helper is currently unused but kept for parity). After editing the editable source, reinstall:
 ```bash
-/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**
@@ -198,7 +198,7 @@ Clean up with `things todos delete <uuid> --yes` for each.
 
 After editing the editable source, reinstall is not required (it's an editable install — changes are live), but a sanity reinstall is safe:
 ```bash
-/Users/adam/Dropbox/GitRepos/Agents/skills/cli-tool/scripts/install-cli-tool.sh things
+/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/scripts/install-cli-tool.sh things
 ```
 
 **Verification:**

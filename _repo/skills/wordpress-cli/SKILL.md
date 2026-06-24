@@ -42,7 +42,7 @@ wordpress <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `wordpress` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `wordpress` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -54,7 +54,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **media** — Media library: list, get, upload, delete
 - **categories** — Category management: list, get, create, update, delete
 - **tags** — Tag management: list, get, create, update, delete
-- **admin** — WordPress admin maintenance, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through explicit SSH/SFTP settings
+- **admin** — WordPress admin maintenance, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through explicit SSH settings
 - **org** — WordPress.com OAuth token commands used by Jetpack plugin updates
 </principle>
 
@@ -96,6 +96,36 @@ wp eval 'update_field("site_ad_settings_logo", 26999, "option"); update_field("s
 
 Preserve valid HTML and use `&amp;` inside HTML attributes when updating the copy
 field. Verify with `GET /wp-json/acf/v3/options/options/site_ad_settings`.
+</principle>
+
+<principle name="Theme-Constrained Page Layouts">
+Many themes wrap page content in a narrow typography container (Tailwind `prose`
++ `max-w-[NNch]`, a constrained `entry-content`, etc.). Rendering a rich
+landing/About page as plain blocks inside such a container looks broken: it is
+too narrow for multi-column layouts, and the typography styles restyle headings
+and underline button links. The fix is NOT a full-page custom shell that hides
+the theme's header/nav or forces full-bleed -- that fights the theme.
+
+When a page needs a custom landing layout, build it as ONE self-contained
+`<!-- wp:html -->` block instead of plain blocks:
+- First DISCOVER the wrapper: load the live page and inspect the content
+  ancestor chain (DevTools or `playwright-cli eval`) to find the class and the
+  `max-width` that constrains content.
+- Namespace all styles under a wrapper class and give every styled element a
+  class. If the theme uses Tailwind Typography, its rules use `:where()` (zero
+  specificity), so class-based rules override them without `!important`.
+- Widen only that page's column with a page-scoped selector
+  (`body.page-id-<ID> .<content-wrapper>{max-width:100%}`) -- never a global
+  override.
+- Keep the theme header, nav, and footer; do not hide chrome.
+- Drive component colors from CSS variables and SUPPORT the theme's dark mode:
+  detect its strategy first (a `.dark`/`.theme-dark` class toggled on `<html>`
+  or `<body>`, vs. `@media (prefers-color-scheme: dark)`), then redefine the
+  variables under that selector so the page re-skins to match the dark chrome
+  instead of sitting as a light island. Verify both modes with screenshots.
+
+Always visually verify the live page after the update (screenshot desktop and
+mobile) and iterate against the target design before calling it done.
 </principle>
 </essential_principles>
 

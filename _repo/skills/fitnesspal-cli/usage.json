@@ -1,7 +1,7 @@
 {
   "tool": "fitnesspal",
   "description": "MyFitnessPal CLI - View diary, exercises, measurements, reports, and food data",
-  "discovered_at": "2026-05-06T15:16:55.670888+00:00",
+  "discovered_at": "2026-06-20T19:45:30Z",
   "total_commands": 27,
   "global_options": [
     {
@@ -19,11 +19,303 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Manage fitnesspal authentication",
+      "usage_instructions": "Authentication management — login, logout, check status, refresh tokens, and test credentials.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Set up or reconfigure MyFitnessPal credentials. Use --force/-F to re-authenticate.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Clear stored credentials. Use --profile/-p to target a specific profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Manage named configuration profiles.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete a profile. Use --force/-F to skip confirmation.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Get details for a named profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all configured profiles.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "usage_instructions": "Check whether credentials are configured and valid.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Verify that stored credentials work. Use --verbose/-v for detailed output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Manage the response cache. Use `cache clear` to remove all cached responses.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Clear all cached responses.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
     "diary": {
       "help": "View food diary entries",
+      "usage_instructions": "View food diary entries. List entries by date or get details for a specific entry.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get the food diary for a specific date. Shows all meals, entries, nutrition totals, goals, notes, and water intake.",
+          "examples": [
+            "fitnesspal diary get",
+            "fitnesspal diary get today",
+            "fitnesspal diary get yesterday",
+            "fitnesspal diary get 2024-01-15",
+            "fitnesspal diary get --table"
+          ],
+          "usage_instructions": "Get details for a specific diary entry.",
+          "arguments": [
+            {
+              "name": "date",
+              "type": "DATE",
+              "required": false,
+              "help": "Date to get diary for (today, yesterday, YYYY-MM-DD)",
+              "default": "today"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List recent diary day summaries. Shows nutrition totals for the last N days.",
+          "examples": [
+            "fitnesspal diary list",
+            "fitnesspal diary list --days 14",
+            "fitnesspal diary list --period today",
+            "fitnesspal diary list --period yesterday",
+            "fitnesspal diary list --period last_week",
+            "fitnesspal diary list --table",
+            "fitnesspal diary list --filter \"complete:true\""
+          ],
+          "usage_instructions": "List food diary entries. Use date options to specify the date range.",
+          "arguments": [],
           "options": [
             {
               "name": "--days",
@@ -67,27 +359,46 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "fitnesspal diary list",
-            "fitnesspal diary list --days 14",
-            "fitnesspal diary list --period today",
-            "fitnesspal diary list --period yesterday",
-            "fitnesspal diary list --period last_week",
-            "fitnesspal diary list --table",
-            "fitnesspal diary list --filter \"complete:true\""
-          ],
-          "usage_instructions": "List food diary entries. Use date options to specify the date range."
-        },
+          ]
+        }
+      }
+    },
+    "exercises": {
+      "help": "View exercise entries",
+      "usage_instructions": "View exercise entries. List exercises by date or get details for a specific entry.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
-          "help": "Get the food diary for a specific date. Shows all meals, entries, nutrition totals, goals, notes, and water intake.",
+          "help": "Get exercises for a specific date. Shows all exercise groups and individual exercise entries with nutrition information (calories burned, etc.).",
+          "examples": [
+            "fitnesspal exercises get",
+            "fitnesspal exercises get today",
+            "fitnesspal exercises get yesterday",
+            "fitnesspal exercises get 2024-01-15",
+            "fitnesspal exercises get --table"
+          ],
+          "usage_instructions": "Get details for a specific exercise entry.",
           "arguments": [
             {
               "name": "date",
               "type": "DATE",
               "required": false,
-              "help": "Date to get diary for (today, yesterday, YYYY-MM-DD)",
+              "help": "Date to get exercises for (today, yesterday, YYYY-MM-DD)",
               "default": "today"
             }
           ],
@@ -98,25 +409,24 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "fitnesspal diary get",
-            "fitnesspal diary get today",
-            "fitnesspal diary get yesterday",
-            "fitnesspal diary get 2024-01-15",
-            "fitnesspal diary get --table"
-          ],
-          "usage_instructions": "Get details for a specific diary entry."
-        }
-      },
-      "usage_instructions": "View food diary entries. List entries by date or get details for a specific entry."
-    },
-    "exercises": {
-      "help": "View exercise entries",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List recent exercise summaries. Shows exercises from the last N days.",
+          "examples": [
+            "fitnesspal exercises list",
+            "fitnesspal exercises list --days 14",
+            "fitnesspal exercises list --table"
+          ],
+          "usage_instructions": "List exercise entries. Use date options to specify the date range.",
+          "arguments": [],
           "options": [
             {
               "name": "--days",
@@ -154,274 +464,71 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal exercises list",
-            "fitnesspal exercises list --days 14",
-            "fitnesspal exercises list --table"
-          ],
-          "usage_instructions": "List exercise entries. Use date options to specify the date range."
-        },
-        "get": {
-          "help": "Get exercises for a specific date. Shows all exercise groups and individual exercise entries with nutrition information (calories burned, etc.).",
-          "arguments": [
+            },
             {
-              "name": "date",
-              "type": "DATE",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Date to get exercises for (today, yesterday, YYYY-MM-DD)",
-              "default": "today"
+              "help": "Auth profile name"
             }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "fitnesspal exercises get",
-            "fitnesspal exercises get today",
-            "fitnesspal exercises get yesterday",
-            "fitnesspal exercises get 2024-01-15",
-            "fitnesspal exercises get --table"
-          ],
-          "usage_instructions": "Get details for a specific exercise entry."
+          ]
         }
-      },
-      "usage_instructions": "View exercise entries. List exercises by date or get details for a specific entry."
-    },
-    "measurements": {
-      "help": "View body measurements",
-      "commands": {
-        "list": {
-          "help": "List measurements by type and date range. Shows body measurements like Weight, Body Fat, etc.",
-          "options": [
-            {
-              "name": "--measurement",
-              "type": "TEXT",
-              "required": false,
-              "help": "Measurement type (e.g., Weight, Body Fat)",
-              "short": "-m",
-              "default": "Weight"
-            },
-            {
-              "name": "--from",
-              "type": "TEXT",
-              "required": false,
-              "help": "Start date (YYYY-MM-DD)"
-            },
-            {
-              "name": "--to",
-              "type": "TEXT",
-              "required": false,
-              "help": "End date (YYYY-MM-DD)"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of entries to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal measurements list",
-            "fitnesspal measurements list --measurement Weight",
-            "fitnesspal measurements list --measurement \"Body Fat\"",
-            "fitnesspal measurements list --from 2024-01-01 --to 2024-01-31",
-            "fitnesspal measurements list --table --limit 10",
-            "fitnesspal measurements list --filter \"value:gt:150\""
-          ],
-          "usage_instructions": "List body measurements. Filter by measurement type."
-        },
-        "get": {
-          "help": "Get measurement for a specific date.",
-          "arguments": [
-            {
-              "name": "date",
-              "type": "TEXT",
-              "required": true,
-              "help": "Date to get measurement for (YYYY-MM-DD)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--measurement",
-              "type": "TEXT",
-              "required": false,
-              "help": "Measurement type (e.g., Weight, Body Fat)",
-              "short": "-m",
-              "default": "Weight"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "fitnesspal measurements get 2024-01-15",
-            "fitnesspal measurements get 2024-01-15 --measurement \"Body Fat\"",
-            "fitnesspal measurements get 2024-01-15 --table"
-          ],
-          "usage_instructions": "Get details for a specific measurement."
-        }
-      },
-      "usage_instructions": "View body measurements (weight, body fat, etc.). List measurements by type or get details."
-    },
-    "reports": {
-      "help": "View nutrition and fitness reports",
-      "commands": {
-        "list": {
-          "help": "List report data by metric and date range.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Report metric (e.g., NetCalories, TotalCalories)",
-              "short": "-n",
-              "default": "NetCalories"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Report category (e.g., Nutrition, Exercise)",
-              "short": "-c",
-              "default": "Nutrition"
-            },
-            {
-              "name": "--from",
-              "type": "TEXT",
-              "required": false,
-              "help": "Start date (YYYY-MM-DD)"
-            },
-            {
-              "name": "--to",
-              "type": "TEXT",
-              "required": false,
-              "help": "End date (YYYY-MM-DD)"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of entries to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal reports list",
-            "fitnesspal reports list --name NetCalories",
-            "fitnesspal reports list --name TotalCalories --category Nutrition",
-            "fitnesspal reports list --from 2024-01-01 --to 2024-01-31",
-            "fitnesspal reports list --table --limit 7",
-            "fitnesspal reports list --filter \"value:gt:1500\""
-          ],
-          "usage_instructions": "List nutrition/fitness reports by date range."
-        },
-        "get": {
-          "help": "Get report value for a specific date.",
-          "arguments": [
-            {
-              "name": "date",
-              "type": "TEXT",
-              "required": true,
-              "help": "Date to get report for (YYYY-MM-DD)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Report metric (e.g., NetCalories, TotalCalories)",
-              "short": "-n",
-              "default": "NetCalories"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Report category (e.g., Nutrition, Exercise)",
-              "short": "-c",
-              "default": "Nutrition"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "fitnesspal reports get 2024-01-15",
-            "fitnesspal reports get 2024-01-15 --name TotalCalories",
-            "fitnesspal reports get 2024-01-15 --table"
-          ],
-          "usage_instructions": "Get a specific report with detailed data."
-        }
-      },
-      "usage_instructions": "View nutrition and fitness reports. List reports by date range or get specific report details."
+      }
     },
     "food": {
       "help": "Search and view food items",
+      "usage_instructions": "Search and view food items in the MyFitnessPal database. Use for looking up nutritional info.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get detailed information about a specific food item.",
+          "examples": [
+            "fitnesspal food get 12345",
+            "fitnesspal food get 12345 --table"
+          ],
+          "usage_instructions": "Get nutritional details for a specific food item.",
+          "arguments": [
+            {
+              "name": "mfp_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "MyFitnessPal food item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "Search the MyFitnessPal food database.",
+          "examples": [
+            "fitnesspal food list \"chicken breast\"",
+            "fitnesspal food list banana --table",
+            "fitnesspal food list \"greek yogurt\" --limit 5",
+            "fitnesspal food list \"protein bar\" --filter \"verified:true\"",
+            "fitnesspal food list rice --properties \"mfp_id,name,calories\""
+          ],
+          "usage_instructions": "Search food items by keyword.",
           "arguments": [
             {
               "name": "query",
@@ -459,208 +566,37 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal food list \"chicken breast\"",
-            "fitnesspal food list banana --table",
-            "fitnesspal food list \"greek yogurt\" --limit 5",
-            "fitnesspal food list \"protein bar\" --filter \"verified:true\"",
-            "fitnesspal food list rice --properties \"mfp_id,name,calories\""
-          ],
-          "usage_instructions": "Search food items by keyword."
-        },
-        "get": {
-          "help": "Get detailed information about a specific food item.",
-          "arguments": [
+            },
             {
-              "name": "mfp_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "MyFitnessPal food item ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "fitnesspal food get 12345",
-            "fitnesspal food get 12345 --table"
-          ],
-          "usage_instructions": "Get nutritional details for a specific food item."
+          ]
         }
-      },
-      "usage_instructions": "Search and view food items in the MyFitnessPal database. Use for looking up nutritional info."
-    },
-    "recipes": {
-      "help": "View saved recipes",
-      "commands": {
-        "list": {
-          "help": "List all saved recipes.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal recipes list",
-            "fitnesspal recipes list --table",
-            "fitnesspal recipes list --limit 10",
-            "fitnesspal recipes list --filter \"name:contains:chicken\""
-          ],
-          "usage_instructions": "List saved recipes."
-        },
-        "create": {
-          "help": "Create a new recipe. Each ingredient requires a food_id (from 'fitnesspal food search'), quantity (number of servings), and serving size details.",
-          "options": [
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipe name",
-              "short": "-n"
-            },
-            {
-              "name": "--servings",
-              "type": "FLOAT",
-              "required": true,
-              "help": "Number of servings",
-              "short": "-s"
-            },
-            {
-              "name": "--ingredients",
-              "type": "TEXT",
-              "required": true,
-              "help": "JSON array of ingredients: [{\"food_id\":\"123\",\"quantity\":2,\"serving_unit\":\"oz\",\"serving_value\":4,\"nutrition_multiplier\":1.0}]",
-              "short": "-i"
-            }
-          ],
-          "examples": [
-            "fitnesspal recipes create --name \"Grilled Chicken Bowl\" --servings 2 \\"
-          ],
-          "usage_instructions": "Create a new saved recipe."
-        },
-        "delete": {
-          "help": "Delete a recipe.",
-          "arguments": [
-            {
-              "name": "recipe_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipe ID to delete"
-            }
-          ],
-          "examples": [
-            "fitnesspal recipes delete 277632783478317"
-          ],
-          "usage_instructions": "Delete a saved recipe."
-        },
-        "get": {
-          "help": "Get detailed recipe information.",
-          "arguments": [
-            {
-              "name": "recipe_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "Recipe ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "fitnesspal recipes get 12345",
-            "fitnesspal recipes get 12345 --table"
-          ],
-          "usage_instructions": "Get details for a specific recipe."
-        }
-      },
-      "usage_instructions": "View, create, and delete saved recipes."
+      }
     },
     "meals": {
       "help": "View saved meals",
+      "usage_instructions": "View saved meals (pre-defined food combinations).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all saved meals.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "fitnesspal meals list",
-            "fitnesspal meals list --table",
-            "fitnesspal meals list --limit 10",
-            "fitnesspal meals list --filter \"name:contains:lunch\""
-          ],
-          "usage_instructions": "List saved meals."
-        },
         "get": {
           "help": "Get detailed saved meal information. The meal title is required by the MyFitnessPal API. Use 'fitnesspal meals list' to find meal IDs and titles.",
+          "examples": [
+            "fitnesspal meals get 12345 \"My Lunch\"",
+            "fitnesspal meals get 12345 \"My Lunch\" --table"
+          ],
+          "usage_instructions": "Get details for a specific saved meal.",
           "arguments": [
             {
               "name": "meal_id",
@@ -682,245 +618,484 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "list": {
+          "help": "List all saved meals.",
           "examples": [
-            "fitnesspal meals get 12345 \"My Lunch\"",
-            "fitnesspal meals get 12345 \"My Lunch\" --table"
+            "fitnesspal meals list",
+            "fitnesspal meals list --table",
+            "fitnesspal meals list --limit 10",
+            "fitnesspal meals list --filter \"name:contains:lunch\""
           ],
-          "usage_instructions": "Get details for a specific saved meal."
+          "usage_instructions": "List saved meals.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "View saved meals (pre-defined food combinations)."
+      }
     },
-    "auth": {
-      "help": "Manage fitnesspal authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Set up or reconfigure MyFitnessPal credentials. Use --force/-F to re-authenticate."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Clear stored credentials. Use --profile/-p to target a specific profile."
-        },
-        "status": {
-          "help": "Check authentication status across profiles.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Check whether credentials are configured and valid."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Refresh an expired OAuth access token."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Verify that stored credentials work. Use --verbose/-v for detailed output."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all configured profiles."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Get details for a named profile. NAME is required."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new profile. NAME is required."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Set a profile as the default. NAME is required."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete a profile. Use --force/-F to skip confirmation."
-            }
-          },
-          "usage_instructions": "Manage named configuration profiles."
+    "measurements": {
+      "help": "View body measurements",
+      "usage_instructions": "View body measurements (weight, body fat, etc.). List measurements by type or get details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
         }
-      },
-      "usage_instructions": "Authentication management \u2014 login, logout, check status, refresh tokens, and test credentials."
+      ],
+      "commands": {
+        "get": {
+          "help": "Get measurement for a specific date.",
+          "examples": [
+            "fitnesspal measurements get 2024-01-15",
+            "fitnesspal measurements get 2024-01-15 --measurement \"Body Fat\"",
+            "fitnesspal measurements get 2024-01-15 --table"
+          ],
+          "usage_instructions": "Get details for a specific measurement.",
+          "arguments": [
+            {
+              "name": "date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Date to get measurement for (YYYY-MM-DD)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--measurement",
+              "type": "TEXT",
+              "required": false,
+              "help": "Measurement type (e.g., Weight, Body Fat)",
+              "short": "-m",
+              "default": "Weight"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List measurements by type and date range. Shows body measurements like Weight, Body Fat, etc.",
+          "examples": [
+            "fitnesspal measurements list",
+            "fitnesspal measurements list --measurement Weight",
+            "fitnesspal measurements list --measurement \"Body Fat\"",
+            "fitnesspal measurements list --from 2024-01-01 --to 2024-01-31",
+            "fitnesspal measurements list --table --limit 10",
+            "fitnesspal measurements list --filter \"value:gt:150\""
+          ],
+          "usage_instructions": "List body measurements. Filter by measurement type.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--measurement",
+              "type": "TEXT",
+              "required": false,
+              "help": "Measurement type (e.g., Weight, Body Fat)",
+              "short": "-m",
+              "default": "Weight"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of entries to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Clear all cached responses."
+    "recipes": {
+      "help": "View saved recipes",
+      "usage_instructions": "View, create, and delete saved recipes.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
         }
-      },
-      "usage_instructions": "Manage the response cache. Use `cache clear` to remove all cached responses."
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a new recipe. Each ingredient requires a food_id (from 'fitnesspal food search'), quantity (number of servings), and serving size details.",
+          "examples": [
+            "fitnesspal recipes create --name \"Grilled Chicken Bowl\" --servings 2 \\"
+          ],
+          "usage_instructions": "Create a new saved recipe.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipe name",
+              "short": "-n"
+            },
+            {
+              "name": "--servings",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Number of servings",
+              "short": "-s"
+            },
+            {
+              "name": "--ingredients",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON array of ingredients: [{\"food_id\":\"123\",\"quantity\":2,\"serving_unit\":\"oz\",\"serving_value\":4,\"nutrition_multiplier\":1.0}]",
+              "short": "-i"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a recipe.",
+          "examples": [
+            "fitnesspal recipes delete 277632783478317"
+          ],
+          "usage_instructions": "Delete a saved recipe.",
+          "arguments": [
+            {
+              "name": "recipe_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipe ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get detailed recipe information.",
+          "examples": [
+            "fitnesspal recipes get 12345",
+            "fitnesspal recipes get 12345 --table"
+          ],
+          "usage_instructions": "Get details for a specific recipe.",
+          "arguments": [
+            {
+              "name": "recipe_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Recipe ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all saved recipes.",
+          "examples": [
+            "fitnesspal recipes list",
+            "fitnesspal recipes list --table",
+            "fitnesspal recipes list --limit 10",
+            "fitnesspal recipes list --filter \"name:contains:chicken\""
+          ],
+          "usage_instructions": "List saved recipes.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "reports": {
+      "help": "View nutrition and fitness reports",
+      "usage_instructions": "View nutrition and fitness reports. List reports by date range or get specific report details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get report value for a specific date.",
+          "examples": [
+            "fitnesspal reports get 2024-01-15",
+            "fitnesspal reports get 2024-01-15 --name TotalCalories",
+            "fitnesspal reports get 2024-01-15 --table"
+          ],
+          "usage_instructions": "Get a specific report with detailed data.",
+          "arguments": [
+            {
+              "name": "date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Date to get report for (YYYY-MM-DD)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Report metric (e.g., Net Calories, Total Calories)",
+              "short": "-n",
+              "default": "Net Calories"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Report category (e.g., Nutrition, Exercise)",
+              "short": "-c",
+              "default": "Nutrition"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List report data by metric and date range.",
+          "examples": [
+            "fitnesspal reports list",
+            "fitnesspal reports list --name NetCalories",
+            "fitnesspal reports list --name TotalCalories --category Nutrition",
+            "fitnesspal reports list --from 2024-01-01 --to 2024-01-31",
+            "fitnesspal reports list --table --limit 7",
+            "fitnesspal reports list --filter \"value:gt:1500\""
+          ],
+          "usage_instructions": "List nutrition/fitness reports by date range.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Report metric (e.g., Net Calories, Total Calories)",
+              "short": "-n",
+              "default": "Net Calories"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Report category (e.g., Nutrition, Exercise)",
+              "short": "-c",
+              "default": "Nutrition"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of entries to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     }
   },
   "usage_instructions": "Use for viewing MyFitnessPal food diary, exercises, measurements, reports, recipes, meals, and food search. Commands follow `fitnesspal <group> <action>` pattern. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p. Use date-based options for diary and exercise entries."

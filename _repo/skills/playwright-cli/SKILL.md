@@ -38,7 +38,7 @@ playwright-cli [-s=<session>] <command> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `playwright-cli` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `playwright-cli` command.**
 It contains every command, argument, and option with descriptions sourced directly from `--help`. Never guess at syntax. When in doubt, also run `playwright-cli --help <command>`.
 </principle>
 
@@ -149,6 +149,9 @@ When redirecting `playwright-cli` stdout to an artifact, especially for
 preserve the producer status, and print explicit evidence on failure. On
 success, verify the stdout artifact is non-empty and inspect it for `### Error`
 before treating the command as successful.
+If the command exits non-zero, print stdout as failure evidence because
+`run-code` writes markdown `### Error` output to stdout while stderr can be
+empty.
 If a validation wrapper prints per-case summaries to the parent stdout, capture
 that wrapper stdout in its own log and assert summary markers against that log,
 not against the per-case redirected producer stdout artifacts.
@@ -171,7 +174,8 @@ if playwright-cli -s=ata run-code 'async (page) => ({ title: await page.title() 
   [ "$rg_rc" -eq 1 ] || exit "$rg_rc"
 else
   rc=$?
-  printf 'PLAYWRIGHT_FAILED:%s rc=%s stderr=%s\n' "$out" "$rc" "$err" >&2
+  printf 'PLAYWRIGHT_FAILED:%s rc=%s stdout=%s stderr=%s\n' "$out" "$rc" "$out" "$err" >&2
+  [ -s "$out" ] && sed -n '1,80p' "$out" >&2
   [ -s "$err" ] && sed -n '1,80p' "$err" >&2
   exit "$rc"
 fi
@@ -185,6 +189,16 @@ Per-command options vary and are documented in `usage.json`; examples:
 - `screenshot` supports `--filename` / `--full-page`
 
 There are **no** generic `--table`, `--limit`, `--filter`, `--properties`, or `--json` flags. To filter list output, parse the markdown or read the `.playwright-cli/*.log` file the command wrote.
+</principle>
+
+<principle name="Eval Versus Run-Code">
+`eval` executes JavaScript in the browser DOM context. It does not receive a
+Playwright `page` object: use `() => ...` for page-global DOM code, or
+`(element) => ...` with a REF when inspecting one snapshot element. Do not pass
+`async (page) => page.locator(...)` to `eval`; `page` will be undefined. When a
+probe needs Playwright APIs such as `page.locator`, `page.getByRole`, or
+`page.title`, use `run-code` with `async (page) => { ... }` and inspect stdout
+for `### Error`.
 </principle>
 
 <principle name="Verify Form Mutations">

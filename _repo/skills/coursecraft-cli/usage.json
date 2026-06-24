@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-17T16:13:09Z",
-  "total_commands": 52,
+  "discovered_at": "2026-06-23T23:20:19Z",
+  "total_commands": 53,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -1335,7 +1367,7 @@
     },
     "demos": {
       "help": "Manage demo records",
-      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include environment-prep-checklist, demo-walkthrough-script-path, demo-walkthrough-script-created, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
+      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-walkthrough-script-path, demo-walkthrough-script-created, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
       "arguments": [],
       "options": [
         {
@@ -1580,11 +1612,10 @@
             "coursecraft demos update recXXX --clip-order 2",
             "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
             "coursecraft demos update recXXX --tested-approved --script-review-human",
-            "coursecraft demos update recXXX --environment-prep-complete",
             "coursecraft demos update recXXX --dictation-recorded",
             "coursecraft demos update recXXX --demo-walkthrough-script-path /Users/adam/courses/example/m2c3/demo_walkthrough.ps1"
           ],
-          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --action-summary/-a, --script/-s, --recap, --demo-walkthrough-script-path, and --demo-walkthrough-script-created. Review fields: --action-summary-review-ai, --action-summary-human-review-complete, --script-review-human. Status fields: --environment-prep-checklist, --environment-setup-script-path, --environment-prep-complete, --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
+          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --action-summary/-a, --script/-s, --recap, --demo-walkthrough-script-path, and --demo-walkthrough-script-created. Review fields: --action-summary-review-ai, --action-summary-human-review-complete, --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
           "arguments": [
             {
               "name": "record_id",
@@ -1629,6 +1660,12 @@
               "help": "High-level instructional overview for the demo"
             },
             {
+              "name": "--demo-overview-review-human",
+              "type": "bool",
+              "required": false,
+              "help": "Mark demo overview human review as complete"
+            },
+            {
               "name": "--execution-method",
               "type": "bool",
               "required": false,
@@ -1648,28 +1685,10 @@
               "help": "AI review of the action summary"
             },
             {
-              "name": "--action-summary-human-review-complete",
+              "name": "--action-summary-review-human",
               "type": "bool",
               "required": false,
-              "help": "Mark human review of action summary complete"
-            },
-            {
-              "name": "--environment-prep-checklist",
-              "type": "TEXT",
-              "required": false,
-              "help": "Environment preparation checklist"
-            },
-            {
-              "name": "--environment-setup-script-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Absolute path to the env_prep.ps1 script that brings the demo to its starting state"
-            },
-            {
-              "name": "--environment-prep-complete",
-              "type": "bool",
-              "required": false,
-              "help": "Mark environment prep as complete"
+              "help": "Mark action summary human review as complete"
             },
             {
               "name": "--tested-approved",
@@ -1701,12 +1720,6 @@
               "type": "bool",
               "required": false,
               "help": "Mark whether the demo walkthrough automation has been created for this demo"
-            },
-            {
-              "name": "--demo-review-complete",
-              "type": "bool",
-              "required": false,
-              "help": "Mark selected demo build review complete"
             },
             {
               "name": "--dictation-recorded",
@@ -1908,6 +1921,36 @@
               "type": "TEXT",
               "required": false,
               "help": "ISO 8601 timestamp the feedback was processed"
+            },
+            {
+              "name": "--remediation",
+              "type": "TEXT",
+              "required": false,
+              "help": "Summary of which skills/agents/sources were modified and how, to remediate this feedback (orchestrator-written when set to Applied)"
+            },
+            {
+              "name": "--element-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Artifact level: Course/Module/Clip/Demo/Slide"
+            },
+            {
+              "name": "--attribute-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "The artifact field the feedback is about, e.g. Script"
+            },
+            {
+              "name": "--attribute-snapshot",
+              "type": "TEXT",
+              "required": false,
+              "help": "The entire attribute value frozen at submission time"
+            },
+            {
+              "name": "--selected-text",
+              "type": "TEXT",
+              "required": false,
+              "help": "The exact span the comment targets"
             },
             {
               "name": "--profile",
@@ -2119,6 +2162,36 @@
               "type": "TEXT",
               "required": false,
               "help": "ISO 8601 timestamp the feedback was processed"
+            },
+            {
+              "name": "--remediation",
+              "type": "TEXT",
+              "required": false,
+              "help": "Summary of which skills/agents/sources were modified and how, to remediate this feedback (orchestrator-written when set to Applied)"
+            },
+            {
+              "name": "--element-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Artifact level: Course/Module/Clip/Demo/Slide"
+            },
+            {
+              "name": "--attribute-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "The artifact field the feedback is about, e.g. Script"
+            },
+            {
+              "name": "--attribute-snapshot",
+              "type": "TEXT",
+              "required": false,
+              "help": "The entire attribute value frozen at submission time"
+            },
+            {
+              "name": "--selected-text",
+              "type": "TEXT",
+              "required": false,
+              "help": "The exact span the comment targets"
             },
             {
               "name": "--profile",
@@ -2469,6 +2542,24 @@
               "type": "bool",
               "required": false,
               "help": "Set or clear the slide deck submitted-for-review flag (Pluralsight only)"
+            },
+            {
+              "name": "--pluralsight-slides-approved",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the Pluralsight slides-approved flag, the gate trigger that releases 'Waiting for Slide Approval' to recording (Pluralsight only)"
+            },
+            {
+              "name": "--slide-narration-approved",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the slide-narration-approved flag, the gate that releases the slide-narration phase (Review Slide Narration) to recording"
+            },
+            {
+              "name": "--slide-narration-recorded",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the slide-narration-recorded flag, marking the module's slide narration take as recorded"
             },
             {
               "name": "--feedback-requested",

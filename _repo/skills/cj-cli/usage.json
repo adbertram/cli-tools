@@ -1,8 +1,8 @@
 {
   "tool": "cj",
   "description": "CLI interface for CJ Affiliate (publisher).",
-  "discovered_at": "2026-05-20T16:04:04.171151+00:00",
-  "total_commands": 20,
+  "discovered_at": "2026-06-20T19:40:38Z",
+  "total_commands": 21,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,67 @@
   "commands": {
     "advertisers": {
       "help": "Discover CJ advertiser programs",
+      "usage_instructions": "Read-only discovery on top of the CJ Advertiser Lookup REST API. Use these to find advertiser programs (merchants/brands) in the CJ Marketplace by category, keyword, name, or relationship slice. No browser session is required.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get full detail for a single advertiser program.",
+          "examples": [
+            "cj advertisers get 1234567",
+            "cj advertisers get 1234567 --table",
+            "cj advertisers get 1234567 --properties \"advertiser_name,primary_category,actions\""
+          ],
+          "usage_instructions": "Fetch the full record for one advertiser by ID (commission terms, link types, actions, category, EPC, current relationship status). Pair with `--properties` to project only fields you care about.",
+          "arguments": [
+            {
+              "name": "advertiser_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The CJ advertiser ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as key/value table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List advertiser programs from CJ.",
+          "examples": [
+            "cj advertisers list",
+            "cj advertisers list --relationship notjoined --limit 50",
+            "cj advertisers list --keywords \"software\" --table",
+            "cj advertisers list --category \"Computer & Electronics\"",
+            "cj advertisers list --filter \"primary_category:eq:Software\""
+          ],
+          "usage_instructions": "List advertiser programs from CJ's Advertiser Lookup REST API. Defaults to `--relationship joined` -- pass `--relationship notjoined` to find candidates to apply to. Combine with `--keywords` / `--category` / `--name` for server-side narrowing; the API caps `--limit` at 100 per page (use `--page` for paging).",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -89,19 +147,23 @@
               "required": false,
               "help": "1-indexed page number",
               "default": "1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "cj advertisers list",
-            "cj advertisers list --relationship notjoined --limit 50",
-            "cj advertisers list --keywords \"software\" --table",
-            "cj advertisers list --category \"Computer & Electronics\"",
-            "cj advertisers list --filter \"primary_category:eq:Software\""
-          ],
-          "usage_instructions": "List advertiser programs from CJ's Advertiser Lookup REST API. Defaults to `--relationship joined` -- pass `--relationship notjoined` to find candidates to apply to. Combine with `--keywords` / `--category` / `--name` for server-side narrowing; the API caps `--limit` at 100 per page (use `--page` for paging)."
+          ]
         },
         "search": {
           "help": "Wildcard search advertiser names. Server-side keyword search plus client-side fnmatch so explicit ``*`` wildcards work.",
+          "examples": [
+            "cj advertisers search \"*wordpress*\"",
+            "cj advertisers search \"Bluehost\"",
+            "cj advertisers search \"*hosting*\" --relationship notjoined --table"
+          ],
+          "usage_instructions": "Wildcard search advertiser names. Server-side keyword narrowing plus client-side fnmatch so explicit `*` wildcards work (`cj advertisers search '*hosting*'`). Use `--relationship` to restrict the search slice (default `all`).",
           "arguments": [
             {
               "name": "query",
@@ -140,23 +202,331 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "cj advertisers search \"*wordpress*\"",
-            "cj advertisers search \"Bluehost\"",
-            "cj advertisers search \"*hosting*\" --relationship notjoined --table"
-          ],
-          "usage_instructions": "Wildcard search advertiser names. Server-side keyword narrowing plus client-side fnmatch so explicit `*` wildcards work (`cj advertisers search '*hosting*'`). Use `--relationship` to restrict the search slice (default `all`)."
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage cj authentication",
+      "usage_instructions": "Manage CJ credentials. `login` walks through the dual-auth flow (paste PAT, then complete interactive browser login). `status` returns the per-profile, per-credential-type JSON used by other CLIs. `profiles` supports multi-account switching.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Walk the user through configuring the CJ PAT and (when browser_session is required) the persistent Marketplace browser session. Use `--force` to redo login even when a session already exists.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'personal_access_token', 'browser_session')",
+              "short": "-c"
+            }
+          ]
         },
-        "get": {
-          "help": "Get full detail for a single advertiser program.",
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Clear stored credentials and the persistent browser session for the active profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Manage named auth profiles when you need to drive more than one CJ publisher account from this machine.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new named profile and walk through its auth flow.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Remove a profile and its stored credentials.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Show details for one profile (does not print credentials).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List configured profiles for cj.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "usage_instructions": "Emit JSON describing every profile's credential state -- the per-credential `credentials_saved` / `authenticated` keys other tools rely on.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run the configured `test_connection()` to validate the PAT can hit advertiser-lookup. Exits non-zero on credential or network failure.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Manage the local HTTP response cache. Use `clear` to invalidate cached advertiser-lookup results when the publisher's relationship state changes out-of-band.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Empty the local response cache for cj.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "links": {
+      "help": "Search creatives and generate affiliate tracking URLs",
+      "usage_instructions": "Search advertiser creatives and generate affiliate deep-link tracking URLs. `list` and `get` hit CJ's Link Search REST API (PAT only, no browser); `deeplink` builds tracking URLs offline using `CJ_PUBLISHER_ACCOUNT_ID` from the profile env. Workflow: confirm a joined relationship via `cj relationships get`, list creatives with `cj links list <advertiser_id>`, then either copy a `click_url` from the listing or mint a custom destination URL with `cj links deeplink`.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "deeplink": {
+          "help": "Generate a CJ deep-link tracking URL. The generated URL routes through CJ's redirector (``anrdoezrs.net``) and lands on the supplied destination URL on the advertiser's site.  Clicks are credited to the publisher identified by ``CJ_PUBLISHER_ACCOUNT_ID``. Requires ``CJ_PUBLISHER_ACCOUNT_ID`` in the profile env file -- this is the numeric segment between ``/member/`` and ``/publisher/`` in any authenticated members.cj.com URL.",
+          "examples": [
+            "cj links deeplink 4837117 https://nordvpn.com/torrent",
+            "cj links deeplink 4837117 https://nordvpn.com/torrent --sid blog-vpn-comparison",
+            "cj links deeplink 4837117 https://nordvpn.com/torrent --no-verify  # skip relationship check"
+          ],
+          "usage_instructions": "Generate a CJ deep-link affiliate tracking URL offline (no API call) that routes a destination URL through CJ's redirector (`anrdoezrs.net`) and credits the publisher. Requires `CJ_PUBLISHER_ACCOUNT_ID` in the active profile's env file (the numeric segment between `/member/` and `/publisher/` in any authenticated members.cj.com URL). Use `--sid` to tag the link for CJ reports (e.g. blog-post slug or campaign id). `--verify` (default on) does a quick REST relationship check before emitting; pass `--no-verify` to skip it for batch generation when relationships are already confirmed.",
           "arguments": [
             {
               "name": "advertiser_id",
               "type": "TEXT",
               "required": true,
-              "help": "The CJ advertiser ID"
+              "help": "CJ advertiser ID"
+            },
+            {
+              "name": "destination_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination URL on the advertiser site"
+            }
+          ],
+          "options": [
+            {
+              "name": "--sid",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publisher sub-id (tracking tag for CJ reports, e.g. \"blog-post-slug\")",
+              "short": "-s"
+            },
+            {
+              "name": "--verify",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm the publisher has a joined relationship with the advertiser before emitting",
+              "default": "verify"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get full detail for a single creative by link id. CJ's Link Search API has no per-id endpoint -- this iterates a page of results client-side.  For better performance when the advertiser is known, use ``cj links list <advertiser-id>`` and filter by ``link_id`` in the output.",
+          "examples": [
+            "cj links get 14729571",
+            "cj links get 14729571 --table"
+          ],
+          "usage_instructions": "Get full detail for a single creative by link ID. CJ's Link Search API has no per-id endpoint, so this iterates results client-side -- when the advertiser ID is known, `cj links list <advertiser_id> --filter link_id:eq:<id>` is significantly faster.",
+          "arguments": [
+            {
+              "name": "link_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "CJ link ID"
             }
           ],
           "options": [
@@ -173,23 +543,246 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List creatives for an advertiser via CJ's Link Search API. The publisher must have a joined relationship with the advertiser for CJ to return any links; otherwise the response is empty.",
+          "examples": [
+            "cj links list 4837117",
+            "cj links list 4837117 --type \"Text Link\" --limit 5",
+            "cj links list 4837117 --table",
+            "cj links list 4837117 --properties \"link_id,link_name,click_url\""
+          ],
+          "usage_instructions": "List affiliate creatives (text links, banners, click links, deep-link templates, etc.) for one advertiser via CJ's Link Search REST API. Requires `advertiser_id` and a joined relationship with that advertiser (otherwise CJ returns an empty list -- use `cj relationships get <advertiser_id>` to pre-flight). Use `--type` to narrow to a creative type (`Text Link`, `Banner`, `Click Link`), `--promotion-type` for coupon/sale-specific creatives, `--keywords` for free-text search. REST-backed (PAT only); no browser session.",
+          "arguments": [
+            {
+              "name": "advertiser_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "CJ advertiser ID to list creatives for"
             }
           ],
-          "examples": [
-            "cj advertisers get 1234567",
-            "cj advertisers get 1234567 --table",
-            "cj advertisers get 1234567 --properties \"advertiser_name,primary_category,actions\""
-          ],
-          "usage_instructions": "Fetch the full record for one advertiser by ID (commission terms, link types, actions, category, EPC, current relationship status). Pair with `--properties` to project only fields you care about."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of records (CJ caps page size at 100)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by CJ link type (e.g. \"Text Link\", \"Banner\", \"Click Link\")"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by creative category",
+              "short": "-c"
+            },
+            {
+              "name": "--keywords",
+              "type": "TEXT",
+              "required": false,
+              "help": "Free-text keywords (server-side search)",
+              "short": "-k"
+            },
+            {
+              "name": "--promotion-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by promotion type (e.g. \"coupon\", \"sale\")"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include (supports dot-notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "1-indexed page number",
+              "default": "1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Read-only discovery on top of the CJ Advertiser Lookup REST API. Use these to find advertiser programs (merchants/brands) in the CJ Marketplace by category, keyword, name, or relationship slice. No browser session is required."
+      }
     },
     "relationships": {
       "help": "Manage publisher-to-advertiser relationships (list / apply)",
+      "usage_instructions": "Publisher-to-advertiser relationship management. `list` and `get` are REST-backed (PAT only). `apply` and `apply-bulk` drive the publisher Marketplace UI via the persistent browser session because CJ has no public mutation for joining a program; both are idempotent (they check existing relationship state first).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "apply": {
+          "help": "Apply to (join) a single advertiser program. Idempotent: if the publisher is already joined / pending / declined, the command reports the existing status without re-submitting.",
+          "examples": [
+            "cj relationships apply 1234567",
+            "cj relationships apply 1234567 --dry-run"
+          ],
+          "usage_instructions": "Submit a join application for one advertiser. Idempotent: when the REST API already reports `joined` / `pending` / `declined`, the command short-circuits without clicking. `--dry-run` reports what would happen without driving the browser. Failures capture a screenshot under the profile data directory.",
+          "arguments": [
+            {
+              "name": "advertiser_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The CJ advertiser ID to apply to"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Check existing relationship and report what would happen, but do not click Apply"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as a table row",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "apply-bulk": {
+          "help": "Apply to many advertiser programs from a file or stdin. Each input line is one advertiser ID; comments (``#``) and blank lines are ignored.  Results stream as JSON (or a streaming table) so a downstream agent can act on each row as it lands.",
+          "examples": [
+            "cj advertisers list --relationship notjoined --properties advertiser_id | jq -r '.[].advertiser_id'             | cj relationships apply-bulk -",
+            "cj relationships apply-bulk targets.txt --delay 5 --dry-run"
+          ],
+          "usage_instructions": "Apply to many advertisers from a file (one ID per line) or stdin (`-`). Rate-limits between submissions via `--delay` (default 3s). Streams a JSON object per result so a downstream agent can react row-by-row; pass `--table` to buffer and print as a table instead. `--stop-on-error` halts on the first FAILED outcome.",
+          "arguments": [
+            {
+              "name": "source",
+              "type": "SOURCE",
+              "required": false,
+              "help": "Path to a file with one advertiser ID per line. Omit or pass '-' to read stdin"
+            }
+          ],
+          "options": [
+            {
+              "name": "--delay",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Seconds to sleep between applies (rate-limit). Default 3s",
+              "short": "-d",
+              "default": "3.0"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Report what would happen without clicking Apply"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Stream results as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--stop-on-error",
+              "type": "bool",
+              "required": false,
+              "help": "Halt on the first FAILED outcome instead of continuing"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the current relationship for a single advertiser.",
+          "examples": [
+            "cj relationships get 1234567",
+            "cj relationships get 1234567 --table"
+          ],
+          "usage_instructions": "Look up the current relationship for a single advertiser ID. Useful as a pre-flight before `apply`.",
+          "arguments": [
+            {
+              "name": "advertiser_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The CJ advertiser ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a key/value table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List the publisher's current advertiser relationships.",
+          "examples": [
+            "cj relationships list",
+            "cj relationships list --status pending --table",
+            "cj relationships list --status declined --limit 200"
+          ],
+          "usage_instructions": "List the publisher's current relationships filtered by `--status` (joined / notjoined / pending / declined / all). Read-only; uses the PAT only.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -234,479 +827,16 @@
               "required": false,
               "help": "1-indexed page number",
               "default": "1"
-            }
-          ],
-          "examples": [
-            "cj relationships list",
-            "cj relationships list --status pending --table",
-            "cj relationships list --status declined --limit 200"
-          ],
-          "usage_instructions": "List the publisher's current relationships filtered by `--status` (joined / notjoined / pending / declined / all). Read-only; uses the PAT only."
-        },
-        "get": {
-          "help": "Get the current relationship for a single advertiser.",
-          "arguments": [
-            {
-              "name": "advertiser_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The CJ advertiser ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as a key/value table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "cj relationships get 1234567",
-            "cj relationships get 1234567 --table"
-          ],
-          "usage_instructions": "Look up the current relationship for a single advertiser ID. Useful as a pre-flight before `apply`."
-        },
-        "apply": {
-          "help": "Apply to (join) a single advertiser program. Idempotent: if the publisher is already joined / pending / declined, the command reports the existing status without re-submitting.",
-          "arguments": [
-            {
-              "name": "advertiser_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The CJ advertiser ID to apply to"
-            }
-          ],
-          "options": [
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Check existing relationship and report what would happen, but do not click Apply"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display result as a table row",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "cj relationships apply 1234567",
-            "cj relationships apply 1234567 --dry-run"
-          ],
-          "usage_instructions": "Submit a join application for one advertiser. Idempotent: when the REST API already reports `joined` / `pending` / `declined`, the command short-circuits without clicking. `--dry-run` reports what would happen without driving the browser. Failures capture a screenshot under the profile data directory."
-        },
-        "apply-bulk": {
-          "help": "Apply to many advertiser programs from a file or stdin. Each input line is one advertiser ID; comments (``#``) and blank lines are ignored.  Results stream as JSON (or a streaming table) so a downstream agent can act on each row as it lands.",
-          "arguments": [
-            {
-              "name": "source",
-              "type": "SOURCE",
-              "required": false,
-              "help": "Path to a file with one advertiser ID per line. Omit or pass '-' to read stdin"
-            }
-          ],
-          "options": [
-            {
-              "name": "--delay",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Seconds to sleep between applies (rate-limit). Default 3s",
-              "short": "-d",
-              "default": "3.0"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Report what would happen without clicking Apply"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Stream results as a table",
-              "short": "-t"
-            },
-            {
-              "name": "--stop-on-error",
-              "type": "bool",
-              "required": false,
-              "help": "Halt on the first FAILED outcome instead of continuing"
-            }
-          ],
-          "examples": [
-            "cj advertisers list --relationship notjoined --properties advertiser_id | jq -r '.[].advertiser_id'             | cj relationships apply-bulk -",
-            "cj relationships apply-bulk targets.txt --delay 5 --dry-run"
-          ],
-          "usage_instructions": "Apply to many advertisers from a file (one ID per line) or stdin (`-`). Rate-limits between submissions via `--delay` (default 3s). Streams a JSON object per result so a downstream agent can react row-by-row; pass `--table` to buffer and print as a table instead. `--stop-on-error` halts on the first FAILED outcome."
-        }
-      },
-      "usage_instructions": "Publisher-to-advertiser relationship management. `list` and `get` are REST-backed (PAT only). `apply` and `apply-bulk` drive the publisher Marketplace UI via the persistent browser session because CJ has no public mutation for joining a program; both are idempotent (they check existing relationship state first)."
-    },
-    "links": {
-      "help": "Search creatives and generate affiliate tracking URLs",
-      "commands": {
-        "list": {
-          "help": "List creatives for an advertiser via CJ's Link Search API. The publisher must have a joined relationship with the advertiser for CJ to return any links; otherwise the response is empty.",
-          "arguments": [
-            {
-              "name": "advertiser_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "CJ advertiser ID to list creatives for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of records (CJ caps page size at 100)",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by CJ link type (e.g. \"Text Link\", \"Banner\", \"Click Link\")"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by creative category",
-              "short": "-c"
-            },
-            {
-              "name": "--keywords",
-              "type": "TEXT",
-              "required": false,
-              "help": "Free-text keywords (server-side search)",
-              "short": "-k"
-            },
-            {
-              "name": "--promotion-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by promotion type (e.g. \"coupon\", \"sale\")"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include (supports dot-notation)",
-              "short": "-p"
-            },
-            {
-              "name": "--page",
-              "type": "INTEGER",
-              "required": false,
-              "help": "1-indexed page number",
-              "default": "1"
-            }
-          ],
-          "examples": [
-            "cj links list 4837117",
-            "cj links list 4837117 --type \"Text Link\" --limit 5",
-            "cj links list 4837117 --table",
-            "cj links list 4837117 --properties \"link_id,link_name,click_url\""
-          ],
-          "usage_instructions": "List affiliate creatives (text links, banners, click links, deep-link templates, etc.) for one advertiser via CJ's Link Search REST API. Requires `advertiser_id` and a joined relationship with that advertiser (otherwise CJ returns an empty list -- use `cj relationships get <advertiser_id>` to pre-flight). Use `--type` to narrow to a creative type (`Text Link`, `Banner`, `Click Link`), `--promotion-type` for coupon/sale-specific creatives, `--keywords` for free-text search. REST-backed (PAT only); no browser session."
-        },
-        "get": {
-          "help": "Get full detail for a single creative by link id. CJ's Link Search API has no per-id endpoint -- this iterates a page of results client-side.  For better performance when the advertiser is known, use ``cj links list <advertiser-id>`` and filter by ``link_id`` in the output.",
-          "arguments": [
-            {
-              "name": "link_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "CJ link ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as key/value table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "cj links get 14729571",
-            "cj links get 14729571 --table"
-          ],
-          "usage_instructions": "Get full detail for a single creative by link ID. CJ's Link Search API has no per-id endpoint, so this iterates results client-side -- when the advertiser ID is known, `cj links list <advertiser_id> --filter link_id:eq:<id>` is significantly faster."
-        },
-        "deeplink": {
-          "help": "Generate a CJ deep-link tracking URL. The generated URL routes through CJ's redirector (``anrdoezrs.net``) and lands on the supplied destination URL on the advertiser's site.  Clicks are credited to the publisher identified by ``CJ_PUBLISHER_ACCOUNT_ID``. Requires ``CJ_PUBLISHER_ACCOUNT_ID`` in the profile env file -- this is the numeric segment between ``/member/`` and ``/publisher/`` in any authenticated members.cj.com URL.",
-          "arguments": [
-            {
-              "name": "advertiser_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "CJ advertiser ID"
-            },
-            {
-              "name": "destination_url",
-              "type": "TEXT",
-              "required": true,
-              "help": "Destination URL on the advertiser site"
-            }
-          ],
-          "options": [
-            {
-              "name": "--sid",
-              "type": "TEXT",
-              "required": false,
-              "help": "Publisher sub-id (tracking tag for CJ reports, e.g. \"blog-post-slug\")",
-              "short": "-s"
-            },
-            {
-              "name": "--verify",
-              "type": "bool",
-              "required": false,
-              "help": "--no-verify          Confirm the publisher has a joined relationship with the advertiser before emitting",
-              "default": "verify"
-            }
-          ],
-          "examples": [
-            "cj links deeplink 4837117 https://nordvpn.com/torrent",
-            "cj links deeplink 4837117 https://nordvpn.com/torrent --sid blog-vpn-comparison",
-            "cj links deeplink 4837117 https://nordvpn.com/torrent --no-verify  # skip relationship check"
-          ],
-          "usage_instructions": "Generate a CJ deep-link affiliate tracking URL offline (no API call) that routes a destination URL through CJ's redirector (`anrdoezrs.net`) and credits the publisher. Requires `CJ_PUBLISHER_ACCOUNT_ID` in the active profile's env file (the numeric segment between `/member/` and `/publisher/` in any authenticated members.cj.com URL). Use `--sid` to tag the link for CJ reports (e.g. blog-post slug or campaign id). `--verify` (default on) does a quick REST relationship check before emitting; pass `--no-verify` to skip it for batch generation when relationships are already confirmed."
-        }
-      },
-      "usage_instructions": "Search advertiser creatives and generate affiliate deep-link tracking URLs. `list` and `get` hit CJ's Link Search REST API (PAT only, no browser); `deeplink` builds tracking URLs offline using `CJ_PUBLISHER_ACCOUNT_ID` from the profile env. Workflow: confirm a joined relationship via `cj relationships get`, list creatives with `cj links list <advertiser_id>`, then either copy a `click_url` from the listing or mint a custom destination URL with `cj links deeplink`."
-    },
-    "auth": {
-      "help": "Manage cj authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'personal_access_token', 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Walk the user through configuring the CJ PAT and (when browser_session is required) the persistent Marketplace browser session. Use `--force` to redo login even when a session already exists."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Clear stored credentials and the persistent browser session for the active profile."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Emit JSON describing every profile's credential state -- the per-credential `credentials_saved` / `authenticated` keys other tools rely on."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
             },
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run the configured `test_connection()` to validate the PAT can hit advertiser-lookup. Exits non-zero on credential or network failure."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List configured profiles for cj."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Show details for one profile (does not print credentials)."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new named profile and walk through its auth flow."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Mark a profile as the default used when --profile is omitted."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Remove a profile and its stored credentials."
-            }
-          },
-          "usage_instructions": "Manage named auth profiles when you need to drive more than one CJ publisher account from this machine."
+          ]
         }
-      },
-      "usage_instructions": "Manage CJ credentials. `login` walks through the dual-auth flow (paste PAT, then complete interactive browser login). `status` returns the per-profile, per-credential-type JSON used by other CLIs. `profiles` supports multi-account switching."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Empty the local response cache for cj."
-        }
-      },
-      "usage_instructions": "Manage the local HTTP response cache. Use `clear` to invalidate cached advertiser-lookup results when the publisher's relationship state changes out-of-band."
+      }
     }
   },
   "usage_instructions": "Use for CJ Affiliate publisher workflows -- discover advertiser programs in the CJ Marketplace, bulk-apply to them, and retrieve affiliate creatives or generate deep-link tracking URLs. The domain command groups are `advertisers` (read-only catalogue), `relationships` (the publisher's joined / pending / declined state plus the browser-driven apply flow), and `links` (creative search via the Link Search REST API plus offline deep-link URL generation). Auth requires BOTH a Personal Access Token (REST API, generated at https://members.cj.com/member/PersonalAccessTokens/tokens.cj) and a browser session to https://members.cj.com (the Marketplace join action has no public API). `cj links deeplink` additionally requires `CJ_PUBLISHER_ACCOUNT_ID` in the profile env. List commands honor --table, --limit, --filter, --properties; all output is JSON on stdout by default."

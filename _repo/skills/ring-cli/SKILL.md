@@ -34,7 +34,7 @@ ring <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `ring` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ring` command.**
 That file contains the full command tree (every argument, every option, every leaf usage_instruction). Do not guess flag names — read usage.json.
 </principle>
 

@@ -36,7 +36,7 @@ copilot <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `copilot` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `copilot` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -44,7 +44,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **whoami** — Current user info (ID, business unit, org)
 - **auth** — Login, logout, status, refresh, test credentials
 - **auth** -- Authentication commands and nested `auth profiles` management
-- **agent** — Core agent CRUD, publish, prompt; subgroups: knowledge, topic, trigger, tool, transcript, analytics, auth, model
+- **agent** — Core agent CRUD, publish, prompt; subgroups: knowledge, topic, trigger, tool, transcript, analytics, auth, model, channel
 - **solution** — Solution lifecycle (create, export, import); subgroups: agent, connection-reference, custom-connector, component, publisher
 - **powerautomate-flow** — List/inspect Power Automate cloud flows
 - **agent-flow** — Agent flow lifecycle (create, export, import, test, enable/disable); subgroups: runs, scaffold
@@ -102,12 +102,58 @@ is intentionally checking auth state. Wrap the command per the cli-tool
 the unauthenticated evidence before exiting `0`.
 </gotcha>
 
+<gotcha name="Progress profile: preflight Azure CLI identity before file-producing commands">
+The `progress_tenant_psdxautomation` profile sets `AZURE_CLI_EXPECTED_USER` to
+`psdxautomation@progress.com` and the tenant to
+`db266a67-cbe0-4d26-ae1a-d0581fe03535`. Before redirecting data commands such
+as `copilot agent model list --profile progress_tenant_psdxautomation` or
+`copilot agent list --profile progress_tenant_psdxautomation` into JSON files,
+run a shaped auth preflight and preserve the producer status:
+
+```bash
+if copilot auth status --profile progress_tenant_psdxautomation >"$auth_out" 2>"$auth_err"; then
+  auth_rc=0
+else
+  auth_rc=$?
+fi
+
+if [ "$auth_rc" -ne 0 ]; then
+  printf 'COPILOT_AUTH_STATUS_FAILED rc=%s\n' "$auth_rc" >&2
+  cat "$auth_err" >&2
+  exit "$auth_rc"
+fi
+```
+
+When running multiple `copilot` producers in one shell batch, capture each
+producer status immediately after that command and carry the first non-zero
+status to the final `exit`. Do not let later reporting commands such as
+`wc`, `printf`, `head`, `jq`, or `ls` mask a failed producer command.
+</gotcha>
+
 <gotcha name="agent list: JSON is default, no --format flag">
 `copilot agent list` emits JSON. JSON is already the default. Do not add `--format json`,
 `--json`, or any output flag not listed for the leaf command. `copilot agent --help`
 is group help only; before adding flags, inspect `usage.json` at
 `commands.agent.commands.list.options` or run `copilot agent list --help`.
 Use `--table` only when human-readable output is requested.
+</gotcha>
+
+<gotcha name="agent channel: read-only; Teams enablement and Direct Line secret are portal-only">
+**The `copilot agent channel` subgroup is read-only — `list`, `get`, and `get-token` only.** There is no CLI command, and no supported Microsoft API, to *enable* a channel or *retrieve* the Web/Direct Line channel secret. The official Power Platform "PVA Bots" REST API exposes only quarantine operations, and Microsoft's own Copilot Studio Kit requires the Direct Line secret to be pasted in by hand. Enabling Teams and reading the secret are manual Copilot Studio portal actions:
+
+- **Enable Microsoft Teams** (no API): publish the agent first (`copilot agent publish <id>`), then in Copilot Studio open **Channels** → **Teams and Microsoft 365 Copilot** → **Add channel**. Org-wide availability needs admin approval. Docs: https://learn.microsoft.com/microsoft-copilot-studio/publication-add-bot-to-microsoft-teams
+- **Get the Direct Line / Web channel secret** (no API): in Copilot Studio open **Settings** → **Security** → **Web channel security**, then copy **Secret 1** or **Secret 2**. Teams-only licenses can't generate secrets (tokens are auto-managed). Docs: https://learn.microsoft.com/microsoft-copilot-studio/configure-web-security
+- **For web embeds, prefer a token over the secret.** Run `copilot agent channel get-token <agent>` to mint a short-lived Direct Line token (no secret exposure), or exchange a secret for a token server-side via `POST https://directline.botframework.com/v3/directline/tokens/generate`. Never put the Direct Line secret in browser code.
+</gotcha>
+
+<gotcha name="tool/knowledge add: deterministic Copilot Studio capacity pre-check">
+**Before attaching a tool or knowledge source, the CLI runs a fail-fast capacity pre-check on the target Power Platform environment. If the environment has no Copilot Studio capacity, the attach is blocked with a non-zero exit BEFORE any mutation.** This guards `copilot agent tool add`, `copilot agent knowledge add`, `copilot agent knowledge upload` (including its `--force` replace, whose existing-source delete is also blocked), and `copilot agent knowledge azure-ai-search add`. (`copilot agent create`/`update` are NOT gated — they take no inline tool/knowledge payload.)
+
+An environment is entitled to attach tools/knowledge if EITHER:
+- Prepaid Copilot Studio capacity (Copilot Credits) is allocated to it — one of the currencies `MCSMessages`, `MCSSessions`, or `VAConversations` has a positive allocation (`GET https://api.powerplatform.com/licensing/environments/{id}/allocations`); OR
+- It is covered by an Enabled pay-as-you-go billing policy (`GET https://api.powerplatform.com/licensing/billingPolicies` + each policy's `/environments`).
+
+When not entitled, the command exits non-zero with a `CapacityError` whose message names the environment and lists three fixes: allocate prepaid capacity in the Power Platform admin center (Licensing > Copilot Studio, https://admin.powerplatform.microsoft.com), link a pay-as-you-go billing policy, or use an environment that already has capacity. This is an environment-capacity policy, not a CLI defect — do not retry; allocate capacity or switch environments. A 404 on the allocations endpoint means "no allocation" (Developer environments), so the env is treated as not entitled. Any other non-200/404 on allocations, or a non-200 on a policy's `/environments` lookup, is undeterminable and raises an error (the signal cannot be confirmed) rather than silently allowing the attach. The target environment id is resolved from `DATAVERSE_ENVIRONMENT_ID`/`POWERPLATFORM_ENVIRONMENT_ID`, or matched from `DATAVERSE_URL`; if neither resolves, the command fails with a clear message.
 </gotcha>
 </gotchas>
 

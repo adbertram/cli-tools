@@ -1,7 +1,7 @@
 {
   "tool": "brickowl",
   "description": "CLI interface for Brickowl API",
-  "discovered_at": "2026-05-06T15:13:41.879462+00:00",
+  "discovered_at": "2026-06-20T19:40:11Z",
   "total_commands": 54,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Brickowl API authentication",
+      "usage_instructions": "Authentication management. Use `auth login` to configure API key, `auth status` to check, `auth test` to verify, `auth refresh` for token refresh.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Configure auth credentials. Use --profile/-p for specific profile. Use --force/-F to re-authenticate.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -43,14 +48,15 @@
               "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
+              "help": "Authenticate only this credential type (e.g., 'api_key', 'browser_session')",
               "short": "-c"
             }
-          ],
-          "usage_instructions": "Configure auth credentials. Use --profile/-p for specific profile. Use --force/-F to re-authenticate."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Clear stored credentials. Use --profile/-p for a specific profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +65,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Clear stored credentials. Use --profile/-p for a specific profile."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management for multiple stores or environments.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Create a new profile with NAME (required positional).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Delete a profile by NAME. Use --force/-F to skip confirmation.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Get profile details by NAME (required positional).",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "List all profiles. Use --table/-t for formatted output.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Check auth status. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +216,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check auth status. Use --table/-t for formatted output."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Refresh OAuth access token."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Test that credentials work. Use --verbose/-v for details.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,123 +244,1316 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Test that credentials work. Use --verbose/-v for details."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "List all profiles. Use --table/-t for formatted output."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Get profile details by NAME (required positional)."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Create a new profile with NAME (required positional)."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Set a profile as default by NAME (required positional)."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Delete a profile by NAME. Use --force/-F to skip confirmation."
-            }
-          },
-          "usage_instructions": "Profile management for multiple stores or environments."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management. Use `auth login` to configure API key, `auth status` to check, `auth test` to verify, `auth refresh` for token refresh."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Manage response cache. Use `cache clear` to remove cached responses.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Remove all cached responses.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "catalog": {
+      "help": "Browse the Brick Owl catalog",
+      "usage_instructions": "Browse the Brick Owl catalog -- lookup items, search, get IDs, check availability, view inventory, colors, conditions, categories, and themes.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "availability": {
+          "help": "Get pricing and availability for a catalog item.",
+          "examples": [
+            "brickowl catalog availability 123456 US",
+            "brickowl catalog availability 123456 US --quantity 10",
+            "brickowl catalog availability 123456 US --table"
+          ],
+          "usage_instructions": "Check item availability. BOID is required positional.",
+          "arguments": [
+            {
+              "name": "boid",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brick Owl item ID (BOID)"
+            },
+            {
+              "name": "country",
+              "type": "TEXT",
+              "required": true,
+              "help": "Country code (e.g., US, GB, DE)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--quantity",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Quantity to check",
+              "short": "-q"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "categories": {
+          "help": "List all catalog categories.",
+          "examples": [
+            "brickowl catalog categories",
+            "brickowl catalog categories --table"
+          ],
+          "usage_instructions": "List catalog categories.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "colors": {
+          "help": "List all available colors.",
+          "examples": [
+            "brickowl catalog colors",
+            "brickowl catalog colors --table"
+          ],
+          "usage_instructions": "List available colors for an item. BOID is required positional.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "conditions": {
+          "help": "List all available conditions.",
+          "examples": [
+            "brickowl catalog conditions",
+            "brickowl catalog conditions --table"
+          ],
+          "usage_instructions": "List available conditions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "id": {
+          "help": "Look up a catalog item by external ID. ID types: item_no, design_id, bl_item_no, set_number (alias: bricklink -> bl_item_no)",
+          "examples": [
+            "brickowl catalog id 3001 Part",
+            "brickowl catalog id 3001 Part --id-type design_id",
+            "brickowl catalog id 3001 Part --id-type bl_item_no",
+            "brickowl catalog id 75192 Set --table"
+          ],
+          "usage_instructions": "Get Brick Owl ID for an item. ITEM_ID is required positional.",
+          "arguments": [
+            {
+              "name": "id_value",
+              "type": "TEXT",
+              "required": true,
+              "help": "External ID value"
+            },
+            {
+              "name": "type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item type (Part, Set, Minifigure, etc.)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--id-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "ID type: item_no, design_id, bl_item_no, set_number (alias: bricklink -> bl_item_no)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "inventory": {
+          "help": "Get the parts inventory for a set.",
+          "examples": [
+            "brickowl catalog inventory 123456",
+            "brickowl catalog inventory 123456 --table"
+          ],
+          "usage_instructions": "View inventory for a catalog item. BOID is required positional.",
+          "arguments": [
+            {
+              "name": "boid",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brick Owl item ID (BOID) for a set"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "lookup": {
+          "help": "Look up a catalog item by BOID.",
+          "examples": [
+            "brickowl catalog lookup 123456",
+            "brickowl catalog lookup 123456 --table"
+          ],
+          "usage_instructions": "Look up catalog item by BOID (required positional). Returns item details.",
+          "arguments": [
+            {
+              "name": "boid",
+              "type": "TEXT",
+              "required": true,
+              "help": "Brick Owl item ID (BOID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search the Brick Owl catalog (browser-based).",
+          "examples": [
+            "brickowl catalog search \"Millennium Falcon\"",
+            "brickowl catalog search \"3001\" --table",
+            "brickowl catalog search \"minifig\" --page 2"
+          ],
+          "usage_instructions": "Search catalog. QUERY is required positional.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--page",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Page number",
+              "default": "1"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "themes": {
+          "help": "List all catalog themes.",
+          "examples": [
+            "brickowl catalog themes",
+            "brickowl catalog themes --table"
+          ],
+          "usage_instructions": "List catalog themes.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "coupon": {
+      "help": "Manage Brick Owl coupons",
+      "usage_instructions": "Manage coupons -- list, get, create user/code coupons, delete.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create-code": {
+          "help": "Create a coupon with a specific code.",
+          "examples": [
+            "brickowl coupon create-code SAVE10 10",
+            "brickowl coupon create-code HOLIDAY20 20 --min-order 50 --limit 100"
+          ],
+          "usage_instructions": "Create a code-based coupon. Requires code and discount details.",
+          "arguments": [
+            {
+              "name": "code",
+              "type": "TEXT",
+              "required": true,
+              "help": "Coupon code"
+            },
+            {
+              "name": "discount",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Discount percentage"
+            }
+          ],
+          "options": [
+            {
+              "name": "--min-order",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum order amount"
+            },
+            {
+              "name": "--max-discount",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Maximum discount amount"
+            },
+            {
+              "name": "--free-shipping",
+              "type": "bool",
+              "required": false,
+              "help": "Include free shipping"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of redemptions"
+            },
+            {
+              "name": "--note",
+              "type": "TEXT",
+              "required": false,
+              "help": "Coupon note",
+              "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create-user": {
+          "help": "Create a coupon for a specific user.",
+          "examples": [
+            "brickowl coupon create-user buyer123 10",
+            "brickowl coupon create-user buyer123 15 --min-order 25.00 --free-shipping"
+          ],
+          "usage_instructions": "Create a user-specific coupon. Requires user details.",
+          "arguments": [
+            {
+              "name": "username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Username to create coupon for"
+            },
+            {
+              "name": "discount",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Discount percentage"
+            }
+          ],
+          "options": [
+            {
+              "name": "--min-order",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum order amount"
+            },
+            {
+              "name": "--max-discount",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Maximum discount amount"
+            },
+            {
+              "name": "--free-shipping",
+              "type": "bool",
+              "required": false,
+              "help": "Include free shipping"
+            },
+            {
+              "name": "--note",
+              "type": "TEXT",
+              "required": false,
+              "help": "Coupon note",
+              "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a coupon.",
+          "examples": [
+            "brickowl coupon delete COUPON_ID"
+          ],
+          "usage_instructions": "Delete a coupon. COUPON_ID is required positional.",
+          "arguments": [
+            {
+              "name": "coupon_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The coupon ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific coupon.",
+          "examples": [
+            "brickowl coupon get COUPON_ID",
+            "brickowl coupon get COUPON_ID --table"
+          ],
+          "usage_instructions": "Get coupon details. COUPON_ID is required positional.",
+          "arguments": [
+            {
+              "name": "coupon_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The coupon ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List store coupons.",
+          "examples": [
+            "brickowl coupon list",
+            "brickowl coupon list --table"
+          ],
+          "usage_instructions": "List coupons. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of coupons to return",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "inventory": {
+      "help": "Manage Brick Owl inventory",
+      "usage_instructions": "Store inventory management -- list, get, search, stats, update, and delete inventory items.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "delete": {
+          "help": "Delete an inventory lot.",
+          "examples": [
+            "brickowl inventory delete LOT_ID"
+          ],
+          "usage_instructions": "Delete an inventory item. LOT_ID is required positional.",
+          "arguments": [
+            {
+              "name": "lot_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The lot ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific inventory lot.",
+          "examples": [
+            "brickowl inventory get 12345678",
+            "brickowl inventory get 12345678 --table"
+          ],
+          "usage_instructions": "Get inventory item details. LOT_ID is required positional.",
+          "arguments": [
+            {
+              "name": "lot_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The lot ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List inventory lots.",
+          "examples": [
+            "brickowl inventory list",
+            "brickowl inventory list --type Part",
+            "brickowl inventory list --all --limit 50",
+            "brickowl inventory list --table",
+            "brickowl inventory list --filter \"qty:gt:5\"",
+            "brickowl inventory list --properties \"lot_id,name,qty,price\""
+          ],
+          "usage_instructions": "List store inventory. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by item type (Part, Set, Minifigure, etc.)"
+            },
+            {
+              "name": "--all",
+              "type": "bool",
+              "required": false,
+              "help": "Include inactive lots (default: active only)"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of lots to return",
+              "short": "-l"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search inventory for a part by number. Looks up the part via catalog ID, then filters your inventory lots matching that item. Returns bricklink-compatible output format.",
+          "examples": [
+            "brickowl inventory search 3063",
+            "brickowl inventory search 3063 --color 38",
+            "brickowl inventory search 2420 --table",
+            "brickowl inventory search 3001 --type Part"
+          ],
+          "usage_instructions": "Search inventory. QUERY is required positional.",
+          "arguments": [
+            {
+              "name": "part_no",
+              "type": "TEXT",
+              "required": true,
+              "help": "Part number to search for (design ID, BL item no, etc.)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by Brick Owl color ID",
+              "short": "-c"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Item type (Part, Set, Minifigure, etc.)",
+              "default": "Part"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stats": {
+          "help": "Show inventory statistics. Computes totals for lots, items, and value across all active inventory.",
+          "examples": [
+            "brickowl inventory stats",
+            "brickowl inventory stats --table"
+          ],
+          "usage_instructions": "Get inventory statistics summary.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an inventory lot.",
+          "examples": [
+            "brickowl inventory update LOT_ID --price 1.50",
+            "brickowl inventory update LOT_ID --quantity 10",
+            "brickowl inventory update LOT_ID --adjust -2",
+            "brickowl inventory update LOT_ID --sale 20",
+            "brickowl inventory update LOT_ID --hide",
+            "brickowl inventory update LOT_ID --show"
+          ],
+          "usage_instructions": "Update an inventory item. LOT_ID is required positional.",
+          "arguments": [
+            {
+              "name": "lot_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The lot ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Set price"
+            },
+            {
+              "name": "--quantity",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Set absolute quantity",
+              "short": "-q"
+            },
+            {
+              "name": "--adjust",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Adjust quantity (positive or negative)"
+            },
+            {
+              "name": "--sale",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Set sale percentage (0 to remove)"
+            },
+            {
+              "name": "--hide",
+              "type": "bool",
+              "required": false,
+              "help": "Hide lot (set for_sale=0)"
+            },
+            {
+              "name": "--show",
+              "type": "bool",
+              "required": false,
+              "help": "Show lot (set for_sale=1)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "issue": {
+      "help": "Manage Brick Owl issue reports",
+      "usage_instructions": "Run `brickowl issue --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one issue report by order ID.",
+          "usage_instructions": "Run `brickowl issue get --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID of the issue report"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List issue reports (browser-based). Shows open issue reports (disputes) filed by customers.",
+          "examples": [
+            "brickowl issue list",
+            "brickowl issue list --table",
+            "brickowl issue list --filter \"status:eq:Open\"",
+            "brickowl issue list --properties \"order_id,customer,status\"",
+            "brickowl issue list --limit 5"
+          ],
+          "usage_instructions": "Run `brickowl issue list --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of reports to return",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "resolve": {
+          "help": "Resolve an issue report for a specific order (browser-based). Finds the issue report matching the given order ID and clicks the resolve action.",
+          "examples": [
+            "brickowl issue resolve 12345678"
+          ],
+          "usage_instructions": "Run `brickowl issue resolve --help` for exact arguments and options.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID of the issue report to resolve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "messages": {
+      "help": "Manage Brick Owl messages",
+      "usage_instructions": "Manage Brick Owl messages -- list, get, send, reply, mark read/unread.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get message details by ID (browser-based).",
+          "examples": [
+            "brickowl messages get 12345678",
+            "brickowl messages get 12345678 --table",
+            "brickowl messages get 12345678 --include-history"
+          ],
+          "usage_instructions": "Get a message. MESSAGE_ID is required positional.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message folder (accepted for parity, ignored)",
+              "default": "inbox"
+            },
+            {
+              "name": "--include-history",
+              "type": "bool",
+              "required": false,
+              "help": "Include message history thread"
+            },
+            {
+              "name": "--download-attachments",
+              "type": "bool",
+              "required": false,
+              "help": "Download attachments to local files"
+            },
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Directory for downloaded attachments (default: cwd)",
+              "short": "-o"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List messages (browser-based).",
+          "examples": [
+            "brickowl messages list",
+            "brickowl messages list --folder outbox",
+            "brickowl messages list --page 2 --table",
+            "brickowl messages list --filter \"is_unread:eq:true\"",
+            "brickowl messages list --include-history"
+          ],
+          "usage_instructions": "List messages. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message folder: inbox or outbox",
+              "default": "inbox"
+            },
+            {
+              "name": "--page",
+              "type": "bool",
+              "required": false,
+              "help": "g      INTEGER  Page number",
+              "short": "-p",
+              "default": "1"
+            },
+            {
+              "name": "--include-history",
+              "type": "bool",
+              "required": false,
+              "help": "Include message history thread for each message"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max results",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-read": {
+          "help": "Mark a message as read (browser-based).",
+          "examples": [
+            "brickowl messages mark-read MSG_ID"
+          ],
+          "usage_instructions": "Mark a message as read. MESSAGE_ID is required.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-unread": {
+          "help": "Mark a message as unread (browser-based).",
+          "examples": [
+            "brickowl messages mark-unread MSG_ID"
+          ],
+          "usage_instructions": "Mark a message as unread. MESSAGE_ID is required.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The message ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reply": {
+          "help": "Reply to a message (browser-based).",
+          "examples": [
+            "brickowl messages reply 12345678 \"Thank you for your message!\"",
+            "brickowl messages reply 12345678 \"Here is the tracking info\" --copy"
+          ],
+          "usage_instructions": "Reply to a message. MESSAGE_ID is required.",
+          "arguments": [
+            {
+              "name": "message_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message ID to reply to"
+            },
+            {
+              "name": "body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply body"
+            }
+          ],
+          "options": [
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override subject (accepted for parity)",
+              "short": "-s"
+            },
+            {
+              "name": "--priority",
+              "type": "bool",
+              "required": false,
+              "help": "Send as high priority (accepted for parity)"
+            },
+            {
+              "name": "--copy",
+              "type": "bool",
+              "required": false,
+              "help": "Send a copy to yourself (accepted for parity)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "send": {
+          "help": "Send a message linked to an order (browser-based). Looks up the buyer username from the order, then sends a message.",
+          "examples": [
+            "brickowl messages send 12345678 \"Your order has been shipped!\"",
+            "brickowl messages send 12345678 \"Hello\" --subject \"Question about order\""
+          ],
+          "usage_instructions": "Send a new message. Requires recipient and content.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID to send message for"
+            },
+            {
+              "name": "body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message body"
+            }
+          ],
+          "options": [
+            {
+              "name": "--subject",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message subject",
+              "short": "-s"
+            },
+            {
+              "name": "--priority",
+              "type": "bool",
+              "required": false,
+              "help": "Send as high priority (accepted for parity)"
+            },
+            {
+              "name": "--copy",
+              "type": "bool",
+              "required": false,
+              "help": "Send a copy to yourself (accepted for parity)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "order": {
       "help": "Manage Brick Owl orders",
+      "usage_instructions": "Order management -- list, get, view items, check status, ship, set tracking, and add notes to orders.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific order.",
+          "examples": [
+            "brickowl order get 12345678",
+            "brickowl order get 12345678 --table"
+          ],
+          "usage_instructions": "Get order details by ORDER_ID (required positional).",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "items": {
+          "help": "Get items in an order.",
+          "examples": [
+            "brickowl order items 12345678",
+            "brickowl order items 12345678 --table"
+          ],
+          "usage_instructions": "List items in an order. ORDER_ID is required positional.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List orders from the Brick Owl store.",
+          "examples": [
+            "brickowl order list",
+            "brickowl order list --status \"payment received\"",
+            "brickowl order list --status 2,3,4",
+            "brickowl order list --not-picked --table",
+            "brickowl order list --shipped --limit 10",
+            "brickowl order list --filter \"buyer_name:contains:John\"",
+            "brickowl order list --properties \"order_id,status,buyer_name\""
+          ],
+          "usage_instructions": "List orders. Use --status/-s to filter. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--status",
@@ -309,71 +1620,21 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "brickowl order list",
-            "brickowl order list --status \"payment received\"",
-            "brickowl order list --status 2,3,4",
-            "brickowl order list --not-picked --table",
-            "brickowl order list --shipped --limit 10",
-            "brickowl order list --filter \"buyer_name:contains:John\"",
-            "brickowl order list --properties \"order_id,status,buyer_name\""
-          ],
-          "usage_instructions": "List orders. Use --status/-s to filter. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific order.",
-          "arguments": [
+            },
             {
-              "name": "order_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "brickowl order get 12345678",
-            "brickowl order get 12345678 --table"
-          ],
-          "usage_instructions": "Get order details by ORDER_ID (required positional)."
+          ]
         },
-        "items": {
-          "help": "Get items in an order.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
+        "note": {
+          "help": "Set seller note on an order.",
           "examples": [
-            "brickowl order items 12345678",
-            "brickowl order items 12345678 --table"
+            "brickowl order note 12345678 \"Shipped via USPS Priority\""
           ],
-          "usage_instructions": "List items in an order. ORDER_ID is required positional."
-        },
-        "status": {
-          "help": "Set the status of an order. Status IDs: 0 = Pending, 1 = Payment Submitted, 2 = Payment Received, 3 = Processing, 4 = Processed, 5 = Shipped, 6 = Received, 7 = On Hold, 8 = Cancelled",
+          "usage_instructions": "Add a note to an order. ORDER_ID and NOTE are required.",
           "arguments": [
             {
               "name": "order_id",
@@ -382,20 +1643,28 @@
               "help": "The order ID"
             },
             {
-              "name": "status_id",
-              "type": "INTEGER",
+              "name": "note",
+              "type": "TEXT",
               "required": true,
-              "help": "Status ID (0-8)"
+              "help": "Note text"
             }
           ],
-          "examples": [
-            "brickowl order status 12345678 4",
-            "brickowl order status 12345678 5"
-          ],
-          "usage_instructions": "Check order status. ORDER_ID is required positional."
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "ship": {
           "help": "Mark an order as shipped, optionally with tracking.",
+          "examples": [
+            "brickowl order ship 12345678",
+            "brickowl order ship 12345678 --tracking 9400111899223456789012"
+          ],
+          "usage_instructions": "Mark an order as shipped. ORDER_ID is required.",
           "arguments": [
             {
               "name": "order_id",
@@ -411,16 +1680,51 @@
               "required": false,
               "help": "Tracking number",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Set the status of an order. Status IDs: 0 = Pending, 1 = Payment Submitted, 2 = Payment Received, 3 = Processing, 4 = Processed, 5 = Shipped, 6 = Received, 7 = On Hold, 8 = Cancelled",
+          "examples": [
+            "brickowl order status 12345678 4",
+            "brickowl order status 12345678 5"
+          ],
+          "usage_instructions": "Check order status. ORDER_ID is required positional.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID"
+            },
+            {
+              "name": "status_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Status ID (0-8)"
             }
           ],
-          "examples": [
-            "brickowl order ship 12345678",
-            "brickowl order ship 12345678 --tracking 9400111899223456789012"
-          ],
-          "usage_instructions": "Mark an order as shipped. ORDER_ID is required."
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "tracking": {
           "help": "Add tracking information to an order.",
+          "examples": [
+            "brickowl order tracking 12345678 9400111899223456789012"
+          ],
+          "usage_instructions": "Set tracking number for an order. ORDER_ID and TRACKING are required.",
           "arguments": [
             {
               "name": "order_id",
@@ -435,1041 +1739,69 @@
               "help": "Tracking number"
             }
           ],
-          "examples": [
-            "brickowl order tracking 12345678 9400111899223456789012"
-          ],
-          "usage_instructions": "Set tracking number for an order. ORDER_ID and TRACKING are required."
-        },
-        "note": {
-          "help": "Set seller note on an order.",
-          "arguments": [
+          "options": [
             {
-              "name": "order_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            },
-            {
-              "name": "note",
-              "type": "TEXT",
-              "required": true,
-              "help": "Note text"
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "brickowl order note 12345678 \"Shipped via USPS Priority\""
-          ],
-          "usage_instructions": "Add a note to an order. ORDER_ID and NOTE are required."
+          ]
         }
-      },
-      "usage_instructions": "Order management -- list, get, view items, check status, ship, set tracking, and add notes to orders."
-    },
-    "inventory": {
-      "help": "Manage Brick Owl inventory",
-      "commands": {
-        "list": {
-          "help": "List inventory lots.",
-          "options": [
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by item type (Part, Set, Minifigure, etc.)"
-            },
-            {
-              "name": "--all",
-              "type": "bool",
-              "required": false,
-              "help": "Include inactive lots (default: active only)"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of lots to return",
-              "short": "-l"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "brickowl inventory list",
-            "brickowl inventory list --type Part",
-            "brickowl inventory list --all --limit 50",
-            "brickowl inventory list --table",
-            "brickowl inventory list --filter \"qty:gt:5\"",
-            "brickowl inventory list --properties \"lot_id,name,qty,price\""
-          ],
-          "usage_instructions": "List store inventory. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific inventory lot.",
-          "arguments": [
-            {
-              "name": "lot_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The lot ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl inventory get 12345678",
-            "brickowl inventory get 12345678 --table"
-          ],
-          "usage_instructions": "Get inventory item details. LOT_ID is required positional."
-        },
-        "search": {
-          "help": "Search inventory for a part by number. Looks up the part via catalog ID, then filters your inventory lots matching that item. Returns bricklink-compatible output format.",
-          "arguments": [
-            {
-              "name": "part_no",
-              "type": "TEXT",
-              "required": true,
-              "help": "Part number to search for (design ID, BL item no, etc.)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--color",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Filter by Brick Owl color ID",
-              "short": "-c"
-            },
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Item type (Part, Set, Minifigure, etc.)",
-              "default": "Part"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl inventory search 3063",
-            "brickowl inventory search 3063 --color 38",
-            "brickowl inventory search 2420 --table",
-            "brickowl inventory search 3001 --type Part"
-          ],
-          "usage_instructions": "Search inventory. QUERY is required positional."
-        },
-        "stats": {
-          "help": "Show inventory statistics. Computes totals for lots, items, and value across all active inventory.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl inventory stats",
-            "brickowl inventory stats --table"
-          ],
-          "usage_instructions": "Get inventory statistics summary."
-        },
-        "update": {
-          "help": "Update an inventory lot.",
-          "arguments": [
-            {
-              "name": "lot_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The lot ID to update"
-            }
-          ],
-          "options": [
-            {
-              "name": "--price",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Set price"
-            },
-            {
-              "name": "--quantity",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Set absolute quantity",
-              "short": "-q"
-            },
-            {
-              "name": "--adjust",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Adjust quantity (positive or negative)"
-            },
-            {
-              "name": "--sale",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Set sale percentage (0 to remove)"
-            },
-            {
-              "name": "--hide",
-              "type": "bool",
-              "required": false,
-              "help": "Hide lot (set for_sale=0)"
-            },
-            {
-              "name": "--show",
-              "type": "bool",
-              "required": false,
-              "help": "Show lot (set for_sale=1)"
-            }
-          ],
-          "examples": [
-            "brickowl inventory update LOT_ID --price 1.50",
-            "brickowl inventory update LOT_ID --quantity 10",
-            "brickowl inventory update LOT_ID --adjust -2",
-            "brickowl inventory update LOT_ID --sale 20",
-            "brickowl inventory update LOT_ID --hide",
-            "brickowl inventory update LOT_ID --show"
-          ],
-          "usage_instructions": "Update an inventory item. LOT_ID is required positional."
-        },
-        "delete": {
-          "help": "Delete an inventory lot.",
-          "arguments": [
-            {
-              "name": "lot_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The lot ID to delete"
-            }
-          ],
-          "examples": [
-            "brickowl inventory delete LOT_ID"
-          ],
-          "usage_instructions": "Delete an inventory item. LOT_ID is required positional."
-        }
-      },
-      "usage_instructions": "Store inventory management -- list, get, search, stats, update, and delete inventory items."
-    },
-    "catalog": {
-      "help": "Browse the Brick Owl catalog",
-      "commands": {
-        "lookup": {
-          "help": "Look up a catalog item by BOID.",
-          "arguments": [
-            {
-              "name": "boid",
-              "type": "TEXT",
-              "required": true,
-              "help": "Brick Owl item ID (BOID)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog lookup 123456",
-            "brickowl catalog lookup 123456 --table"
-          ],
-          "usage_instructions": "Look up catalog item by BOID (required positional). Returns item details."
-        },
-        "search": {
-          "help": "Search the Brick Owl catalog (browser-based).",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search query"
-            }
-          ],
-          "options": [
-            {
-              "name": "--page",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Page number",
-              "default": "1"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog search \"Millennium Falcon\"",
-            "brickowl catalog search \"3001\" --table",
-            "brickowl catalog search \"minifig\" --page 2"
-          ],
-          "usage_instructions": "Search catalog. QUERY is required positional."
-        },
-        "id": {
-          "help": "Look up a catalog item by external ID. ID types: item_no, design_id, bl_item_no, set_number (alias: bricklink -> bl_item_no)",
-          "arguments": [
-            {
-              "name": "id_value",
-              "type": "TEXT",
-              "required": true,
-              "help": "External ID value"
-            },
-            {
-              "name": "type",
-              "type": "TEXT",
-              "required": true,
-              "help": "Item type (Part, Set, Minifigure, etc.)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--id-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "ID type: item_no, design_id, bl_item_no, set_number (alias: bricklink -> bl_item_no)"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog id 3001 Part",
-            "brickowl catalog id 3001 Part --id-type design_id",
-            "brickowl catalog id 3001 Part --id-type bl_item_no",
-            "brickowl catalog id 75192 Set --table"
-          ],
-          "usage_instructions": "Get Brick Owl ID for an item. ITEM_ID is required positional."
-        },
-        "availability": {
-          "help": "Get pricing and availability for a catalog item.",
-          "arguments": [
-            {
-              "name": "boid",
-              "type": "TEXT",
-              "required": true,
-              "help": "Brick Owl item ID (BOID)"
-            },
-            {
-              "name": "country",
-              "type": "TEXT",
-              "required": true,
-              "help": "Country code (e.g., US, GB, DE)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--quantity",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Quantity to check",
-              "short": "-q"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog availability 123456 US",
-            "brickowl catalog availability 123456 US --quantity 10",
-            "brickowl catalog availability 123456 US --table"
-          ],
-          "usage_instructions": "Check item availability. BOID is required positional."
-        },
-        "inventory": {
-          "help": "Get the parts inventory for a set.",
-          "arguments": [
-            {
-              "name": "boid",
-              "type": "TEXT",
-              "required": true,
-              "help": "Brick Owl item ID (BOID) for a set"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog inventory 123456",
-            "brickowl catalog inventory 123456 --table"
-          ],
-          "usage_instructions": "View inventory for a catalog item. BOID is required positional."
-        },
-        "colors": {
-          "help": "List all available colors.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog colors",
-            "brickowl catalog colors --table"
-          ],
-          "usage_instructions": "List available colors for an item. BOID is required positional."
-        },
-        "conditions": {
-          "help": "List all available conditions.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog conditions",
-            "brickowl catalog conditions --table"
-          ],
-          "usage_instructions": "List available conditions."
-        },
-        "categories": {
-          "help": "List all catalog categories.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog categories",
-            "brickowl catalog categories --table"
-          ],
-          "usage_instructions": "List catalog categories."
-        },
-        "themes": {
-          "help": "List all catalog themes.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl catalog themes",
-            "brickowl catalog themes --table"
-          ],
-          "usage_instructions": "List catalog themes."
-        }
-      },
-      "usage_instructions": "Browse the Brick Owl catalog -- lookup items, search, get IDs, check availability, view inventory, colors, conditions, categories, and themes."
-    },
-    "user": {
-      "help": "View Brick Owl user details",
-      "commands": {
-        "details": {
-          "help": "Get your Brick Owl user/store details.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl user details",
-            "brickowl user details --table"
-          ],
-          "usage_instructions": "Get user details. USER_ID is optional (defaults to self)."
-        }
-      },
-      "usage_instructions": "View Brick Owl user details."
-    },
-    "messages": {
-      "help": "Manage Brick Owl messages",
-      "commands": {
-        "list": {
-          "help": "List messages (browser-based).",
-          "options": [
-            {
-              "name": "--folder",
-              "type": "TEXT",
-              "required": false,
-              "help": "Message folder: inbox or outbox",
-              "default": "inbox"
-            },
-            {
-              "name": "--page",
-              "type": "bool",
-              "required": false,
-              "help": "g      INTEGER  Page number",
-              "short": "-p",
-              "default": "1"
-            },
-            {
-              "name": "--include-history",
-              "type": "bool",
-              "required": false,
-              "help": "Include message history thread for each message"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max results",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "brickowl messages list",
-            "brickowl messages list --folder outbox",
-            "brickowl messages list --page 2 --table",
-            "brickowl messages list --filter \"is_unread:eq:true\"",
-            "brickowl messages list --include-history"
-          ],
-          "usage_instructions": "List messages. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get message details by ID (browser-based).",
-          "arguments": [
-            {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--folder",
-              "type": "TEXT",
-              "required": false,
-              "help": "Message folder (accepted for parity, ignored)",
-              "default": "inbox"
-            },
-            {
-              "name": "--include-history",
-              "type": "bool",
-              "required": false,
-              "help": "Include message history thread"
-            },
-            {
-              "name": "--download-attachments",
-              "type": "bool",
-              "required": false,
-              "help": "Download attachments to local files"
-            },
-            {
-              "name": "--output-dir",
-              "type": "TEXT",
-              "required": false,
-              "help": "Directory for downloaded attachments (default: cwd)",
-              "short": "-o"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl messages get 12345678",
-            "brickowl messages get 12345678 --table",
-            "brickowl messages get 12345678 --include-history"
-          ],
-          "usage_instructions": "Get a message. MESSAGE_ID is required positional."
-        },
-        "send": {
-          "help": "Send a message linked to an order (browser-based). Looks up the buyer username from the order, then sends a message.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID to send message for"
-            },
-            {
-              "name": "body",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message body"
-            }
-          ],
-          "options": [
-            {
-              "name": "--subject",
-              "type": "TEXT",
-              "required": false,
-              "help": "Message subject",
-              "short": "-s"
-            },
-            {
-              "name": "--priority",
-              "type": "bool",
-              "required": false,
-              "help": "Send as high priority (accepted for parity)"
-            },
-            {
-              "name": "--copy",
-              "type": "bool",
-              "required": false,
-              "help": "Send a copy to yourself (accepted for parity)"
-            }
-          ],
-          "examples": [
-            "brickowl messages send 12345678 \"Your order has been shipped!\"",
-            "brickowl messages send 12345678 \"Hello\" --subject \"Question about order\""
-          ],
-          "usage_instructions": "Send a new message. Requires recipient and content."
-        },
-        "reply": {
-          "help": "Reply to a message (browser-based).",
-          "arguments": [
-            {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Message ID to reply to"
-            },
-            {
-              "name": "body",
-              "type": "TEXT",
-              "required": true,
-              "help": "Reply body"
-            }
-          ],
-          "options": [
-            {
-              "name": "--subject",
-              "type": "TEXT",
-              "required": false,
-              "help": "Override subject (accepted for parity)",
-              "short": "-s"
-            },
-            {
-              "name": "--priority",
-              "type": "bool",
-              "required": false,
-              "help": "Send as high priority (accepted for parity)"
-            },
-            {
-              "name": "--copy",
-              "type": "bool",
-              "required": false,
-              "help": "Send a copy to yourself (accepted for parity)"
-            }
-          ],
-          "examples": [
-            "brickowl messages reply 12345678 \"Thank you for your message!\"",
-            "brickowl messages reply 12345678 \"Here is the tracking info\" --copy"
-          ],
-          "usage_instructions": "Reply to a message. MESSAGE_ID is required."
-        },
-        "mark-read": {
-          "help": "Mark a message as read (browser-based).",
-          "arguments": [
-            {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The message ID"
-            }
-          ],
-          "examples": [
-            "brickowl messages mark-read MSG_ID"
-          ],
-          "usage_instructions": "Mark a message as read. MESSAGE_ID is required."
-        },
-        "mark-unread": {
-          "help": "Mark a message as unread (browser-based).",
-          "arguments": [
-            {
-              "name": "message_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The message ID"
-            }
-          ],
-          "examples": [
-            "brickowl messages mark-unread MSG_ID"
-          ],
-          "usage_instructions": "Mark a message as unread. MESSAGE_ID is required."
-        }
-      },
-      "usage_instructions": "Manage Brick Owl messages -- list, get, send, reply, mark read/unread."
-    },
-    "refund": {
-      "help": "Manage Brick Owl refunds",
-      "commands": {
-        "info": {
-          "help": "Get refund information for an order. Shows order total, prior refunds, and maximum refund amount.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl refund info 12345678",
-            "brickowl refund info 12345678 --table"
-          ],
-          "usage_instructions": "Get refund info for an order. ORDER_ID is required positional."
-        },
-        "issue": {
-          "help": "Issue a partial refund for an order.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            },
-            {
-              "name": "amount",
-              "type": "FLOAT",
-              "required": true,
-              "help": "Refund amount in dollars"
-            }
-          ],
-          "options": [
-            {
-              "name": "--reason",
-              "type": "TEXT",
-              "required": false,
-              "help": "Refund reason",
-              "short": "-r"
-            },
-            {
-              "name": "--message",
-              "type": "TEXT",
-              "required": false,
-              "help": "Message to buyer",
-              "short": "-m"
-            }
-          ],
-          "examples": [
-            "brickowl refund issue 12345678 5.00",
-            "brickowl refund issue 12345678 5.00 --reason \"Missing Items\"",
-            "brickowl refund issue 12345678 5.00 --reason \"Overcharged Shipping\" --message \"Refunding excess shipping\""
-          ],
-          "usage_instructions": "Issue a partial refund. ORDER_ID and AMOUNT are required."
-        },
-        "full": {
-          "help": "Issue a full refund for an order.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The order ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--reason",
-              "type": "TEXT",
-              "required": false,
-              "help": "Refund reason",
-              "short": "-r"
-            },
-            {
-              "name": "--message",
-              "type": "TEXT",
-              "required": false,
-              "help": "Message to buyer",
-              "short": "-m"
-            }
-          ],
-          "examples": [
-            "brickowl refund full 12345678",
-            "brickowl refund full 12345678 --reason \"Cancel Order\""
-          ],
-          "usage_instructions": "Issue a full refund. ORDER_ID is required positional."
-        }
-      },
-      "usage_instructions": "Manage refunds -- get refund info, issue partial refunds, or full refunds."
-    },
-    "coupon": {
-      "help": "Manage Brick Owl coupons",
-      "commands": {
-        "list": {
-          "help": "List store coupons.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of coupons to return",
-              "short": "-l"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "brickowl coupon list",
-            "brickowl coupon list --table"
-          ],
-          "usage_instructions": "List coupons. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific coupon.",
-          "arguments": [
-            {
-              "name": "coupon_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The coupon ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "brickowl coupon get COUPON_ID",
-            "brickowl coupon get COUPON_ID --table"
-          ],
-          "usage_instructions": "Get coupon details. COUPON_ID is required positional."
-        },
-        "create-user": {
-          "help": "Create a coupon for a specific user.",
-          "arguments": [
-            {
-              "name": "username",
-              "type": "TEXT",
-              "required": true,
-              "help": "Username to create coupon for"
-            },
-            {
-              "name": "discount",
-              "type": "FLOAT",
-              "required": true,
-              "help": "Discount percentage"
-            }
-          ],
-          "options": [
-            {
-              "name": "--min-order",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Minimum order amount"
-            },
-            {
-              "name": "--max-discount",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Maximum discount amount"
-            },
-            {
-              "name": "--free-shipping",
-              "type": "bool",
-              "required": false,
-              "help": "Include free shipping"
-            },
-            {
-              "name": "--note",
-              "type": "TEXT",
-              "required": false,
-              "help": "Coupon note",
-              "short": "-n"
-            }
-          ],
-          "examples": [
-            "brickowl coupon create-user buyer123 10",
-            "brickowl coupon create-user buyer123 15 --min-order 25.00 --free-shipping"
-          ],
-          "usage_instructions": "Create a user-specific coupon. Requires user details."
-        },
-        "create-code": {
-          "help": "Create a coupon with a specific code.",
-          "arguments": [
-            {
-              "name": "code",
-              "type": "TEXT",
-              "required": true,
-              "help": "Coupon code"
-            },
-            {
-              "name": "discount",
-              "type": "FLOAT",
-              "required": true,
-              "help": "Discount percentage"
-            }
-          ],
-          "options": [
-            {
-              "name": "--min-order",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Minimum order amount"
-            },
-            {
-              "name": "--max-discount",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Maximum discount amount"
-            },
-            {
-              "name": "--free-shipping",
-              "type": "bool",
-              "required": false,
-              "help": "Include free shipping"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of redemptions"
-            },
-            {
-              "name": "--note",
-              "type": "TEXT",
-              "required": false,
-              "help": "Coupon note",
-              "short": "-n"
-            }
-          ],
-          "examples": [
-            "brickowl coupon create-code SAVE10 10",
-            "brickowl coupon create-code HOLIDAY20 20 --min-order 50 --limit 100"
-          ],
-          "usage_instructions": "Create a code-based coupon. Requires code and discount details."
-        },
-        "delete": {
-          "help": "Delete a coupon.",
-          "arguments": [
-            {
-              "name": "coupon_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The coupon ID to delete"
-            }
-          ],
-          "examples": [
-            "brickowl coupon delete COUPON_ID"
-          ],
-          "usage_instructions": "Delete a coupon. COUPON_ID is required positional."
-        }
-      },
-      "usage_instructions": "Manage coupons -- list, get, create user/code coupons, delete."
+      }
     },
     "quotes": {
       "help": "Manage Brick Owl quotes",
+      "usage_instructions": "Manage quotes -- list, get, and submit quotes.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific quote.",
+          "examples": [
+            "brickowl quotes get QUOTE_ID",
+            "brickowl quotes get QUOTE_ID --table"
+          ],
+          "usage_instructions": "Get quote details. QUOTE_ID is required positional.",
+          "arguments": [
+            {
+              "name": "quote_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The quote ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List quote requests.",
+          "examples": [
+            "brickowl quotes list",
+            "brickowl quotes list --table"
+          ],
+          "usage_instructions": "List quotes. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -1498,41 +1830,22 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "brickowl quotes list",
-            "brickowl quotes list --table"
-          ],
-          "usage_instructions": "List quotes. Use --table/-t for formatted output."
-        },
-        "get": {
-          "help": "Get details for a specific quote.",
-          "arguments": [
+            },
             {
-              "name": "quote_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "The quote ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "brickowl quotes get QUOTE_ID",
-            "brickowl quotes get QUOTE_ID --table"
-          ],
-          "usage_instructions": "Get quote details. QUOTE_ID is required positional."
+          ]
         },
         "submit": {
           "help": "Submit a shipping quote for a quote request.",
+          "examples": [
+            "brickowl quotes submit QUOTE_ID 5.99",
+            "brickowl quotes submit QUOTE_ID 3.50 --note \"Ships within 2 business days\""
+          ],
+          "usage_instructions": "Submit a quote. QUOTE_ID is required positional.",
           "arguments": [
             {
               "name": "quote_id",
@@ -1554,22 +1867,83 @@
               "required": false,
               "help": "Note for the buyer",
               "short": "-n"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "refund": {
+      "help": "Manage Brick Owl refunds",
+      "usage_instructions": "Manage refunds -- get refund info, issue partial refunds, or full refunds.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "full": {
+          "help": "Issue a full refund for an order.",
+          "examples": [
+            "brickowl refund full 12345678",
+            "brickowl refund full 12345678 --reason \"Cancel Order\""
+          ],
+          "usage_instructions": "Issue a full refund. ORDER_ID is required positional.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID"
             }
           ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Refund reason",
+              "short": "-r"
+            },
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message to buyer",
+              "short": "-m"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "info": {
+          "help": "Get refund information for an order. Shows order total, prior refunds, and maximum refund amount.",
           "examples": [
-            "brickowl quotes submit QUOTE_ID 5.99",
-            "brickowl quotes submit QUOTE_ID 3.50 --note \"Ships within 2 business days\""
+            "brickowl refund info 12345678",
+            "brickowl refund info 12345678 --table"
           ],
-          "usage_instructions": "Submit a quote. QUOTE_ID is required positional."
-        }
-      },
-      "usage_instructions": "Manage quotes -- list, get, and submit quotes."
-    },
-    "issue": {
-      "help": "Manage Brick Owl issue reports",
-      "commands": {
-        "list": {
-          "help": "List issue reports (browser-based). Shows open issue reports (disputes) filed by customers.",
+          "usage_instructions": "Get refund info for an order. ORDER_ID is required positional.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The order ID"
+            }
+          ],
           "options": [
             {
               "name": "--table",
@@ -1579,46 +1953,81 @@
               "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of reports to return",
-              "short": "-l"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "brickowl issue list",
-            "brickowl issue list --table",
-            "brickowl issue list --filter \"status:eq:Open\"",
-            "brickowl issue list --properties \"order_id,customer,status\"",
-            "brickowl issue list --limit 5"
-          ],
-          "usage_instructions": "Run `brickowl issue list --help` for exact arguments and options."
+          ]
         },
-        "get": {
-          "help": "Get one issue report by order ID.",
+        "issue": {
+          "help": "Issue a partial refund for an order.",
+          "examples": [
+            "brickowl refund issue 12345678 5.00",
+            "brickowl refund issue 12345678 5.00 --reason \"Missing Items\"",
+            "brickowl refund issue 12345678 5.00 --reason \"Overcharged Shipping\" --message \"Refunding excess shipping\""
+          ],
+          "usage_instructions": "Issue a partial refund. ORDER_ID and AMOUNT are required.",
           "arguments": [
             {
               "name": "order_id",
               "type": "TEXT",
               "required": true,
-              "help": "The order ID of the issue report"
+              "help": "The order ID"
+            },
+            {
+              "name": "amount",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Refund amount in dollars"
             }
           ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Refund reason",
+              "short": "-r"
+            },
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message to buyer",
+              "short": "-m"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "user": {
+      "help": "View Brick Owl user details",
+      "usage_instructions": "View Brick Owl user details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "details": {
+          "help": "Get your Brick Owl user/store details.",
+          "examples": [
+            "brickowl user details",
+            "brickowl user details --table"
+          ],
+          "usage_instructions": "Get user details. USER_ID is optional (defaults to self).",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -1628,42 +2037,14 @@
               "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Run `brickowl issue get --help` for exact arguments and options."
-        },
-        "resolve": {
-          "help": "Resolve an issue report for a specific order (browser-based). Finds the issue report matching the given order ID and clicks the resolve action.",
-          "arguments": [
-            {
-              "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The order ID of the issue report to resolve"
-            }
-          ],
-          "examples": [
-            "brickowl issue resolve 12345678"
-          ],
-          "usage_instructions": "Run `brickowl issue resolve --help` for exact arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Run `brickowl issue --help` for exact arguments and options."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Remove all cached responses."
-        }
-      },
-      "usage_instructions": "Manage response cache. Use `cache clear` to remove cached responses."
+      }
     }
   },
   "usage_instructions": "Use for all Brick Owl operations -- orders, inventory, catalog, messages, refunds, coupons, quotes, and user info. Commands follow `brickowl <group> <action>` pattern. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."

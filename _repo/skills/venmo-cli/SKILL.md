@@ -51,7 +51,7 @@ venmo cache clear                                  # wipe cache for the active p
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `venmo` command.** It contains the complete command tree, every flag, defaults, and per-command usage instructions. Never guess at command syntax.
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `venmo` command.** It contains the complete command tree, every flag, defaults, and per-command usage instructions. Never guess at command syntax.
 </principle>
 
 <principle name="Credentials Come From the Keychain">

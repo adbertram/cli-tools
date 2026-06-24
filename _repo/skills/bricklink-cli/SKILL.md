@@ -71,15 +71,18 @@ bricklink auth status            # read-only; per-profile, per-credential-type t
 
 **Browser-session remediation (for `messages`/`refund`/`notification`/`order search` auth errors):**
 1. Re-establish the session yourself: `bricklink auth login -c browser_session`. This opens a headed Chrome at the BrickLink/LEGO login.
-2. **The shared browser-auth flow is human-in-the-loop**: `PlaywrightBrowserAutomation.authenticate()` opens the page, prints "Log in, then press Enter…", and blocks on stdin (`/dev/tty`) until login is completed. It does NOT itself type the email/password. To authenticate autonomously, drive the LEGO.com login form with the `playwright-cli` binary and retrieve the LEGO/BrickLink password from the `lastpass` CLI (lastpass holds a `bricklink.com` and a `lego.com` entry; the ad-hoc browser-login password comes from lastpass — NOT from the CLI-tools secret manager, which owns only the OAuth API creds). Per the browser-password policy, never ask the user for the password and never use browser-stored credentials. Then return to the blocked `auth login` and confirm completion.
-3. Verify: `bricklink auth status` must report `browser_session.authenticated: true` for the active profile.
+2. **The shared browser-auth flow is human-in-the-loop**: `PlaywrightBrowserAutomation.authenticate()` opens the page, prints "Log in, then press Enter…", and blocks on stdin (`/dev/tty`) until login is completed. It does NOT itself type the email/password, and the opened browser is not exposed as an attachable CDP browser. To authenticate autonomously, drive the same persistent profile with Playwright/playwright-cli and the LEGO.com login form, then return to `bricklink auth status` for verification.
+3. Use the LEGO account email and LEGO web password. Do NOT treat profile `.env` values or `secret://...` placeholders as proof of the LEGO web login. Those values belong to the CLI-tools secret manager and may be BrickLink CLI/API credentials or stale browser credentials; in a live recovery, `bricklink-username` resolved to the store username and LEGO rejected it, while the current `bricklink-password` value produced LEGO `invalid_login`. Resolve secret-manager placeholders only for CLI credential work, never by printing them.
+4. The LEGO web password source is LastPass. If `lastpass`/`lpass` is not authenticated, stop at that credential blocker. Do not reset the LEGO password, create a new credential, or approve a macOS Keychain prompt without explicit user approval.
+5. Chrome profile transplant is not a reliable autonomous substitute. BrickLink/LEGO cookies in normal Chrome are `HttpOnly` and encrypted (`v10`); reading Chrome Safe Storage can require a macOS Keychain Allow prompt, and copying the normal Chrome profile to a temporary non-default directory has still opened BrickLink at the LEGO login page with only non-auth cookies exposed in practice.
+6. Verify with a live browser-backed command after auth: `bricklink auth status` must report `browser_session.authenticated: true`, then run `bricklink cache clear` and a non-cached browser command such as `bricklink messages get <message-id>`.
 
-**The only allowed user touchpoints:** (a) BrickLink OAuth 1.0a secrets that do not exist anywhere on this machine (issued by BrickLink, outside automation), or (b) a hard CAPTCHA/2FA wall that blocks the browser login after a genuine automated attempt. In every other case, authenticate yourself. Run `bricklink auth status`, `bricklink auth login --help`, and the relevant `--help` before acting — never guess flags.
+**The only allowed user touchpoints:** (a) BrickLink OAuth 1.0a secrets that do not exist anywhere on this machine (issued by BrickLink, outside automation), (b) LastPass/LEGO web credentials unavailable to the agent, (c) a macOS Keychain/permissions prompt that requires Adam to click Allow, or (d) a hard CAPTCHA/2FA wall that blocks the browser login after a genuine automated attempt. In every other case, authenticate yourself. Run `bricklink auth status`, `bricklink auth login --help`, and the relevant `--help` before acting — never guess flags.
 </authentication>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `bricklink` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `bricklink` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -96,6 +99,28 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** -- Authentication (login, logout, status, refresh, test)
 - **cache** -- Response cache (clear)
 - **auth** -- Authentication commands and nested `auth profiles` management
+</principle>
+
+<principle name="Inventory Delete Verification">
+After `bricklink inventory delete <inventory_id>`, verify deletion with a
+wrapped expected-404 probe, never a bare `bricklink inventory get <inventory_id>`.
+Use `--no-cache`, capture the command status and output, validate the BrickLink
+404 inventory error, print an explicit marker, and exit `0` only for that
+expected deletion evidence.
+
+```bash
+if output="$(bricklink --no-cache inventory get "$inventory_id" 2>&1)"; then
+  status=0
+else
+  status=$?
+fi
+printf '%s\n' "$output"
+if [ "$status" -eq 1 ] && printf '%s\n' "$output" | rg -q -F -- "Bricklink API error 404: resource name: [Inventory] resource id: [$inventory_id]"; then
+  printf 'EXPECTED_DELETED_INVENTORY:%s\n' "$inventory_id"
+  exit 0
+fi
+exit "$status"
+```
 </principle>
 
 <principle name="Item Dimensions">

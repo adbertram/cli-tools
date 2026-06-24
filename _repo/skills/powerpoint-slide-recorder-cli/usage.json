@@ -1,121 +1,122 @@
 {
-    "tool": "powerpoint-slide-recorder",
-    "description": "Record narrated PowerPoint slides",
-    "discovered_at": "2026-05-06T00:00:00+00:00",
-    "total_commands": 1,
-    "global_options": [
+  "tool": "powerpoint-slide-recorder",
+  "description": "Record narrated PowerPoint slides",
+  "discovered_at": "2026-06-20T19:53:48Z",
+  "total_commands": 1,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "record": {
+      "help": "Record narrated PowerPoint slides.",
+      "examples": [
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/output.mp4 --work-dir /tmp/record-work --video-input 3 --resolution 1920x1080",
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 1920x1080 --force-resolution",
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --force-aspect-ratio 16x9",
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 2560x1440 --cue-marker \"[cue]\""
+      ],
+      "usage_instructions": "Use powerpoint-slide-recorder record to record one or more consecutive slide items. Required flags are --deck, --items, --output, --work-dir, and --video-input; --resolution defaults to 1920x1080 and defines the final MP4 size. Width and height must be positive even integers. The recorder automatically counts click-triggered animations from the deck, requires each transcript to contain the same number of cue markers, and fails before PowerPoint launches when the AVFoundation capture source does not match the requested output aspect ratio or is smaller than the requested output. The final mux scales matching sources with -vf scale=<width>:<height> and does not add pad or crop filters. Use --force-resolution to temporarily switch the main display to --resolution before recording and restore the previous display mode afterward. Use --force-aspect-ratio 16x9 to temporarily switch the main display to the highest-usable-area mode for 16:9, then scale the final MP4 to the default 1920x1080 output resolution; an exact 16:9 mode is recorded uncropped, while a 16:10-only panel (the built-in MacBook Pro display) is recorded by cropping the centered 16:9 slide region PowerPoint letterboxes inside the 16:10 frame, so no external 16:9 monitor is needed. --force-aspect-ratio fails before launch only when no mode's centered 16:9 crop reaches the output. --force-resolution and --force-aspect-ratio are mutually exclusive. Use --cue-marker to override the default transcript cue marker ||, and use --table/-t only when a summary table is preferred over JSON.",
+      "arguments": [],
+      "options": [
         {
-            "name": "--version",
-            "type": "bool",
-            "required": false,
-            "help": "Show version and exit",
-            "short": "-v"
+          "name": "--deck",
+          "type": "PATH",
+          "required": true,
+          "help": "PowerPoint slide deck path"
+        },
+        {
+          "name": "--items",
+          "type": "PATH",
+          "required": true,
+          "help": "JSON item manifest path"
+        },
+        {
+          "name": "--output",
+          "type": "PATH",
+          "required": true,
+          "help": "MP4 output file path"
+        },
+        {
+          "name": "--work-dir",
+          "type": "PATH",
+          "required": true,
+          "help": "Working directory for generated timing and audio files"
+        },
+        {
+          "name": "--video-input",
+          "type": "TEXT",
+          "required": true,
+          "help": "ffmpeg AVFoundation video input"
+        },
+        {
+          "name": "--resolution",
+          "type": "TEXT",
+          "required": false,
+          "help": "Final MP4 resolution as WIDTHxHEIGHT with even dimensions",
+          "default": "1920x1080"
+        },
+        {
+          "name": "--force-resolution",
+          "type": "bool",
+          "required": false,
+          "help": "Temporarily switch the main display to --resolution before recording, then restore it"
+        },
+        {
+          "name": "--force-aspect-ratio",
+          "type": "TEXT",
+          "required": false,
+          "help": "Temporarily switch the main display to the highest available mode with this aspect ratio, then restore it"
+        },
+        {
+          "name": "--cue-marker",
+          "type": "TEXT",
+          "required": false,
+          "help": "Transcript marker that triggers a Space keypress",
+          "default": "||"
+        },
+        {
+          "name": "--framerate",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Screen recording framerate",
+          "default": "30"
+        },
+        {
+          "name": "--recording-lead-seconds",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Silence before narration starts",
+          "default": "1.0"
+        },
+        {
+          "name": "--slide-pause-seconds",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Pause inserted between slide items",
+          "default": "0.75"
+        },
+        {
+          "name": "--slideshow-start-seconds",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Delay after slideshow starts before recording begins",
+          "default": "2.0"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display result summary as a table",
+          "short": "-t"
         }
-    ],
-    "commands": {
-        "record": {
-            "help": "Record narrated PowerPoint slides.",
-            "options": [
-                {
-                    "name": "--deck",
-                    "type": "PATH",
-                    "required": true,
-                    "help": "PowerPoint slide deck path"
-                },
-                {
-                    "name": "--items",
-                    "type": "PATH",
-                    "required": true,
-                    "help": "JSON item manifest path"
-                },
-                {
-                    "name": "--output",
-                    "type": "PATH",
-                    "required": true,
-                    "help": "MP4 output file path"
-                },
-                {
-                    "name": "--work-dir",
-                    "type": "PATH",
-                    "required": true,
-                    "help": "Working directory for generated timing and audio files"
-                },
-                {
-                    "name": "--video-input",
-                    "type": "TEXT",
-                    "required": true,
-                    "help": "ffmpeg AVFoundation video input"
-                },
-                {
-                    "name": "--resolution",
-                    "type": "TEXT",
-                    "required": false,
-                    "help": "Final MP4 resolution as WIDTHxHEIGHT with even dimensions",
-                    "default": "1920x1080"
-                },
-                {
-                    "name": "--force-resolution",
-                    "type": "bool",
-                    "required": false,
-                    "help": "Temporarily switch the main display to --resolution before recording, then restore it"
-                },
-                {
-                    "name": "--force-aspect-ratio",
-                    "type": "TEXT",
-                    "required": false,
-                    "help": "Temporarily switch the main display to the highest available mode with this aspect ratio, then restore it"
-                },
-                {
-                    "name": "--cue-marker",
-                    "type": "TEXT",
-                    "required": false,
-                    "help": "Transcript marker that triggers a Space keypress",
-                    "default": "||"
-                },
-                {
-                    "name": "--framerate",
-                    "type": "INTEGER",
-                    "required": false,
-                    "help": "Screen recording framerate",
-                    "default": "30"
-                },
-                {
-                    "name": "--recording-lead-seconds",
-                    "type": "FLOAT",
-                    "required": false,
-                    "help": "Silence before narration starts",
-                    "default": "1.0"
-                },
-                {
-                    "name": "--slide-pause-seconds",
-                    "type": "FLOAT",
-                    "required": false,
-                    "help": "Pause inserted between slide items",
-                    "default": "0.75"
-                },
-                {
-                    "name": "--slideshow-start-seconds",
-                    "type": "FLOAT",
-                    "required": false,
-                    "help": "Delay after slideshow starts before recording begins",
-                    "default": "2.0"
-                },
-                {
-                    "name": "--table",
-                    "type": "bool",
-                    "required": false,
-                    "help": "Display result summary as a table",
-                    "short": "-t"
-                }
-            ],
-            "usage_instructions": "Use powerpoint-slide-recorder record to record one or more consecutive slide items. Required flags are --deck, --items, --output, --work-dir, and --video-input; --resolution defaults to 1920x1080 and defines the final MP4 size. Width and height must be positive even integers. The recorder automatically counts click-triggered animations from the deck, requires each transcript to contain the same number of cue markers, and fails before PowerPoint launches when the AVFoundation capture source does not match the requested output aspect ratio or is smaller than the requested output. The final mux scales matching sources with -vf scale=<width>:<height> and does not add pad or crop filters. Use --force-resolution to temporarily switch the main display to --resolution before recording and restore the previous display mode afterward. Use --force-aspect-ratio 16x9 to temporarily switch the main display to the highest available 16:9 mode, then scale the final MP4 to the default 1920x1080 output resolution. --force-resolution and --force-aspect-ratio are mutually exclusive. Use --cue-marker to override the default transcript cue marker ||, and use --table/-t only when a summary table is preferred over JSON.",
-            "examples": [
-                "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/output.mp4 --work-dir /tmp/record-work --video-input 3 --resolution 1920x1080",
-                "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 1920x1080 --force-resolution",
-                "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --force-aspect-ratio 16x9",
-                "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 2560x1440 --cue-marker \"[cue]\""
-            ]
-        }
-    },
-    "usage_instructions": "Use powerpoint-slide-recorder when you need to create narrated PowerPoint slide recordings, screencasts, or screen recordings from a PowerPoint deck plus per-slide transcripts and audio. The tool automatically counts click-triggered slide animations from the deck, validates transcript cue markers, and validates the AVFoundation capture source against --resolution before recording. Use --force-resolution when the main display should be temporarily switched to the requested recording resolution and restored afterward. Use --force-aspect-ratio 16x9 for standard 1920x1080 course output when the main display should be switched to the highest available 16:9 source mode and the final MP4 scaled down to the default output resolution. The tool has one command, powerpoint-slide-recorder record, and JSON is the default stdout format; use --table/-t only for a compact human summary."
+      ]
+    }
+  },
+  "usage_instructions": "Use powerpoint-slide-recorder when you need to create narrated PowerPoint slide recordings, screencasts, or screen recordings from a PowerPoint deck plus per-slide transcripts and audio. The tool automatically counts click-triggered slide animations from the deck, validates transcript cue markers, and validates the AVFoundation capture source against --resolution before recording. Use --force-resolution when the main display should be temporarily switched to the requested recording resolution and restored afterward. Use --force-aspect-ratio 16x9 for standard 1920x1080 course output; the recorder switches the main display to the highest-usable-area 16:9 source mode (or, on a 16:10-only panel such as the built-in MacBook Pro display, the best 16:10 mode whose centered 16:9 crop covers the output) and scales the final MP4 down to the default output resolution. The tool has one command, powerpoint-slide-recorder record, and JSON is the default stdout format; use --table/-t only for a compact human summary."
 }

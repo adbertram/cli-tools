@@ -1,7 +1,7 @@
 {
   "tool": "shippo",
   "description": "CLI interface for Shippo shipping API - Create USPS labels, compare rates, track packages",
-  "discovered_at": "2026-05-06T15:21:31.955907+00:00",
+  "discovered_at": "2026-06-20T19:55:00Z",
   "total_commands": 32,
   "global_options": [
     {
@@ -19,313 +19,28 @@
     }
   ],
   "commands": {
-    "auth": {
-      "help": "Manage Shippo API authentication",
-      "commands": {
-        "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to save credentials to",
-              "short": "-p"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
-            }
-          ],
-          "usage_instructions": "Use to authenticate with Shippo API key."
-        },
-        "logout": {
-          "help": "Clear stored credentials and browser sessions.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to clear credentials from",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to clear credentials."
-        },
-        "status": {
-          "help": "Check authentication status across profiles.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to check auth status."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to refresh token."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use to test credentials."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use to list profiles."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use to get profile details."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a profile."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use to switch profile."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to delete a profile."
-            }
-          },
-          "usage_instructions": "Profile management -- list, get, create, set default, delete profiles."
-        }
-      },
-      "usage_instructions": "Authentication -- login with Shippo API key, logout, check status, refresh, test."
-    },
-    "cache": {
-      "help": "Manage CLI cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `shippo cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `shippo cache --help` for exact arguments and options."
-    },
     "addresses": {
       "help": "Manage saved addresses",
+      "usage_instructions": "Address management -- list saved addresses, get details, create new, validate addresses.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List saved addresses.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of addresses to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo addresses list",
-            "shippo addresses list --table",
-            "shippo addresses list --limit 10",
-            "shippo addresses list --properties \"object_id,name,city,state\""
-          ],
-          "usage_instructions": "Use to list saved addresses."
-        },
-        "get": {
-          "help": "Get details for a specific address.",
-          "arguments": [
-            {
-              "name": "address_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The address object ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo addresses get ADDRESS_ID",
-            "shippo addresses get ADDRESS_ID --table"
-          ],
-          "usage_instructions": "Use to get address details by ID."
-        },
         "create": {
           "help": "Create a new address.",
+          "examples": [
+            "shippo addresses create -n \"John Doe\" -a \"123 Main St\" -c \"San Francisco\" -s CA -z 94102",
+            "shippo addresses create -n \"Jane Doe\" -a \"456 Oak Ave\" -c \"Los Angeles\" -s CA -z 90001 --validate",
+            "shippo addresses create -n \"ACME Inc\" -a \"789 Business Dr\" -c \"Chicago\" -s IL -z 60601 --company \"ACME Inc\""
+          ],
+          "usage_instructions": "Use to create/save a new address.",
+          "arguments": [],
           "options": [
             {
               "name": "--name",
@@ -333,6 +48,13 @@
               "required": true,
               "help": "Full name",
               "short": "-n"
+            },
+            {
+              "name": "--address",
+              "type": "TEXT",
+              "required": true,
+              "help": "Street address line 1",
+              "short": "-a"
             },
             {
               "name": "--city",
@@ -390,7 +112,7 @@
               "name": "--residential",
               "type": "bool",
               "required": false,
-              "help": "--commercial          Residential address (default: True)",
+              "help": "Residential address (default: True)",
               "default": "residential"
             },
             {
@@ -406,17 +128,108 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific address.",
+          "examples": [
+            "shippo addresses get ADDRESS_ID",
+            "shippo addresses get ADDRESS_ID --table"
+          ],
+          "usage_instructions": "Use to get address details by ID.",
+          "arguments": [
+            {
+              "name": "address_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The address object ID"
             }
           ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved addresses.",
           "examples": [
-            "shippo addresses create -n \"John Doe\" -a \"123 Main St\" -c \"San Francisco\" -s CA -z 94102",
-            "shippo addresses create -n \"Jane Doe\" -a \"456 Oak Ave\" -c \"Los Angeles\" -s CA -z 90001 --validate",
-            "shippo addresses create -n \"ACME Inc\" -a \"789 Business Dr\" -c \"Chicago\" -s IL -z 60601 --company \"ACME Inc\""
+            "shippo addresses list",
+            "shippo addresses list --table",
+            "shippo addresses list --limit 10",
+            "shippo addresses list --properties \"object_id,name,city,state\""
           ],
-          "usage_instructions": "Use to create/save a new address."
+          "usage_instructions": "Use to list saved addresses.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of addresses to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "validate": {
           "help": "Validate an existing address.",
+          "examples": [
+            "shippo addresses validate ADDRESS_ID",
+            "shippo addresses validate ADDRESS_ID --table"
+          ],
+          "usage_instructions": "Use to validate an address.",
           "arguments": [
             {
               "name": "address_id",
@@ -432,22 +245,315 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage Shippo API authentication",
+      "usage_instructions": "Authentication -- login with Shippo API key, logout, check status, refresh, test.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to authenticate with Shippo API key.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing credentials and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Use to clear credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management -- list, get, create, set default, delete profiles.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to delete a profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to get profile details.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use to list profiles.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "usage_instructions": "Use to check auth status.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to test credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage CLI cache",
+      "usage_instructions": "Run `shippo cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `shippo cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "carriers": {
+      "help": "Manage carrier accounts",
+      "usage_instructions": "Carrier accounts -- list available carriers and get carrier details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific carrier account.",
+          "examples": [
+            "shippo carriers get CARRIER_ACCOUNT_ID",
+            "shippo carriers get CARRIER_ACCOUNT_ID --table"
+          ],
+          "usage_instructions": "Use to get carrier details.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The carrier account object ID"
             }
           ],
-          "examples": [
-            "shippo addresses validate ADDRESS_ID",
-            "shippo addresses validate ADDRESS_ID --table"
-          ],
-          "usage_instructions": "Use to validate an address."
-        }
-      },
-      "usage_instructions": "Address management -- list saved addresses, get details, create new, validate addresses."
-    },
-    "shipments": {
-      "help": "Create shipments, view rates",
-      "commands": {
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
-          "help": "List shipments.",
+          "help": "List carrier accounts configured in your Shippo account. Shows all carriers connected to your account (USPS, FedEx, UPS, etc.) with their account IDs and active status.",
+          "examples": [
+            "shippo carriers list",
+            "shippo carriers list --table",
+            "shippo carriers list --carrier fedex",
+            "shippo carriers list --service-levels",
+            "shippo carriers list --properties \"carrier,carrier_name,active\""
+          ],
+          "usage_instructions": "Use to list available carrier accounts.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -460,9 +566,23 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of shipments to return",
+              "help": "Maximum number of accounts to return",
               "short": "-l",
               "default": "100"
+            },
+            {
+              "name": "--carrier",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by carrier (e.g., usps, fedex)",
+              "short": "-c"
+            },
+            {
+              "name": "--service-levels",
+              "type": "bool",
+              "required": false,
+              "help": "Include service levels for each carrier",
+              "short": "-s"
             },
             {
               "name": "--filter",
@@ -477,249 +597,121 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo shipments list",
-            "shippo shipments list --table",
-            "shippo shipments list --limit 10",
-            "shippo shipments list --properties \"object_id,status,address_to.city\""
-          ],
-          "usage_instructions": "Use to list shipments."
-        },
-        "get": {
-          "help": "Get details for a specific shipment (includes rates).",
-          "arguments": [
-            {
-              "name": "shipment_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The shipment object ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--properties",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "shippo shipments get SHIPMENT_ID",
-            "shippo shipments get SHIPMENT_ID --table"
-          ],
-          "usage_instructions": "Use to get shipment details by ID."
-        },
+          ]
+        }
+      }
+    },
+    "labels": {
+      "help": "Purchase and manage shipping labels",
+      "usage_instructions": "Label management -- list purchased labels, get details, create/purchase labels, download label files, print, and void labels.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "create": {
-          "help": "Create a shipment and get rates. Returns a shipment object containing available rates from all carriers.",
-          "options": [
-            {
-              "name": "--from-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender full name (default: FROM_NAME env)"
-            },
-            {
-              "name": "--from-city",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender city (default: FROM_CITY env)"
-            },
-            {
-              "name": "--from-state",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender state code (default: FROM_STATE env)"
-            },
-            {
-              "name": "--from-zip",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender ZIP code (default: FROM_ZIP env)"
-            },
-            {
-              "name": "--from-country",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender country (default: FROM_COUNTRY env or US)"
-            },
-            {
-              "name": "--from-phone",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender phone"
-            },
-            {
-              "name": "--from-email",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sender email"
-            },
-            {
-              "name": "--to-name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipient full name"
-            },
-            {
-              "name": "--to-street2",
-              "type": "TEXT",
-              "required": false,
-              "help": "Recipient address line 2 (apt, suite, unit, etc.)"
-            },
-            {
-              "name": "--to-city",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipient city"
-            },
-            {
-              "name": "--to-state",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipient state code"
-            },
-            {
-              "name": "--to-zip",
-              "type": "TEXT",
-              "required": true,
-              "help": "Recipient ZIP code"
-            },
-            {
-              "name": "--to-country",
-              "type": "TEXT",
-              "required": false,
-              "help": "Recipient country (default: US)",
-              "default": "US"
-            },
-            {
-              "name": "--to-phone",
-              "type": "TEXT",
-              "required": false,
-              "help": "Recipient phone"
-            },
-            {
-              "name": "--to-email",
-              "type": "TEXT",
-              "required": false,
-              "help": "Recipient email"
-            },
-            {
-              "name": "--length",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Parcel length in inches (default: 7)",
-              "default": "7.0"
-            },
-            {
-              "name": "--width",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Parcel width in inches (default: 4)",
-              "default": "4.0"
-            },
-            {
-              "name": "--height",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Parcel height in inches (default: 1)",
-              "default": "1.0"
-            },
-            {
-              "name": "--weight",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Parcel weight in oz (default: 8)",
-              "short": "-w",
-              "default": "8.0"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
+          "help": "Purchase a shipping label from a rate. First create a shipment to get rates, then use a rate ID to purchase a label.",
           "examples": [
-            "shippo shipments create \\",
-            "shippo shipments create \\"
+            "shippo labels create RATE_ID",
+            "shippo labels create RATE_ID --format ZPLII",
+            "shippo labels create RATE_ID --metadata \"Order #12345\""
           ],
-          "usage_instructions": "Use to create a new shipment with from/to addresses and parcel dimensions. Returns rates."
-        }
-      },
-      "usage_instructions": "Shipment management -- list shipments, get details, create new shipments with from/to addresses and parcels."
-    },
-    "rates": {
-      "help": "View and compare shipping rates",
-      "commands": {
-        "list": {
-          "help": "List rates for a shipment.",
-          "arguments": [
-            {
-              "name": "shipment_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The shipment object ID to get rates for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of rates to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo rates list SHIPMENT_ID",
-            "shippo rates list SHIPMENT_ID --table",
-            "shippo rates list SHIPMENT_ID --filter \"provider:usps\"",
-            "shippo rates list SHIPMENT_ID --filter \"service:priority\"",
-            "shippo rates list SHIPMENT_ID --properties \"object_id,provider,amount,estimated_days\""
-          ],
-          "usage_instructions": "Use to list rates for a shipment."
-        },
-        "get": {
-          "help": "Get details for a specific rate.",
+          "usage_instructions": "Use to purchase a shipping label from a rate.",
           "arguments": [
             {
               "name": "rate_id",
               "type": "TEXT",
               "required": true,
-              "help": "The rate object ID"
+              "help": "The rate object ID to purchase"
+            }
+          ],
+          "options": [
+            {
+              "name": "--format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Label format: PDF_4x6, PDF, PNG, ZPLII (default: PDF_4x6)",
+              "short": "-F",
+              "default": "PDF_4x6"
+            },
+            {
+              "name": "--metadata",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional metadata string",
+              "short": "-m"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "download": {
+          "help": "Download a label file.",
+          "examples": [
+            "shippo labels download TRANSACTION_ID",
+            "shippo labels download TRANSACTION_ID -o my_label.pdf"
+          ],
+          "usage_instructions": "Use to download a label file.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The transaction/label object ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: label_<tracking>.pdf)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific label (transaction).",
+          "examples": [
+            "shippo labels get TRANSACTION_ID",
+            "shippo labels get TRANSACTION_ID --table"
+          ],
+          "usage_instructions": "Use to get label details by ID.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The transaction/label object ID"
             }
           ],
           "options": [
@@ -736,16 +728,163 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List purchased labels (transactions).",
+          "examples": [
+            "shippo labels list",
+            "shippo labels list --table",
+            "shippo labels list --filter \"status:success\"",
+            "shippo labels list --filter \"tracking_status:delivered\"",
+            "shippo labels list --properties \"object_id,tracking_number,status,label_url\""
+          ],
+          "usage_instructions": "Use to list purchased labels.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of labels to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "print": {
+          "help": "Download and print a shipping label. Downloads the label PDF and sends it to the specified printer.",
+          "examples": [
+            "shippo labels print d3f43baa320949e99402777b28a8d888",
+            "shippo labels print 9200190396055700531869",
+            "shippo labels print d3f43baa320949e99402777b28a8d888 -p my_printer",
+            "shippo labels print d3f43baa320949e99402777b28a8d888 -T 60"
+          ],
+          "usage_instructions": "Use to print a label.",
+          "arguments": [
+            {
+              "name": "label_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Transaction ID or tracking number"
             }
           ],
-          "examples": [
-            "shippo rates get RATE_ID",
-            "shippo rates get RATE_ID --table"
-          ],
-          "usage_instructions": "Use to get rate details by ID."
+          "options": [
+            {
+              "name": "--printer",
+              "type": "TEXT",
+              "required": false,
+              "help": "Printer name to use",
+              "short": "-p",
+              "default": "Zebra_LP2844"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Seconds to wait for print job to complete",
+              "short": "-T",
+              "default": "90"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
+        "void": {
+          "help": "Void (refund) a shipping label. Note: Refunds are not instant. The status will be QUEUED until processed.",
+          "examples": [
+            "shippo labels void TRANSACTION_ID",
+            "shippo labels void TRANSACTION_ID --table"
+          ],
+          "usage_instructions": "Use to void/cancel a label.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The transaction/label object ID to void"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "rates": {
+      "help": "View and compare shipping rates",
+      "usage_instructions": "Rate comparison -- list rates for a shipment, get rate details, estimate rates without creating a shipment.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "estimate": {
           "help": "Estimate shipping rates without creating a label. Creates a temporary shipment to retrieve available rates. Uses FROM address from environment variables (FROM_NAME, FROM_STREET1, FROM_CITY, FROM_STATE, FROM_ZIP, FROM_COUNTRY). For international destinations (non-US), customs information is automatically generated. You can override the defaults with --description and --value. Weight is in OUNCES (oz). Common conversions: 4oz = 0.25 lbs, 8oz = 0.5 lbs, 16oz = 1 lb Dimensions are in INCHES. Defaults: 7\" x 4\" x 1\"",
+          "examples": [
+            "shippo rates estimate --weight 8 --to-country US --to-zip 90210",
+            "shippo rates estimate --weight 32 --to-country US --to-zip 90210 \\",
+            "shippo rates estimate --weight 4 --to-country FR",
+            "shippo rates estimate --weight 8 --to-country FR --value 50",
+            "shippo rates estimate --weight 4 --to-country FR --filter \"provider:usps\""
+          ],
+          "usage_instructions": "Use to estimate rates without creating a shipment.",
+          "arguments": [],
           "options": [
             {
               "name": "--weight",
@@ -836,207 +975,28 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
               "short": "-f"
-            }
-          ],
-          "examples": [
-            "shippo rates estimate --weight 8 --to-country US --to-zip 90210",
-            "shippo rates estimate --weight 32 --to-country US --to-zip 90210 \\",
-            "shippo rates estimate --weight 4 --to-country FR",
-            "shippo rates estimate --weight 8 --to-country FR --value 50",
-            "shippo rates estimate --weight 4 --to-country FR --filter \"provider:usps\""
-          ],
-          "usage_instructions": "Use to estimate rates without creating a shipment."
-        }
-      },
-      "usage_instructions": "Rate comparison -- list rates for a shipment, get rate details, estimate rates without creating a shipment."
-    },
-    "labels": {
-      "help": "Purchase and manage shipping labels",
-      "commands": {
-        "list": {
-          "help": "List purchased labels (transactions).",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of labels to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "shippo labels list",
-            "shippo labels list --table",
-            "shippo labels list --filter \"status:success\"",
-            "shippo labels list --filter \"tracking_status:delivered\"",
-            "shippo labels list --properties \"object_id,tracking_number,status,label_url\""
-          ],
-          "usage_instructions": "Use to list purchased labels."
+          ]
         },
         "get": {
-          "help": "Get details for a specific label (transaction).",
-          "arguments": [
-            {
-              "name": "transaction_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The transaction/label object ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
+          "help": "Get details for a specific rate.",
           "examples": [
-            "shippo labels get TRANSACTION_ID",
-            "shippo labels get TRANSACTION_ID --table"
+            "shippo rates get RATE_ID",
+            "shippo rates get RATE_ID --table"
           ],
-          "usage_instructions": "Use to get label details by ID."
-        },
-        "create": {
-          "help": "Purchase a shipping label from a rate. First create a shipment to get rates, then use a rate ID to purchase a label.",
+          "usage_instructions": "Use to get rate details by ID.",
           "arguments": [
             {
               "name": "rate_id",
               "type": "TEXT",
               "required": true,
-              "help": "The rate object ID to purchase"
-            }
-          ],
-          "options": [
-            {
-              "name": "--format",
-              "type": "TEXT",
-              "required": false,
-              "help": "Label format: PDF_4x6, PDF, PNG, ZPLII (default: PDF_4x6)",
-              "short": "-F",
-              "default": "PDF_4x6"
-            },
-            {
-              "name": "--metadata",
-              "type": "TEXT",
-              "required": false,
-              "help": "Optional metadata string",
-              "short": "-m"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "shippo labels create RATE_ID",
-            "shippo labels create RATE_ID --format ZPLII",
-            "shippo labels create RATE_ID --metadata \"Order #12345\""
-          ],
-          "usage_instructions": "Use to purchase a shipping label from a rate."
-        },
-        "download": {
-          "help": "Download a label file.",
-          "arguments": [
-            {
-              "name": "transaction_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The transaction/label object ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--output",
-              "type": "TEXT",
-              "required": false,
-              "help": "Output file path (default: label_<tracking>.pdf)",
-              "short": "-o"
-            }
-          ],
-          "examples": [
-            "shippo labels download TRANSACTION_ID",
-            "shippo labels download TRANSACTION_ID -o my_label.pdf"
-          ],
-          "usage_instructions": "Use to download a label file."
-        },
-        "print": {
-          "help": "Download and print a shipping label. Downloads the label PDF and sends it to the specified printer.",
-          "arguments": [
-            {
-              "name": "label_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Transaction ID or tracking number"
-            }
-          ],
-          "options": [
-            {
-              "name": "--printer",
-              "type": "TEXT",
-              "required": false,
-              "help": "Printer name to use",
-              "short": "-p",
-              "default": "Zebra_LP2844"
-            },
-            {
-              "name": "--timeout",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Seconds to wait for print job to complete",
-              "short": "-T",
-              "default": "90"
-            }
-          ],
-          "examples": [
-            "shippo labels print d3f43baa320949e99402777b28a8d888",
-            "shippo labels print 9200190396055700531869",
-            "shippo labels print d3f43baa320949e99402777b28a8d888 -p my_printer",
-            "shippo labels print d3f43baa320949e99402777b28a8d888 -T 60"
-          ],
-          "usage_instructions": "Use to print a label."
-        },
-        "void": {
-          "help": "Void (refund) a shipping label. Note: Refunds are not instant. The status will be QUEUED until processed.",
-          "arguments": [
-            {
-              "name": "transaction_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The transaction/label object ID to void"
+              "help": "The rate object ID"
             }
           ],
           "options": [
@@ -1046,22 +1006,40 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "shippo labels void TRANSACTION_ID",
-            "shippo labels void TRANSACTION_ID --table"
-          ],
-          "usage_instructions": "Use to void/cancel a label."
-        }
-      },
-      "usage_instructions": "Label management -- list purchased labels, get details, create/purchase labels, download label files, print, and void labels."
-    },
-    "tracking": {
-      "help": "Track shipments",
-      "commands": {
+          ]
+        },
         "list": {
-          "help": "List tracking numbers from purchased labels. This retrieves tracking numbers from your label transactions.",
+          "help": "List rates for a shipment.",
+          "examples": [
+            "shippo rates list SHIPMENT_ID",
+            "shippo rates list SHIPMENT_ID --table",
+            "shippo rates list SHIPMENT_ID --filter \"provider:usps\"",
+            "shippo rates list SHIPMENT_ID --filter \"service:priority\"",
+            "shippo rates list SHIPMENT_ID --properties \"object_id,provider,amount,estimated_days\""
+          ],
+          "usage_instructions": "Use to list rates for a shipment.",
+          "arguments": [
+            {
+              "name": "shipment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The shipment object ID to get rates for"
+            }
+          ],
           "options": [
             {
               "name": "--table",
@@ -1074,7 +1052,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of tracking numbers to return",
+              "help": "Maximum number of rates to return",
               "short": "-l",
               "default": "100"
             },
@@ -1091,18 +1069,295 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "shipments": {
+      "help": "Create shipments, view rates",
+      "usage_instructions": "Shipment management -- list shipments, get details, create new shipments with from/to addresses and parcels.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a shipment and get rates. Returns a shipment object containing available rates from all carriers.",
           "examples": [
-            "shippo tracking list",
-            "shippo tracking list --table",
-            "shippo tracking list --limit 10",
-            "shippo tracking list --filter \"tracking_status:eq:DELIVERED\""
+            "shippo shipments create \\",
+            "shippo shipments create \\"
           ],
-          "usage_instructions": "Use to list tracked packages."
+          "usage_instructions": "Use to create a new shipment with from/to addresses and parcel dimensions. Returns rates.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--from-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender full name (default: FROM_NAME env)"
+            },
+            {
+              "name": "--from-address",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender street address (default: FROM_STREET1 env)"
+            },
+            {
+              "name": "--from-city",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender city (default: FROM_CITY env)"
+            },
+            {
+              "name": "--from-state",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender state code (default: FROM_STATE env)"
+            },
+            {
+              "name": "--from-zip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender ZIP code (default: FROM_ZIP env)"
+            },
+            {
+              "name": "--from-country",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender country (default: FROM_COUNTRY env or US)"
+            },
+            {
+              "name": "--from-phone",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender phone"
+            },
+            {
+              "name": "--from-email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sender email"
+            },
+            {
+              "name": "--to-name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient full name"
+            },
+            {
+              "name": "--to-address",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient street address"
+            },
+            {
+              "name": "--to-street2",
+              "type": "TEXT",
+              "required": false,
+              "help": "Recipient address line 2 (apt, suite, unit, etc.)"
+            },
+            {
+              "name": "--to-city",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient city"
+            },
+            {
+              "name": "--to-state",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient state code"
+            },
+            {
+              "name": "--to-zip",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recipient ZIP code"
+            },
+            {
+              "name": "--to-country",
+              "type": "TEXT",
+              "required": false,
+              "help": "Recipient country (default: US)",
+              "default": "US"
+            },
+            {
+              "name": "--to-phone",
+              "type": "TEXT",
+              "required": false,
+              "help": "Recipient phone"
+            },
+            {
+              "name": "--to-email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Recipient email"
+            },
+            {
+              "name": "--length",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Parcel length in inches (default: 7)",
+              "default": "7.0"
+            },
+            {
+              "name": "--width",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Parcel width in inches (default: 4)",
+              "default": "4.0"
+            },
+            {
+              "name": "--height",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Parcel height in inches (default: 1)",
+              "default": "1.0"
+            },
+            {
+              "name": "--weight",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Parcel weight in oz (default: 8)",
+              "short": "-w",
+              "default": "8.0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "get": {
+          "help": "Get details for a specific shipment (includes rates).",
+          "examples": [
+            "shippo shipments get SHIPMENT_ID",
+            "shippo shipments get SHIPMENT_ID --table"
+          ],
+          "usage_instructions": "Use to get shipment details by ID.",
+          "arguments": [
+            {
+              "name": "shipment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The shipment object ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List shipments.",
+          "examples": [
+            "shippo shipments list",
+            "shippo shipments list --table",
+            "shippo shipments list --limit 10",
+            "shippo shipments list --properties \"object_id,status,address_to.city\""
+          ],
+          "usage_instructions": "Use to list shipments.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of shipments to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tracking": {
+      "help": "Track shipments",
+      "usage_instructions": "Package tracking -- list tracked packages, get tracking details, register a tracking number for updates.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
           "help": "Get tracking information for a shipment.",
+          "examples": [
+            "shippo tracking get 9400111899223033005011",
+            "shippo tracking get 9400111899223033005011 --carrier usps",
+            "shippo tracking get 1Z999AA10123456784 --carrier ups --table"
+          ],
+          "usage_instructions": "Use to get tracking details.",
           "arguments": [
             {
               "name": "tracking_number",
@@ -1133,17 +1388,71 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "list": {
+          "help": "List tracking numbers from purchased labels. This retrieves tracking numbers from your label transactions.",
           "examples": [
-            "shippo tracking get 9400111899223033005011",
-            "shippo tracking get 9400111899223033005011 --carrier usps",
-            "shippo tracking get 1Z999AA10123456784 --carrier ups --table"
+            "shippo tracking list",
+            "shippo tracking list --table",
+            "shippo tracking list --limit 10",
+            "shippo tracking list --filter \"tracking_status:eq:DELIVERED\""
           ],
-          "usage_instructions": "Use to get tracking details."
+          "usage_instructions": "Use to list tracked packages.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of tracking numbers to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "register": {
           "help": "Register a tracking number for webhook updates. Use this to start receiving tracking updates via Shippo webhooks.",
+          "examples": [
+            "shippo tracking register 9400111899223033005011",
+            "shippo tracking register 9400111899223033005011 --carrier usps",
+            "shippo tracking register 1Z999AA10123456784 --carrier ups --metadata \"Order #123\""
+          ],
+          "usage_instructions": "Use to register a tracking number for webhook updates.",
           "arguments": [
             {
               "name": "tracking_number",
@@ -1174,111 +1483,16 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "shippo tracking register 9400111899223033005011",
-            "shippo tracking register 9400111899223033005011 --carrier usps",
-            "shippo tracking register 1Z999AA10123456784 --carrier ups --metadata \"Order #123\""
-          ],
-          "usage_instructions": "Use to register a tracking number for webhook updates."
+          ]
         }
-      },
-      "usage_instructions": "Package tracking -- list tracked packages, get tracking details, register a tracking number for updates."
-    },
-    "carriers": {
-      "help": "Manage carrier accounts",
-      "commands": {
-        "list": {
-          "help": "List carrier accounts configured in your Shippo account. Shows all carriers connected to your account (USPS, FedEx, UPS, etc.) with their account IDs and active status.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of accounts to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--carrier",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by carrier (e.g., usps, fedex)",
-              "short": "-c"
-            },
-            {
-              "name": "--service-levels",
-              "type": "bool",
-              "required": false,
-              "help": "Include service levels for each carrier",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo carriers list",
-            "shippo carriers list --table",
-            "shippo carriers list --carrier fedex",
-            "shippo carriers list --service-levels",
-            "shippo carriers list --properties \"carrier,carrier_name,active\""
-          ],
-          "usage_instructions": "Use to list available carrier accounts."
-        },
-        "get": {
-          "help": "Get details for a specific carrier account.",
-          "arguments": [
-            {
-              "name": "account_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The carrier account object ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "examples": [
-            "shippo carriers get CARRIER_ACCOUNT_ID",
-            "shippo carriers get CARRIER_ACCOUNT_ID --table"
-          ],
-          "usage_instructions": "Use to get carrier details."
-        }
-      },
-      "usage_instructions": "Carrier accounts -- list available carriers and get carrier details."
+      }
     }
   },
   "usage_instructions": "Use for shipping operations -- create USPS labels, compare rates, track packages via Shippo API. Commands follow `shippo <group> <action>` pattern. Workflow: create address -> create shipment -> view rates -> purchase label -> track. Requires API key via `shippo auth login`."

@@ -1,7 +1,7 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp), channel management (Data API v3), and browser-session community posting",
-  "discovered_at": "2026-06-08T16:33:58Z",
+  "discovered_at": "2026-06-20T19:57:38Z",
   "total_commands": 25,
   "global_options": [
     {
@@ -529,7 +529,7 @@
                   "name": "--made-for-kids",
                   "type": "bool",
                   "required": false,
-                  "help": "--not-made-for-kids                               Mark video as made for kids",
+                  "help": "Mark video as made for kids",
                   "default": "not-made-for-kids"
                 },
                 {
@@ -753,7 +753,7 @@
               "name": "--auto-sub",
               "type": "bool",
               "required": false,
-              "help": "--no-auto-sub          Download auto-generated subtitles",
+              "help": "Download auto-generated subtitles",
               "default": "auto-sub"
             },
             {

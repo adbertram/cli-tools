@@ -32,7 +32,7 @@ awin <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `awin` command.** It contains complete command syntax, arguments, options, and usage instructions.
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `awin` command.** It contains complete command syntax, arguments, options, and usage instructions.
 </principle>
 
 <principle name="Authentication">

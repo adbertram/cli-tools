@@ -1,7 +1,7 @@
 {
   "tool": "kick",
   "description": "CLI interface for Kick API",
-  "discovered_at": "2026-05-06T15:18:12.114137+00:00",
+  "discovered_at": "2026-06-20T19:49:39Z",
   "total_commands": 36,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Kick API authentication",
+      "usage_instructions": "OAuth2 authentication for Kick API. Use `auth login` to authenticate, `auth status` to verify, `auth refresh` to renew tokens.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Authenticate with Kick via OAuth2. Opens browser for authorization.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Authenticate with Kick via OAuth2. Opens browser for authorization."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Clear stored Kick credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Clear stored Kick credentials."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Run `kick auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `kick auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `kick auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `kick auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Run `kick auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Check if Kick authentication is active and valid. Use --table/-t for formatted output.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Check if Kick authentication is active and valid. Use --table/-t for formatted output."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Refresh the OAuth access token using stored refresh token."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `kick auth test --help` for exact arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,14 +237,672 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `kick cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `kick cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "categories": {
+      "help": "Manage Kick categories",
+      "usage_instructions": "View Kick categories for organizing transactions.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific category.",
+          "examples": [
+            "kick categories get 01956661-459c-74c3-94d8-b52a43fbae24",
+            "kick categories get 01956661-459c-74c3-94d8-b52a43fbae24 --table"
           ],
-          "usage_instructions": "Run `kick auth test --help` for exact arguments and options."
+          "usage_instructions": "Get details for a specific category. CATEGORY_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "category_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The category UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
-        "profiles": {
-          "help": "Manage authentication profiles",
+        "list": {
+          "help": "List all categories.",
+          "examples": [
+            "kick categories list",
+            "kick categories list --table",
+            "kick categories list --parents-only",
+            "kick categories list --filter \"label:like:%Income%\"",
+            "kick categories list --filter \"isBusiness:true\""
+          ],
+          "usage_instructions": "List all categories. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of categories to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--parents-only",
+              "type": "bool",
+              "required": false,
+              "help": "Only show parent categories (no subcategories)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "clients": {
+      "help": "Manage Kick clients",
+      "usage_instructions": "Manage Kick clients/customers.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a new client.",
+          "examples": [
+            "kick clients create \"Acme Corporation\"",
+            "kick clients create \"New Client\" --table"
+          ],
+          "usage_instructions": "Create a new client. Pass client details as options.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the client"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific client.",
+          "examples": [
+            "kick clients get 019b7021-bfa4-7a86-b46f-304afb384221",
+            "kick clients get 019b7021-bfa4-7a86-b46f-304afb384221 --table"
+          ],
+          "usage_instructions": "Get client details. CLIENT_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "client_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The client UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List clients. Filter by name using API-level search, or use client-side filtering for other fields.",
+          "examples": [
+            "kick clients list",
+            "kick clients list --table",
+            "kick clients list --filter \"name:Acme\"",
+            "kick clients list --filter \"name:like:%test%\"",
+            "kick clients list --filter \"city:Chicago\"",
+            "kick clients list --limit 100"
+          ],
+          "usage_instructions": "List all clients. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of clients to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort order (name_asc, name_desc)",
+              "default": "name_asc"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "entities": {
+      "help": "Manage Kick entities",
+      "usage_instructions": "Manage Kick entities (companies/organizations).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific entity.",
+          "examples": [
+            "kick entities get 16044",
+            "kick entities get 16044 --table"
+          ],
+          "usage_instructions": "Get entity details. ENTITY_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "entity_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The entity ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--workspace-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace UUID (uses default if not provided)",
+              "short": "-w"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all entities in a workspace. Entities are business or personal units used to organize transactions.",
+          "examples": [
+            "kick entities list",
+            "kick entities list --table",
+            "kick entities list --filter \"isBusiness:true\""
+          ],
+          "usage_instructions": "List all entities. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of entities to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--workspace-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace UUID (uses default if not provided)",
+              "short": "-w"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "integrations": {
+      "help": "Manage Kick integrations",
+      "usage_instructions": "Manage Kick integrations with external services.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific integration.",
+          "examples": [
+            "kick integrations get 8531",
+            "kick integrations get 8531 --table"
+          ],
+          "usage_instructions": "Get integration details. INTEGRATION_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "integration_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The integration ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all integrations. Integrations represent linked financial accounts such as banks (via Plaid), PayPal, Stripe, and other payment processors.",
+          "examples": [
+            "kick integrations list",
+            "kick integrations list --table",
+            "kick integrations list --provider Plaid --table"
+          ],
+          "usage_instructions": "List all integrations. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of integrations to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--provider",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by provider (e.g., Plaid, Stripe)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "rule-groups": {
+      "help": "Manage Kick rule groups",
+      "usage_instructions": "Manage rule groups for automatic transaction categorization. Includes nested `rules` subgroup.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add": {
+          "help": "Create a new rule group.",
+          "examples": [
+            "kick rule-groups add \"My Rules\"",
+            "kick rule-groups add \"Accounting Rules\" --type accounting --icon bank",
+            "kick rule-groups add \"Transfer Rules\" --type transfer --order 5"
+          ],
+          "usage_instructions": "Create a new rule group. Pass configuration as options.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name for the rule group"
+            }
+          ],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Rule group type (transaction, accounting, transfer, split)",
+              "short": "-t",
+              "default": "transaction"
+            },
+            {
+              "name": "--icon",
+              "type": "TEXT",
+              "required": false,
+              "help": "Icon identifier (briefcase, bank, etc.)",
+              "short": "-i",
+              "default": "briefcase"
+            },
+            {
+              "name": "--order",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Order position (auto-calculated if not provided)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a rule group.",
+          "examples": [
+            "kick rule-groups delete 019b6ff1-0d3b-76ad-8063-22dd79ef4402",
+            "kick rule-groups delete 019b6ff1-0d3b-76ad-8063-22dd79ef4402 --force"
+          ],
+          "usage_instructions": "Delete a rule group. RULE_GROUP_ID is required (positional).",
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The rule group UUID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific rule group.",
+          "examples": [
+            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a",
+            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a --table",
+            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a --no-rules"
+          ],
+          "usage_instructions": "Get rule group details. RULE_GROUP_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The rule group UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--include-rules",
+              "type": "bool",
+              "required": false,
+              "help": "Include rules in output",
+              "default": "include-rules"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all rule groups.",
+          "examples": [
+            "kick rule-groups list",
+            "kick rule-groups list --table",
+            "kick rule-groups list --type all",
+            "kick rule-groups list --include-rules"
+          ],
+          "usage_instructions": "List all rule groups. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of rule groups to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by rule type (transaction, accounting, transfer, split, all)",
+              "default": "transaction"
+            },
+            {
+              "name": "--include-rules",
+              "type": "bool",
+              "required": false,
+              "help": "Include rules in output",
+              "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "rules": {
+          "help": "Manage rules within rule groups",
+          "usage_instructions": "Nested subgroup for managing individual rules within rule groups.",
+          "arguments": [],
+          "options": [],
           "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
+            "actions": {
+              "help": "List available rule action types.",
+              "examples": [
+                "kick rule-groups rules actions",
+                "kick rule-groups rules actions --table"
+              ],
+              "usage_instructions": "List available rule action types. Notable options: --table/-t. Example: `kick rule-groups rules actions`.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -143,39 +912,71 @@
                   "short": "-t"
                 },
                 {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
+                  "name": "--profile",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
+                  "help": "Auth profile name"
                 }
-              ],
-              "usage_instructions": "Run `kick auth profiles list --help` for exact arguments and options."
+              ]
             },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
+            "add": {
+              "help": "Add a new rule to a rule group.",
+              "examples": [
+                "kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"",
+                "kick rule-groups rules add -g 43b5276c-... -c \"Amazon\" -e \"My Business\" --category \"Shopping\" --apply-existing"
+              ],
+              "usage_instructions": "Add a new rule to a rule group. Notable options: --group/-g, --counterparty/-c, --entity/-e, --category, --apply-existing. Example: `kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"`.",
+              "arguments": [],
+              "options": [
                 {
-                  "name": "name",
+                  "name": "--group",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to get details for"
+                  "help": "Rule group UUID to add the rule to",
+                  "short": "-g"
+                },
+                {
+                  "name": "--counterparty",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Counterparty name to match",
+                  "short": "-c"
+                },
+                {
+                  "name": "--entity",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Entity name or ID to match",
+                  "short": "-e"
+                },
+                {
+                  "name": "--category",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Category name or ID to set"
+                },
+                {
+                  "name": "--apply-existing",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Apply rule to existing transactions"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
+              ]
+            },
+            "conditions": {
+              "help": "List available rule condition types.",
+              "examples": [
+                "kick rule-groups rules conditions",
+                "kick rule-groups rules conditions --table"
               ],
+              "usage_instructions": "List available rule condition types. Notable options: --table/-t. Example: `kick rule-groups rules conditions`.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -183,42 +984,28 @@
                   "required": false,
                   "help": "Display as table",
                   "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `kick auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
+                },
                 {
-                  "name": "name",
+                  "name": "--profile",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
+                  "required": false,
+                  "help": "Auth profile name"
                 }
-              ],
-              "usage_instructions": "Run `kick auth profiles create --help` for exact arguments and options."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Run `kick auth profiles set-default --help` for exact arguments and options."
+              ]
             },
             "delete": {
-              "help": "Delete a profile and its data.",
+              "help": "Delete a rule.",
+              "examples": [
+                "kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032",
+                "kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032 --force"
+              ],
+              "usage_instructions": "Delete a rule. Required arguments: rule_id. Notable options: --force/-f. Example: `kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032`.",
               "arguments": [
                 {
-                  "name": "name",
+                  "name": "rule_id",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Profile name to delete"
+                  "help": "The rule UUID to delete"
                 }
               ],
               "options": [
@@ -226,23 +1013,176 @@
                   "name": "--force",
                   "type": "bool",
                   "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
+                  "help": "Skip confirmation prompt",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
                 }
+              ]
+            },
+            "list": {
+              "help": "List all rules across rule groups.",
+              "examples": [
+                "kick rule-groups rules list",
+                "kick rule-groups rules list --table",
+                "kick rule-groups rules list --group 43b5276c-57a5-4c5f-bf76-c71675d8662a",
+                "kick rule-groups rules list --type all"
               ],
-              "usage_instructions": "Run `kick auth profiles delete --help` for exact arguments and options."
+              "usage_instructions": "List all rules across rule groups. Notable options: --group/-g, --table/-t, --type. Example: `kick rule-groups rules list`.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--group",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by rule group UUID",
+                  "short": "-g"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by rule group type (transaction, accounting, transfer, split, all)",
+                  "default": "transaction"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             }
-          },
-          "usage_instructions": "Run `kick auth profiles --help` for exact arguments and options."
+          }
         }
-      },
-      "usage_instructions": "OAuth2 authentication for Kick API. Use `auth login` to authenticate, `auth status` to verify, `auth refresh` to renew tokens."
+      }
+    },
+    "statistics": {
+      "help": "Get Kick transaction statistics",
+      "usage_instructions": "View transaction statistics and summaries.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get transaction statistics for a workspace. Returns aggregate statistics including total, cash in/out, average, and count.",
+          "examples": [
+            "kick statistics get",
+            "kick statistics get --table",
+            "kick statistics get --entity-id 16044"
+          ],
+          "usage_instructions": "Get transaction statistics. Use --table/-t for formatted output.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--workspace-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Workspace UUID (uses default if not provided)",
+              "short": "-w"
+            },
+            {
+              "name": "--entity-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter by entity ID",
+              "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
     },
     "transactions": {
       "help": "Manage Kick transactions",
+      "usage_instructions": "Manage financial transactions -- list, search, get details, and update transactions.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific transaction.",
+          "examples": [
+            "kick transactions get 12345",
+            "kick transactions get 12345 --table"
+          ],
+          "usage_instructions": "Get details for a specific transaction. TRANSACTION_ID is required (positional). Use --table/-t.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "The transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display summary as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List transactions. Client-Side Filtering: --from/--to: Filter by date range (YYYY-MM-DD format) --status: Filter by transaction status --account: Filter by account name (case-insensitive partial match) --account-id: Filter by financial account ID (exact match)",
+          "examples": [
+            "kick transactions list",
+            "kick transactions list --table",
+            "kick transactions list --limit 50",
+            "kick transactions list --entity-id 16044",
+            "kick transactions list --status pending --table",
+            "kick transactions list --status completed",
+            "kick transactions list --sort-field date --sort-order ASC",
+            "kick transactions list --from 2025-12-01 --to 2025-12-31 --table",
+            "kick transactions list --from 2025-01-01 --table",
+            "kick transactions list --account \"ATA Biz Checking\" --table",
+            "kick transactions list --account-id 17334 --table"
+          ],
+          "usage_instructions": "List transactions. Use --table/-t, --filter/-f, --limit/-l, --properties/-p for output control.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -326,25 +1266,27 @@
               "type": "INTEGER",
               "required": false,
               "help": "Filter by financial account ID (exact match)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "kick transactions list",
-            "kick transactions list --table",
-            "kick transactions list --limit 50",
-            "kick transactions list --entity-id 16044",
-            "kick transactions list --status pending --table",
-            "kick transactions list --status completed",
-            "kick transactions list --sort-field date --sort-order ASC",
-            "kick transactions list --from 2025-12-01 --to 2025-12-31 --table",
-            "kick transactions list --from 2025-01-01 --table",
-            "kick transactions list --account \"ATA Biz Checking\" --table",
-            "kick transactions list --account-id 17334 --table"
-          ],
-          "usage_instructions": "List transactions. Use --table/-t, --filter/-f, --limit/-l, --properties/-p for output control."
+          ]
         },
         "search": {
           "help": "Search transactions by text in description fields. Searches through displayDescription, bankDescription, category label, and counterparty name fields.",
+          "examples": [
+            "kick transactions search \"Cursor\"",
+            "kick transactions search \"amazon\" --table",
+            "kick transactions search \"stripe\" --limit 50",
+            "kick transactions search \"payment\" --filter \"direction:out\"",
+            "kick transactions search \"AWS\" --case-sensitive",
+            "kick transactions search \"cursor\" --account \"ATA Biz Checking\"",
+            "kick transactions search \"cursor\" --account-id 17334"
+          ],
+          "usage_instructions": "Search transactions by keyword. QUERY is required (positional). Use --table/-t, --limit/-l.",
           "arguments": [
             {
               "name": "query",
@@ -402,46 +1344,25 @@
               "type": "INTEGER",
               "required": false,
               "help": "Filter by financial account ID (exact match)"
-            }
-          ],
-          "examples": [
-            "kick transactions search \"Cursor\"",
-            "kick transactions search \"amazon\" --table",
-            "kick transactions search \"stripe\" --limit 50",
-            "kick transactions search \"payment\" --filter \"direction:out\"",
-            "kick transactions search \"AWS\" --case-sensitive",
-            "kick transactions search \"cursor\" --account \"ATA Biz Checking\"",
-            "kick transactions search \"cursor\" --account-id 17334"
-          ],
-          "usage_instructions": "Search transactions by keyword. QUERY is required (positional). Use --table/-t, --limit/-l."
-        },
-        "get": {
-          "help": "Get details for a specific transaction.",
-          "arguments": [
+            },
             {
-              "name": "transaction_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The transaction ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "kick transactions get 12345",
-            "kick transactions get 12345 --table"
-          ],
-          "usage_instructions": "Get details for a specific transaction. TRANSACTION_ID is required (positional). Use --table/-t."
+          ]
         },
         "update": {
           "help": "Update a transaction. At least one update option must be provided.",
+          "examples": [
+            "kick transactions update 12345 --category-id 01956661-459c-74c3-94d8-b52a43fbae24",
+            "kick transactions update 12345 --counterparty-id 019129dd-96c6-7747-ba23-3c1b5b2066e6",
+            "kick transactions update 12345 --account-id 019493a3-193e-790f-9f0c-c8c0fc21383b",
+            "kick transactions update 12345 --memo \"Payment for invoice #123\"",
+            "kick transactions update 12345 -c 01956661-459c-74c3-94d8-b52a43fbae24 -m \"Note\" --table"
+          ],
+          "usage_instructions": "Update a transaction. TRANSACTION_ID is required (positional). Pass update fields as options.",
           "arguments": [
             {
               "name": "transaction_id",
@@ -485,79 +1406,44 @@
               "required": false,
               "help": "Display result as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "kick transactions update 12345 --category-id 01956661-459c-74c3-94d8-b52a43fbae24",
-            "kick transactions update 12345 --counterparty-id 019129dd-96c6-7747-ba23-3c1b5b2066e6",
-            "kick transactions update 12345 --account-id 019493a3-193e-790f-9f0c-c8c0fc21383b",
-            "kick transactions update 12345 --memo \"Payment for invoice #123\"",
-            "kick transactions update 12345 -c 01956661-459c-74c3-94d8-b52a43fbae24 -m \"Note\" --table"
-          ],
-          "usage_instructions": "Update a transaction. TRANSACTION_ID is required (positional). Pass update fields as options."
+          ]
         }
-      },
-      "usage_instructions": "Manage financial transactions -- list, search, get details, and update transactions."
+      }
     },
-    "categories": {
-      "help": "Manage Kick categories",
+    "workspaces": {
+      "help": "Manage Kick workspaces",
+      "usage_instructions": "Manage Kick workspaces.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List all categories.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of categories to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display",
-              "short": "-p"
-            },
-            {
-              "name": "--parents-only",
-              "type": "bool",
-              "required": false,
-              "help": "Only show parent categories (no subcategories)"
-            }
-          ],
-          "examples": [
-            "kick categories list",
-            "kick categories list --table",
-            "kick categories list --parents-only",
-            "kick categories list --filter \"label:like:%Income%\"",
-            "kick categories list --filter \"isBusiness:true\""
-          ],
-          "usage_instructions": "List all categories. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
         "get": {
-          "help": "Get details for a specific category.",
+          "help": "Get details for a specific workspace.",
+          "examples": [
+            "kick workspaces get",
+            "kick workspaces get 019409a4-f7bd-7282-8325-3a417b0c7cd3",
+            "kick workspaces get --table"
+          ],
+          "usage_instructions": "Get workspace details. WORKSPACE_ID is required (positional). Use --table/-t.",
           "arguments": [
             {
-              "name": "category_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The category UUID"
+              "name": "workspace_id",
+              "type": "WORKSPACE_ID",
+              "required": false,
+              "help": "Workspace UUID (uses default if not provided)"
             }
           ],
           "options": [
@@ -567,22 +1453,23 @@
               "required": false,
               "help": "Display summary as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "kick categories get 01956661-459c-74c3-94d8-b52a43fbae24",
-            "kick categories get 01956661-459c-74c3-94d8-b52a43fbae24 --table"
-          ],
-          "usage_instructions": "Get details for a specific category. CATEGORY_ID is required (positional). Use --table/-t."
-        }
-      },
-      "usage_instructions": "View Kick categories for organizing transactions."
-    },
-    "workspaces": {
-      "help": "Manage Kick workspaces",
-      "commands": {
+          ]
+        },
         "list": {
           "help": "List all workspaces.",
+          "examples": [
+            "kick workspaces list",
+            "kick workspaces list --table"
+          ],
+          "usage_instructions": "List all workspaces. Use --table/-t, --filter/-f, --limit/-l, --properties/-p.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -612,660 +1499,16 @@
               "required": false,
               "help": "Comma-separated list of properties to display",
               "short": "-p"
-            }
-          ],
-          "examples": [
-            "kick workspaces list",
-            "kick workspaces list --table"
-          ],
-          "usage_instructions": "List all workspaces. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
-        "get": {
-          "help": "Get details for a specific workspace.",
-          "arguments": [
+            },
             {
-              "name": "workspace_id",
-              "type": "WORKSPACE_ID",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Workspace UUID (uses default if not provided)"
+              "help": "Auth profile name"
             }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "kick workspaces get",
-            "kick workspaces get 019409a4-f7bd-7282-8325-3a417b0c7cd3",
-            "kick workspaces get --table"
-          ],
-          "usage_instructions": "Get workspace details. WORKSPACE_ID is required (positional). Use --table/-t."
+          ]
         }
-      },
-      "usage_instructions": "Manage Kick workspaces."
-    },
-    "entities": {
-      "help": "Manage Kick entities",
-      "commands": {
-        "list": {
-          "help": "List all entities in a workspace. Entities are business or personal units used to organize transactions.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of entities to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display",
-              "short": "-p"
-            },
-            {
-              "name": "--workspace-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Workspace UUID (uses default if not provided)",
-              "short": "-w"
-            }
-          ],
-          "examples": [
-            "kick entities list",
-            "kick entities list --table",
-            "kick entities list --filter \"isBusiness:true\""
-          ],
-          "usage_instructions": "List all entities. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
-        "get": {
-          "help": "Get details for a specific entity.",
-          "arguments": [
-            {
-              "name": "entity_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "The entity ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            },
-            {
-              "name": "--workspace-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Workspace UUID (uses default if not provided)",
-              "short": "-w"
-            }
-          ],
-          "examples": [
-            "kick entities get 16044",
-            "kick entities get 16044 --table"
-          ],
-          "usage_instructions": "Get entity details. ENTITY_ID is required (positional). Use --table/-t."
-        }
-      },
-      "usage_instructions": "Manage Kick entities (companies/organizations)."
-    },
-    "statistics": {
-      "help": "Get Kick transaction statistics",
-      "commands": {
-        "get": {
-          "help": "Get transaction statistics for a workspace. Returns aggregate statistics including total, cash in/out, average, and count.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--workspace-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Workspace UUID (uses default if not provided)",
-              "short": "-w"
-            },
-            {
-              "name": "--entity-id",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Filter by entity ID",
-              "short": "-e"
-            }
-          ],
-          "examples": [
-            "kick statistics get",
-            "kick statistics get --table",
-            "kick statistics get --entity-id 16044"
-          ],
-          "usage_instructions": "Get transaction statistics. Use --table/-t for formatted output."
-        }
-      },
-      "usage_instructions": "View transaction statistics and summaries."
-    },
-    "rule-groups": {
-      "help": "Manage Kick rule groups",
-      "commands": {
-        "list": {
-          "help": "List all rule groups.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of rule groups to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display",
-              "short": "-p"
-            },
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by rule type (transaction, accounting, transfer, split, all)",
-              "default": "transaction"
-            },
-            {
-              "name": "--include-rules",
-              "type": "bool",
-              "required": false,
-              "help": "Include rules in output",
-              "short": "-r"
-            }
-          ],
-          "examples": [
-            "kick rule-groups list",
-            "kick rule-groups list --table",
-            "kick rule-groups list --type all",
-            "kick rule-groups list --include-rules"
-          ],
-          "usage_instructions": "List all rule groups. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
-        "get": {
-          "help": "Get details for a specific rule group.",
-          "arguments": [
-            {
-              "name": "group_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The rule group UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display summary as table",
-              "short": "-t"
-            },
-            {
-              "name": "--include-rules",
-              "type": "bool",
-              "required": false,
-              "help": "--no-rules      Include rules in output",
-              "default": "include-rules"
-            }
-          ],
-          "examples": [
-            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a",
-            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a --table",
-            "kick rule-groups get 43b5276c-57a5-4c5f-bf76-c71675d8662a --no-rules"
-          ],
-          "usage_instructions": "Get rule group details. RULE_GROUP_ID is required (positional). Use --table/-t."
-        },
-        "add": {
-          "help": "Create a new rule group.",
-          "arguments": [
-            {
-              "name": "name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Name for the rule group"
-            }
-          ],
-          "options": [
-            {
-              "name": "--type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Rule group type (transaction, accounting, transfer, split)",
-              "short": "-t",
-              "default": "transaction"
-            },
-            {
-              "name": "--icon",
-              "type": "TEXT",
-              "required": false,
-              "help": "Icon identifier (briefcase, bank, etc.)",
-              "short": "-i",
-              "default": "briefcase"
-            },
-            {
-              "name": "--order",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Order position (auto-calculated if not provided)",
-              "short": "-o"
-            }
-          ],
-          "examples": [
-            "kick rule-groups add \"My Rules\"",
-            "kick rule-groups add \"Accounting Rules\" --type accounting --icon bank",
-            "kick rule-groups add \"Transfer Rules\" --type transfer --order 5"
-          ],
-          "usage_instructions": "Create a new rule group. Pass configuration as options."
-        },
-        "delete": {
-          "help": "Delete a rule group.",
-          "arguments": [
-            {
-              "name": "group_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The rule group UUID to delete"
-            }
-          ],
-          "options": [
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-f"
-            }
-          ],
-          "examples": [
-            "kick rule-groups delete 019b6ff1-0d3b-76ad-8063-22dd79ef4402",
-            "kick rule-groups delete 019b6ff1-0d3b-76ad-8063-22dd79ef4402 --force"
-          ],
-          "usage_instructions": "Delete a rule group. RULE_GROUP_ID is required (positional)."
-        },
-        "rules": {
-          "help": "Manage rules within rule groups",
-          "commands": {
-            "add": {
-              "help": "Add a new rule to a rule group.",
-              "options": [
-                {
-                  "name": "--group",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Rule group UUID to add the rule to",
-                  "short": "-g"
-                },
-                {
-                  "name": "--counterparty",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Counterparty name to match",
-                  "short": "-c"
-                },
-                {
-                  "name": "--entity",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Entity name or ID to match",
-                  "short": "-e"
-                },
-                {
-                  "name": "--category",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Category name or ID to set"
-                },
-                {
-                  "name": "--apply-existing",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Apply rule to existing transactions"
-                }
-              ],
-              "examples": [
-                "kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"",
-                "kick rule-groups rules add -g 43b5276c-... -c \"Amazon\" -e \"My Business\" --category \"Shopping\" --apply-existing"
-              ],
-              "usage_instructions": "Add a new rule to a rule group. Notable options: --group/-g, --counterparty/-c, --entity/-e, --category, --apply-existing. Example: `kick rule-groups rules add -g 43b5276c-... -c \"Verizon\" -e \"ATA Learning\" --category \"Utilities\"`."
-            },
-            "delete": {
-              "help": "Delete a rule.",
-              "arguments": [
-                {
-                  "name": "rule_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "The rule UUID to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation prompt",
-                  "short": "-f"
-                }
-              ],
-              "examples": [
-                "kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032",
-                "kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032 --force"
-              ],
-              "usage_instructions": "Delete a rule. Required arguments: rule_id. Notable options: --force/-f. Example: `kick rule-groups rules delete 019b6ffa-3522-73e9-b3c2-84b3b2f18032`."
-            },
-            "conditions": {
-              "help": "List available rule condition types.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "examples": [
-                "kick rule-groups rules conditions",
-                "kick rule-groups rules conditions --table"
-              ],
-              "usage_instructions": "List available rule condition types. Notable options: --table/-t. Example: `kick rule-groups rules conditions`."
-            },
-            "actions": {
-              "help": "List available rule action types.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "examples": [
-                "kick rule-groups rules actions",
-                "kick rule-groups rules actions --table"
-              ],
-              "usage_instructions": "List available rule action types. Notable options: --table/-t. Example: `kick rule-groups rules actions`."
-            },
-            "list": {
-              "help": "List all rules across rule groups.",
-              "options": [
-                {
-                  "name": "--group",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter by rule group UUID",
-                  "short": "-g"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--type",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter by rule group type (transaction, accounting, transfer, split, all)",
-                  "default": "transaction"
-                }
-              ],
-              "examples": [
-                "kick rule-groups rules list",
-                "kick rule-groups rules list --table",
-                "kick rule-groups rules list --group 43b5276c-57a5-4c5f-bf76-c71675d8662a",
-                "kick rule-groups rules list --type all"
-              ],
-              "usage_instructions": "List all rules across rule groups. Notable options: --group/-g, --table/-t, --type. Example: `kick rule-groups rules list`."
-            }
-          },
-          "usage_instructions": "Nested subgroup for managing individual rules within rule groups."
-        }
-      },
-      "usage_instructions": "Manage rule groups for automatic transaction categorization. Includes nested `rules` subgroup."
-    },
-    "clients": {
-      "help": "Manage Kick clients",
-      "commands": {
-        "list": {
-          "help": "List clients. Filter by name using API-level search, or use client-side filtering for other fields.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of clients to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display",
-              "short": "-p"
-            },
-            {
-              "name": "--sort",
-              "type": "TEXT",
-              "required": false,
-              "help": "Sort order (name_asc, name_desc)",
-              "default": "name_asc"
-            }
-          ],
-          "examples": [
-            "kick clients list",
-            "kick clients list --table",
-            "kick clients list --filter \"name:Acme\"",
-            "kick clients list --filter \"name:like:%test%\"",
-            "kick clients list --filter \"city:Chicago\"",
-            "kick clients list --limit 100"
-          ],
-          "usage_instructions": "List all clients. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
-        "get": {
-          "help": "Get details for a specific client.",
-          "arguments": [
-            {
-              "name": "client_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The client UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "kick clients get 019b7021-bfa4-7a86-b46f-304afb384221",
-            "kick clients get 019b7021-bfa4-7a86-b46f-304afb384221 --table"
-          ],
-          "usage_instructions": "Get client details. CLIENT_ID is required (positional). Use --table/-t."
-        },
-        "create": {
-          "help": "Create a new client.",
-          "arguments": [
-            {
-              "name": "name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Name of the client"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display result as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "kick clients create \"Acme Corporation\"",
-            "kick clients create \"New Client\" --table"
-          ],
-          "usage_instructions": "Create a new client. Pass client details as options."
-        }
-      },
-      "usage_instructions": "Manage Kick clients/customers."
-    },
-    "integrations": {
-      "help": "Manage Kick integrations",
-      "commands": {
-        "list": {
-          "help": "List all integrations. Integrations represent linked financial accounts such as banks (via Plaid), PayPal, Stripe, and other payment processors.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of integrations to return",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display",
-              "short": "-p"
-            },
-            {
-              "name": "--provider",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by provider (e.g., Plaid, Stripe)"
-            }
-          ],
-          "examples": [
-            "kick integrations list",
-            "kick integrations list --table",
-            "kick integrations list --provider Plaid --table"
-          ],
-          "usage_instructions": "List all integrations. Use --table/-t, --filter/-f, --limit/-l, --properties/-p."
-        },
-        "get": {
-          "help": "Get details for a specific integration.",
-          "arguments": [
-            {
-              "name": "integration_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The integration ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "kick integrations get 8531",
-            "kick integrations get 8531 --table"
-          ],
-          "usage_instructions": "Get integration details. INTEGRATION_ID is required (positional). Use --table/-t."
-        }
-      },
-      "usage_instructions": "Manage Kick integrations with external services."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `kick cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `kick cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use for managing Kick accounting/invoicing data -- transactions, categories, workspaces, entities, clients, rule groups, integrations, and statistics. Commands follow `kick <group> <action>` pattern. Most list commands support --table/-t, --filter/-f, --limit/-l, and --properties/-p."

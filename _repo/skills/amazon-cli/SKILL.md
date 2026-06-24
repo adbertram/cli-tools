@@ -29,16 +29,16 @@ amazon <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `amazon` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `amazon` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
 <principle name="Browser Session">
-Evidence commands require a saved browser session. If authentication is missing, run `amazon auth login` and complete the visible login flow. Do not invent order, purchase, receipt, or subscription details.
+Evidence commands require a saved browser session. If authentication is missing, run `amazon auth login` and complete the visible login flow. In non-interactive automation without stdin or `/dev/tty`, finish the login in the opened browser window, then close that browser window so the CLI can capture the session. Do not invent order, purchase, receipt, or subscription details.
 </principle>
 
 <principle name="Evidence Auth Precheck">
-Before running any `amazon orders ...` evidence command, run `amazon auth status` in JSON mode and parse the browser-session status. If no profile has `credential_types.browser_session.authenticated` set to `true`, stop cleanly, report `AUTH_BLOCKED: amazon browser session is not authenticated`, and do not run the `orders` command.
+Before running any `amazon orders ...` evidence command, run `amazon auth status` in JSON mode and parse the browser-session status. `amazon auth status` exits `0` when at least one profile is authenticated and exits `2` when no profile is authenticated; it still writes the JSON status report to stdout. In automation, capture stdout and the exit status together, parse stdout even when the exit status is `2`, and treat exit status `2` plus `profiles[].credential_types.browser_session.authenticated: false` as `AUTH_BLOCKED: amazon browser session is not authenticated`, not as a tool failure. If no profile has `credential_types.browser_session.authenticated` set to `true`, stop cleanly, report `AUTH_BLOCKED: amazon browser session is not authenticated`, and do not run the `orders` command.
 </principle>
 
 <principle name="Command Groups">

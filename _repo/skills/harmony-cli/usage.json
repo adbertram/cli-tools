@@ -1,7 +1,7 @@
 {
   "tool": "harmony",
   "description": "Manage Logitech Harmony hubs, activities, devices, and commands over the local network",
-  "discovered_at": "2026-06-08T02:25:05.256826+00:00",
+  "discovered_at": "2026-06-20T19:48:12Z",
   "total_commands": 21,
   "global_options": [
     {
@@ -19,251 +19,16 @@
     }
   ],
   "commands": {
-    "hubs": {
-      "help": "Manage Harmony hubs",
-      "commands": {
-        "list": {
-          "help": "Discover Harmony hubs on the local network.",
-          "options": [
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Discovery timeout in seconds",
-              "default": "3.0"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony hubs list`. Consult command help for arguments and options."
-        },
-        "get": {
-          "help": "Get hub status and summary details.",
-          "arguments": [
-            {
-              "name": "hub",
-              "type": "TEXT",
-              "required": true,
-              "help": "Hub IP, hostname, or discovered hub name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony hubs get`. Consult command help for arguments and options."
-        },
-        "search": {
-          "help": "Search discovered hubs.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search text"
-            }
-          ],
-          "options": [
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Discovery timeout in seconds",
-              "default": "3.0"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony hubs search`. Consult command help for arguments and options."
-        },
-        "probe": {
-          "help": "Probe a subnet for Harmony-compatible TCP ports.",
-          "options": [
-            {
-              "name": "--cidr",
-              "type": "TEXT",
-              "required": false,
-              "help": "IPv4 CIDR to scan; defaults to the primary local /24"
-            },
-            {
-              "name": "--port",
-              "type": "INTEGER",
-              "required": false,
-              "help": "TCP port to probe; repeat for multiple ports"
-            },
-            {
-              "name": "--timeout",
-              "type": "FLOAT",
-              "required": false,
-              "help": "Per-port connection timeout in seconds",
-              "default": "0.25"
-            },
-            {
-              "name": "--workers",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Concurrent probe workers",
-              "default": "96"
-            },
-            {
-              "name": "--max-hosts",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum hosts allowed in the CIDR",
-              "default": "1024"
-            },
-            {
-              "name": "--verify",
-              "type": "bool",
-              "required": false,
-              "help": "--no-verify             Verify candidates by connecting as Harmony hubs",
-              "default": "verify"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony hubs probe`. Consult command help for arguments and options."
-        },
-        "sync": {
-          "help": "Sync the hub with Logitech's Harmony service.",
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony hubs sync`. Consult command help for arguments and options."
-        }
-      },
-      "usage_instructions": "Use `harmony hubs`. Consult command help for arguments and options."
-    },
     "activities": {
       "help": "Manage Harmony activities",
+      "usage_instructions": "Use `harmony activities`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List activities configured on a hub.",
+        "current": {
+          "help": "Show the current activity.",
+          "usage_instructions": "Use `harmony activities current`. Consult command help for arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--hub",
@@ -279,21 +44,6 @@
               "help": "Protocol: WEBSOCKETS or XMPP"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -307,11 +57,11 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony activities list`. Consult command help for arguments and options."
+          ]
         },
         "get": {
           "help": "Get one activity.",
+          "usage_instructions": "Use `harmony activities get`. Consult command help for arguments and options.",
           "arguments": [
             {
               "name": "activity",
@@ -348,11 +98,12 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony activities get`. Consult command help for arguments and options."
+          ]
         },
-        "current": {
-          "help": "Show the current activity.",
+        "list": {
+          "help": "List activities configured on a hub.",
+          "usage_instructions": "Use `harmony activities list`. Consult command help for arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--hub",
@@ -368,45 +119,19 @@
               "help": "Protocol: WEBSOCKETS or XMPP"
             },
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--limit",
+              "type": "INTEGER",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
             },
             {
-              "name": "--properties",
+              "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony activities current`. Consult command help for arguments and options."
-        },
-        "start": {
-          "help": "Start an activity.",
-          "arguments": [
-            {
-              "name": "activity",
-              "type": "TEXT",
-              "required": true,
-              "help": "Activity ID or name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
             },
             {
               "name": "--table",
@@ -422,11 +147,12 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony activities start`. Consult command help for arguments and options."
+          ]
         },
         "power-off": {
           "help": "Power off the current activity.",
+          "usage_instructions": "Use `harmony activities power-off`. Consult command help for arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--hub",
@@ -455,11 +181,11 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony activities power-off`. Consult command help for arguments and options."
+          ]
         },
         "search": {
           "help": "Search hub activities.",
+          "usage_instructions": "Use `harmony activities search`. Consult command help for arguments and options.",
           "arguments": [
             {
               "name": "query",
@@ -505,168 +231,80 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
+          ]
+        },
+        "start": {
+          "help": "Start an activity.",
+          "usage_instructions": "Use `harmony activities start`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "activity",
+              "type": "TEXT",
+              "required": true,
+              "help": "Activity ID or name"
+            }
           ],
-          "usage_instructions": "Use `harmony activities search`. Consult command help for arguments and options."
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `harmony activities`. Consult command help for arguments and options."
+      }
     },
-    "devices": {
-      "help": "Manage Harmony devices",
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `harmony cache`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List devices configured on a hub.",
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony devices list`. Consult command help for arguments and options."
-        },
-        "get": {
-          "help": "Get one device.",
-          "arguments": [
-            {
-              "name": "device",
-              "type": "TEXT",
-              "required": true,
-              "help": "Device ID or name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony devices get`. Consult command help for arguments and options."
-        },
-        "search": {
-          "help": "Search hub devices.",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Search text"
-            }
-          ],
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony devices search`. Consult command help for arguments and options."
+        "clear": {
+          "help": "Remove all cached responses.",
+          "usage_instructions": "Use `harmony cache clear`. Consult command help for arguments and options.",
+          "arguments": [],
+          "options": []
         }
-      },
-      "usage_instructions": "Use `harmony devices`. Consult command help for arguments and options."
+      }
     },
     "commands": {
       "help": "Manage Harmony device commands",
+      "usage_instructions": "Use `harmony commands`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "list": {
-          "help": "List commands for a device.",
+        "channel": {
+          "help": "Change channel on the current activity.",
+          "usage_instructions": "Use `harmony commands channel`. Consult command help for arguments and options.",
           "arguments": [
             {
-              "name": "device",
+              "name": "channel",
               "type": "TEXT",
               "required": true,
-              "help": "Device ID or name"
+              "help": "Numeric channel"
             }
           ],
           "options": [
@@ -684,21 +322,6 @@
               "help": "Protocol: WEBSOCKETS or XMPP"
             },
             {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value)",
-              "short": "-f"
-            },
-            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -712,11 +335,11 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony commands list`. Consult command help for arguments and options."
+          ]
         },
         "get": {
           "help": "Get one device command.",
+          "usage_instructions": "Use `harmony commands get`. Consult command help for arguments and options.",
           "arguments": [
             {
               "name": "device",
@@ -759,11 +382,67 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
+          ]
+        },
+        "list": {
+          "help": "List commands for a device.",
+          "usage_instructions": "Use `harmony commands list`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device ID or name"
+            }
           ],
-          "usage_instructions": "Use `harmony commands get`. Consult command help for arguments and options."
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
         },
         "send": {
           "help": "Send a command to a device.",
+          "usage_instructions": "Use `harmony commands send`. Consult command help for arguments and options.",
           "arguments": [
             {
               "name": "device",
@@ -828,58 +507,20 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony commands send`. Consult command help for arguments and options."
-        },
-        "channel": {
-          "help": "Change channel on the current activity.",
-          "arguments": [
-            {
-              "name": "channel",
-              "type": "TEXT",
-              "required": true,
-              "help": "Numeric channel"
-            }
-          ],
-          "options": [
-            {
-              "name": "--hub",
-              "type": "TEXT",
-              "required": false,
-              "help": "Hub IP, hostname, or discovered hub name",
-              "short": "-H"
-            },
-            {
-              "name": "--protocol",
-              "type": "TEXT",
-              "required": false,
-              "help": "Protocol: WEBSOCKETS or XMPP"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `harmony commands channel`. Consult command help for arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Use `harmony commands`. Consult command help for arguments and options."
+      }
     },
     "config": {
       "help": "Inspect Harmony hub configuration",
+      "usage_instructions": "Use `harmony config`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "get": {
           "help": "Get the full hub configuration.",
+          "usage_instructions": "Use `harmony config get`. Consult command help for arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--hub",
@@ -908,11 +549,12 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony config get`. Consult command help for arguments and options."
+          ]
         },
         "list": {
           "help": "List hub configurations.",
+          "usage_instructions": "Use `harmony config list`. Consult command help for arguments and options.",
+          "arguments": [],
           "options": [
             {
               "name": "--hub",
@@ -956,21 +598,402 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `harmony config list`. Consult command help for arguments and options."
+          ]
         }
-      },
-      "usage_instructions": "Use `harmony config`. Consult command help for arguments and options."
+      }
     },
-    "cache": {
-      "help": "Manage response cache",
+    "devices": {
+      "help": "Manage Harmony devices",
+      "usage_instructions": "Use `harmony devices`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "clear": {
-          "help": "Remove all cached responses.",
-          "usage_instructions": "Use `harmony cache clear`. Consult command help for arguments and options."
+        "get": {
+          "help": "Get one device.",
+          "usage_instructions": "Use `harmony devices get`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "device",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device ID or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List devices configured on a hub.",
+          "usage_instructions": "Use `harmony devices list`. Consult command help for arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search hub devices.",
+          "usage_instructions": "Use `harmony devices search`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `harmony cache`. Consult command help for arguments and options."
+      }
+    },
+    "hubs": {
+      "help": "Manage Harmony hubs",
+      "usage_instructions": "Use `harmony hubs`. Consult command help for arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get hub status and summary details.",
+          "usage_instructions": "Use `harmony hubs get`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "hub",
+              "type": "TEXT",
+              "required": true,
+              "help": "Hub IP, hostname, or discovered hub name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "Discover Harmony hubs on the local network.",
+          "usage_instructions": "Use `harmony hubs list`. Consult command help for arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Discovery timeout in seconds",
+              "default": "3.0"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "probe": {
+          "help": "Probe a subnet for Harmony-compatible TCP ports.",
+          "usage_instructions": "Use `harmony hubs probe`. Consult command help for arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--cidr",
+              "type": "TEXT",
+              "required": false,
+              "help": "IPv4 CIDR to scan; defaults to the primary local /24"
+            },
+            {
+              "name": "--port",
+              "type": "INTEGER",
+              "required": false,
+              "help": "TCP port to probe; repeat for multiple ports"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Per-port connection timeout in seconds",
+              "default": "0.25"
+            },
+            {
+              "name": "--workers",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Concurrent probe workers",
+              "default": "96"
+            },
+            {
+              "name": "--max-hosts",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum hosts allowed in the CIDR",
+              "default": "1024"
+            },
+            {
+              "name": "--verify",
+              "type": "bool",
+              "required": false,
+              "help": "Verify candidates by connecting as Harmony hubs",
+              "default": "verify"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search discovered hubs.",
+          "usage_instructions": "Use `harmony hubs search`. Consult command help for arguments and options.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search text"
+            }
+          ],
+          "options": [
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Discovery timeout in seconds",
+              "default": "3.0"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "sync": {
+          "help": "Sync the hub with Logitech's Harmony service.",
+          "usage_instructions": "Use `harmony hubs sync`. Consult command help for arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--hub",
+              "type": "TEXT",
+              "required": false,
+              "help": "Hub IP, hostname, or discovered hub name",
+              "short": "-H"
+            },
+            {
+              "name": "--protocol",
+              "type": "TEXT",
+              "required": false,
+              "help": "Protocol: WEBSOCKETS or XMPP"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
     }
   },
   "usage_instructions": "Use for local Logitech Harmony hub control. Discover hubs with `harmony hubs list`; if Bonjour/mDNS misses a hub, scan the subnet with `harmony hubs probe` and then pass the hub IP or name with --hub."

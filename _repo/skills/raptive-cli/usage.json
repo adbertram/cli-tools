@@ -1,7 +1,7 @@
 {
   "tool": "raptive",
   "description": "CLI interface for Raptive traffic and revenue data",
-  "discovered_at": "2026-05-06T15:20:57.434884+00:00",
+  "discovered_at": "2026-06-20T19:54:01Z",
   "total_commands": 23,
   "global_options": [
     {
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage Raptive authentication",
+      "usage_instructions": "Authentication management -- login via browser, logout, check status, refresh tokens, test credentials.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to authenticate with Raptive via browser. Use --profile/-p for a named profile. Use --force/-F to re-authenticate.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -38,19 +43,13 @@
               "required": false,
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
-            },
-            {
-              "name": "--credential-type",
-              "type": "TEXT",
-              "required": false,
-              "help": "Authenticate only this credential type (e.g., 'oauth', 'browser_session')",
-              "short": "-c"
             }
-          ],
-          "usage_instructions": "Use to authenticate with Raptive via browser. Use --profile/-p for a named profile. Use --force/-F to re-authenticate."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
+          "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,11 +58,142 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile."
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Profile management -- list, get, create, set default, and delete authentication profiles.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use to create a new profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use to delete a profile. NAME is required. Use --force/-F to skip confirmation.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use to get details of a specific profile. NAME is required.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show which is the default.",
+              "usage_instructions": "Use to list all profiles and see which is the default.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
         },
         "status": {
           "help": "Check authentication status across profiles.",
+          "usage_instructions": "Use to check current authentication status.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -79,31 +209,12 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ],
-          "usage_instructions": "Use to check current authentication status."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to refresh an expired token."
+          ]
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use to verify credentials are valid. Use --verbose/-v for detailed output.",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -126,123 +237,66 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to verify credentials are valid. Use --verbose/-v for detailed output."
-        },
-        "profiles": {
-          "help": "Manage authentication profiles",
-          "commands": {
-            "list": {
-              "help": "List all profiles and show which is the default.",
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                },
-                {
-                  "name": "--limit",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Maximum number of profiles to return",
-                  "short": "-l"
-                },
-                {
-                  "name": "--filter",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Filter: field:op:value (e.g., is_default:eq:True)",
-                  "short": "-f"
-                },
-                {
-                  "name": "--properties",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Comma-separated list of fields to include",
-                  "short": "-p"
-                }
-              ],
-              "usage_instructions": "Use to list all profiles and see which is the default."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use to get details of a specific profile. NAME is required."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use to create a new profile. NAME is required."
-            },
-            "set-default": {
-              "help": "Set a profile as the default (IS_DEFAULT_PROFILE=1).",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to set as default"
-                }
-              ],
-              "usage_instructions": "Use to switch the active profile. NAME is required."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use to delete a profile. NAME is required. Use --force/-F to skip confirmation."
-            }
-          },
-          "usage_instructions": "Profile management -- list, get, create, set default, and delete authentication profiles."
+          ]
         }
-      },
-      "usage_instructions": "Authentication management -- login via browser, logout, check status, refresh tokens, test credentials."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Cache management -- clear cached API responses.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use to clear all cached API responses and free disk space.",
+          "arguments": [],
+          "options": []
+        }
+      }
     },
     "dashboard": {
       "help": "View dashboard metrics and summaries",
+      "usage_instructions": "Dashboard metrics -- get summary metrics (earnings, RPM, sessions, pageviews) and check data date bounds.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "date-bounds": {
+          "help": "Get the date bounds for available data. Shows the earliest and latest dates with data.",
+          "usage_instructions": "Use to check the earliest and latest dates with available data.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "summary": {
           "help": "Get dashboard summary metrics for a date range. Shows earnings, RPM, sessions, and pageviews.",
+          "examples": [
+            "raptive dashboard summary --period last7d",
+            "raptive dashboard summary --start 2025-12-01 --end 2025-12-31",
+            "raptive dashboard summary --table"
+          ],
+          "usage_instructions": "Use to get high-level metrics (earnings, RPM, sessions, pageviews) for a date range. Default period is last30d. Use --period or --start/--end for custom dates.",
+          "arguments": [],
           "options": [
             {
               "name": "--period",
@@ -272,36 +326,87 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        }
+      }
+    },
+    "earnings": {
+      "help": "View earnings and revenue data",
+      "usage_instructions": "Revenue analytics -- daily earnings overview, earnings by device, page, traffic source, country, category, ad network source, and brand safety assessments.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "brand-safety": {
+          "help": "Get brand safety assessments for pages. Shows pages with brand safety ratings sorted by pageviews.",
           "examples": [
-            "raptive dashboard summary --period last7d",
-            "raptive dashboard summary --start 2025-12-01 --end 2025-12-31",
-            "raptive dashboard summary --table"
+            "raptive earnings brand-safety --table",
+            "raptive earnings brand-safety --limit 50",
+            "raptive earnings brand-safety --filter alc:ne:normal",
+            "raptive earnings brand-safety --properties pagepath,pageviews,alc"
           ],
-          "usage_instructions": "Use to get high-level metrics (earnings, RPM, sessions, pageviews) for a date range. Default period is last30d. Use --period or --start/--end for custom dates."
-        },
-        "date-bounds": {
-          "help": "Get the date bounds for available data. Shows the earliest and latest dates with data.",
+          "usage_instructions": "Use to see brand safety assessments for pages. Default limit is 20. Shows safety ratings sorted by pageviews.",
+          "arguments": [],
           "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of pages to return",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include",
+              "short": "-p"
+            },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
+          ]
+        },
+        "by-category": {
+          "help": "Get earnings breakdown by category. Shows performance metrics for each content category.",
+          "examples": [
+            "raptive earnings by-category --period last7d --table",
+            "raptive earnings by-category --filter earnings:gt:100",
+            "raptive earnings by-category --properties category,earnings"
           ],
-          "usage_instructions": "Use to check the earliest and latest dates with available data."
-        }
-      },
-      "usage_instructions": "Dashboard metrics -- get summary metrics (earnings, RPM, sessions, pageviews) and check data date bounds."
-    },
-    "earnings": {
-      "help": "View earnings and revenue data",
-      "commands": {
-        "overview": {
-          "help": "Get daily earnings breakdown for a date range. Shows earnings, sessions, RPM for each day.",
+          "usage_instructions": "Use to see earnings by content category. Supports --period or --start/--end date range.",
+          "arguments": [],
           "options": [
             {
               "name": "--period",
@@ -351,18 +456,91 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "by-country": {
+          "help": "Get earnings breakdown by country. Shows performance metrics for each country.",
           "examples": [
-            "raptive earnings overview --period last7d",
-            "raptive earnings overview --start 2025-12-01 --end 2025-12-31 --table",
-            "raptive earnings overview --filter earnings:gt:100",
-            "raptive earnings overview --limit 7 --properties date,earnings"
+            "raptive earnings by-country --period last7d --table",
+            "raptive earnings by-country --filter country:in:United States|Canada",
+            "raptive earnings by-country --limit 10 --properties country,earnings"
           ],
-          "usage_instructions": "Use to get daily earnings breakdown. Default period is last30d. Use --period or --start/--end for custom dates. Use --filter/-f for field-based filtering (e.g., 'earnings:gt:100')."
+          "usage_instructions": "Use to see earnings by country. Supports --period or --start/--end date range.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--period",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
+              "default": "last30d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD). Overrides --period",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD). Overrides --period",
+              "short": "-e"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "by-device": {
           "help": "Get earnings breakdown by device type. Shows earnings for Desktop, Mobile, and Tablet.",
+          "examples": [
+            "raptive earnings by-device --filter device:eq:Mobile",
+            "raptive earnings by-device --filter earnings:gt:50 --table",
+            "raptive earnings by-device --properties device,earnings"
+          ],
+          "usage_instructions": "Use to see earnings split by Desktop, Mobile, and Tablet. Use --filter/-f to filter by device or earnings amount.",
+          "arguments": [],
           "options": [
             {
               "name": "--filter",
@@ -391,17 +569,27 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "raptive earnings by-device --filter device:eq:Mobile",
-            "raptive earnings by-device --filter earnings:gt:50 --table",
-            "raptive earnings by-device --properties device,earnings"
-          ],
-          "usage_instructions": "Use to see earnings split by Desktop, Mobile, and Tablet. Use --filter/-f to filter by device or earnings amount."
+          ]
         },
         "by-page": {
           "help": "Get earnings breakdown by page. Shows page-level performance metrics sorted by pageviews.",
+          "examples": [
+            "raptive earnings by-page --period last7d --table",
+            "raptive earnings by-page --limit 50",
+            "raptive earnings by-page --min-pageviews 50 --search spark",
+            "raptive earnings by-page --min-rpm 10 --limit 100",
+            "raptive earnings by-page --filter earnings:gt:10",
+            "raptive earnings by-page --properties page_url,earnings"
+          ],
+          "usage_instructions": "Use to see per-page earnings. Default limit is 20. Use --min-pageviews, --max-pageviews, --min-rpm, --max-rpm for server-side filtering. Use --search/-q to filter by URL.",
+          "arguments": [],
           "options": [
             {
               "name": "--period",
@@ -483,80 +671,24 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "raptive earnings by-page --period last7d --table",
-            "raptive earnings by-page --limit 50",
-            "raptive earnings by-page --min-pageviews 50 --search spark",
-            "raptive earnings by-page --min-rpm 10 --limit 100",
-            "raptive earnings by-page --filter earnings:gt:10",
-            "raptive earnings by-page --properties page_url,earnings"
-          ],
-          "usage_instructions": "Use to see per-page earnings. Default limit is 20. Use --min-pageviews, --max-pageviews, --min-rpm, --max-rpm for server-side filtering. Use --search/-q to filter by URL."
+          ]
         },
         "by-traffic-source": {
           "help": "Get earnings breakdown by traffic source. Shows performance metrics for each traffic source (direct, google, etc.).",
-          "options": [
-            {
-              "name": "--period",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
-              "default": "last30d"
-            },
-            {
-              "name": "--start",
-              "type": "TEXT",
-              "required": false,
-              "help": "Start date (YYYY-MM-DD). Overrides --period",
-              "short": "-s"
-            },
-            {
-              "name": "--end",
-              "type": "TEXT",
-              "required": false,
-              "help": "End date (YYYY-MM-DD). Overrides --period",
-              "short": "-e"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
           "examples": [
             "raptive earnings by-traffic-source --period last7d --table",
             "raptive earnings by-traffic-source --filter traffic_source:eq:google",
             "raptive earnings by-traffic-source --properties traffic_source,earnings"
           ],
-          "usage_instructions": "Use to see earnings by traffic source (direct, google, etc.). Supports --period or --start/--end date range."
-        },
-        "by-country": {
-          "help": "Get earnings breakdown by country. Shows performance metrics for each country.",
+          "usage_instructions": "Use to see earnings by traffic source (direct, google, etc.). Supports --period or --start/--end date range.",
+          "arguments": [],
           "options": [
             {
               "name": "--period",
@@ -606,17 +738,25 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "raptive earnings by-country --period last7d --table",
-            "raptive earnings by-country --filter country:in:United States|Canada",
-            "raptive earnings by-country --limit 10 --properties country,earnings"
-          ],
-          "usage_instructions": "Use to see earnings by country. Supports --period or --start/--end date range."
+          ]
         },
-        "by-category": {
-          "help": "Get earnings breakdown by category. Shows performance metrics for each content category.",
+        "overview": {
+          "help": "Get daily earnings breakdown for a date range. Shows earnings, sessions, RPM for each day.",
+          "examples": [
+            "raptive earnings overview --period last7d",
+            "raptive earnings overview --start 2025-12-01 --end 2025-12-31 --table",
+            "raptive earnings overview --filter earnings:gt:100",
+            "raptive earnings overview --limit 7 --properties date,earnings"
+          ],
+          "usage_instructions": "Use to get daily earnings breakdown. Default period is last30d. Use --period or --start/--end for custom dates. Use --filter/-f for field-based filtering (e.g., 'earnings:gt:100').",
+          "arguments": [],
           "options": [
             {
               "name": "--period",
@@ -666,194 +806,172 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
-            }
-          ],
-          "examples": [
-            "raptive earnings by-category --period last7d --table",
-            "raptive earnings by-category --filter earnings:gt:100",
-            "raptive earnings by-category --properties category,earnings"
-          ],
-          "usage_instructions": "Use to see earnings by content category. Supports --period or --start/--end date range."
-        },
-        "brand-safety": {
-          "help": "Get brand safety assessments for pages. Shows pages with brand safety ratings sorted by pageviews.",
-          "options": [
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of pages to return",
-              "short": "-l",
-              "default": "20"
             },
             {
-              "name": "--filter",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "raptive earnings brand-safety --table",
-            "raptive earnings brand-safety --limit 50",
-            "raptive earnings brand-safety --filter alc:ne:normal",
-            "raptive earnings brand-safety --properties pagepath,pageviews,alc"
-          ],
-          "usage_instructions": "Use to see brand safety assessments for pages. Default limit is 20. Shows safety ratings sorted by pageviews."
+          ]
         },
         "sources": {
           "help": "Get earnings breakdown by ad network source. Shows monthly earnings from each ad network.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
           "examples": [
             "raptive earnings sources --table",
             "raptive earnings sources --filter ad_network:eq:AdSense",
             "raptive earnings sources --filter earnings:gt:500",
             "raptive earnings sources --properties ad_network,earnings"
           ],
-          "usage_instructions": "Use to see earnings by ad network source (e.g., AdSense). Shows monthly earnings from each network."
+          "usage_instructions": "Use to see earnings by ad network source (e.g., AdSense). Shows monthly earnings from each network.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Revenue analytics -- daily earnings overview, earnings by device, page, traffic source, country, category, ad network source, and brand safety assessments."
+      }
     },
     "traffic": {
       "help": "View traffic and session data",
+      "usage_instructions": "Traffic analytics -- session data by traffic source and device type.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "sources": {
-          "help": "Get traffic breakdown by source. Shows sessions from different traffic sources (direct, google, bing, etc.). Note: The Raptive API does not support date filtering for this endpoint. Data reflects the default dashboard period.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "raptive traffic sources --filter source:eq:google",
-            "raptive traffic sources --filter sessions:gt:1000 --table",
-            "raptive traffic sources --limit 5",
-            "raptive traffic sources --properties source,sessions"
-          ],
-          "usage_instructions": "Use to see session counts by traffic source. Note: Raptive API does not support date filtering for this endpoint."
-        },
         "by-device": {
           "help": "Get traffic breakdown by device type. Shows sessions for Desktop, Mobile, and Tablet.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of results to return",
-              "short": "-l"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
           "examples": [
             "raptive traffic by-device --filter device:eq:Mobile",
             "raptive traffic by-device --filter sessions:gt:5000 --table",
             "raptive traffic by-device --limit 2",
             "raptive traffic by-device --properties device,sessions"
           ],
-          "usage_instructions": "Use to see sessions split by Desktop, Mobile, and Tablet."
+          "usage_instructions": "Use to see sessions split by Desktop, Mobile, and Tablet.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "sources": {
+          "help": "Get traffic breakdown by source. Shows sessions from different traffic sources (direct, google, bing, etc.). Note: The Raptive API does not support date filtering for this endpoint. Data reflects the default dashboard period.",
+          "examples": [
+            "raptive traffic sources --filter source:eq:google",
+            "raptive traffic sources --filter sessions:gt:1000 --table",
+            "raptive traffic sources --limit 5",
+            "raptive traffic sources --properties source,sessions"
+          ],
+          "usage_instructions": "Use to see session counts by traffic source. Note: Raptive API does not support date filtering for this endpoint.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). Operators: eq, ne, gt, gte, lt, lte, in, like, contains",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Traffic analytics -- session data by traffic source and device type."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use to clear all cached API responses and free disk space."
-        }
-      },
-      "usage_instructions": "Cache management -- clear cached API responses."
+      }
     }
   },
   "usage_instructions": "Use for viewing Raptive (ad network) traffic and revenue data. Commands follow `raptive <group> <action>` pattern. Most commands support --period (yesterday, last7d, last30d, mtd, lastmonth) or custom --start/--end dates. Supports --table/-t, --filter/-f, --properties/-p, --limit/-l. Use --no-cache to bypass response cache. Requires browser authentication via `raptive auth login`."

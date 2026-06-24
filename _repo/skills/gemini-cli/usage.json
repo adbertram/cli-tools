@@ -1,7 +1,7 @@
 {
   "tool": "gemini",
   "description": "CLI interface for Gemini API",
-  "discovered_at": "2026-06-14T16:17:17Z",
+  "discovered_at": "2026-06-20T19:46:30Z",
   "total_commands": 26,
   "global_options": [
     {
@@ -430,7 +430,7 @@
               "name": "--wait",
               "type": "bool",
               "required": false,
-              "help": "--no-wait          Wait for processing",
+              "help": "Wait for processing",
               "default": "wait"
             },
             {
@@ -642,7 +642,7 @@
               "name": "--stream",
               "type": "bool",
               "required": false,
-              "help": "--no-stream             Stream results in real-time",
+              "help": "Stream results in real-time",
               "default": "stream"
             },
             {

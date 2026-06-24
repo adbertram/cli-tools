@@ -31,7 +31,7 @@ cloudflare <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `cloudflare` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `cloudflare` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -42,6 +42,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **cache** — Manage cache (purge all cached content)
 - **access-rules** — Manage IP access rules (whitelist, block, challenge IPs/ranges/ASNs/countries)
 - **dns** — Manage DNS with sub-groups: `dns zones` (list/get zones) and `dns records` (full CRUD on DNS records)
+</principle>
+
+<principle name="Optional Capability Probes">
+`usage.json` is the command contract. If a needed Cloudflare API area is absent from `usage.json` (for example rulesets/header transforms for HSTS discovery), do not run a bare guessed command and let `No such command` fail the workflow. Either report the missing CLI capability and route a deliberate CLI-extension task, or wrap any exploratory `cloudflare <group> --help` probe so expected absence prints an explicit unsupported marker and exits 0. Do not mutate Cloudflare configuration while probing capability.
 </principle>
 </essential_principles>
 
