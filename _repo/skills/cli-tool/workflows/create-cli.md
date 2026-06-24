@@ -460,6 +460,7 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 - **Re-run until all pass** - Execute the script repeatedly until `"success": true`
 - **Warnings are acceptable** - Only failures must be fixed; warnings may be addressed later
 - **No exceptions for "wrapper CLIs" or "passthrough patterns"** - If the test expects an option, implement it
+- **No skipping structural tests** - ALL command structure tests are required to run and PASS for all CLIs, including browser CLIs. The only exception is `test_install.py` which may be skipped for non-wrapper CLIs. If tests are being skipped because you have not implemented full commands (e.g., missing `main.py`, `commands/`, `list` operations, or `get` operations), you must fully implement the CLI's command structure until those tests execute and PASS. A skipped test due to missing command structure is equivalent to a failure.
 - **Wrapper upstream binary failures are implementation failures** - Install or bootstrap the official `CLI_COMMAND` dependency before reporting completion
 - **Auth-required CLIs without credentials** - Follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
@@ -725,6 +726,7 @@ CLI creation is complete when:
 - [ ] Output shape defined and covered by command contract tests
 - [ ] Internal representation is minimal: no unused helpers, models, or dependencies
 - [ ] Browser parsers validated against real DOM captures via BrowserAutomation (browser CLIs only)
+- [ ] ALL command structure tests pass (none skipped due to missing `main.py`, `commands/`, or missing `list`/`get` commands). `test_install.py` is the only permitted structural skip for non-wrapper CLIs.
 - [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (warnings acceptable)
 - [ ] `/debloat` post-implementation pass completed (Step 6.5)
 - [ ] AI Review completed (for API CLIs):

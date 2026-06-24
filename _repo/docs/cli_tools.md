@@ -62,6 +62,7 @@
 | `msword` | The `msword` CLI lets you read Word docs, convert to markdown, and extract comments with context. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `mychart` | The `mychart` CLI provides command-line access to Epic MyChart SMART on FHIR patient record. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `n8n` | The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `nextdoor` | CLI for Nextdoorcom |
 | `notifier` | The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

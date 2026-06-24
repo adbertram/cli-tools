@@ -29,6 +29,9 @@ ata-blog <command-group> <action> [arguments] [options]
 | List WordPress plugins | `ata-blog wordpress-admin plugins list --properties "name,status,version"` |
 | Get WordPress plugin | `ata-blog wordpress-admin plugins get <plugin> --properties "name,status,version"` |
 | Upgrade WordPress plugin | `ata-blog wordpress-admin plugins upgrade <plugin>` |
+| List WordPress themes | `ata-blog wordpress-admin themes list --table` |
+| Preview theme file push | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --dry-run` |
+| Push theme file | `ata-blog wordpress-admin themes file-push <theme> ./front-page.php front-page.php --remote-root /path/to/wp --host <ssh-host> --backup --yes` |
 | Upload media | `ata-blog media upload <file_path>` |
 | Check ad earnings | `ata-blog earnings get` |
 | Set schema on post | `ata-blog schema set <post_id> <type>` |
@@ -102,7 +105,7 @@ When running ATA WordPress plugin maintenance batches from Hermes, do not use a 
 - **notion-page** -- Notion page management (list, get, publish, update, search, statuses, comments, content)
 - **wordpress-post** -- WordPress post CRUD (list, get, create, update, schedule, delete)
 - **wordpress-page** -- WordPress page CRUD (list, get, create, update, delete). Passthrough to `wordpress pages`; pages support `parent`, `menu_order`, `template` (no tags/categories/format).
-- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade.
+- **wordpress-admin** -- WordPress admin operations, including plugin list/get/activate/deactivate/delete/install/upgrade and theme list/get/file-push through the delegated `wordpress` CLI.
 - **media** -- WordPress media management (list, get, upload, delete)
 - **categories** -- WordPress categories (list, get, create)
 - **tags** -- WordPress tags (list, get, create)

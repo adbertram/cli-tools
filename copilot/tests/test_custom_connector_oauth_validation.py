@@ -299,3 +299,267 @@ def test_get_oauth_configuration_issues_reports_missing_refresh_url():
     issues = connection_commands._get_oauth_configuration_issues(connector)
 
     assert issues == ["refresh URL"]
+
+
+# ---------------------------------------------------------------------------
+# Bug 1: OAuth detection must read connectionParameters from the Power Apps
+# apihub representation, not the Dataverse connector entity (which never
+# carries connectionParameters / connectionParameterSets).
+# ---------------------------------------------------------------------------
+
+
+def _dataverse_connector_without_auth() -> dict:
+    """A connector record as returned by _get_connector_from_dataverse.
+
+    The Dataverse entity carries swagger but never connectionParameters.
+    """
+    return {
+        "name": "shared_test-connector",
+        "properties": {
+            "displayName": "Test Connector",
+            "description": "",
+            "publisher": "",
+            "tier": "Standard",
+            "environment": True,
+            "swagger": make_openapi_spec(),
+        },
+        "_dataverse": {"connectorid": "dv-row-123"},
+        "_source": "dataverse",
+    }
+
+
+def _apihub_connector_with_oauth() -> dict:
+    """A connector record as returned by _get_connector_from_powerapps.
+
+    The apihub representation carries the OAuth connectionParameters block.
+    """
+    return {
+        "name": "shared_test-connector",
+        "properties": {
+            "displayName": "Test Connector",
+            "connectionParameters": {
+                "token": {
+                    "type": "oauthSetting",
+                    "oAuthSettings": {
+                        "identityProvider": "aad",
+                        "clientId": "12d53a00-9654-4398-9855-a8517fb732c4",
+                        "scopes": ["mcp.tools", "offline_access"],
+                        "customParameters": {
+                            "authorizationUrl": {"value": "https://example.com/authorize"},
+                            "tokenUrl": {"value": "https://example.com/token"},
+                            "refreshUrl": {"value": "https://example.com/token"},
+                        },
+                    },
+                }
+            },
+        },
+        "_source": "powerapps",
+    }
+
+
+def test_merge_apihub_auth_copies_connection_parameters_into_dataverse_record(monkeypatch):
+    client = DataverseClient.__new__(DataverseClient)
+    connector = _dataverse_connector_without_auth()
+
+    monkeypatch.setattr(
+        client,
+        "_get_connector_from_powerapps",
+        lambda connector_id, environment_id: _apihub_connector_with_oauth(),
+    )
+
+    client._merge_apihub_auth_into_connector(connector, "shared_test-connector", "env-123")
+
+    token_def = connector["properties"]["connectionParameters"]["token"]
+    assert token_def["type"] == "oauthSetting"
+    assert token_def["oAuthSettings"]["clientId"] == "12d53a00-9654-4398-9855-a8517fb732c4"
+
+
+def test_merge_apihub_auth_leaves_record_untouched_when_apihub_unavailable(monkeypatch):
+    client = DataverseClient.__new__(DataverseClient)
+    connector = _dataverse_connector_without_auth()
+
+    def _raise(connector_id, environment_id):
+        raise ClientError("apihub unavailable")
+
+    monkeypatch.setattr(client, "_get_connector_from_powerapps", _raise)
+
+    client._merge_apihub_auth_into_connector(connector, "shared_test-connector", "env-123")
+
+    assert "connectionParameters" not in connector["properties"]
+
+
+def test_merge_apihub_auth_does_not_refetch_when_already_present(monkeypatch):
+    client = DataverseClient.__new__(DataverseClient)
+    connector = _apihub_connector_with_oauth()  # already has connectionParameters
+    calls = {"count": 0}
+
+    def _count(connector_id, environment_id):
+        calls["count"] += 1
+        return _apihub_connector_with_oauth()
+
+    monkeypatch.setattr(client, "_get_connector_from_powerapps", _count)
+
+    client._merge_apihub_auth_into_connector(connector, "shared_test-connector", "env-123")
+
+    assert calls["count"] == 0
+
+
+def test_get_connector_merges_apihub_oauth_so_detection_returns_true(monkeypatch):
+    """End-to-end of Bug 1: get_connector returns a Dataverse record whose
+    OAuth connectionParameters were merged from the apihub, so OAuth detection
+    (the single-auth token check used by `connections auth`) returns true."""
+    client = DataverseClient.__new__(DataverseClient)
+
+    monkeypatch.setattr(
+        client,
+        "_get_connector_from_dataverse",
+        lambda connector_id: _dataverse_connector_without_auth(),
+    )
+    monkeypatch.setattr(
+        client,
+        "_get_connector_from_powerapps",
+        lambda connector_id, environment_id: _apihub_connector_with_oauth(),
+    )
+
+    connector = client.get_connector("shared_test-connector", environment_id="env-123")
+
+    # The single-auth OAuth detection used by `connections auth` (connections.py)
+    conn_params = connector.get("properties", {}).get("connectionParameters", {})
+    token_def = conn_params.get("token") or conn_params.get("Token", {})
+    is_oauth = isinstance(token_def, dict) and token_def.get("type") == "oauthSetting"
+    assert is_oauth is True
+
+    # And the configuration-issue detector finds a fully configured connector.
+    assert connection_commands._get_oauth_configuration_issues(connector) == []
+
+
+# ---------------------------------------------------------------------------
+# Bug 2: an OAuth-credential-only update must send a FULL payload (the apihub
+# rejects a connectionParameters-only PATCH with HTTP 500), and must carry
+# forward existing custom-code config when present (and omit it when absent)
+# without ever uploading a new script.
+# ---------------------------------------------------------------------------
+
+
+class _FakePatchResponse:
+    status_code = 204
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {}
+
+
+class _FakeGetResponse:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+class _FakeHttpClient:
+    """Captures the PATCH payload and returns a canned existing connector."""
+
+    def __init__(self, existing_connector: dict):
+        self._existing_connector = existing_connector
+        self.patch_payload = None
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        return _FakeGetResponse(self._existing_connector)
+
+    def patch(self, url, headers=None, params=None, json=None, timeout=None):
+        self.patch_payload = json
+        return _FakePatchResponse()
+
+
+def _existing_connector_for_update(*, with_script: bool) -> dict:
+    props = {
+        "displayName": "Test Connector",
+        "iconBrandColor": "#007ee5",
+        "swagger": make_openapi_spec(),
+        "backendService": {"serviceUrl": "https://api.example.com/v1"},
+        "connectionParameters": {
+            "token": {
+                "type": "oauthSetting",
+                "oAuthSettings": {
+                    "identityProvider": "aad",
+                    "clientId": "old-client-id",
+                    "scopes": ["read"],
+                    "customParameters": {
+                        "tokenUrl": {"value": "https://example.com/token"},
+                    },
+                },
+            }
+        },
+    }
+    if with_script:
+        props["scriptDefinitionUrl"] = "https://blob.example.com/script.csx"
+        props["scriptOperations"] = ["Ping"]
+    return {"name": "shared_test-connector", "properties": props}
+
+
+def _run_credential_only_update(monkeypatch, *, with_script: bool):
+    client = DataverseClient.__new__(DataverseClient)
+    fake_http = _FakeHttpClient(_existing_connector_for_update(with_script=with_script))
+    client._http_client = fake_http
+
+    monkeypatch.setattr(
+        "copilot_cli.client.get_access_token",
+        lambda resource: "fake-token",
+    )
+
+    result = client.update_custom_connector(
+        connector_id="shared_test-connector",
+        oauth_client_id="new-client-id",
+        oauth_client_secret="new-secret",
+        environment_id="env-123",
+    )
+    return fake_http.patch_payload, result
+
+
+def test_credential_only_update_sends_full_payload(monkeypatch):
+    payload, result = _run_credential_only_update(monkeypatch, with_script=False)
+
+    assert payload is not None, "PATCH was never issued"
+    props = payload["properties"]
+
+    # The apihub rejects connectionParameters-only payloads with HTTP 500, so the
+    # payload must include the full property set.
+    assert "OpenApiDefinition" in props
+    assert "backendService" in props
+    assert "connectionParameters" in props
+    assert props["backendService"]["serviceUrl"] == "https://api.example.com/v1"
+
+    # NOT connectionParameters alone.
+    assert set(props.keys()) != {"connectionParameters"}
+
+    # The credential update was applied onto the OAuth settings.
+    oauth_settings = props["connectionParameters"]["token"]["oAuthSettings"]
+    assert oauth_settings["clientId"] == "new-client-id"
+    assert oauth_settings["clientSecret"] == "new-secret"
+
+    assert result["connector_id"] == "shared_test-connector"
+
+
+def test_credential_only_update_carries_forward_existing_custom_code(monkeypatch):
+    payload, _ = _run_credential_only_update(monkeypatch, with_script=True)
+
+    props = payload["properties"]
+    # Existing custom code must be re-sent (the apihub PATCH drops scriptOperations
+    # if omitted), but no new script is uploaded in this path.
+    assert props["scriptDefinitionUrl"] == "https://blob.example.com/script.csx"
+    assert props["scriptOperations"] == ["Ping"]
+
+
+def test_credential_only_update_omits_custom_code_when_absent(monkeypatch):
+    payload, _ = _run_credential_only_update(monkeypatch, with_script=False)
+
+    props = payload["properties"]
+    # The connector has no custom code, so the payload must not invent any.
+    assert "scriptDefinitionUrl" not in props
+    assert "scriptOperations" not in props

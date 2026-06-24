@@ -1,8 +1,8 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-06-20T19:37:12Z",
-  "total_commands": 75,
+  "discovered_at": "2026-06-24T18:45:24Z",
+  "total_commands": 81,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -1218,15 +1250,79 @@
             }
           ]
         },
+        "unpublish": {
+          "help": "Unpublish an article: revert a published post back to draft.",
+          "examples": [
+            "ata-blog notion-page unpublish PAGE_ID --dry-run",
+            "ata-blog notion-page unpublish PAGE_ID --yes",
+            "ata-blog notion-page unpublish 26985 --yes",
+            "ata-blog notion-page unpublish https://adamtheautomator.com/my-post/ --yes",
+            "ata-blog notion-page unpublish my-post-slug --force --yes",
+            "ata-blog notion-page unpublish PAGE_ID --keep-wordpress --yes"
+          ],
+          "usage_instructions": "Inverse of `publish`. The identifier may be a Notion page ID (32-hex, dashed or not), a WordPress post ID, a post URL, or a slug; the command resolves BOTH the Notion page and the WordPress post. By default the WordPress post is trashed (recoverable); pass --force to permanently delete it, or --keep-wordpress to leave WordPress untouched. The Notion page is reset to 'Draft' (override with --status, validated against live statuses) and its publication artifact fields are cleared (Published URL, X Post URL, LinkedIn Post URL, Publish Date -> null; Promoted -> false); content, Keywords, Tags, Category, Schema Type, Stage Date, and Post Performance Snapshots are left intact. This is destructive: pass --yes to run non-interactively or --dry-run to preview without mutating. Output is a JSON summary of the WordPress action and the Notion fields cleared.",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID, WordPress post ID, post URL, or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Notion status to set",
+              "short": "-s",
+              "default": "Draft"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Permanently delete the WordPress post (vs trash)",
+              "short": "-F"
+            },
+            {
+              "name": "--keep-wordpress",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the WordPress trash/delete; only reset Notion"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Resolve and report planned changes without mutating"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the confirmation prompt (required non-interactively)",
+              "short": "-y"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "update": {
           "help": "Update article properties in Notion.",
           "examples": [
             "ata-blog notion-page update PAGE_ID --status \"Draft\"",
             "ata-blog notion-page update PAGE_ID --status \"Developmental Review\"",
             "ata-blog notion-page update PAGE_ID --property \"Keywords:azure, cloud\"",
-            "ata-blog notion-page update PAGE_ID -s \"Draft\" -p \"Dev Review Iterations:2\""
+            "ata-blog notion-page update PAGE_ID -s \"Draft\" -p \"Dev Review Iterations:2\"",
+            "ata-blog notion-page update PAGE_ID -p \"Promoted:true\"",
+            "ata-blog notion-page update PAGE_ID -p \"Published URL:\" -p \"Promoted:false\""
           ],
-          "usage_instructions": "Use `ata-blog notion-page update` with the documented arguments and options shown below.",
+          "usage_instructions": "Property types are read from the live Notion database schema. Pass an empty value (e.g. -p \"Published URL:\") to clear a property: url/email/number/select/date become null and rich_text/multi_select/relation become empty. Checkbox properties accept true/false/yes/no/1/0 (case-insensitive) and are rejected if ambiguous.",
           "arguments": [
             {
               "name": "page_id",
@@ -2191,6 +2287,173 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "themes": {
+          "help": "Manage WordPress themes",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "file-push": {
+              "help": "REMOTE_FILE",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme directory name under wp-content/themes"
+                },
+                {
+                  "name": "local_file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Local file to upload"
+                },
+                {
+                  "name": "remote_file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Relative destination path inside the theme"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--remote-root",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Absolute remote WordPress root path"
+                },
+                {
+                  "name": "--host",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "SSH host"
+                },
+                {
+                  "name": "--user",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "SSH user"
+                },
+                {
+                  "name": "--port",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "SSH port",
+                  "default": "22"
+                },
+                {
+                  "name": "--identity-file",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "SSH identity file"
+                },
+                {
+                  "name": "--backup",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Back up the existing remote file before overwrite"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Upload and overwrite the remote file"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show readback without uploading"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific WordPress theme.",
+              "arguments": [
+                {
+                  "name": "theme",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Theme stylesheet, textdomain, or exact name from themes list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List installed WordPress themes.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum themes to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Forwarded filter expressions for wordpress admin",
+                  "short": "-f"
+                },
+                {
+                  "name": "--status",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by status",
+                  "short": "-s"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -2240,6 +2503,46 @@
               "type": "INTEGER",
               "required": false,
               "help": "Menu item order"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a WordPress navigation menu and its items by menu ID, slug, or name.",
+          "arguments": [
+            {
+              "name": "menu",
+              "type": "TEXT",
+              "required": true,
+              "help": "Menu ID, slug, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum menu items to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
             },
             {
               "name": "--profile",

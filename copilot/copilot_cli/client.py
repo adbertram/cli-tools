@@ -4294,12 +4294,59 @@ schemaName: {schema_name}
         try:
             connector = self._get_connector_from_dataverse(connector_id)
             if connector:
+                # The Dataverse connector entity carries the OpenAPI definition
+                # (swagger) but structurally never carries connectionParameters /
+                # connectionParameterSets. Those auth fields live only on the
+                # Power Apps apihub representation. Merge them in so OAuth
+                # detection and raw output see the real auth configuration.
+                self._merge_apihub_auth_into_connector(connector, connector_id, environment_id)
                 return connector
         except ClientError:
             pass  # Not found in Dataverse, try Power Apps API
 
         # Then try Power Apps API (managed connectors)
         return self._get_connector_from_powerapps(connector_id, environment_id)
+
+    def _merge_apihub_auth_into_connector(
+        self, connector: dict, connector_id: str, environment_id: str
+    ) -> None:
+        """
+        Merge apihub-only auth fields into a Dataverse connector record in place.
+
+        The Dataverse `connector` entity exposes the OpenAPI definition but not
+        `connectionParameters` / `connectionParameterSets`; those exist only on
+        the Power Apps apihub representation
+        (GET /providers/Microsoft.PowerApps/apis/{id}). When the Dataverse record
+        already contains those auth fields nothing is fetched. If the apihub GET
+        fails the Dataverse record is left untouched so callers degrade to the
+        same behavior as before this merge.
+
+        Args:
+            connector: Dataverse connector record (mutated in place).
+            connector_id: The connector's unique identifier.
+            environment_id: Power Platform environment ID.
+        """
+        props = connector.get("properties", {})
+        if not isinstance(props, dict):
+            return
+
+        # Nothing to do if the auth fields are already present.
+        if props.get("connectionParameters") or props.get("connectionParameterSets"):
+            return
+
+        try:
+            apihub_connector = self._get_connector_from_powerapps(connector_id, environment_id)
+        except ClientError:
+            return  # apihub representation unavailable; leave Dataverse record as-is
+
+        apihub_props = apihub_connector.get("properties", {})
+        if not isinstance(apihub_props, dict):
+            return
+
+        for auth_field in ("connectionParameters", "connectionParameterSets"):
+            value = apihub_props.get(auth_field)
+            if value:
+                props[auth_field] = value
 
     def _get_connector_from_dataverse(self, connector_id: str) -> Optional[dict]:
         """
@@ -5247,7 +5294,16 @@ schemaName: {schema_name}
             backend_url = f"{scheme}://{host}{base_path}"
             payload["properties"]["backendService"] = {"serviceUrl": backend_url}
 
-        # Handle OAuth credential updates even without new OpenAPI definition
+        # Handle OAuth credential updates even without new OpenAPI definition.
+        #
+        # The apihub PATCH endpoint rejects a connectionParameters-only payload
+        # with HTTP 500. It requires a full property set, so we rebuild the
+        # payload from the connector's existing definition: re-include the
+        # existing OpenApiDefinition, regenerate apiProperties (iconBrandColor,
+        # capabilities, policyTemplateInstances, connectionParameters), preserve
+        # the existing backendService, and carry forward any existing custom-code
+        # script configuration. The OAuth credential updates are then merged onto
+        # connectionParameters.token.oAuthSettings.
         if (
             oauth_client_id
             or oauth_client_secret
@@ -5258,27 +5314,86 @@ schemaName: {schema_name}
             token_settings = existing_conn_params.get("token", {})
 
             if token_settings.get("type") == "oauthSetting":
-                # Update OAuth settings with new credentials
-                oauth_settings = token_settings.get("oAuthSettings", {})
+                # The apihub returns the spec under "swagger" (not "OpenApiDefinition")
+                existing_openapi = (
+                    existing_props.get("swagger")
+                    or existing_props.get("OpenApiDefinition")
+                    or {}
+                )
+
+                # Regenerate the full apiProperties from the existing definition so
+                # the payload carries iconBrandColor, capabilities,
+                # policyTemplateInstances, and a structurally complete
+                # connectionParameters block — not connectionParameters alone.
+                api_properties = self._generate_api_properties(
+                    existing_openapi,
+                    icon_brand_color or existing_props.get("iconBrandColor", "#007ee5"),
+                    oauth_client_id,
+                    oauth_client_secret,
+                    oauth_redirect_url,
+                    oauth_identity_provider,
+                )
+                payload["properties"]["OpenApiDefinition"] = existing_openapi
+                payload["properties"].update(api_properties.get("properties", {}))
+
+                # Merge the credential updates onto the existing oAuthSettings so
+                # any previously stored fields the swagger does not reproduce
+                # (e.g. an existing clientId when only the secret rotates, a
+                # custom redirectUrl) are preserved.
+                existing_oauth_settings = dict(token_settings.get("oAuthSettings", {}))
+                regenerated_conn_params = payload["properties"].get("connectionParameters", {})
+                regenerated_token = regenerated_conn_params.get("token", {})
+                regenerated_oauth_settings = regenerated_token.get("oAuthSettings", {})
+
+                merged_oauth_settings = existing_oauth_settings
+                merged_oauth_settings.update(regenerated_oauth_settings)
 
                 if oauth_client_id:
-                    oauth_settings["clientId"] = oauth_client_id
+                    merged_oauth_settings["clientId"] = oauth_client_id
                 if oauth_client_secret:
-                    oauth_settings["clientSecret"] = oauth_client_secret
+                    merged_oauth_settings["clientSecret"] = oauth_client_secret
                 if oauth_redirect_url:
-                    oauth_settings["redirectUrl"] = oauth_redirect_url
-                    oauth_settings["redirectMode"] = "Global"
+                    merged_oauth_settings["redirectUrl"] = oauth_redirect_url
+                    merged_oauth_settings["redirectMode"] = "Global"
                 if oauth_identity_provider:
-                    oauth_settings["identityProvider"] = oauth_identity_provider
+                    merged_oauth_settings["identityProvider"] = oauth_identity_provider
 
-                # Build updated connection parameters
+                # Rebuild connectionParameters: start from the existing set (to
+                # keep any non-token parameters), then apply the merged token.
                 updated_conn_params = dict(existing_conn_params)
+                updated_conn_params.update(regenerated_conn_params)
                 updated_conn_params["token"] = {
                     "type": "oauthSetting",
-                    "oAuthSettings": oauth_settings
+                    "oAuthSettings": merged_oauth_settings,
                 }
-
                 payload["properties"]["connectionParameters"] = updated_conn_params
+
+                # Preserve the existing backend service so the full payload the
+                # apihub requires is present. Rebuild it from the existing swagger
+                # host/basePath/schemes if the connector does not expose one.
+                existing_backend = existing_props.get("backendService")
+                if existing_backend:
+                    payload["properties"]["backendService"] = existing_backend
+                elif existing_openapi:
+                    schemes = existing_openapi.get("schemes", ["https"])
+                    scheme = schemes[0] if schemes else "https"
+                    host = existing_openapi.get("host", "")
+                    base_path = existing_openapi.get("basePath", "")
+                    payload["properties"]["backendService"] = {
+                        "serviceUrl": f"{scheme}://{host}{base_path}"
+                    }
+
+                # Carry forward any existing custom-code configuration WITHOUT
+                # touching it. The apihub PATCH drops scriptOperations if omitted,
+                # so existing custom code must be re-sent. This path never uploads
+                # a script (that only happens when the caller passes --script).
+                if not script_url:
+                    existing_script_url = existing_props.get("scriptDefinitionUrl")
+                    if existing_script_url:
+                        payload["properties"]["scriptDefinitionUrl"] = existing_script_url
+                        existing_script_operations = existing_props.get("scriptOperations")
+                        if existing_script_operations:
+                            payload["properties"]["scriptOperations"] = existing_script_operations
 
         if description is not None:
             payload["properties"]["description"] = description

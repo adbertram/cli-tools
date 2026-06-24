@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-23T23:20:19Z",
+  "discovered_at": "2026-06-24T19:20:33Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -1367,7 +1367,7 @@
     },
     "demos": {
       "help": "Manage demo records",
-      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-walkthrough-script-path, demo-walkthrough-script-created, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
+      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-overview, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
       "arguments": [],
       "options": [
         {
@@ -1612,10 +1612,9 @@
             "coursecraft demos update recXXX --clip-order 2",
             "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
             "coursecraft demos update recXXX --tested-approved --script-review-human",
-            "coursecraft demos update recXXX --dictation-recorded",
-            "coursecraft demos update recXXX --demo-walkthrough-script-path /Users/adam/courses/example/m2c3/demo_walkthrough.ps1"
+            "coursecraft demos update recXXX --dictation-recorded"
           ],
-          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --action-summary/-a, --script/-s, --recap, --demo-walkthrough-script-path, and --demo-walkthrough-script-created. Review fields: --action-summary-review-ai, --action-summary-human-review-complete, --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
+          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --demo-overview, --action-summary/-a, --script/-s, and --recap. Review fields: --demo-overview-review-human, --action-summary-review-ai, --action-summary-review-human, and --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
           "arguments": [
             {
               "name": "record_id",
@@ -1714,12 +1713,6 @@
               "type": "bool",
               "required": false,
               "help": "Mark script human review as complete"
-            },
-            {
-              "name": "--demo-walkthrough-script-created",
-              "type": "bool",
-              "required": false,
-              "help": "Mark whether the demo walkthrough automation has been created for this demo"
             },
             {
               "name": "--dictation-recorded",
@@ -2054,7 +2047,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., feedback:contains:typo, timestamp:gte:2026-01-01)",
+              "help": "Filter: field:op:value. Cannot be combined with --demo, --slide, --clip, --module, or --course",
               "short": "-f"
             },
             {

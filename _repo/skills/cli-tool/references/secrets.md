@@ -71,8 +71,10 @@ Before asking Adam for any CLI-tool credential:
 
 1. Run `list` or `has <name>` against the CLI-tools secret manager.
 2. If the secret exists, retrieve it with `get <name>` and use it.
-3. Ask Adam only for missing credentials.
-4. Store any newly provided reusable CLI-tool credential immediately with `set <name>`.
+3. If the secret is missing, use the `lastpass` CLI tool to look it up (e.g., `lastpass items list --filter "name:like:%<service-name>%" --table`). If found, retrieve the value with the `lastpass` CLI and store it in the CLI-tools secret manager with `set --tool <cli-tool> --type <type>`.
+4. If not found in LastPass, inspect the service's login page using browser automation (e.g., via `playwright-cli` or `ui-web-test-engineer`) to see if it supports third-party authentication providers (like Google, Microsoft, Apple). If it does, ask Adam if he would like to use one of those providers.
+5. Ask Adam for manual credentials only if the credential cannot be found in the secret manager, cannot be found via the `lastpass` CLI, and third-party auth is either unsupported or declined by Adam.
+6. Store any newly provided reusable CLI-tool credential immediately with `set <name>`.
 
 Never print secret values in logs, final answers, test output, screenshots, or command examples.
 

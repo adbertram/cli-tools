@@ -15,6 +15,7 @@ app = typer.Typer(help="Manage WordPress navigation menus")
 
 COMMAND_CREDENTIALS = {
     "add-page": ["username_password"],
+    "get": ["username_password"],
     "items": ["username_password"],
     "list": ["username_password"],
     "locations": ["username_password"],
@@ -51,6 +52,36 @@ def menus_list(
             print_table(menus, table_fields, table_fields)
         else:
             print_json(menus)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("get")
+def menus_get(
+    menu: str = typer.Argument(..., help="Menu ID, slug, or name"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """Get a single WordPress navigation menu."""
+    try:
+        client = get_client()
+        menu_data = client.get_menu(menu)
+        fields = _fields(properties)
+        if fields:
+            menu_data = extract_fields([menu_data], fields)[0]
+
+        if table:
+            if fields:
+                print_table([menu_data], fields, fields)
+            else:
+                rows = [
+                    {"field": key, "value": str(value)}
+                    for key, value in menu_data.items()
+                    if value is not None
+                ]
+                print_table(rows, ["field", "value"], ["Field", "Value"])
+        else:
+            print_json(menu_data)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

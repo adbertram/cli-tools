@@ -1244,6 +1244,88 @@ Input #0, avfoundation, from '3':
         self.assertFalse(result)
         self.assertEqual(capture.call_args.args[0][-1], str(Path(deck_path).expanduser().resolve()))
 
+    def test_parse_dialog_payload_treats_malformed_responses_as_no_dialog(self):
+        # Regression: the live-process System Events probe can return a bare
+        # ``false`` (or an empty / AppleScript-error string) instead of the
+        # 3-field payload when AX is not ready or an Automation consent gate
+        # intercepts the event. Any non-3-field response must be read as
+        # "no dialog detected" and return None, never raise -- raising here used
+        # to crash the whole recorder with
+        # "Unexpected PowerPoint dialog probe response: 'false'".
+        for malformed in ["false", "", "true", "execution error: Not authorized to send Apple events", "weird\toutput"]:
+            with self.subTest(response=malformed):
+                self.assertIsNone(record.parse_frontmost_dialog_payload(malformed))
+
+    def test_parse_dialog_payload_reads_wellformed_payload(self):
+        sep = record.DIALOG_FIELD_SEPARATOR
+        text_sep = record.DIALOG_TEXT_SEPARATOR
+        self.assertIsNone(record.parse_frontmost_dialog_payload(f"false{sep}{sep}"))
+        self.assertEqual(
+            record.parse_frontmost_dialog_payload(f"true{sep}Sign in{sep}Use your account{text_sep}"),
+            {"title": "Sign in", "text": "Use your account"},
+        )
+
+    def test_frontmost_dialog_probe_is_non_fatal_on_bare_false(self):
+        # The bare ``false`` from the failing live run must yield None (no raise).
+        with mock.patch.object(record, "capture", return_value="false"), \
+                mock.patch.object(record.time, "sleep"):
+            self.assertIsNone(record.frontmost_powerpoint_dialog())
+
+    def test_frontmost_dialog_probe_is_non_fatal_on_osascript_failure(self):
+        # An osascript subprocess failure (e.g. a consent gate / AX error) must be
+        # caught and read as "no dialog", after retrying, never propagated.
+        def boom(command, timeout=None):
+            raise subprocess.CalledProcessError(1, command, stderr="Not authorized to send Apple events")
+
+        with mock.patch.object(record, "capture", side_effect=boom) as capture, \
+                mock.patch.object(record.time, "sleep"):
+            self.assertIsNone(record.frontmost_powerpoint_dialog())
+        self.assertEqual(capture.call_count, record.DIALOG_PROBE_ATTEMPTS)
+
+    def test_frontmost_dialog_probe_is_non_fatal_on_timeout(self):
+        # A hard osascript subprocess timeout (converted to RuntimeError by
+        # capture_osascript) must also be non-fatal for the best-effort probe.
+        with mock.patch.object(record, "capture", side_effect=subprocess.TimeoutExpired("osascript", 30)), \
+                mock.patch.object(record.time, "sleep"):
+            self.assertIsNone(record.frontmost_powerpoint_dialog())
+
+    def test_auto_dismiss_does_not_raise_on_unknown_dialog(self):
+        # An unrecognized dialog is logged and left alone (never blindly clicked),
+        # and auto-dismiss returns None instead of raising.
+        with mock.patch.object(record, "frontmost_powerpoint_dialog",
+                               return_value={"title": "Delete slide?", "text": "cannot undo"}), \
+                mock.patch.object(record, "capture_osascript") as capture_osascript:
+            self.assertIsNone(record.try_auto_dismiss_startup_dialog())
+        capture_osascript.assert_not_called()
+
+    def test_open_deck_proceeds_when_already_open_despite_unreadable_probe(self):
+        # When the deck is already open, the recorder must proceed even if the
+        # dialog probe cannot read dialog state.
+        with mock.patch.object(record, "presentation_is_open", return_value=True), \
+                mock.patch.object(record, "frontmost_powerpoint_dialog", return_value=None) as probe, \
+                mock.patch.object(record, "run") as run_command:
+            record.open_deck({"deck_path": "/tmp/deck.pptx"})
+        run_command.assert_not_called()
+        probe.assert_not_called()
+
+    def test_start_slideshow_proceeds_when_open_but_probe_reads_no_dialog(self):
+        # presentation_is_open true + probe returns "no dialog" -> the slideshow is
+        # driven (open/record path proceeds), the probe never blocks it.
+        config = {"items": [{"identity": {"value": 3}}, {"identity": {"value": 5}}]}
+        with mock.patch.object(record, "open_deck") as open_deck, \
+                mock.patch.object(record, "frontmost_powerpoint_dialog", return_value=None), \
+                mock.patch.object(record, "run_osascript") as run_osascript, \
+                mock.patch.object(record, "execute_ui_actions"), \
+                mock.patch.object(record, "force_slideshow_fullscreen"), \
+                mock.patch.object(record.time, "sleep"):
+            config["slideshow_start_seconds"] = 0
+            record.start_slideshow(config)
+        open_deck.assert_called_once()
+        # The slideshow-range AppleScript was driven for slides 3..5.
+        rendered = "\n".join(run_osascript.call_args.args)
+        self.assertIn("set starting slide of slideShowSettings to 3", rendered)
+        self.assertIn("set ending slide of slideShowSettings to 5", rendered)
+
     def test_client_returns_recording_result_model(self):
         client = PowerPointSlideRecorderClient.__new__(PowerPointSlideRecorderClient)
 

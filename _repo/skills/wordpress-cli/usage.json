@@ -1,8 +1,8 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-06-20T19:56:59Z",
-  "total_commands": 53,
+  "discovered_at": "2026-06-24T19:18:04Z",
+  "total_commands": 55,
   "global_options": [
     {
       "name": "--version",
@@ -464,7 +464,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -590,6 +590,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -1061,6 +1093,39 @@
               "type": "INTEGER",
               "required": false,
               "help": "Menu item order"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a single WordPress navigation menu.",
+          "arguments": [
+            {
+              "name": "menu",
+              "type": "TEXT",
+              "required": true,
+              "help": "Menu ID, slug, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
             },
             {
               "name": "--profile",

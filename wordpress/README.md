@@ -569,6 +569,74 @@ wordpress tags delete 123
 
 **Note:** Tags are permanently deleted (no trash support).
 
+## Menus Commands
+
+### List Menus
+
+List all navigation menus:
+
+```bash
+# Basic list (JSON format)
+wordpress menus list
+
+# Table format
+wordpress menus list --table
+
+# Select specific fields
+wordpress menus list --properties "id,name,slug,locations"
+```
+
+### Get Menu Details
+
+Retrieve a single navigation menu by ID, slug, or name:
+
+```bash
+# By ID
+wordpress menus get 5496
+
+# By slug
+wordpress menus get category-tag-menu
+
+# Table format
+wordpress menus get 5496 --table
+```
+
+### List Menu Locations
+
+List the theme's registered menu locations and the menu assigned to each:
+
+```bash
+wordpress menus locations
+wordpress menus locations --table
+```
+
+### List Menu Items
+
+List the items in a menu, identified by menu ID/slug/name or by theme location:
+
+```bash
+# By menu identifier
+wordpress menus items --menu "Category/Tag Menu"
+
+# By theme location
+wordpress menus items --location secondary_menu --table
+
+# Limit results
+wordpress menus items --menu category-tag-menu --limit 50
+```
+
+### Add Page to Menu
+
+Add a published page to a navigation menu (idempotent — returns the existing item if the page is already in the menu):
+
+```bash
+# Add page 1234 to a menu by identifier
+wordpress menus add-page 1234 --menu "Category/Tag Menu"
+
+# Add to a theme location with a custom title and order
+wordpress menus add-page 1234 --location secondary_menu --title "Docs" --menu-order 3
+```
+
 ## Profiles Commands
 
 ### List Profiles

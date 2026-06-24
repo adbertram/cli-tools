@@ -105,6 +105,12 @@ OSASCRIPT_TIMEOUT_SECONDS = 30
 # Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
 # benign PowerPoint startup dialog cannot block the recording indefinitely.
 OPEN_DECK_DISMISS_ATTEMPTS = 8
+# The dialog probe is best-effort: re-probe a few times with short sleeps to ride
+# out the AX-not-ready race in the first moments after PowerPoint launches before
+# concluding "no dialog". Never fatal — a probe that still cannot read dialog
+# state just means the auto-dismiss convenience is skipped, not that recording stops.
+DIALOG_PROBE_ATTEMPTS = 3
+DIALOG_PROBE_RETRY_SECONDS = 0.5
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 INTER_SLIDE_ACTIONS = [{
@@ -166,6 +172,10 @@ def slide_label(item, index):
     if item[SLIDE_IDENTITY_FIELD] < 1:
         raise ValueError(f"{SLIDE_LABEL_PREFIX} item {index} {SLIDE_IDENTITY_FIELD} must be greater than zero")
     return f"{SLIDE_LABEL_PREFIX} {item[SLIDE_IDENTITY_FIELD]}"
+
+
+def log_warning(message):
+    print(f"Warning: {message}", file=sys.stderr)
 
 
 def run(command, timeout=None):
@@ -1047,18 +1057,281 @@ def create_powerpoint_state(config):
     }
 
 
+DIALOG_FIELD_SEPARATOR = "\x1f"
+DIALOG_TEXT_SEPARATOR = "\x1e"
+
+
+def render_frontmost_powerpoint_dialog():
+    """AppleScript that reports the frontmost PowerPoint blocking dialog, if any.
+
+    Emits ``<has-dialog><US><title><US><joined-static-text>`` where has-dialog is
+    "true"/"false", the title is the dialog/sheet window name, and the static text
+    is every visible static-text value joined by a record separator. A window only
+    counts as a blocking dialog when it owns a sheet OR its subrole is an Apple
+    dialog/system-dialog subrole, so the live Slide Show / presentation window is
+    never misread as a modal. Each query is wrapped in ``try`` so a window that
+    refuses an attribute cannot abort the whole probe.
+    """
+    return [
+        'if application "Microsoft PowerPoint" is not running then return "false" & "%s" & "" & "%s" & ""' % (
+            DIALOG_FIELD_SEPARATOR,
+            DIALOG_FIELD_SEPARATOR,
+        ),
+        'tell application "System Events"',
+        'tell process "Microsoft PowerPoint"',
+        "set dialogTitle to \"\"",
+        "set dialogText to \"\"",
+        "set hasDialog to false",
+        "repeat with currentWindow in windows",
+        "set isDialog to false",
+        "try",
+        "if (count of sheets of currentWindow) > 0 then set isDialog to true",
+        "end try",
+        "try",
+        "set windowSubrole to subrole of currentWindow",
+        'if windowSubrole is "AXDialog" or windowSubrole is "AXSystemDialog" then set isDialog to true',
+        "end try",
+        "if isDialog then",
+        "set hasDialog to true",
+        "try",
+        "set dialogTitle to name of currentWindow as text",
+        "end try",
+        "try",
+        "set staticTexts to value of every static text of currentWindow",
+        "repeat with staticTextValue in staticTexts",
+        "try",
+        'set dialogText to dialogText & (staticTextValue as text) & "%s"' % DIALOG_TEXT_SEPARATOR,
+        "end try",
+        "end repeat",
+        "end try",
+        "try",
+        "set sheetStaticTexts to value of every static text of sheets of currentWindow",
+        "repeat with sheetStaticTextValue in sheetStaticTexts",
+        "try",
+        'set dialogText to dialogText & (sheetStaticTextValue as text) & "%s"' % DIALOG_TEXT_SEPARATOR,
+        "end try",
+        "end repeat",
+        "end try",
+        "exit repeat",
+        "end if",
+        "end repeat",
+        "end tell",
+        'return (hasDialog as text) & "%s" & dialogTitle & "%s" & dialogText' % (
+            DIALOG_FIELD_SEPARATOR,
+            DIALOG_FIELD_SEPARATOR,
+        ),
+        "end tell",
+    ]
+
+
+def parse_frontmost_dialog_payload(output):
+    """Parse the dialog probe payload, treating anything ill-formed as "no dialog".
+
+    The dialog probe is best-effort convenience, not a recording step. The
+    live-process System Events path can return a bare ``false`` (or an empty /
+    AppleScript-error string) instead of the 3-field ``\\x1f``-delimited payload
+    when AX is not ready yet or an Automation consent gate intercepts the event.
+    Any response that is not a well-formed 3-field payload — bare ``false``,
+    empty string, or an AppleScript error string — is read as "no dialog
+    detected" and returns ``None`` rather than raising, so a probe that cannot
+    read dialog state never crashes the recorder.
+    """
+    parts = output.split(DIALOG_FIELD_SEPARATOR)
+    if len(parts) != 3:
+        return None
+    has_dialog = parts[0].strip() == "true"
+    if not has_dialog:
+        return None
+    title = parts[1].strip()
+    text = " ".join(
+        segment.strip()
+        for segment in parts[2].split(DIALOG_TEXT_SEPARATOR)
+        if segment.strip() != ""
+    )
+    return {"title": title, "text": text}
+
+
+def frontmost_powerpoint_dialog():
+    """Return the frontmost PowerPoint blocking dialog as ``{title, text}`` or None.
+
+    Best-effort and never fatal. Any failure reading dialog state — a hard
+    osascript subprocess timeout, an AppleScript / System Events / AX error, or an
+    ill-formed payload — is treated as "no dialog detected" (returns ``None``) and
+    the underlying stderr is logged so a genuine Automation consent gate stays
+    diagnosable. An AX-not-ready race right after launch is ridden out by
+    re-probing a few times with short sleeps before concluding "no dialog".
+    """
+    last_error = None
+    for attempt in range(DIALOG_PROBE_ATTEMPTS):
+        try:
+            output = capture_osascript(*render_frontmost_powerpoint_dialog())
+        # Best-effort by design: ANY failure reading dialog state (osascript
+        # timeout, System Events / AX / Automation-consent error, ill-formed
+        # output) is non-fatal and read as "no dialog detected".
+        except Exception as error:  # noqa: BLE001 - intentional best-effort catch-all
+            last_error = error
+        else:
+            return parse_frontmost_dialog_payload(output)
+        if attempt < DIALOG_PROBE_ATTEMPTS - 1:
+            time.sleep(DIALOG_PROBE_RETRY_SECONDS)
+
+    if last_error is not None:
+        log_warning(
+            "PowerPoint dialog probe could not read dialog state; proceeding as "
+            f"if no dialog is present. Underlying osascript error: {last_error}"
+        )
+    return None
+
+
+def dialog_matches_catalog_entry(entry, title, text):
+    title_lower = title.lower()
+    text_lower = text.lower()
+    for needle in entry["title_contains"]:
+        if needle.lower() in title_lower:
+            return True
+    for needle in entry["text_contains"]:
+        if needle.lower() in text_lower:
+            return True
+    return False
+
+
+def match_startup_dialog(dialog):
+    for entry in POWERPOINT_STARTUP_DIALOGS:
+        if dialog_matches_catalog_entry(entry, dialog["title"], dialog["text"]):
+            return entry
+    return None
+
+
+def render_dismiss_dialog_button(button_names):
+    """AppleScript that clicks the first present benign button, else presses Escape.
+
+    Searches the frontmost PowerPoint window and any sheet it owns for a button
+    whose name matches one of ``button_names`` (in priority order) and clicks it.
+    When no listed button is present it presses Escape, the safe default for a
+    benign startup sheet. Returns the name of the clicked button, or "escape".
+    """
+    lines = [
+        'tell application "Microsoft PowerPoint" to activate',
+        'tell application "System Events"',
+        'tell process "Microsoft PowerPoint"',
+        "set clicked to \"\"",
+    ]
+    for button_name in button_names:
+        quoted = quote_applescript_text(button_name)
+        lines.extend([
+            'if clicked is "" then',
+            "try",
+            f'click button "{quoted}" of front window',
+            f'set clicked to "{quoted}"',
+            "end try",
+            "end if",
+            'if clicked is "" then',
+            "try",
+            f'click button "{quoted}" of sheet 1 of front window',
+            f'set clicked to "{quoted}"',
+            "end try",
+            "end if",
+        ])
+    lines.extend([
+        'if clicked is "" then',
+        "key code 53",
+        'set clicked to "escape"',
+        "end if",
+        "return clicked",
+        "end tell",
+        "end tell",
+    ])
+    return lines
+
+
+def try_auto_dismiss_startup_dialog():
+    """Best-effort auto-dismiss of a benign PowerPoint startup dialog. Never fatal.
+
+    Auto-dismissing benign startup sheets (sign-in, 'What's New', Document
+    Recovery, update prompts, first-run) is a CONVENIENCE that smooths recording;
+    it must never block or crash the run. Returns the matched catalog entry's name
+    when a known benign dialog was dismissed, otherwise ``None`` — no dialog in
+    front, an unrecognized dialog (logged and left alone — never blindly clicked),
+    or any failure reading/dismissing dialog state. The actual recording steps
+    (``open_deck`` and the slideshow drive) remain the fail-fast gates; this probe
+    never decides success or failure of the recording.
+    """
+    dialog = frontmost_powerpoint_dialog()
+    if dialog is None:
+        return None
+
+    entry = match_startup_dialog(dialog)
+    if entry is None:
+        log_warning(
+            "An unrecognized PowerPoint dialog is in front and was NOT auto-dismissed "
+            f"(title={dialog['title']!r}, text={dialog['text']!r}). Proceeding; if the "
+            "deck does not open or the slideshow does not start, dismiss it manually "
+            "and retry."
+        )
+        return None
+
+    try:
+        capture_osascript(*render_dismiss_dialog_button(entry["dismiss_button"]))
+    except Exception as error:  # noqa: BLE001 - dismiss is best-effort, never fatal
+        log_warning(
+            f"Could not auto-dismiss the benign PowerPoint '{entry['name']}' dialog; "
+            f"proceeding. Underlying osascript error: {error}"
+        )
+        return None
+    return entry["name"]
+
+
+def open_deck_failure_error(deck_path, last_dialog):
+    powerpoint_running = powerpoint_is_running()
+    if last_dialog is not None:
+        cause = (
+            f"A PowerPoint dialog is still blocking automation "
+            f"(title={last_dialog['title']!r}, text={last_dialog['text']!r}); "
+            "dismiss it manually, then retry."
+        )
+    else:
+        cause = (
+            "The most likely cause is a blocking PowerPoint modal / first-run dialog "
+            "(sign-in, 'What's New', Document Recovery, update prompt) or a pending "
+            "macOS Automation (AppleEvents) consent prompt for controlling PowerPoint. "
+            "Dismiss any open PowerPoint dialog and grant Automation access (System "
+            "Settings -> Privacy & Security -> Automation), then retry."
+        )
+    return RuntimeError(
+        f"PowerPoint deck did not open: {deck_path} "
+        f"(PowerPoint running: {powerpoint_running}). {cause}"
+    )
+
+
 def open_deck(config):
     deck_path = Path(config["deck_path"])
     if presentation_is_open(deck_path):
         return
 
     run(["open", "-a", "Microsoft PowerPoint", str(deck_path)])
-    for _ in range(60):
+
+    # Bounded open/dismiss/recheck loop: poll for the deck to open, and on each
+    # cycle best-effort auto-dismiss a recognized benign startup dialog so a
+    # transient first-run / sign-in / recovery / update sheet does not delay the
+    # open. The dismiss step is a convenience and never fatal (an unreadable probe
+    # or unknown dialog is logged and skipped). Whether the deck actually opened is
+    # the fail-fast gate: if it never opens within the budget, raise loudly.
+    last_dialog = None
+    for _ in range(OPEN_DECK_DISMISS_ATTEMPTS):
+        deadline = time.monotonic() + (OSASCRIPT_TIMEOUT_SECONDS / OPEN_DECK_DISMISS_ATTEMPTS)
+        while time.monotonic() < deadline:
+            if presentation_is_open(deck_path):
+                return
+            time.sleep(0.5)
+
+        last_dialog = frontmost_powerpoint_dialog()
+        if last_dialog is None:
+            continue
+        try_auto_dismiss_startup_dialog()
         if presentation_is_open(deck_path):
             return
-        time.sleep(0.5)
 
-    raise RuntimeError(f"PowerPoint deck did not open: {deck_path}")
+    raise open_deck_failure_error(deck_path, last_dialog)
 
 
 def render_run_slideshow_range(starting_slide, ending_slide):
@@ -1087,8 +1360,30 @@ def render_run_slideshow_range(starting_slide, ending_slide):
     ]
 
 
+def clear_benign_dialogs_before_slideshow():
+    """Best-effort clear of benign PowerPoint startup dialogs before the drive. Never fatal.
+
+    PowerPoint can surface a startup/first-run sheet between opening the deck and
+    the slideshow drive. Best-effort auto-dismiss recognized benign ones (bounded);
+    stop as soon as none is dismissed. This is a CONVENIENCE — it never raises and
+    never blocks. A remaining unrecognized/unclearable dialog is logged (via
+    ``try_auto_dismiss_startup_dialog``) and left alone; the slideshow drive that
+    follows is the fail-fast gate, so a genuine blocker still surfaces loudly there
+    rather than being silently waited on here.
+    """
+    for _ in range(OPEN_DECK_DISMISS_ATTEMPTS):
+        if frontmost_powerpoint_dialog() is None:
+            return
+        if try_auto_dismiss_startup_dialog() is None:
+            # Nothing benign was dismissed this cycle (no dialog, an unrecognized
+            # one already logged, or an unreadable probe). Stop; do not spin or raise.
+            return
+        time.sleep(0.5)
+
+
 def start_slideshow(config):
     open_deck(config)
+    clear_benign_dialogs_before_slideshow()
     starting_slide = config["items"][0]["identity"]["value"]
     ending_slide = config["items"][-1]["identity"]["value"]
     run_osascript(*render_run_slideshow_range(starting_slide, ending_slide))
