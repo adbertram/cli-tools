@@ -335,8 +335,11 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
     monkeypatch.setattr("builtins.input", _raise_eof)
     monkeypatch.setattr("builtins.open", _raise_tty_error)
     monkeypatch.setattr("cli_tools_shared.browser.driver._chrome_binary", lambda: "/tmp/chrome")
-    monkeypatch.setattr("cli_tools_shared.browser.driver._chrome_launch_command", lambda _chrome, args: args)
-    monkeypatch.setattr("cli_tools_shared.auth.subprocess.Popen", lambda *_a, **_k: proc)
+    popen_calls = []
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.subprocess.Popen",
+        lambda *a, **k: popen_calls.append((a, k)) or proc,
+    )
     monkeypatch.setattr(
         browser,
         "_wait_for_manual_browser_close",
@@ -350,6 +353,7 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
 
     assert waited == [(proc, tmp_path / "chromium-profile")]
     assert proc.terminated is True
+    assert popen_calls[0][0][0][0] == "/tmp/chrome"
 
 
 # ---------------------------------------------------------------------------

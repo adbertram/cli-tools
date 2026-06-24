@@ -452,3 +452,50 @@ def register_commands(
         ctx.call_on_close(lambda: reset_runtime_profile_resolution(tokens))
 
     app.add_typer(sub_app, name=name, help=help)
+
+
+def register_root_commands(
+    app: typer.Typer,
+    get_config: Callable,
+    command_module,
+    *,
+    cli_name: Optional[str] = None,
+) -> None:
+    """Register a command module's commands directly on the root app.
+
+    This keeps COMMAND_CREDENTIALS enforcement for CLIs that intentionally
+    expose leaf commands at the root instead of under a resource group.
+    """
+    sub_app = command_module.app
+    cred_map = getattr(command_module, "COMMAND_CREDENTIALS", None)
+    resolved_cli_name = cli_name or (app.info.name if app.info.name else "cli")
+
+    if app.registered_callback is None:
+        @app.callback()
+        def _cli_tools_root_command_group():
+            pass
+
+    if cred_map is not None:
+        _install_command_wrappers(
+            sub_app,
+            cred_map=cred_map,
+            get_config=get_config,
+            cli_name=resolved_cli_name,
+        )
+
+    existing_names = {
+        command_info.name or _callback_name(command_info.callback)
+        for command_info in app.registered_commands
+    }
+    existing_names.update(
+        group_info.name
+        for group_info in app.registered_groups
+        if group_info.name
+    )
+
+    for command_info in sub_app.registered_commands:
+        command_name = command_info.name or _callback_name(command_info.callback)
+        if command_name in existing_names:
+            raise ValueError(f"Root command '{command_name}' is already registered.")
+        app.registered_commands.append(command_info)
+        existing_names.add(command_name)

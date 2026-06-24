@@ -8,7 +8,14 @@ import typer
 
 from .config import ConfigError, get_profile_auth_settings, resolve_tool_dir
 from .filters import apply_filters, apply_limit, apply_properties_filter
-from .profiles import ProfileStore, create_profile, delete_profile, list_profiles, select_profile
+from .profiles import (
+    ProfileStore,
+    create_profile,
+    delete_profile,
+    list_profiles,
+    rename_profile,
+    select_profile,
+)
 from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command, confirm_destructive_action
 
 
@@ -253,6 +260,7 @@ def create_profiles_app(get_config_fn, tool_name: str):
             f"Delete profile '{name}'? This removes the .env file and profile data.",
             assume_yes=force,
             action_description=f"delete profile '{name}'",
+            skip_flag_hint="--force",
         )
 
         delete_profile(profile_store, name)
@@ -264,5 +272,59 @@ def create_profiles_app(get_config_fn, tool_name: str):
     app.command("remove")(
         command(_delete_profile)
     )
+
+    @app.command("rename")
+    @command
+    def profiles_rename(
+        old: str = typer.Argument(..., help="Existing profile name to rename"),
+        new: str = typer.Argument(..., help="New profile name (must not already exist)"),
+        keep_old: bool = typer.Option(
+            False,
+            "--keep-old",
+            help="Build and activate the new profile but leave the old profile dir and old secrets intact.",
+        ),
+        force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation"),
+    ):
+        """Rename a profile, re-keying its secrets to the new profile name."""
+        if not keep_old:
+            confirm_destructive_action(
+                f"Rename profile '{old}' to '{new}'? This removes the old "
+                f"profile '{old}' and its secret-manager keys after the new "
+                "profile is built.",
+                assume_yes=force,
+                action_description=f"rename profile '{old}' to '{new}'",
+                skip_flag_hint="--force",
+            )
+
+        secret_name_config = {}
+
+        def _secret_name_for_field(field_name: str, new_env_path) -> str:
+            """Profile-scoped secret name for ``new``, reusing the config builder.
+
+            The builder on ``BaseConfig`` is profile-independent given the target
+            env path: an instance bound to the OLD profile (whose secrets exist,
+            so it constructs) produces the correct NEW secret name when handed
+            the new profile's env path. Built once and reused across fields.
+            """
+            config = secret_name_config.get("config")
+            if config is None:
+                config = get_config_fn(profile=old)
+                secret_name_config["config"] = config
+            return config._secret_name_for_field_in_profile(field_name, new_env_path)
+
+        rename_profile(
+            profile_store,
+            old,
+            new,
+            secret_name_for_field=_secret_name_for_field,
+            keep_old=keep_old,
+        )
+
+        if keep_old:
+            print_success(
+                f"Profile '{new}' created from '{old}' and activated; '{old}' left intact"
+            )
+        else:
+            print_success(f"Profile '{old}' renamed to '{new}'")
 
     return app

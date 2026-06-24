@@ -376,14 +376,15 @@ def confirm_destructive_action(
     *,
     assume_yes: bool,
     action_description: str,
+    skip_flag_hint: str = "--yes",
 ) -> None:
     """Gate a destructive action behind confirmation, safe for non-TTY contexts.
 
     This is the single confirmation path for every destructive CLI command
     (delete, clear, purge, etc.). It guarantees three things:
 
-    * ``assume_yes=True`` (the command's ``--yes``/``-y``/``--force`` flag was
-      passed): proceed with no prompt. Behavior is unchanged.
+    * ``assume_yes=True`` (the command's confirmation-skip flag was passed):
+      proceed with no prompt. Behavior is unchanged.
     * stdin is an interactive terminal: prompt the user with ``typer.confirm``.
       Declining cancels cleanly with exit code 0 (no error).
     * stdin is NOT a terminal (agent Bash tool, pipe, CI) and ``assume_yes`` is
@@ -398,6 +399,11 @@ def confirm_destructive_action(
         action_description: Short imperative describing the action for the
             non-interactive refusal message, e.g. ``"delete record recXXX"`` or
             ``"delete field fldXXX"``.
+        skip_flag_hint: The exact confirmation-skip flag the *calling command*
+            exposes, named in the non-interactive refusal message so the user
+            re-runs with the correct flag. Commands that use ``--force``/``-F``
+            (e.g. ``auth profiles delete``) must pass ``"--force"``; the default
+            ``"--yes"`` suits commands that expose ``--yes``/``-y``.
 
     Raises:
         ClientError: When confirmation is required but stdin is not a TTY.
@@ -411,7 +417,7 @@ def confirm_destructive_action(
     if not _stdin_is_interactive_tty():
         raise ClientError(
             f"Refusing to {action_description} without confirmation. "
-            "Re-run with --yes in non-interactive contexts."
+            f"Re-run with {skip_flag_hint} in non-interactive contexts."
         )
 
     if not typer.confirm(prompt):

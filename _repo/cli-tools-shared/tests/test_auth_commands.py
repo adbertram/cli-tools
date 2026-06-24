@@ -699,8 +699,8 @@ def test_login_requires_profile_when_multiple_profile_auth_types_exist(tmp_path,
     assert "auth login requires --profile" in result.output
 
 
-def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeypatch):
-    """--force must clear OAuth app fields before opening the auth handler."""
+def test_force_oauth_authorization_code_preserves_setup_fields(tmp_path, monkeypatch):
+    """--force clears tokens without deleting reusable OAuth app credentials."""
     from cli_tools_shared.config import BaseConfig
 
     class _Cfg(BaseConfig):
@@ -769,25 +769,119 @@ def test_force_oauth_authorization_code_reprompts_setup_fields(tmp_path, monkeyp
     result = CliRunner().invoke(
         app,
         ["login", "--force"],
-        input="new-client\nnew-secret\nhttps://new.example/callback\n",
+        input="",
     )
 
     assert result.exit_code == 0, result.output
     assert handler_values == {
         "force": True,
-        "client_id": "new-client",
-        "client_secret": "new-secret",
-        "redirect_uri": "https://new.example/callback",
+        "client_id": "old-client",
+        "client_secret": "old-secret",
+        "redirect_uri": "https://old.example/callback",
         "access_token": None,
     }
 
     content = (default_dir / ".env").read_text()
-    assert "CLIENT_ID='new-client'" in content
+    assert "CLIENT_ID=old-client" in content
     assert "CLIENT_SECRET='secret://tool-client-secret'" in content
-    assert "REDIRECT_URI='https://new.example/callback'" in content
+    assert "REDIRECT_URI=https://old.example/callback" in content
     assert "ACCESS_TOKEN=''" in content
-    assert "old-client" not in content
     assert "old-secret" not in content
+
+
+def test_force_custom_login_handler_preserves_profile_credentials(tmp_path, monkeypatch):
+    """Google-style custom OAuth login can reuse saved client fields on --force."""
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.CUSTOM, CredentialType.BROWSER_SESSION]
+        CUSTOM_REQUIRED_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
+        CUSTOM_ALL_FIELDS = ["CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN"]
+        CUSTOM_LOGIN_PROMPTS = [
+            ("CLIENT_ID", "OAuth Client ID", False),
+            ("CLIENT_SECRET", "OAuth Client Secret", True),
+        ]
+        CUSTOM_EPHEMERAL_FIELDS = ["ACCESS_TOKEN"]
+        CUSTOM_SENSITIVE_FIELDS = ["CLIENT_SECRET"]
+
+        def get_browser(self):
+            return browser
+
+    for name in ("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+
+    browser = MagicMock()
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nACTIVE=true\n"
+    )
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    default_dir = base_profiles_dir / "default"
+    default_dir.mkdir(parents=True)
+    (default_dir / ".env").write_text(
+        "ACTIVE=true\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "CLIENT_ID=profile-client\n"
+            "CLIENT_SECRET=profile-secret\n"
+            "ACCESS_TOKEN=old-access-token\n",
+        )
+    )
+    cookies = (
+        default_dir
+        / "browser-data"
+        / "chromium-profile"
+        / "Default"
+        / "Cookies"
+    )
+    cookies.parent.mkdir(parents=True, exist_ok=True)
+    cookies.write_text("sqlite-stub")
+
+    handler_values = {}
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    def login_handler(config, force):
+        handler_values.update(
+            {
+                "force": force,
+                "client_id": config.client_id,
+                "client_secret": config.client_secret,
+                "access_token": config.access_token,
+            }
+        )
+
+    app = create_auth_app(get_config, tool_name="tool", login_handler=login_handler)
+    result = CliRunner().invoke(app, ["login", "--force"], input="")
+
+    assert result.exit_code == 0, result.output
+    assert "Enter OAuth Client ID" not in result.output
+    assert handler_values == {
+        "force": True,
+        "client_id": "profile-client",
+        "client_secret": "profile-secret",
+        "access_token": None,
+    }
+    browser.clear_session.assert_called_once_with()
+
+    content = (default_dir / ".env").read_text()
+    assert "CLIENT_ID=profile-client" in content
+    assert "CLIENT_SECRET='secret://tool-client-secret'" in content
+    assert "ACCESS_TOKEN=''" in content
+    assert "profile-secret" not in content
 
 
 def test_profiles_create_requires_auth_type_for_profile_auth_configs(tmp_path, monkeypatch):

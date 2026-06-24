@@ -352,7 +352,7 @@ class BrowserAutomation:
         cookies that help the manual login pass risk scoring; the fresh login
         overwrites the session cookies regardless.
         """
-        from .browser.driver import _chrome_binary, _chrome_launch_command
+        from .browser.driver import _chrome_binary
 
         # Release any CDP browser (e.g. from a pre-login auth check) so the
         # persistent profile is unlocked for the plain browser.
@@ -369,14 +369,12 @@ class BrowserAutomation:
             "--no-default-browser-check",
             self.LOGIN_URL,
         ]
-        launch_args = _chrome_launch_command(chrome, args)
-
         print_info("Opening a normal browser window for login (no automation attached).")
         print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
         print_info("Then come back here and press Enter to capture the session.")
 
         proc = subprocess.Popen(
-            launch_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         try:
             confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)

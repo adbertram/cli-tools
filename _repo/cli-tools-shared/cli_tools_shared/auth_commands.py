@@ -73,15 +73,8 @@ def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
 
 
 def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
-    """Clear fields collected by auth login plus transient auth state."""
-    prompt_fields = [
-        field_name
-        for field_name, _prompt_text, _hide in combined_login_prompts(
-            credential_types,
-            config=config,
-        )
-    ]
-    fields = prompt_fields + combined_ephemeral_fields(credential_types, config=config)
+    """Clear transient login state without removing reusable credentials."""
+    fields = combined_ephemeral_fields(credential_types, config=config)
     for field_name in dict.fromkeys(fields):
         config._clear(field_name)
 
@@ -580,11 +573,11 @@ def create_auth_app(
             from .oauth import oauth_login
             effective_handler = oauth_login
 
-        # Force clears the active credential fields so login prompts collect
-        # fresh values before any OAuth/browser handler runs.
+        # Force clears only transient auth state. Static credentials such as
+        # client IDs, client secrets, API keys, and redirect URIs remain usable.
         if force:
             _clear_login_state(config, active_types)
-            print_info("Existing sessions cleared")
+            print_info("Existing ephemeral auth state cleared")
 
         _prompt_and_save(
             config,
@@ -603,9 +596,9 @@ def create_auth_app(
             _prompt_and_save(
                 config,
                 combined_login_prompts(active_types, config=config),
-                skip_if_set=not force,
+                skip_if_set=True,
             )
-            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=not force)
+            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=True)
 
             # Delegate to handler for token acquisition
             effective_handler(config, force)
@@ -613,7 +606,7 @@ def create_auth_app(
             # Default prompt-based login — skip fields that already have values
             # (force only clears ephemeral fields, so static creds remain)
             prompted = _prompt_and_save(config, combined_login_prompts(active_types, config=config))
-            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=not force)
+            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=True)
 
             if prompted:
                 print_success("Credentials saved successfully")
@@ -633,7 +626,7 @@ def create_auth_app(
                 None, "--profile", "-p", help="Profile name to save credentials to"
             ),
             force: bool = typer.Option(
-                False, "--force", "-F", help="Clear existing credentials and re-authenticate"
+                False, "--force", "-F", help="Clear existing ephemeral auth state and re-authenticate"
             ),
             credential_type: Optional[str] = typer.Option(
                 None, "--credential-type", "--credential", "-c", help=credential_type_help
@@ -650,7 +643,7 @@ def create_auth_app(
                 None, "--profile", "-p", help="Profile name to save credentials to"
             ),
             force: bool = typer.Option(
-                False, "--force", "-F", help="Clear existing credentials and re-authenticate"
+                False, "--force", "-F", help="Clear existing ephemeral auth state and re-authenticate"
             ),
         ):
             _run_auth_login(profile, force)

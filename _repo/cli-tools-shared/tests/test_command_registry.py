@@ -19,6 +19,7 @@ from cli_tools_shared.command_registry import (
     _check_credentials,
     _resolve_runtime_profile_context,
     register_commands,
+    register_root_commands,
 )
 from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
 from cli_tools_shared.credentials import CredentialType
@@ -279,6 +280,50 @@ def test_registered_group_help_exposes_profile_option():
 
     assert result.exit_code == 0, result.output
     assert "--profile" in result.output
+
+
+def test_registered_root_commands_enforce_credentials_and_expose_profile_option():
+    calls = []
+    ran = []
+
+    class SingleProfileConfig:
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+        def _get(self, name):
+            return {"API_KEY": "saved-key"}.get(name)
+
+    def get_config(profile=None) -> SingleProfileConfig:
+        calls.append(profile)
+        return SingleProfileConfig()
+
+    command_app = typer.Typer()
+
+    @command_app.command("import")
+    def import_media():
+        ran.append("import")
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_root_commands(
+        root,
+        get_config,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"import": ["api_key"]},
+        ),
+        cli_name="tool",
+    )
+
+    help_result = CliRunner().invoke(root, ["import", "--help"])
+    assert help_result.exit_code == 0, help_result.output
+    assert "--profile" in help_result.output
+
+    result = CliRunner().invoke(root, ["import", "--profile", "staging"])
+
+    assert result.exit_code == 0, result.output
+    assert "ok" in result.output
+    assert calls == ["staging"]
+    assert ran == ["import"]
 
 
 def test_registered_group_accepts_profile_option_before_leaf_command():

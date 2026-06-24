@@ -44,6 +44,29 @@ def test_non_tty_refuses_fast_with_actionable_message(monkeypatch):
     assert "Re-run with --yes in non-interactive contexts." in message
 
 
+def test_non_tty_refusal_names_caller_skip_flag(monkeypatch):
+    """skip_flag_hint surfaces the calling command's actual skip flag.
+
+    ``auth profiles delete`` exposes ``--force``/``-F`` (not ``--yes``), so the
+    non-interactive refusal must tell the user to re-run with ``--force``.
+    """
+    monkeypatch.setattr(output, "_stdin_is_interactive_tty", lambda: False)
+    monkeypatch.setattr(typer, "confirm", lambda *a, **k: pytest.fail("must not prompt"))
+
+    with pytest.raises(ClientError) as excinfo:
+        confirm_destructive_action(
+            "Delete profile 'work'?",
+            assume_yes=False,
+            action_description="delete profile 'work'",
+            skip_flag_hint="--force",
+        )
+
+    message = str(excinfo.value)
+    assert "Refusing to delete profile 'work' without confirmation." in message
+    assert "Re-run with --force in non-interactive contexts." in message
+    assert "--yes" not in message
+
+
 def test_interactive_accept_proceeds(monkeypatch):
     """Interactive TTY + user confirms: return without raising."""
     monkeypatch.setattr(output, "_stdin_is_interactive_tty", lambda: True)
