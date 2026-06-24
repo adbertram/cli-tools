@@ -16,3 +16,4 @@ class AmazonBrowser(BrowserAutomation):
     LOGIN_URL = AUTH_CHECK_URL
     AUTH_URL_PATTERN = r"/ap/signin|/login|/register"
     AUTH_SUCCESS_SELECTOR = "#ordersContainer, .js-order-card, [data-order-id]"
+    MANUAL_LOGIN = True

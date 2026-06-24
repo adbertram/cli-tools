@@ -597,13 +597,22 @@ class DropboxClient:
                             else:
                                 file_remote_path = f"/{entry_name}"
 
-                            metadata, response = self.dbx.sharing_get_shared_link_file(
-                                url=shared_link.url,
-                                path=file_remote_path,
-                            )
+                            try:
+                                metadata, response = self.dbx.sharing_get_shared_link_file(
+                                    url=shared_link.url,
+                                    path=file_remote_path,
+                                )
+                                content = response.content
+                            except Exception as e:
+                                if "missing '.tag' key" not in str(e):
+                                    raise
+                                content = self._download_shared_link_file_content_raw(
+                                    url=shared_link.url,
+                                    path=file_remote_path,
+                                )
 
                             with open(local_entry_path, "wb") as f:
-                                f.write(response.content)
+                                f.write(content)
 
                             stats["files_downloaded"] += 1
                             stats["total_bytes"] += entry.size
@@ -622,6 +631,58 @@ class DropboxClient:
                 "path": remote_path,
                 "error": str(e),
             })
+
+    def _download_shared_link_file_content_raw(self, url: str, path: str) -> bytes:
+        """Download shared-link file content without SDK metadata deserialization.
+
+        Dropbox SDK 12.0.2 can fail to deserialize the download metadata header
+        when Dropbox omits ``link_permissions.resolved_visibility['.tag']``.
+        The content response is still valid, so this fallback calls the same
+        content-download route and returns only the response body.
+        """
+        import json
+        from dropbox import sharing
+        from dropbox.dropbox_client import RouteErrorResult
+        from dropbox.exceptions import ApiError
+        from stone.backends.python_rsrc import stone_serializers
+
+        route = sharing.get_shared_link_file
+        arg = sharing.GetSharedLinkMetadataArg(url, path, None)
+        serialized_arg = stone_serializers.json_encode(route.arg_type, arg)
+
+        self.dbx.check_and_refresh_access_token()
+        route_name = f"sharing/{route.name}"
+        if route.version > 1:
+            route_name += f"_v{route.version}"
+
+        res = self.dbx.request_json_string_with_retry(
+            route.attrs["host"] or "api",
+            route_name,
+            route.attrs["style"] or "rpc",
+            serialized_arg,
+            route.attrs["auth"],
+            None,
+            timeout=None,
+        )
+
+        if isinstance(res, RouteErrorResult):
+            decoded = json.loads(res.obj_result)
+            deserialized_error = stone_serializers.json_compat_obj_decode(
+                route.error_type,
+                decoded["error"],
+                strict=False,
+            )
+            user_message = decoded.get("user_message")
+            user_message_text = user_message and user_message.get("text")
+            user_message_locale = user_message and user_message.get("locale")
+            raise ApiError(
+                res.request_id,
+                deserialized_error,
+                user_message_text,
+                user_message_locale,
+            )
+
+        return res.http_resp.content
 
     def _shared_metadata_to_dict(self, metadata) -> Dict[str, Any]:
         """Convert shared link metadata to dictionary."""

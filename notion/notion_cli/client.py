@@ -1864,8 +1864,10 @@ class NotionClient:
         return (blocks, deferred)
 
     # Block types that REQUIRE direct children at creation time per the Notion API.
-    # column_list needs >=2 columns; column needs >=1 child block; table needs table_row children.
-    _CHILD_REQUIRED_TYPES = frozenset(["column_list", "column", "table"])
+    # column_list needs >=2 columns; column needs >=1 child block; table needs
+    # table_row children. Original synced_block content is not updatable later,
+    # so its direct children must be sent with the synced_block creation payload.
+    _CHILD_REQUIRED_TYPES = frozenset(["column_list", "column", "table", "synced_block"])
 
     def _upload_blocks_with_nesting(
         self,
@@ -1884,9 +1886,10 @@ class NotionClient:
         prior 2-level approach lost the grandchild→parent linkage when stripping
         deeper subtrees, re-attaching grandchildren to the wrong block).
 
-        Block types that require direct children at creation (column_list, column,
-        table) keep their direct children inline; only their grandchildren are
-        recursed (we look up the created child IDs via a follow-up children fetch).
+        Block types that require direct children at creation (column_list,
+        column, table, synced_block) keep their direct children inline; only
+        their grandchildren are recursed (we look up the created child IDs via
+        a follow-up children fetch).
 
         Args:
             parent_id: Page or block ID to append children under

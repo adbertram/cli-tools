@@ -366,3 +366,111 @@ def test_completion_resolves_recurring_backing_task_to_open_instance(tmp_path):
         )
 
     assert client._resolve_todo_completion_uuid("template-uuid") == "instance-uuid"
+
+
+def test_delete_completed_todo_uses_uncomplete_then_delete(monkeypatch):
+    """Deleting a completed todo must reopen it before delete (Things -1728 fix)."""
+    client = ThingsClient.__new__(ThingsClient)
+    scripts = []
+
+    monkeypatch.setattr(
+        client,
+        "get_todo",
+        lambda uuid: _make_todo(TaskStatus.COMPLETED, uuid=uuid, title="Done todo"),
+    )
+    monkeypatch.setattr(client, "_run_applescript", lambda script: scripts.append(script))
+
+    result = client.delete_todo("todo-uuid")
+
+    assert result == {"uuid": "todo-uuid", "title": "Done todo", "deleted": True}
+    assert len(scripts) == 1
+    # A completed todo cannot be deleted via `to do id` alone; it must be
+    # reopened in the same AppleScript transaction first.
+    assert "set status of theToDo to open" in scripts[0]
+    assert "delete theToDo" in scripts[0]
+
+
+def test_delete_incomplete_todo_keeps_direct_delete_path(monkeypatch):
+    """Incomplete todos must keep using the existing direct delete (no reopen)."""
+    client = ThingsClient.__new__(ThingsClient)
+    scripts = []
+
+    monkeypatch.setattr(
+        client,
+        "get_todo",
+        lambda uuid: _make_todo(TaskStatus.INCOMPLETE, uuid=uuid, title="Open todo"),
+    )
+    monkeypatch.setattr(client, "_run_applescript", lambda script: scripts.append(script))
+
+    result = client.delete_todo("todo-uuid")
+
+    assert result == {"uuid": "todo-uuid", "title": "Open todo", "deleted": True}
+    assert len(scripts) == 1
+    assert "delete theToDo" in scripts[0]
+    assert "set status of theToDo to open" not in scripts[0]
+
+
+def test_delete_todo_missing_raises_instead_of_phantom_delete(monkeypatch):
+    """A missing UUID must raise, not silently attempt an AppleScript delete."""
+    client = ThingsClient.__new__(ThingsClient)
+    ran = []
+
+    def missing_get_todo(uuid):
+        raise ClientError(f"Todo not found: {uuid}")
+
+    monkeypatch.setattr(client, "get_todo", missing_get_todo)
+    monkeypatch.setattr(client, "_run_applescript", lambda script: ran.append(script))
+
+    try:
+        client.delete_todo("does-not-exist")
+    except ClientError as exc:
+        assert "Todo not found: does-not-exist" in str(exc)
+    else:
+        raise AssertionError("Expected delete_todo to raise ClientError")
+    assert ran == []
+
+
+def test_delete_completed_todo_timeout_returns_deleted_when_trashed(monkeypatch):
+    """If osascript times out after trashing, report the durable deleted state."""
+    client = ThingsClient.__new__(ThingsClient)
+    states = iter([
+        _make_todo(TaskStatus.COMPLETED, uuid="todo-uuid", title="Done todo"),
+        _make_todo(TaskStatus.INCOMPLETE, uuid="todo-uuid", title="Done todo", trashed=True),
+    ])
+
+    monkeypatch.setattr(client, "get_todo", lambda uuid: next(states))
+    monkeypatch.setattr(
+        client,
+        "_run_applescript",
+        lambda script: (_ for _ in ()).throw(AppleScriptTimeoutError("timeout")),
+    )
+
+    result = client.delete_todo("todo-uuid")
+
+    assert result == {"uuid": "todo-uuid", "title": "Done todo", "deleted": True}
+
+
+def test_delete_completed_todo_timeout_reports_reopened_not_trashed(monkeypatch):
+    """A timeout that reopened but did not trash must surface a recoverable error."""
+    client = ThingsClient.__new__(ThingsClient)
+    states = iter([
+        _make_todo(TaskStatus.COMPLETED, uuid="todo-uuid", title="Done todo"),
+        _make_todo(TaskStatus.INCOMPLETE, uuid="todo-uuid", title="Done todo", trashed=False),
+    ])
+
+    monkeypatch.setattr(client, "get_todo", lambda uuid: next(states))
+    monkeypatch.setattr(
+        client,
+        "_run_applescript",
+        lambda script: (_ for _ in ()).throw(AppleScriptTimeoutError("timeout")),
+    )
+
+    try:
+        client.delete_todo("todo-uuid")
+    except ClientError as exc:
+        message = str(exc)
+        assert "was not trashed" in message
+        assert "status was also changed from 3 to 0" in message
+        assert "recoverable" in message
+    else:
+        raise AssertionError("Expected delete_todo to raise ClientError")

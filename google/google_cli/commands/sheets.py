@@ -126,7 +126,7 @@ def sheets_get(
 @app.command("read")
 def sheets_read(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
-    range_name: str = typer.Option("Sheet1", "--range", "-r", help="Range to read (e.g., Sheet1!A1:D10)"),
+    range_name: str = typer.Option("A:Z", "--range", "-r", help="Range to read (e.g., A1:D10 or TabName!A1:D10)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -204,7 +204,7 @@ def sheets_create(
 @app.command("append")
 def sheets_append(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
-    range_name: str = typer.Option("Sheet1", "--range", "-r", help="Range to append to"),
+    range_name: str = typer.Option("A:Z", "--range", "-r", help="Range to append to"),
     values: str = typer.Option(..., "--values", "-v", help="Values to append (comma-separated)"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):

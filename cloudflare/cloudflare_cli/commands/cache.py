@@ -1,11 +1,36 @@
 """Cache commands for Cloudflare CLI."""
+
 import typer
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from ..config import get_config
+from cli_tools_shared.output import command, print_json, print_table, print_success, handle_error
 
 
 app = typer.Typer(help="Manage Cloudflare cache", no_args_is_help=True)
+
+
+@app.command("clear")
+@command
+def cache_clear():
+    """Remove all cached CLI responses."""
+    config = get_config()
+    cache_dir = config.get_profile_data_dir() / "cache"
+
+    if not cache_dir.exists():
+        print_json({"files_removed": 0, "bytes_freed": 0})
+        return
+
+    total_bytes = 0
+    files_removed = 0
+    for cache_file in cache_dir.iterdir():
+        if not cache_file.is_file():
+            continue
+        total_bytes += cache_file.stat().st_size
+        cache_file.unlink()
+        files_removed += 1
+
+    print_json({"files_removed": files_removed, "bytes_freed": total_bytes})
 
 
 @app.command("purge")

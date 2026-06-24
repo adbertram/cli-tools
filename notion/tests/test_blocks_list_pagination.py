@@ -23,6 +23,7 @@ pages with multi-page has_more/next_cursor responses.
 import json
 
 import pytest
+import typer
 
 from notion_cli.client import NotionClient
 from notion_cli.commands import page
@@ -205,6 +206,29 @@ def _make_request_recording_appends(recorded, tail_size):
     return fake_make_request
 
 
+def _make_request_recording_payloads(recorded):
+    """Record append payloads and return created IDs for each sent child."""
+    counter = {"n": 0}
+
+    def fake_make_request(method, endpoint, data=None, params=None, retry=True):
+        assert method == "PATCH"
+        assert endpoint.endswith("/children")
+        recorded.append({"endpoint": endpoint, "data": data})
+        inserted = []
+        for child in data["children"]:
+            counter["n"] += 1
+            child_type = child["type"]
+            inserted.append({
+                "id": f"created-{counter['n']}",
+                "object": "block",
+                "type": child_type,
+                child_type: child.get(child_type, {}),
+            })
+        return {"object": "list", "results": inserted}
+
+    return fake_make_request
+
+
 def test_blocks_append_after_reports_only_inserted_count(monkeypatch):
     """Inserting 3 flat blocks after a block on a 110-block tail must report 3,
     not len(results) (which would include the 110 re-listed tail blocks).
@@ -230,6 +254,8 @@ def test_blocks_append_after_reports_only_inserted_count(monkeypatch):
         json_file=None,
         after="anchor-block-id",
         is_toggleable=False,
+        synced=False,
+        synced_from=None,
     )
 
     # The 3 flat input blocks were sent in a single chunk positioned by `after`.
@@ -262,6 +288,8 @@ def test_blocks_append_after_chunks_past_100_without_dropping_tail(monkeypatch):
         json_file=None,
         after="anchor-block-id",
         is_toggleable=False,
+        synced=False,
+        synced_from=None,
     )
 
     # Every append stayed within Notion's 100-block-per-call limit.
@@ -274,3 +302,122 @@ def test_blocks_append_after_chunks_past_100_without_dropping_tail(monkeypatch):
     assert all(call["after"] != "anchor-block-id" for call in recorded[1:])
     # Reported count is the 120 inserted, not inflated by the re-listed tail.
     assert printed[-1] == {"blocks_created": 120, "parent_id": "page-x"}
+
+
+def test_blocks_append_synced_wraps_content_with_inline_children(monkeypatch):
+    """An original synced block must send direct children in the creation payload.
+
+    The Notion API does not allow updating synced block content later, so the
+    command cannot create an empty synced_block and append content afterward.
+    """
+    recorded = []
+    client = NotionClient.__new__(NotionClient)
+    client._make_request = _make_request_recording_payloads(recorded)
+
+    printed = []
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(page, "print_json", printed.append)
+    monkeypatch.setattr(page, "print_success", lambda msg: None)
+
+    page.blocks_append(
+        block_id="page-x",
+        text="A\n\nB",
+        file=None,
+        json_data=None,
+        json_file=None,
+        after=None,
+        is_toggleable=False,
+        synced=True,
+        synced_from=None,
+    )
+
+    assert len(recorded) == 1
+    sent_children = recorded[0]["data"]["children"]
+    assert len(sent_children) == 1
+    synced_block = sent_children[0]
+    assert synced_block["type"] == "synced_block"
+    assert synced_block["synced_block"]["synced_from"] is None
+    assert [child["type"] for child in synced_block["synced_block"]["children"]] == [
+        "paragraph",
+        "paragraph",
+    ]
+    assert printed[-1] == {"blocks_created": 1, "parent_id": "page-x"}
+
+
+def test_blocks_append_synced_from_creates_duplicate_synced_block(monkeypatch):
+    recorded = []
+    client = NotionClient.__new__(NotionClient)
+    client._make_request = _make_request_recording_payloads(recorded)
+
+    printed = []
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(page, "print_json", printed.append)
+    monkeypatch.setattr(page, "print_success", lambda msg: None)
+
+    page.blocks_append(
+        block_id="page-x",
+        text=None,
+        file=None,
+        json_data=None,
+        json_file=None,
+        after="anchor-block-id",
+        is_toggleable=False,
+        synced=False,
+        synced_from="original-synced-block-id",
+    )
+
+    sent_children = recorded[0]["data"]["children"]
+    assert sent_children == [{
+        "object": "block",
+        "type": "synced_block",
+        "synced_block": {
+            "synced_from": {
+                "type": "block_id",
+                "block_id": "original-synced-block-id",
+            },
+        },
+    }]
+    assert recorded[0]["data"]["after"] == "anchor-block-id"
+    assert printed[-1] == {"blocks_created": 1, "parent_id": "page-x"}
+
+
+def test_blocks_append_synced_from_rejects_content_inputs(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(page, "get_client", lambda: pytest.fail("client should not be created"))
+    monkeypatch.setattr(page, "print_warning", warnings.append)
+
+    with pytest.raises(typer.Exit):
+        page.blocks_append(
+            block_id="page-x",
+            text="A",
+            file=None,
+            json_data=None,
+            json_file=None,
+            after=None,
+            is_toggleable=False,
+            synced=False,
+            synced_from="original-synced-block-id",
+        )
+
+    assert warnings == ["--synced-from cannot be combined with --synced or content inputs"]
+
+
+def test_blocks_append_synced_requires_one_content_input(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(page, "get_client", lambda: pytest.fail("client should not be created"))
+    monkeypatch.setattr(page, "print_warning", warnings.append)
+
+    with pytest.raises(typer.Exit):
+        page.blocks_append(
+            block_id="page-x",
+            text=None,
+            file=None,
+            json_data=None,
+            json_file=None,
+            after=None,
+            is_toggleable=False,
+            synced=True,
+            synced_from=None,
+        )
+
+    assert warnings == ["--synced requires exactly one content input: --text, --file, --json, or --json-file"]

@@ -71,7 +71,7 @@ def vault_list(
     group: Optional[str] = typer.Argument(None, help="Folder/group to list (e.g., 'Work' or 'Work/Servers')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum entries to return (default 50; use 0 for unlimited). A truncation notice is printed to stderr when results are capped."),
-    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter narrowed entries by LastPass category/note type"),
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Filter already-narrowed entries by LastPass category/note type; broad category scans over 50 candidates are refused"),
     filters: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value. Only metadata fields are filterable (id, name, group, full_path); name:like/ilike is case-insensitive. An unsupported field (e.g. Username, URL) errors instead of returning empty. E.g. name:like:%github%, group:eq:Home."),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of properties to include (supports dot notation)"),
 ):
@@ -86,6 +86,10 @@ def vault_list(
 
     The default limit is 50; pass `--limit 0` for unlimited. When results are
     truncated a notice is printed to stderr.
+
+    Category filtering checks each remaining candidate's NoteType and refuses
+    more than 50 candidates. Pass a group argument or metadata --filter before
+    --category; do not run category-only scans with --limit 0.
 
     Examples:
         lastpass items list

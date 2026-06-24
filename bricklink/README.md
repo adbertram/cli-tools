@@ -65,6 +65,56 @@ BrickLink redirects the active browser page to `confirmation_code_required`.
 The command keeps the browser session open, asks for the emailed code on
 stderr, submits it, and retries the original request.
 
+#### Browser Session Recovery Notes
+
+When browser-backed commands report an expired session or a persistent AWS WAF
+challenge, rebuild only the browser session first:
+
+```bash
+bricklink auth login --credential-type browser_session
+```
+
+In Codex or another non-interactive runner, start that command in a real TTY.
+It opens a headed Chrome profile at
+`~/.local/share/cli-tools/bricklink/authentication_profiles/default/browser-data/chromium-profile`
+and waits for Enter before verifying and closing the browser. Do not press
+Enter until the visible browser is actually signed in.
+
+Important gotchas from a live recovery attempt:
+
+- `--force` clears the saved browser profile before opening login. If the
+  runner cannot complete the interactive browser login, the prior session is
+  gone. Prefer the non-force command first.
+- The profile `.env` may contain `secret://...` placeholders. Resolve those
+  placeholders only through the CLI-tools secret manager, and never echo the
+  values. These are CLI credentials, not proof of a LEGO web login. In the
+  observed recovery, the saved `bricklink-username` was the store username and
+  LEGO rejected it as a login; the saved `bricklink-password` value also
+  produced LEGO `invalid_login`, so verify that secret is current before
+  trusting it for browser login.
+- Use the LEGO account email plus the LEGO web password. LastPass is the
+  expected source for that browser password. If `lastpass`/`lpass` is not logged
+  in, stop at the credential blocker; do not reset the LEGO password without
+  explicit approval.
+- The CLI-owned auth browser is opened through the shared Playwright harness and
+  is not exposed as an attachable CDP browser. For diagnostics, a Codex run can
+  launch the same persistent profile with Playwright and interact with the LEGO
+  form directly, then return to `bricklink auth status` for verification.
+- For email codes, use the newest Gmail result. Known BrickLink confirmation
+  subject: `Your BrickLink confirmation code`. If the local `google` CLI lacks
+  Gmail scopes, use the Gmail connector instead of asking the user to relay the
+  code.
+- `bricklink messages list` may be cached. Use `bricklink cache clear` and a
+  live browser-backed command such as `bricklink messages get <message-id>` to
+  verify the session.
+- Copying cookies from the normal Chrome profile did not restore CLI auth in
+  the observed recovery. BrickLink/LEGO auth cookies were `HttpOnly` and
+  encrypted (`v10`); reading Chrome Safe Storage required a macOS Keychain
+  Allow prompt, and a temporary copy of the normal Chrome profile still opened
+  BrickLink at the LEGO login page with only non-auth cookies exposed. Chrome
+  also refused remote debugging on the default profile with: `DevTools remote
+  debugging requires a non-default data directory`.
+
 ### Items
 
 ```bash

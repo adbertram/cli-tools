@@ -338,7 +338,7 @@ class MychartClient:
             params["patient"] = scoped_patient_id
         params.update(filters_to_search_params(filters))
         payload = self._make_request("GET", resource_type, params=params)
-        return _bundle_resources(payload)
+        return _bundle_resources(payload)[:limit]
 
     @cached
     def get_resource(self, resource_type: str, resource_id: str) -> dict:

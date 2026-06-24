@@ -87,8 +87,9 @@ facebook auth logout --force  # Skip confirmation
 
 `facebook auth login --force --profile <name>` requires `USERNAME` and
 `PASSWORD` in that auth profile. The CLI submits those credentials into the
-Facebook login form and fails loudly on checkpoint, two-step, or captcha
-screens instead of falling back to manual browser login.
+Facebook login form. If Facebook presents a checkpoint, two-step, or captcha
+screen, complete it manually in the opened browser; the CLI waits until the
+login finishes and the browser session is saved.
 
 ### Marketplace
 

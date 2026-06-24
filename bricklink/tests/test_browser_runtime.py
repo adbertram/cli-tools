@@ -47,6 +47,25 @@ class _NoNetworkIdlePage:
         return None
 
 
+class _WafChallengePage(_NoNetworkIdlePage):
+    def __init__(self, *, clear_after):
+        super().__init__()
+        self.clear_after = clear_after
+
+    def _waf_active(self):
+        return len(self.goto_calls) <= self.clear_after
+
+    def evaluate(self, script):
+        if "document.title" in script:
+            return "Human Verification" if self._waf_active() else "BrickLink"
+        return None
+
+    def query_selector(self, selector):
+        if selector == "#amzn-captcha-verify-button" and self._waf_active():
+            return object()
+        return None
+
+
 class _AbortedNavigationPage(_NoNetworkIdlePage):
     def __init__(self, *, body_visible=True):
         super().__init__()
@@ -194,6 +213,41 @@ def test_get_page_for_reraises_aborted_navigation_when_body_missing(monkeypatch)
 
     with pytest.raises(TimeoutError, match="body not visible"):
         runtime._get_page_for(url)
+
+
+def test_get_page_for_reloads_until_waf_challenge_clears(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _WafChallengePage(clear_after=2)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/contact.asp?orderID=31874336"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    assert page.goto_calls == [
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+    ]
+
+
+def test_get_page_for_raises_actionable_error_when_waf_challenge_persists(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _WafChallengePage(clear_after=99)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/contact.asp?orderID=31874336"
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._get_page_for(url, max_waf_retries=2)
+
+    msg = str(ei.value)
+    assert "AWS WAF CAPTCHA challenge" in msg
+    assert "did not clear after 2 reloads" in msg
+    assert page.goto_calls == [
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+    ]
 
 
 def test_check_session_expired_raises_actionable_even_if_clear_session_fails(monkeypatch):

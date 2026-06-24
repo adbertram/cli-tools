@@ -104,7 +104,7 @@ def themes_file_push(
     yes: bool = typer.Option(False, "--yes", help="Upload and overwrite the remote file"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show readback without uploading"),
 ) -> None:
-    """Push a local file to a remote WordPress theme through SSH/SFTP."""
+    """Push a local file to a remote WordPress theme through SSH."""
     try:
         result = push_theme_file(
             theme=theme,

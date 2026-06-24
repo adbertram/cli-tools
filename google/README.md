@@ -13,6 +13,7 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 - **Google Sheets**: Create, read, update spreadsheets
 - **Gmail**: List, search, read, send, reply, draft, archive messages; download attachments
 - **Google Calendar**: List, search calendar events (read-only)
+- **Google Contacts**: List and get contacts through the People API (read-only)
 - **Google Analytics**: GA4 reports, top pages, traffic sources, real-time data
 - **Google Search Console**: Request URL indexing, list verified sites
 - **Google Chat**: List spaces, read messages, send messages
@@ -42,6 +43,7 @@ pip install -e .
    - Google Sheets API
    - Gmail API
    - Google Calendar API
+   - People API
    - Search Console API
    - Google Analytics Data API
    - Google Analytics Admin API
@@ -172,10 +174,12 @@ google sheets list --filter "folder:<folder-id>"
 
 # Get spreadsheet metadata
 google sheets get <spreadsheet-id>
+# Inspect tab names before using a sheet-qualified range
+google sheets get <spreadsheet-id> | jq '.sheets[].properties.title'
 
 # Read spreadsheet data
 google sheets read <spreadsheet-id>
-google sheets read <spreadsheet-id> --range "Sheet1!A1:D10"
+google sheets read <spreadsheet-id> --range "A1:D10"
 google sheets read <spreadsheet-id>
 
 # Create a new spreadsheet
@@ -479,6 +483,21 @@ google calendar search "standup"
 # Get specific event
 google calendar get <event-id>
 ```
+
+### Google Contacts
+
+```bash
+# List contacts
+google contacts list
+google contacts list --limit 1000
+google contacts list --filter "organization:contains:Example"
+google contacts list --properties resourceName,displayName,primaryEmail,organization
+
+# Get a contact by resource name from contacts list
+google contacts get people/<contact-id>
+```
+
+**Note:** Contacts use the People API `contacts.readonly` scope. After adding this scope, re-authenticate with `google auth login --force`.
 
 ### Google Chat
 

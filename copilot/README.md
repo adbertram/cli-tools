@@ -11,6 +11,7 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 The Copilot CLI provides access to:
 - **Auth** - Manage CLI authentication (login, status, logout, profiles)
 - **Agents** - Create, update, delete, publish, and test agents
+- **Channels** - List/inspect agent channels and get Direct Line tokens (Teams enablement and secret retrieval are portal-only — see [Channels](#channels))
 - **Topics** - Manage conversation flows (list, create, update, delete, enable/disable)
 - **Agent Tools** - Connect connectors, prompts, flows, HTTP endpoints, or sub-agents as tools
 - **Knowledge** - Add file-based and Azure AI Search knowledge sources
@@ -136,6 +137,46 @@ copilot tool mcp tools list --url "https://mcp.example.com/sse" --limit 10
 copilot environment list --table
 copilot solution list --table
 ```
+
+### Capacity requirement for attaching tools and knowledge
+
+Before attaching a tool or knowledge source, the CLI runs a deterministic, fail-fast
+capacity pre-check on the target Power Platform environment. The attach is blocked
+(non-zero exit, no mutation) when the environment has **no Copilot Studio capacity**.
+This guards:
+
+```bash
+copilot agent tool add --agentId <id> --toolType <type> --id <tool-id>
+copilot agent knowledge add <agent-id> --component <component-id>
+copilot agent knowledge upload <agent-id> --file <path> --name <name>
+copilot agent knowledge azure-ai-search add <agent-id> --name ... --endpoint ... --index ... --api-key ...
+```
+
+An environment is entitled when **either** prepaid Copilot Studio capacity (Copilot
+Credits — `MCSMessages`, `MCSSessions`, or `VAConversations`) is allocated to it,
+**or** it is covered by an Enabled pay-as-you-go billing policy. When not entitled,
+the command exits with an error naming the environment and three fixes: allocate
+prepaid capacity in the [Power Platform admin center](https://admin.powerplatform.microsoft.com)
+(Licensing → Copilot Studio), link a pay-as-you-go billing policy, or use an
+environment that already has capacity. `copilot agent create` / `update` are not
+gated (they take no inline tool/knowledge payload).
+
+## Channels
+
+The `copilot agent channel` subgroup is **read-only**:
+
+```bash
+copilot agent channel list <agent-id> --table     # list channels for an agent
+copilot agent channel get <agent-id> directline    # inspect one channel
+copilot agent channel get-token <agent-id>          # mint a short-lived Direct Line token
+```
+
+Enabling a channel and retrieving the Web/Direct Line secret have **no supported Microsoft API** — the Power Platform "PVA Bots" REST API covers only quarantine operations, and even Microsoft's Copilot Studio Kit requires the secret to be entered by hand. These stay manual Copilot Studio portal steps:
+
+- **Enable Microsoft Teams:** publish the agent (`copilot agent publish <id>`), then in Copilot Studio go to **Channels → Teams and Microsoft 365 Copilot → Add channel**. Org-wide availability needs admin approval. See the [Microsoft docs](https://learn.microsoft.com/microsoft-copilot-studio/publication-add-bot-to-microsoft-teams).
+- **Get the Direct Line / Web channel secret:** in Copilot Studio go to **Settings → Security → Web channel security** and copy **Secret 1** or **Secret 2**. Teams-only licenses can't generate secrets. See the [Microsoft docs](https://learn.microsoft.com/microsoft-copilot-studio/configure-web-security).
+
+**For web embeds, prefer a token over the secret.** `copilot agent channel get-token <agent-id>` returns a short-lived Direct Line token without exposing the secret. If you must use the secret, exchange it for a token server-side via `POST https://directline.botframework.com/v3/directline/tokens/generate` — never embed the raw secret in browser code.
 
 ## Documentation
 

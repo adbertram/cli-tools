@@ -29,6 +29,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/chat.memberships.readonly",
     "https://www.googleapis.com/auth/chromewebstore",
     "https://www.googleapis.com/auth/datastudio",
+    "https://www.googleapis.com/auth/contacts.readonly",
 ]
 
 class ClientError(Exception):
@@ -179,6 +180,10 @@ class GoogleClient:
     def get_calendar_service(self):
         """Get Google Calendar service."""
         return self.get_service("calendar", "v3")
+
+    def get_people_service(self):
+        """Get Google People service."""
+        return self.get_service("people", "v1")
 
     def get_webmasters_service(self):
         """Get Google Search Console v1 service (for URL Inspection API)."""

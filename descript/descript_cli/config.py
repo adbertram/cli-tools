@@ -6,17 +6,18 @@ from cli_tools_shared.credentials import CredentialType
 
 
 class Config(BaseConfig):
-    """Descript CLI configuration (JWT extracted from running app)."""
+    """Descript CLI configuration."""
 
     DIST_NAME = "descript-cli"
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
-    DEFAULT_BASE_URL = "https://web.descript.com"
+    DEFAULT_BASE_URL = "https://descriptapi.com/v1"
     CUSTOM_REQUIRED_FIELDS: list = []
     CUSTOM_ALL_FIELDS = ["DESCRIPT_BASE_URL"]
 
     LOGIN_INSTRUCTIONS = (
-        "Descript authentication is extracted from the running Descript app.\n"
-        "Open Descript before running 'descript auth login'."
+        "Descript API authentication is managed by the official descript-api CLI.\n"
+        "The descript wrapper auto-provisions @descript/platform-cli@latest, "
+        "then runs 'descript auth login' or 'descript config set api-key'."
     )
 
     def __init__(self, profile: Optional[str] = None):
@@ -33,16 +34,10 @@ class Config(BaseConfig):
         return []
 
     def test_connection(self) -> Optional[dict]:
-        """Verify a JWT can be read from cache or the running app."""
-        from .client import DescriptClient, ClientError
-        try:
-            jwt = DescriptClient(config=self)._get_jwt()
-            return {
-                "api_test": "passed",
-                "token_preview": f"{jwt[:20]}..." if len(jwt) > 20 else "***",
-            }
-        except ClientError as e:
-            return {"api_test": f"failed: {e}"}
+        """Verify the official Descript API CLI is configured."""
+        from .platform import official_config_validate
+
+        return official_config_validate()
 
 
 _configs: dict = {}

@@ -76,7 +76,7 @@ class FreshBooksClient:
         refresh_token = self.config.refresh_token
         if not refresh_token:
             raise ClientError(
-                "No refresh token available. Please re-authenticate."
+                "No refresh token available - run 'freshbooks auth login'"
             )
         redirect_uri = self.config.redirect_uri or self.config.OAUTH_REDIRECT_URI
         if not redirect_uri:
@@ -96,10 +96,13 @@ class FreshBooksClient:
         response = requests.post(self.token_url, data=data)
 
         if response.status_code != 200:
-            error_data = response.json()
+            try:
+                error_data = response.json()
+            except ValueError:
+                error_data = {}
             if error_data.get("error") == "invalid_grant":
                 raise ClientError(
-                    "Refresh token is invalid. Please re-authenticate."
+                    "Refresh token invalid or expired - run 'freshbooks auth login'"
                 )
             response.raise_for_status()
 
@@ -208,12 +211,11 @@ class FreshBooksClient:
         """
         url = f"{self.base_url}{endpoint}"
 
-        # Check if token needs refresh
+        # Check if token needs refresh. A failed refresh (e.g. invalid_grant)
+        # must surface a clear re-authenticate error rather than proceeding with
+        # a dead token and producing a confusing downstream 401.
         if self._is_token_expired():
-            try:
-                self._refresh_token()
-            except Exception:
-                pass  # Try with existing token
+            self._refresh_token()
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
@@ -590,12 +592,10 @@ class FreshBooksClient:
         endpoint = f"/uploads/account/{self.account_id}/attachments"
         url = f"{self.base_url}{endpoint}"
 
-        # Check if token needs refresh
+        # Check if token needs refresh. A failed refresh must surface a clear
+        # re-authenticate error rather than proceeding with a dead token.
         if self._is_token_expired():
-            try:
-                self._refresh_token()
-            except Exception:
-                pass
+            self._refresh_token()
 
         # Use multipart form data for file upload
         headers = {
@@ -643,12 +643,10 @@ class FreshBooksClient:
         endpoint = f"/accounting/account/{self.account_id}/invoices/invoices/{invoice_id}/pdf"
         url = f"{self.base_url}{endpoint}"
 
-        # Check if token needs refresh
+        # Check if token needs refresh. A failed refresh must surface a clear
+        # re-authenticate error rather than proceeding with a dead token.
         if self._is_token_expired():
-            try:
-                self._refresh_token()
-            except Exception:
-                pass
+            self._refresh_token()
 
         # Request PDF with appropriate Accept header
         headers = {

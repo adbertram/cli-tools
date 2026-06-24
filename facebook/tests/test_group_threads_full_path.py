@@ -184,56 +184,91 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
     assert posts[0].comments[0].text == "Comment"
 
 
-def test_list_group_post_summaries_uses_group_discussion_graphql(monkeypatch):
+def test_get_group_extracts_rendered_metadata(monkeypatch):
     monkeypatch.setattr(client_mod, "get_config", lambda: object())
 
-    def fake_graphql(self, group_id, body, count):
-        assert group_id == "2318028917"
-        assert body == "bootstrap"
-        assert count == 7
-        return (
-            [
-                {
-                    "post_id": "1001",
-                    "title": None,
-                    "author": "Ada",
-                    "text": "First",
-                    "body": "First",
-                    "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                    "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                },
-                {
-                    "post_id": "1001",
-                    "title": None,
-                    "author": "Ada",
-                    "text": "Duplicate",
-                    "body": "Duplicate",
-                    "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                    "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                },
-                {
-                    "post_id": "1002",
-                    "title": None,
-                    "author": "Grace",
-                    "text": "Second",
-                    "body": "Second",
-                    "url": "https://www.facebook.com/groups/2318028917/posts/1002/",
-                    "thread_url": "https://www.facebook.com/groups/2318028917/posts/1002/",
-                },
-            ],
-            True,
-        )
+    class FakePage:
+        def evaluate(self, script):
+            return {"name": "BrickLink", "memberCount": "47.2K members"}
 
-    monkeypatch.setattr(
-        client_mod.FacebookClient,
-        "_fetch_authenticated_facebook_bootstrap_html",
-        lambda self, url: "bootstrap",
-    )
-    monkeypatch.setattr(client_mod.FacebookClient, "_graphql_group_discussion_posts", fake_graphql)
+    requested = []
+    client = client_mod.FacebookClient()
+    monkeypatch.setattr(client, "_get_page", lambda url: requested.append(url) or FakePage())
+    monkeypatch.setattr(client, "_assert_authenticated_page", lambda page, url, surface: None)
+
+    group = client.get_group("2318028917")
+
+    assert requested == ["https://www.facebook.com/groups/2318028917/"]
+    assert group.group_id == "2318028917"
+    assert group.name == "BrickLink"
+    assert group.member_count == "47.2K members"
+
+
+def test_list_group_post_summaries_uses_rendered_feed_with_bounded_scroll(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+
+    class FakePage:
+        def __init__(self):
+            self.scrolls = 0
+            self.waits = []
+
+        def evaluate(self, script):
+            assert "window.scrollBy" in script
+            self.scrolls += 1
+
+        def wait_for_timeout(self, ms):
+            self.waits.append(ms)
 
     client = client_mod.FacebookClient()
+    page = FakePage()
+    requested = []
+    checked = []
+
+    def fake_get_page(url, settle_ms=3000):
+        requested.append((url, settle_ms))
+        return page
+
+    def fake_assert(page_arg, url, surface):
+        checked.append((page_arg, url, surface))
+
+    calls = []
+
+    def fake_extract(page_arg):
+        calls.append(page_arg)
+        if page.scrolls == 0:
+            return []
+        return [
+            {
+                "post_id": "1001",
+                "title": None,
+                "author": "Ada",
+                "text": "First",
+                "body": "First",
+                "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
+                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
+            },
+            {
+                "post_id": "1002",
+                "title": None,
+                "author": "Grace",
+                "text": "Second",
+                "body": "Second",
+                "url": "https://www.facebook.com/groups/2318028917/posts/1002/",
+                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1002/",
+            },
+        ]
+
+    monkeypatch.setattr(client, "_get_page", fake_get_page)
+    monkeypatch.setattr(client, "_assert_authenticated_page", fake_assert)
+    monkeypatch.setattr(client, "_extract_group_posts", fake_extract)
+
     posts = client._list_group_post_summaries("2318028917", 2)
 
+    assert requested == [("https://www.facebook.com/groups/2318028917/", 5000)]
+    assert checked == [(page, "https://www.facebook.com/groups/2318028917/", "group feed")]
+    assert calls == [page, page]
+    assert page.scrolls == 1
+    assert page.waits == [2500]
     assert [post.post_id for post in posts] == ["1001", "1002"]
 
 
@@ -252,6 +287,118 @@ def test_extract_group_discussion_request_uses_dynamic_doc_id(monkeypatch):
 
     assert document_id == "999888777"
     assert variables["groupID"] == "2318028917"
+
+
+def test_group_discussion_graphql_allows_empty_dtsg_for_read_only_query(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    captured = {}
+
+    def fake_server_define(body, name):
+        assert body == "bootstrap"
+        return {
+            "CurrentUserInitialData": {"USER_ID": "user-1"},
+            "DTSGInitialData": {},
+            "LSD": {"token": "lsd-token"},
+        }[name]
+
+    class FakeRelayGraphQLClient:
+        def __init__(self, http):
+            assert http == "http-client"
+
+        def execute(self, request, headers=None):
+            captured["fields"] = request.form_fields()
+            captured["headers"] = headers
+            return (
+                {
+                    "data": {
+                        "group": {
+                            "group_feed": {
+                                "edges": [
+                                    {
+                                        "node": {
+                                            "__typename": "Story",
+                                            "post_id": "1001",
+                                            "comet_sections": {
+                                                "message": {
+                                                    "__typename": "CometFeedStoryDefaultMessageRenderingStrategy",
+                                                    "story": {"message": {"text": "Body"}},
+                                                },
+                                                "timestamp": {"story": {"url": "https://example.com/thread"}},
+                                            },
+                                        }
+                                    }
+                                ],
+                                "page_info": {"has_next_page": False},
+                            }
+                        }
+                    }
+                },
+            )
+
+    client = client_mod.FacebookClient()
+    monkeypatch.setattr(client, "_facebook_server_define", fake_server_define)
+    monkeypatch.setattr(client, "_extract_group_discussion_request", lambda body, group_id: ({"groupID": group_id}, "doc-1"))
+    monkeypatch.setattr(client, "_facebook_http_client", lambda: "http-client")
+    monkeypatch.setattr(client_mod, "RelayGraphQLClient", FakeRelayGraphQLClient)
+
+    posts, has_next = client._graphql_group_discussion_posts("2318028917", "bootstrap", 5)
+
+    assert [post["post_id"] for post in posts] == ["1001"]
+    assert has_next is False
+    assert "fb_dtsg" not in captured["fields"]
+    assert "jazoest" not in captured["fields"]
+    assert captured["fields"]["lsd"] == "lsd-token"
+
+
+def test_extract_group_discussion_posts_uses_data_when_graphql_has_field_errors(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+    payloads = (
+        {
+            "errors": [{"message": "A server error field_exception occured. Check server logs for details."}],
+            "data": {
+                "group": {
+                    "group_feed": {
+                        "edges": [
+                            {
+                                "node": {
+                                    "__typename": "Story",
+                                    "post_id": "1002",
+                                    "comet_sections": {
+                                        "message": {
+                                            "__typename": "CometFeedStoryDefaultMessageRenderingStrategy",
+                                            "story": {"message": {"text": "Partial data body"}},
+                                        }
+                                    },
+                                }
+                            }
+                        ],
+                        "page_info": {"has_next_page": True},
+                    }
+                }
+            },
+        },
+    )
+
+    posts, has_next = client._extract_group_discussion_posts("2318028917", payloads)
+
+    assert [post["post_id"] for post in posts] == ["1002"]
+    assert has_next is True
+
+
+def test_extract_group_discussion_posts_still_fails_errors_without_posts(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+
+    try:
+        client._extract_group_discussion_posts(
+            "2318028917",
+            ({"errors": [{"message": "fatal"}], "data": {"group": {"group_feed": {"edges": [], "page_info": {"has_next_page": False}}}}},),
+        )
+    except ClientError as exc:
+        assert "GraphQL returned errors" in str(exc)
+    else:
+        raise AssertionError("Expected GraphQL errors without posts to fail")
 
 
 def test_extract_comments_from_relay_payloads_builds_reply_tree(monkeypatch):
@@ -285,6 +432,44 @@ def test_extract_comments_from_relay_payloads_builds_reply_tree(monkeypatch):
     assert comments[0]["text"] == "Top level"
     assert comments[0]["replies"][0]["comment_id"] == "r1"
     assert comments[0]["replies"][0]["text"] == "Nested reply"
+
+
+def test_extract_comments_from_relay_payloads_skips_comments_without_body_text(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+
+    comments = client._extract_comments_from_relay_payloads((
+        {
+            "data": {
+                "sticker_comment": {
+                    "__typename": "Comment",
+                    "legacy_fbid": "missing-body",
+                    "author": {"name": "Ada"},
+                    "created_time": 1780000000,
+                    "comment_direct_parent": None,
+                },
+                "empty_comment": {
+                    "__typename": "Comment",
+                    "legacy_fbid": "empty-body",
+                    "author": {"name": "Grace"},
+                    "body": {"text": "   "},
+                    "created_time": 1780000100,
+                    "comment_direct_parent": None,
+                },
+                "text_comment": {
+                    "__typename": "Comment",
+                    "legacy_fbid": "text-body",
+                    "author": {"name": "Linus"},
+                    "body": {"text": "Usable comment text"},
+                    "created_time": 1780000200,
+                    "comment_direct_parent": None,
+                },
+            }
+        },
+    ))
+
+    assert [comment["comment_id"] for comment in comments] == ["text-body"]
+    assert comments[0]["text"] == "Usable comment text"
 
 
 def test_title_from_group_post_body_uses_first_non_empty_line(monkeypatch):

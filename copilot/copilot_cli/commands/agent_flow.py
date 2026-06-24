@@ -13,7 +13,7 @@ from typing import Optional
 import yaml as yaml_lib
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error, safe_symbol
+from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error, safe_symbol, command
 from ..validation import FlowYAMLValidator, validate_agent_flow_yaml
 
 
@@ -131,6 +131,7 @@ def list_available_scaffolds(truncate: bool = False) -> list:
 
 
 @scaffold_app.command("list")
+@command
 def scaffold_list(
     table: bool = typer.Option(
         False,

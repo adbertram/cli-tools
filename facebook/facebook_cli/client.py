@@ -843,15 +843,33 @@ class FacebookClient:
             group_ref = group_id
             url = f"{GROUPS_BASE}/{group_ref}/"
 
-        body = self._fetch_authenticated_facebook_html(url)
-        name = self._extract_group_name(body)
-        member_count = self._extract_group_member_count(body)
+        page = self._get_page(url)
+        self._assert_authenticated_page(page, url, f"Facebook group {group_ref}")
+        metadata = page.evaluate(
+            """() => {
+                const main = document.querySelector('[role="main"]') || document.body;
+                const h1 = main?.querySelector('h1');
+                const name = (h1?.innerText || document.title || '').trim();
+                const text = main?.innerText || document.body?.innerText || '';
+                const memberMatch = text.match(/\\b\\d[\\d,.]*\\s*[KkMm]?\\s+members?\\b/);
+                return {
+                    name,
+                    memberCount: memberMatch ? memberMatch[0].trim() : ''
+                };
+            }"""
+        )
+        if not isinstance(metadata, dict):
+            raise ClientError("Rendered Facebook group metadata extractor returned a non-object result.")
+        name = re.sub(r"\s+", " ", str(metadata.get("name") or "")).strip()
+        if not name or name in ("Facebook", "Error"):
+            raise ClientError("Rendered Facebook group page did not include a group title.")
+        member_count = re.sub(r"\s+", " ", str(metadata.get("memberCount") or "")).strip()
 
         return Group(
             group_id=group_ref,
             name=name,
             url=f"{GROUPS_BASE}/{group_ref}/",
-            member_count=member_count,
+            member_count=member_count or None,
         )
 
     def _facebook_http_client(self) -> BrowserAuthenticatedHttpClient:
@@ -1113,8 +1131,9 @@ class FacebookClient:
             self._optional_text_path(node, ["body", "text"])
             or self._optional_text_path(node, ["preferred_body", "text"])
         )
-        if text is None:
-            raise ClientError(f"Facebook comment {legacy_fbid} is missing body text.")
+        if text is None or not text.strip():
+            logger.debug("Skipping Facebook comment %s because it has no body text.", legacy_fbid)
+            return None
         created = node.get("created_time")
         if created is not None and not isinstance(created, (int, float)):
             raise ClientError(f"Facebook comment {legacy_fbid} created_time is not numeric.")
@@ -1407,8 +1426,6 @@ class FacebookClient:
         lsd_token = lsd.get("token")
         if not isinstance(user_id, str) or not user_id:
             raise ClientError("Facebook CurrentUserInitialData is missing USER_ID.")
-        if not isinstance(fb_dtsg, str) or not fb_dtsg:
-            raise ClientError("Facebook DTSGInitialData is missing token.")
         if not isinstance(lsd_token, str) or not lsd_token:
             raise ClientError("Facebook LSD data is missing token.")
 
@@ -1422,21 +1439,29 @@ class FacebookClient:
             "X-FB-LSD": lsd_token,
             "Accept-Encoding": "gzip",
         }
+        base_fields = {
+            "av": user_id,
+            "__user": user_id,
+            "__a": "1",
+            "lsd": lsd_token,
+            "fb_api_caller_class": "RelayModern",
+            "server_timestamps": "true",
+        }
+        # Facebook currently serves authenticated group pages where
+        # DTSGInitialData is present but empty. This read-only discussion query
+        # still accepts the LSD token and current user fields, so do not fail the
+        # list path just because fb_dtsg is absent. Mutating actions continue to
+        # use their own browser-backed composer flows.
+        if isinstance(fb_dtsg, str) and fb_dtsg:
+            base_fields["fb_dtsg"] = fb_dtsg
+            base_fields["jazoest"] = self._facebook_jazoest(fb_dtsg)
+
         relay_request = RelayFormRequest(
             endpoint=f"{FACEBOOK_BASE_URL}/api/graphql/",
             operation_name=GROUP_DISCUSSION_FRIENDLY_NAME,
             document_id=document_id,
             variables=variables,
-            base_fields={
-                "av": user_id,
-                "__user": user_id,
-                "__a": "1",
-                "fb_dtsg": fb_dtsg,
-                "jazoest": self._facebook_jazoest(fb_dtsg),
-                "lsd": lsd_token,
-                "fb_api_caller_class": "RelayModern",
-                "server_timestamps": "true",
-            },
+            base_fields=base_fields,
         )
         payloads = RelayGraphQLClient(self._facebook_http_client()).execute(relay_request, headers=headers)
         return self._extract_group_discussion_posts(
@@ -1457,13 +1482,11 @@ class FacebookClient:
         """Extract Story edges and next-page status from discussion Relay payloads."""
         posts: List[Dict] = []
         has_next_page = False
+        graph_errors = []
         for payload in payloads:
             errors = payload.get("errors")
             if errors:
-                raise ClientError(
-                    "Facebook group feed GraphQL returned errors: "
-                    f"{errors}. document_id={document_id!r} variable_keys={variable_keys!r}"
-                )
+                graph_errors.extend(errors if isinstance(errors, list) else [errors])
 
             data = payload.get("data")
             if isinstance(data, dict):
@@ -1514,6 +1537,12 @@ class FacebookClient:
                 if not isinstance(has_next_page_value, bool):
                     raise ClientError("Facebook streamed group feed has_next_page is not boolean.")
                 has_next_page = has_next_page or has_next_page_value
+
+        if graph_errors and not posts:
+            raise ClientError(
+                "Facebook group feed GraphQL returned errors: "
+                f"{graph_errors}. document_id={document_id!r} variable_keys={variable_keys!r}"
+            )
 
         return posts, has_next_page
 
@@ -1885,28 +1914,26 @@ class FacebookClient:
         return result if isinstance(result, list) else []
 
     def _list_group_post_summaries(self, group_id: str, limit: int) -> List[GroupPost]:
-        """List summary posts from a Facebook Group feed."""
-        body = self._fetch_authenticated_facebook_bootstrap_html(f"{GROUPS_BASE}/{group_id}/")
-        fetch_count = limit + 5
-        fetched_posts, _has_next_page = self._graphql_group_discussion_posts(group_id, body, fetch_count)
-        if not fetched_posts:
-            raise ClientError("Facebook group discussion GraphQL did not return any posts.")
+        """List summary posts from a rendered Facebook Group feed."""
+        url = f"{GROUPS_BASE}/{group_id}/"
+        page = self._get_page(url, settle_ms=5000)
+        self._assert_authenticated_page(page, url, "group feed")
 
         items: List[Dict] = []
-        seen_ids = set()
-        for post in fetched_posts:
-            post_id = post["post_id"]
-            if post_id in seen_ids:
-                continue
-            seen_ids.add(post_id)
-            items.append(post)
+        scrolls = 0
+        max_scrolls = 5
+        while scrolls < max_scrolls:
+            items = self._extract_group_posts(page)
             if len(items) >= limit:
                 break
+            page.evaluate("window.scrollBy(0, Math.max(document.body.scrollHeight, 1200))")
+            scrolls += 1
+            page.wait_for_timeout(2500)
 
-        if len(items) < limit:
-            raise ClientError(f"Facebook group discussion GraphQL returned {len(items)} unique posts; expected {limit}.")
-
-        return [GroupPost(**p) for p in items]
+        if not items:
+            return []
+        print_info(f"Loaded {len(items[:limit])} post(s) after {scrolls} scroll(s)")
+        return [GroupPost(**p) for p in items[:limit]]
 
     def list_group_posts(self, group_id: str, limit: int = 20, full_threads: bool = False) -> List[GroupPost]:
         """List posts from a Facebook Group."""

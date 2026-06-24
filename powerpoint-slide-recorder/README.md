@@ -59,7 +59,9 @@ The default `--resolution` is `1920x1080`. A high-resolution non-16:9 source suc
 
 If the current capture source is smaller than the requested output, add `--force-resolution` to have the recorder temporarily switch the main display to `--resolution`, re-probe the AVFoundation source, perform the recording, and restore the original display mode during cleanup. This uses an embedded macOS CoreGraphics helper through `/usr/bin/python3`; there is no external display resolution tool to install.
 
-For standard 1080p course output, use `--force-aspect-ratio 16x9` without also passing `--resolution 1920x1080`. The recorder chooses the highest available 16:9 main-display mode, captures at that source size, and scales the final MP4 to the default output resolution, 1920x1080. If the main display does not advertise a 16:9 mode, the command fails before PowerPoint launches; use a display or AVFoundation input that exposes a 16:9 mode.
+For standard 1080p course output, use `--force-aspect-ratio 16x9` without also passing `--resolution 1920x1080`. The recorder chooses the highest-usable-area main-display mode for 16:9 — an exact 16:9 mode when one exists (captured uncropped), otherwise the best near-ratio mode whose centered 16:9 crop still covers 1920x1080 — captures at that source size, and scales the final MP4 to the default output resolution, 1920x1080.
+
+A 16:10-only display, such as the built-in MacBook Pro Liquid Retina XDR panel, advertises no true 16:9 mode but still works: PowerPoint presents the 16:9 slide centered and letterboxed inside the 16:10 screen, so the recorder switches to the best 16:10 mode, crops the centered 16:9 slide region from the captured frame, and scales it to 1920x1080 — no external 16:9 monitor required. The command fails before PowerPoint launches only when no available mode's centered 16:9 crop reaches 1920x1080 (every mode is too small); use a higher-resolution display or AVFoundation input. Do not add crop or pad filters to hide a real too-small-source failure.
 
 ## Item Manifest
 

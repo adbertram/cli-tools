@@ -16,10 +16,8 @@ from descript_cli.client import (
     CHROMIUM_KEY_LENGTH,
     CHROMIUM_KEY_SALT,
     CHROMIUM_V10_PREFIX,
-    ClientError,
     DescriptClient,
 )
-from descript_cli.config import Config
 
 
 def _make_client(tmp_path: Path) -> DescriptClient:
@@ -109,26 +107,3 @@ def test_get_jwt_reads_cookie_and_caches_token(tmp_path, monkeypatch):
     cache_data = json.loads(cache_path.read_text())
     assert cache_data["jwt"] == "desktop-jwt"
     assert client._get_cached_token()["jwt"] == "desktop-jwt"
-
-
-def test_config_test_connection_reports_client_error(monkeypatch):
-    config = Config.__new__(Config)
-
-    def raise_client_error(self):
-        raise ClientError("keychain access denied")
-
-    monkeypatch.setattr("descript_cli.client.DescriptClient._get_jwt", raise_client_error)
-
-    assert config.test_connection() == {"api_test": "failed: keychain access denied"}
-
-
-def test_config_test_connection_returns_token_preview(monkeypatch):
-    config = Config.__new__(Config)
-    token = "abcdefghijklmnopqrstuvwxyz"
-
-    monkeypatch.setattr("descript_cli.client.DescriptClient._get_jwt", lambda self: token)
-
-    assert config.test_connection() == {
-        "api_test": "passed",
-        "token_preview": "abcdefghijklmnopqrst...",
-    }

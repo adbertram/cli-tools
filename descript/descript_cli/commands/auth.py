@@ -2,28 +2,20 @@
 import typer
 
 from cli_tools_shared.auth_commands import create_auth_app
-from cli_tools_shared.output import print_error, print_info, print_success
+from cli_tools_shared.output import print_error
 
-from ..client import ClientError, DescriptClient
 from ..config import get_config
+from ..platform import PlatformCLIError, run_platform_passthrough
 
 
 def _login_handler(config, force: bool):
-    """Extract and cache the Descript JWT from the running app."""
-    if force:
-        token_cache = config.get_profile_data_dir() / "token.json"
-        if token_cache.exists():
-            token_cache.unlink()
-            print_info("Token cache cleared")
-
+    """Configure the official Descript API CLI API key."""
     try:
-        DescriptClient(config=config)._get_jwt()
-    except ClientError as e:
+        code = run_platform_passthrough(["config", "set", "api-key"])
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
-
-    print_success("Successfully authenticated with Descript")
-    print_info("Token is cached automatically. Run commands without re-authenticating.")
+    raise typer.Exit(code)
 
 
 app = create_auth_app(

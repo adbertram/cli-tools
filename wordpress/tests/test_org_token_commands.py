@@ -1,10 +1,13 @@
 import json
 
 import pytest
+import requests
 from typer.testing import CliRunner
 
+from cli_tools_shared.exceptions import ClientError
 from wordpress_cli.config import _configs, get_config
 from wordpress_cli.main import app
+from wordpress_cli.wpcom import _request_wpcom_token
 
 
 class DummyResponse:
@@ -109,6 +112,49 @@ def test_org_token_requests_and_saves_token_without_printing_raw_token(runner, m
     assert config.wpcom_access_token == "raw-token-value"
     assert config.wpcom_token_type == "bearer"
     assert config.wpcom_scope == "global"
+
+
+def test_wpcom_token_request_retries_transient_connection_error(monkeypatch):
+    attempts = []
+    sleeps = []
+
+    def fake_request(**kwargs):
+        attempts.append(kwargs)
+        if len(attempts) == 1:
+            raise requests.exceptions.ConnectionError("temporary DNS failure")
+        return DummyResponse(200, {"access_token": "raw-token-value"})
+
+    monkeypatch.setattr("wordpress_cli.wpcom.requests.request", fake_request)
+    monkeypatch.setattr("wordpress_cli.wpcom.time.sleep", sleeps.append)
+
+    response = _request_wpcom_token({"code": "auth-code", "client_secret": "secret-value"})
+
+    assert response.status_code == 200
+    assert len(attempts) == 2
+    assert sleeps == [1.0]
+    assert attempts[0]["method"] == "POST"
+    assert attempts[0]["url"] == "https://public-api.wordpress.com/oauth2/token"
+
+
+def test_wpcom_token_request_reports_exhausted_pre_response_network_failure(monkeypatch):
+    attempts = []
+    sleeps = []
+
+    def fake_request(**kwargs):
+        attempts.append(kwargs)
+        raise requests.exceptions.ConnectionError("temporary DNS failure secret-value")
+
+    monkeypatch.setattr("wordpress_cli.wpcom.requests.request", fake_request)
+    monkeypatch.setattr("wordpress_cli.wpcom.time.sleep", sleeps.append)
+
+    with pytest.raises(ClientError) as excinfo:
+        _request_wpcom_token({"code": "auth-code", "client_secret": "secret-value"})
+
+    message = str(excinfo.value)
+    assert "failed before receiving a response after 3 attempts" in message
+    assert "secret-value" not in message
+    assert len(attempts) == 3
+    assert sleeps == [1.0, 2.0]
 
 
 def test_org_token_status_reports_upgrade_readiness_without_secrets(runner):

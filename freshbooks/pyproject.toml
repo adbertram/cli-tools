@@ -67,7 +67,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=freshbooks_cli --cov-report=term-missing"
+addopts = "-v"
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

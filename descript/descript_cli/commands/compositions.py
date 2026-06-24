@@ -1,4 +1,6 @@
 """Compositions commands for Descript CLI."""
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional, List
 
@@ -221,9 +223,12 @@ def export_composition(
     descript://project/<project-id> deep link and waits for the project page.
     It automates the app's local export to produce the full rendered video.
 
-    WAV audio export (--format wav or --audio) runs the same proven MP4 export,
-    then extracts the audio track to the target .wav path with ffmpeg
-    (-vn -acodec pcm_s16le). The intermediate MP4 is removed afterward.
+    WAV audio export (--format wav or --audio) drives the same local export to a
+    temporary .wav destination, then moves it to the target path. Descript picks
+    the export format from the composition's content: an audio-only composition
+    (e.g. a narration take) exports WAV directly, so the .wav destination matches
+    and no native extension-mismatch sheet appears. The asset-export path (raw
+    recording, second form) still extracts audio with ffmpeg from its API MP4.
 
     Example:
         descript compositions export <project-id> <asset-id>
@@ -240,7 +245,7 @@ def export_composition(
 
         if composition:
             # Composition export via Descript app automation
-            from ..app_export import export_composition_local, extract_audio_wav
+            from ..app_export import export_composition_local
 
             comp_id, comp_name = _resolve_composition(project_id, composition)
             print_info(f"Found composition: {comp_name} ({comp_id})")
@@ -251,17 +256,20 @@ def export_composition(
             output_path = Path(output)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            video_path = output_path.with_suffix(f".{video_fmt}") if produce_wav else output_path
+            if produce_wav:
+                fd, _tmp = tempfile.mkstemp(suffix=".wav")
+                os.close(fd)
+                video_path = Path(_tmp)
+            else:
+                video_path = output_path
             result_path = export_composition_local(
                 project_id, comp_id, comp_name, video_path,
             )
 
             if produce_wav:
-                print_info(f"Extracting audio to {output_path}...")
-                wav_path = extract_audio_wav(result_path, output_path)
-                result_path.unlink()
-                size_mb = wav_path.stat().st_size / (1024 * 1024)
-                print_success(f"Exported audio to {wav_path} ({size_mb:.1f} MB)")
+                result_path.replace(output_path)
+                size_mb = output_path.stat().st_size / (1024 * 1024)
+                print_success(f"Exported audio to {output_path} ({size_mb:.1f} MB)")
             else:
                 size_mb = result_path.stat().st_size / (1024 * 1024)
                 print_success(f"Exported to {result_path} ({size_mb:.1f} MB)")

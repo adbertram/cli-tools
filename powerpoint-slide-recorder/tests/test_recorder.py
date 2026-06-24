@@ -387,27 +387,84 @@ Input #0, avfoundation, from '3':
             "pixel_height": 1944,
         }])
 
-    def test_best_display_mode_for_aspect_ratio_returns_highest_pixel_area_match(self):
+    def test_best_display_mode_for_aspect_ratio_returns_highest_exact_area_match(self):
+        # Two exact 16:9 modes plus a smaller exact one: the largest exact 16:9 mode
+        # wins (it records uncropped), preserving the external-16:9 source behavior.
         modes = [
             {"width": 960, "height": 540, "pixel_width": 1920, "pixel_height": 1080},
             {"width": 1728, "height": 972, "pixel_width": 3456, "pixel_height": 1944},
-            {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},
+            {"width": 2560, "height": 1440, "pixel_width": 5120, "pixel_height": 2880},
         ]
 
-        self.assertEqual(record.best_display_mode_for_aspect_ratio(modes, 16, 9), {
-            "width": 1728,
-            "height": 972,
-            "pixel_width": 3456,
-            "pixel_height": 1944,
+        self.assertEqual(record.best_display_mode_for_aspect_ratio(modes, 16, 9, 1920, 1080), {
+            "width": 2560,
+            "height": 1440,
+            "pixel_width": 5120,
+            "pixel_height": 2880,
         })
 
-    def test_best_display_mode_for_aspect_ratio_rejects_missing_match(self):
+    def test_best_display_mode_for_aspect_ratio_prefers_exact_over_larger_croppable(self):
+        # A 16:10 mode of higher pixel area sits next to an exact 16:9 mode whose
+        # usable (uncropped) area is larger. The exact 16:9 mode wins because its
+        # full pixel area is usable while the 16:10 mode loses height to the crop.
         modes = [
-            {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},
+            {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},  # 16:10, usable 3456x1944
+            {"width": 1920, "height": 1080, "pixel_width": 3840, "pixel_height": 2160},  # exact 16:9, usable 3840x2160
         ]
 
-        with self.assertRaisesRegex(RuntimeError, "No display mode with aspect ratio 16x9 is available on the main display"):
-            record.best_display_mode_for_aspect_ratio(modes, 16, 9)
+        self.assertEqual(record.best_display_mode_for_aspect_ratio(modes, 16, 9, 1920, 1080), {
+            "width": 1920,
+            "height": 1080,
+            "pixel_width": 3840,
+            "pixel_height": 2160,
+        })
+
+    def test_best_display_mode_for_aspect_ratio_uses_centered_crop_on_sixteen_ten_only_panel(self):
+        # The real built-in Liquid Retina XDR panel: every mode is 16:10 or 1.547,
+        # none is exact 16:9. A mode is chosen via its centered 16:9 crop so no
+        # external 16:9 display is required. When two modes share the largest usable
+        # 16:9 area, the larger raw pixel mode wins (its extra height is cropped away,
+        # so the recorded result is identical) -- here the 4112x2658 native mode.
+        modes = [
+            {"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658},  # 1.547, usable 4112x2312
+            {"width": 2056, "height": 1285, "pixel_width": 4112, "pixel_height": 2570},  # 16:10, usable 4112x2312
+            {"width": 1728, "height": 1117, "pixel_width": 3456, "pixel_height": 2234},  # 1.547, usable 3456x1944
+            {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},  # 16:10, usable 3456x1944
+            {"width": 960, "height": 600, "pixel_width": 1920, "pixel_height": 1200},    # 16:10, usable 1920x1080
+        ]
+
+        chosen = record.best_display_mode_for_aspect_ratio(modes, 16, 9, 1920, 1080)
+
+        # 4112x2658 and 4112x2570 tie on usable area (4112x2312); the larger raw mode wins.
+        self.assertEqual(chosen, {
+            "width": 2056,
+            "height": 1329,
+            "pixel_width": 4112,
+            "pixel_height": 2658,
+        })
+
+    def test_best_display_mode_for_aspect_ratio_rejects_when_no_mode_reaches_output(self):
+        # Only small modes whose centered 16:9 crop is below 1920x1080.
+        modes = [
+            {"width": 640, "height": 400, "pixel_width": 1280, "pixel_height": 800},
+        ]
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "No display mode can produce a 16x9 capture of at least 1920x1080 on the main display",
+        ):
+            record.best_display_mode_for_aspect_ratio(modes, 16, 9, 1920, 1080)
+
+    def test_best_display_mode_for_aspect_ratio_rejects_ratio_output_mismatch(self):
+        modes = [
+            {"width": 960, "height": 540, "pixel_width": 1920, "pixel_height": 1080},
+        ]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Requested aspect ratio 16x9 does not match the output resolution 1920x1200",
+        ):
+            record.best_display_mode_for_aspect_ratio(modes, 16, 9, 1920, 1200)
 
     def test_parse_display_mode_payload_rejects_invalid_payload(self):
         with self.assertRaisesRegex(RuntimeError, "macOS display helper returned invalid JSON"):
@@ -935,6 +992,79 @@ Input #0, avfoundation, from '3':
             record.record(config)
 
         self.assertEqual(events, ["set_aspect_ratio", "close_powerpoint", "mux", "restore_resolution"])
+
+    def test_force_aspect_ratio_crops_centered_region_on_sixteen_ten_only_panel(self):
+        # The real failure case: the built-in Liquid Retina XDR panel advertises only
+        # 16:10 / 1.547 modes and no exact 16:9 mode. --force-aspect-ratio 16x9 must
+        # switch to the best 16:10 mode, record, and crop the centered 16:9 slide
+        # region before scaling to 1920x1080 -- no external 16:9 display required.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir), work_dir="/tmp/work", force_aspect_ratio=(16, 9))
+        ffmpeg_process = FakeProcess([None, None, None], 0)
+        audio_process = FakeProcess([None, 0], 0)
+        events = []
+        commands = []
+        original_mode = {
+            "width": 2056,
+            "height": 1329,
+            "pixel_width": 4112,
+            "pixel_height": 2658,
+        }
+        # 16:10-only panel modes -- none is exact 16:9.
+        modes = [
+            {"width": 2056, "height": 1285, "pixel_width": 4112, "pixel_height": 2570},
+            {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},
+        ]
+
+        def fake_set_display_resolution(width, height):
+            if (width, height) == (4112, 2570):
+                events.append("set_aspect_ratio")
+                return
+            if (width, height) == (2056, 1329):
+                events.append("restore_resolution")
+                return
+            raise AssertionError((width, height))
+
+        def fake_run(command):
+            if command[0] == "ffmpeg":
+                commands.append(command)
+                events.append("mux")
+                return
+            raise AssertionError(command)
+
+        def fake_probe(video_input, framerate):
+            if "set_aspect_ratio" in events:
+                return (4112, 2570)
+            return (4112, 2658)
+
+        with mock.patch.object(record, "current_display_mode", return_value=original_mode), \
+                mock.patch.object(record, "available_display_modes", return_value=modes), \
+                mock.patch.object(record, "set_display_resolution", side_effect=fake_set_display_resolution), \
+                mock.patch.object(record, "probe_capture_dimensions", side_effect=fake_probe), \
+                mock.patch.object(record, "prepare", return_value={
+                    "narration_audio": "/tmp/narration.wav",
+                    "actions": [],
+                }), \
+                mock.patch.object(record, "create_powerpoint_state", return_value={
+                    "powerpoint_was_running": False,
+                    "deck_was_open": False,
+                }), \
+                mock.patch.object(record, "start_slideshow"), \
+                mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "run", side_effect=fake_run), \
+                mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
+            with contextlib.redirect_stderr(io.StringIO()):
+                record.record(config)
+
+        # Best 16:10 mode chosen, then the centered 16:9 region cropped and scaled.
+        self.assertIn("set_aspect_ratio", events)
+        mux_command = commands[0]
+        self.assertIn("-vf", mux_command)
+        # 4112x2570 (16:10) -> centered crop to 16:9 (4112x2312, y=129->even 128), then scale.
+        self.assertEqual(
+            mux_command[mux_command.index("-vf") + 1],
+            "crop=4112:2312:0:128,scale=1920:1080",
+        )
 
     def test_force_resolution_restores_after_recording_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:

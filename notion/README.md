@@ -77,11 +77,12 @@ notion database schema <database-id>
 
 ### Create Database
 
-Create a new database under a parent page (API 2025-09-03). The schema is
-supplied via raw JSON (`--properties`, the Notion `initial_data_source.properties`
-object) and/or convenience flags. A title property is always present: if
-`--properties` does not define one, a title column named by `--title-property`
-(default `Name`) is added.
+Create a new database under a parent page (API 2025-09-03). The parent must be
+a page ID; Notion rejects database and data_source IDs as database parents. The
+schema is supplied via raw JSON (`--properties`, the Notion
+`initial_data_source.properties` object) and/or convenience flags. A title
+property is always present: if `--properties` does not define one, a title
+column named by `--title-property` (default `Name`) is added.
 
 ```bash
 notion database create <parent-page-id> --title "Tasks"
@@ -564,6 +565,17 @@ notion pages blocks update BLOCK_ID --text "New title" --toggleable   # combine
 When reading blocks back, `pages blocks list` exposes `is_toggleable` in JSON
 output and as a column in `--table` view; markdown rendering prefixes toggle
 headings with `▶ ` (e.g. `# ▶ Section Title`).
+
+### Synced Blocks
+
+```bash
+notion pages blocks append PAGE_ID --file reusable.md --synced
+notion pages blocks append PAGE_ID --synced-from ORIGINAL_SYNCED_BLOCK_ID
+```
+
+`--synced` wraps one content input (`--text`, `--file`, `--json`, or
+`--json-file`) in a new original synced block. `--synced-from` appends a
+duplicate synced block and cannot be combined with content inputs.
 
 ---
 

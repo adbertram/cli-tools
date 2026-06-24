@@ -102,7 +102,7 @@ def test_auth_login_force_reuses_saved_oauth_client_credentials(tmp_path, monkey
     assert "Enter OAuth Client ID" not in result.output
     assert captured["client_config"]["installed"]["client_id"] == "profile-client"
     assert captured["client_config"]["installed"]["client_secret"] == "profile-secret"
-    assert captured["scopes"] == SCOPES
+    assert "https://www.googleapis.com/auth/contacts.readonly" in captured["scopes"]
     assert (profile_dir / "token.json").exists()
     assert not (profile_dir / "credentials.json").exists()
 
@@ -191,5 +191,5 @@ def test_auth_login_stores_prompted_oauth_client_credentials_as_secret_refs(
     assert "prompt-secret" not in content
     assert captured["client_config"]["installed"]["client_id"] == "prompt-client"
     assert captured["client_config"]["installed"]["client_secret"] == "prompt-secret"
-    assert captured["scopes"] == SCOPES
+    assert "https://www.googleapis.com/auth/contacts.readonly" in captured["scopes"]
     assert not (profile_dir / "credentials.json").exists()

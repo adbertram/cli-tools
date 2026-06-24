@@ -8,9 +8,15 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 
 ## Prerequisites
 
+- Node.js 24 or newer
+- Official Descript API CLI package is auto-provisioned on first use under
+  `~/.local/share/cli-tools/descript/platform-cli/` (or
+  `$XDG_DATA_HOME/cli-tools/descript/platform-cli/`)
+
+Desktop-only export helpers still require:
 - Descript desktop app installed
 - Descript running and signed in
-- macOS must allow the shell to read the `Descript Safe Storage` keychain item the first time auth runs
+- macOS must allow the shell to read the `Descript Safe Storage` keychain item when raw/local export helpers need the desktop session
 
 ## Installation
 
@@ -22,14 +28,22 @@ pip install -e .
 ## Quick Start
 
 ```bash
-# Authenticate (extracts JWT from the signed-in desktop app)
+# Authenticate the official Descript API CLI
 descript auth login
 
-# List projects
+# Or use the official config command directly
+descript config set api-key
+
+# List projects through the official API CLI
 descript projects list
 
-# List compositions in a project
+# List compositions from the official project summary
 descript compositions list <project-id>
+
+# Import media and run Underlord through the official CLI
+descript import --name "My Project" --media "https://example.com/video.mp4"
+descript import --name "Shared Project" --media ./voiceover.wav --folder Pluralsight --team-access edit
+descript agent --project-id <project-id> --prompt "Remove filler words and add Studio Sound"
 
 # Monitor network traffic for API discovery
 descript monitor start
@@ -40,18 +54,47 @@ descript monitor start
 ### Authentication
 
 ```bash
-# Login - extracts JWT from the signed-in desktop app
+# Login - prompts the official descript-api CLI to save an API key
 descript auth login
-descript auth login --force  # Clear cache and re-authenticate
 
 # Check authentication status
 descript auth status
+
+# Official configuration commands are also available
+descript config list
+descript config get api-key
+descript config validate
 ```
+
+### Official Descript API CLI
+
+The root command surface exposes the official `descript-api` commands:
+if `descript-api` is not already on `PATH`, the wrapper installs
+`@descript/platform-cli@latest` into the Descript CLI user data directory and
+uses that binary.
+
+```bash
+descript import --name "My Project" --media "https://example.com/video.mp4"
+descript agent --project-id <project-id> --prompt "Add Studio Sound"
+descript job-status <job-id>
+descript list-jobs --json
+descript job-cancel <job-id>
+descript list-projects --json
+descript get-project <project-id> --json
+descript list-folders --json
+descript publish --project-id <project-id> --composition-id <composition-id>
+descript export-transcript --project-id <project-id> --format markdown
+descript update
+```
+
+Folder imports require `--team-access edit`, `--team-access comment`, or
+`--team-access view`; the Descript API rejects folder imports without drive
+member access.
 
 ### Projects
 
 ```bash
-# List projects (JSON output)
+# List projects via the official Descript API CLI (JSON output)
 descript projects list
 
 # Limit results
@@ -61,13 +104,13 @@ descript projects list --limit 10
 descript projects list --table
 
 # Filter by name
-descript projects list --filter "name:Cursor"
+descript projects list --name Cursor
 
 # Select specific fields
-descript projects list -p "name,composition_count"
+descript projects list -p "id,name"
 
 # Get full project IDs for follow-up commands
-descript projects list --filter "name:contains:BrickBuddy" --properties id,name
+descript projects list --name BrickBuddy --properties id,name
 
 # Pipe to jq
 descript projects list | jq '.[].name'
@@ -76,7 +119,7 @@ descript projects list | jq '.[].name'
 ### Compositions
 
 ```bash
-# List compositions in a project
+# List compositions from the official project summary
 descript compositions list <project-id>
 descript compositions list <project-id> --table
 
@@ -90,7 +133,7 @@ descript compositions list <project-id> --filter "name:m1c1"
 descript compositions active
 descript compositions active --project-id <project-id>
 
-# List video assets (raw recordings) for export
+# List media files from the official project summary
 descript compositions assets <project-id>
 descript compositions assets <project-id> --table
 
@@ -156,6 +199,8 @@ shown.
 | `--limit` | `-l` | Maximum results | list |
 | `--filter` | `-f` | Filter results (field:value) | list |
 | `--properties` | `-p` | Select fields (comma-separated) | list |
+| `--folder` | | Folder path for a new project | import |
+| `--team-access` | | Drive member access for folder imports (`edit`, `comment`, `view`) | import |
 | `--output` | `-o` | Output file path | export |
 | `--fps` | | Frames per second (default: 30) | export |
 | `--width` | `-W` | Max width (default: 1920) | export |

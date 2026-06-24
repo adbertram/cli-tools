@@ -5,6 +5,7 @@ from cli_tools_shared.exceptions import CredentialError
 from typer.testing import CliRunner
 
 from amazon_cli import commands
+from amazon_cli.browser import AmazonBrowser
 from amazon_cli.client import AUTH_BLOCKED_MESSAGE, AmazonClient
 
 
@@ -31,6 +32,10 @@ def test_page_snapshot_raises_actionable_auth_blocker_when_session_is_stale():
     browser.get_page.assert_not_called()
     page.wait_for_timeout.assert_not_called()
     browser._check_auth.assert_not_called()
+
+
+def test_amazon_auth_login_uses_manual_browser_completion_path():
+    assert AmazonBrowser.MANUAL_LOGIN is True
 
 
 def test_orders_match_returns_exit_two_with_actionable_auth_blocker(monkeypatch):

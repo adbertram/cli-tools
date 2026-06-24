@@ -58,10 +58,26 @@ class FakeMessagesResource:
         return FakeExecute(self.get_payloads[kwargs["id"]])
 
 
+class FakeLabelsResource:
+    def __init__(self, list_payload=None):
+        self.list_payload = list_payload
+        self.list_calls = []
+
+    def list(self, **kwargs):
+        self.list_calls.append(kwargs)
+        return FakeExecute(self.list_payload)
+
+
 class FakeGmailService:
-    def __init__(self, filters_resource=None, messages_resource=None):
+    def __init__(
+        self,
+        filters_resource=None,
+        messages_resource=None,
+        labels_resource=None,
+    ):
         self.filters_resource = filters_resource
         self.messages_resource = messages_resource
+        self.labels_resource = labels_resource
 
     def users(self):
         return self
@@ -74,6 +90,9 @@ class FakeGmailService:
 
     def messages(self):
         return self.messages_resource
+
+    def labels(self):
+        return self.labels_resource
 
 
 class FakeClient:
@@ -105,6 +124,17 @@ def _patch_message_client(monkeypatch, messages_resource):
         gmail_commands, "get_client", lambda profile=None: FakeClient(service)
     )
     return messages_resource
+
+
+def _patch_labels_client(monkeypatch, messages_resource, labels_resource):
+    service = FakeGmailService(
+        messages_resource=messages_resource,
+        labels_resource=labels_resource,
+    )
+    monkeypatch.setattr(
+        gmail_commands, "get_client", lambda profile=None: FakeClient(service)
+    )
+    return messages_resource, labels_resource
 
 
 def _encoded_body(text):
@@ -165,6 +195,39 @@ def test_gmail_filters_list_supports_filter_limit_properties(monkeypatch):
     assert result.exit_code == 0
     records = json.loads(result.stdout)
     assert records == [{"id": "ANe1Bmj_filter1", "from": "news@example.com"}]
+
+
+def test_gmail_labels_list_supports_comma_separated_properties(monkeypatch):
+    messages_resource = FakeMessagesResource(
+        get_payloads={"msg-1": {"id": "msg-1", "labelIds": ["INBOX", "Label_1"]}}
+    )
+    labels_resource = FakeLabelsResource(
+        list_payload={
+            "labels": [
+                {"id": "INBOX", "name": "Inbox"},
+                {"id": "Label_1", "name": "Client"},
+            ]
+        }
+    )
+    _patch_labels_client(monkeypatch, messages_resource, labels_resource)
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "labels", "list", "msg-1", "--properties", "id,name"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "message_id": "msg-1",
+        "labels": [
+            {"id": "INBOX", "name": "Inbox"},
+            {"id": "Label_1", "name": "Client"},
+        ],
+    }
+    assert messages_resource.get_calls == [
+        {"userId": "me", "id": "msg-1", "format": "minimal"}
+    ]
+    assert labels_resource.list_calls == [{"userId": "me"}]
 
 
 def test_gmail_filters_get_outputs_raw_resource(monkeypatch):
@@ -378,6 +441,36 @@ def test_gmail_list_include_body_adds_decoded_body(monkeypatch):
     assert resource.get_calls == [
         {"userId": "me", "id": "msg-1", "format": "full"}
     ]
+
+
+def test_gmail_list_name_property_aliases_subject(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["INBOX"],
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "alerts@example.com"},
+                {"name": "Subject", "value": "Balance Alert"},
+                {"name": "Date", "value": "Fri, 12 Jun 2026 10:00:00 -0500"},
+            ],
+        },
+    }
+    _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(
+            list_payload={"messages": [{"id": "msg-1"}]},
+            get_payloads={"msg-1": message},
+        ),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "list", "--limit", "1", "--properties", "id,name"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == [{"id": "msg-1", "name": "Balance Alert"}]
 
 
 def test_gmail_get_include_body_outputs_decoded_body(monkeypatch):

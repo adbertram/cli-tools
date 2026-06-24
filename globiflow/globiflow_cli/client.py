@@ -56,6 +56,17 @@ class ClientError(Exception):
     pass
 
 
+def _clean(value: Optional[str]) -> str:
+    """Normalize a Playwright text_content() result to a stripped string.
+
+    Playwright's ``text_content()`` returns ``Optional[str]`` and yields
+    ``None`` for a node that has no text content, so calling ``.strip()``
+    directly raises ``AttributeError``. This helper coalesces ``None`` to an
+    empty string before stripping.
+    """
+    return (value or "").strip()
+
+
 class GlobiflowClient:
     """Client for interacting with Globiflow via browser automation."""
 
@@ -286,7 +297,7 @@ class GlobiflowClient:
         # First pass: build hierarchy and identify apps with flows
         apps_with_flows = []
         for item in tree_items:
-            text = item.text_content().strip()
+            text = _clean(item.text_content())
             level = item.get_attribute("aria-level")
 
             if level == "1":
@@ -328,7 +339,7 @@ class GlobiflowClient:
 
                     for flow_item in flow_items:
                         # Get flow name - it's the text content excluding img
-                        flow_name = flow_item.text_content().strip()
+                        flow_name = _clean(flow_item.text_content())
 
                         # Skip toolbar elements
                         if flow_name.startswith("With Selected:"):
@@ -394,7 +405,7 @@ class GlobiflowClient:
         tree_items = page.locator('[role="treeitem"]').all()
         apps_with_flows = []
         for item in tree_items:
-            text = item.text_content().strip()
+            text = _clean(item.text_content())
             level = item.get_attribute("aria-level")
             if level == "3":
                 match = re.match(r"(.+) \((\d+)\)", text)
@@ -750,7 +761,7 @@ class GlobiflowClient:
         tree_items = page.locator('[role="treeitem"]').all()
         apps_with_flows = []
         for item in tree_items:
-            text = item.text_content().strip()
+            text = _clean(item.text_content())
             level = item.get_attribute("aria-level")
             if level == "3":
                 match = re.match(r"(.+) \((\d+)\)", text)
@@ -770,7 +781,7 @@ class GlobiflowClient:
                     flow_divs = flow_container.locator("> div").all()
 
                     for flow_div in flow_divs:
-                        flow_name_text = flow_div.text_content().strip()
+                        flow_name_text = _clean(flow_div.text_content())
                         if flow_name_text.startswith("With Selected:"):
                             continue
 
@@ -971,7 +982,7 @@ class GlobiflowClient:
                     # Try to get text from gMention's display div
                     mention_container = action_div.locator(f".gMention[data-for='{element_id}'], .mention-wrapper[data-id='{element_id}']").first
                     if mention_container.count() > 0:
-                        value = mention_container.text_content().strip()
+                        value = _clean(mention_container.text_content())
                     else:
                         # Try evaluating the element's textContent directly
                         try:
@@ -1001,7 +1012,7 @@ class GlobiflowClient:
             name = select.get_attribute("name") or ""
             selected = select.locator("option[selected]").first
             if selected.count() > 0:
-                value = selected.text_content().strip()
+                value = _clean(selected.text_content())
                 if value:
                     # Map select name to parameter
                     if "method" in name.lower():
@@ -1019,7 +1030,7 @@ class GlobiflowClient:
                 cells = row.locator("td").all()
                 if len(cells) >= 2:
                     # Get label from first cell
-                    label_text = cells[0].text_content().strip().rstrip(":")
+                    label_text = _clean(cells[0].text_content()).rstrip(":")
                     if not label_text or label_text in parameters:
                         continue
 
@@ -1027,7 +1038,7 @@ class GlobiflowClient:
                     combo = cells[1].locator("select").first
                     if combo.count() > 0:
                         selected = combo.locator("option[selected]").first
-                        param_value = selected.text_content().strip() if selected.count() > 0 else ""
+                        param_value = _clean(selected.text_content()) if selected.count() > 0 else ""
                     else:
                         textbox = cells[1].locator("input[type='text'], textarea").first
                         if textbox.count() > 0:
@@ -1035,9 +1046,9 @@ class GlobiflowClient:
                         else:
                             display_div = cells[1].locator("> div > div").first
                             if display_div.count() > 0:
-                                param_value = display_div.text_content().strip()
+                                param_value = _clean(display_div.text_content())
                             else:
-                                param_value = cells[1].text_content().strip().split("\n")[0]
+                                param_value = _clean(cells[1].text_content()).split("\n")[0]
 
                     if label_text and param_value:
                         parameters[label_text] = param_value
@@ -1449,19 +1460,18 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions section to load
-        page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
+        # Wait for the actions step list to load. The steps live in
+        # ul#flowactions (a stable element id), not under a heading: the page
+        # renders two "Actions" h4 headings (a sidebar palette labelled
+        # "Actions" plus the real "Actions (... then do the following:)"
+        # section), so matching on heading text is ambiguous and unreliable.
+        page.wait_for_selector("ul#flowactions", timeout=10000)
         page.wait_for_timeout(2000)  # Allow time for all step content to render
 
         steps = []
 
-        # Find the Actions section and get its list items
-        actions_heading = page.locator("h4:has-text('Actions')")
-        if actions_heading.count() == 0:
-            return steps
-
-        # Get the parent container and find the list within it
-        actions_section = actions_heading.locator("..").locator("ul").first
+        # The action steps are the direct <li> children of ul#flowactions.
+        actions_section = page.locator("ul#flowactions")
         if actions_section.count() == 0:
             return steps
 
@@ -1523,18 +1533,15 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions section to load
-        page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
+        # Wait for the actions step list to load (see list_flow_steps for why we
+        # anchor on the stable ul#flowactions id instead of an "Actions" heading).
+        page.wait_for_selector("ul#flowactions", timeout=10000)
         page.wait_for_timeout(2000)  # Allow time for all step content to render
 
-        # Find the Actions section and get the list
-        actions_heading = page.locator("h4:has-text('Actions')")
-        if actions_heading.count() == 0:
-            raise ClientError(f"Actions section not found in flow {flow_id}")
-
-        actions_section = actions_heading.locator("..").locator("ul").first
+        # The action steps are the direct <li> children of ul#flowactions.
+        actions_section = page.locator("ul#flowactions")
         if actions_section.count() == 0:
-            raise ClientError(f"No steps found in flow {flow_id}")
+            raise ClientError(f"Actions section not found in flow {flow_id}")
 
         # Find the specific step by index (1-based)
         step_items = actions_section.locator("> li").all()
@@ -1594,18 +1601,15 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions section to load
-        page.wait_for_selector("h4:has-text('Actions')", timeout=10000)
+        # Wait for the actions step list to load (see list_flow_steps for why we
+        # anchor on the stable ul#flowactions id instead of an "Actions" heading).
+        page.wait_for_selector("ul#flowactions", timeout=10000)
         page.wait_for_timeout(2000)
 
-        # Find the step
-        actions_heading = page.locator("h4:has-text('Actions')")
-        if actions_heading.count() == 0:
-            raise ClientError(f"Actions section not found in flow {flow_id}")
-
-        actions_section = actions_heading.locator("..").locator("ul").first
+        # The action steps are the direct <li> children of ul#flowactions.
+        actions_section = page.locator("ul#flowactions")
         if actions_section.count() == 0:
-            raise ClientError(f"No steps found in flow {flow_id}")
+            raise ClientError(f"Actions section not found in flow {flow_id}")
 
         step_items = actions_section.locator("> li").all()
         if step_number < 1 or step_number > len(step_items):

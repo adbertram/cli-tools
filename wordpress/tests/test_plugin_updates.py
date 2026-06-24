@@ -25,7 +25,7 @@ class DummyResponse:
 
 
 class WpcomConfig:
-    def __init__(self, *, wpcom_access_token="token", wpcom_site="example.com", missing=None):
+    def __init__(self, *, wpcom_access_token: str | None = "token", wpcom_site="example.com", missing=None):
         self.wpcom_access_token = wpcom_access_token
         self.wpcom_site = wpcom_site
         self.clear_count = 0
@@ -169,6 +169,79 @@ def test_resolve_plugin_identifier_fails_clearly_when_ambiguous():
         client.resolve_plugin_identifier("Sample")
 
 
+def test_delete_plugin_resolves_identifier_requires_inactive_and_disables_retry():
+    client = WordPressClient.__new__(WordPressClient)
+    current = create_plugin(
+        {"plugin": "sample/sample", "name": "Sample", "status": "inactive", "version": "1.0"}
+    )
+    client.get_plugin = MagicMock(return_value=current)
+    client._make_request = MagicMock(return_value={"deleted": True, "previous": {"plugin": "sample/sample"}})
+
+    result = client.delete_plugin("sample")
+
+    assert result["deleted"] is True
+    client.get_plugin.assert_called_once_with("sample")
+    client._make_request.assert_called_once_with("DELETE", "/plugins/sample/sample", retry=False)
+
+
+def test_delete_plugin_rejects_active_plugin_before_mutation():
+    client = WordPressClient.__new__(WordPressClient)
+    client.get_plugin = MagicMock(
+        return_value=create_plugin(
+            {"plugin": "sample/sample", "name": "Sample", "status": "active", "version": "1.0"}
+        )
+    )
+    client._make_request = MagicMock()
+
+    with pytest.raises(ClientError, match="Plugin sample/sample is active; deactivate it before deleting"):
+        client.delete_plugin("sample")
+
+    client._make_request.assert_not_called()
+
+
+def test_delete_plugin_reports_partial_delete_when_readback_still_installed():
+    client = WordPressClient.__new__(WordPressClient)
+    current = create_plugin(
+        {"plugin": "sample/sample", "name": "Sample", "status": "inactive", "version": "1.0"}
+    )
+    client.get_plugin = MagicMock(return_value=current)
+    client._make_request = MagicMock(
+        side_effect=ClientError(
+            "API request failed (500): Could not fully remove the plugin sample/sample.php."
+        )
+    )
+    client.list_plugins = MagicMock(return_value=[current])
+
+    with pytest.raises(ClientError, match="readback confirms the plugin is still installed"):
+        client.delete_plugin("sample/sample")
+
+    client._make_request.assert_called_once_with("DELETE", "/plugins/sample/sample", retry=False)
+    client.list_plugins.assert_called_once_with()
+
+
+def test_delete_plugin_treats_partial_delete_error_as_success_when_readback_absent():
+    client = WordPressClient.__new__(WordPressClient)
+    current = create_plugin(
+        {"plugin": "sample/sample", "name": "Sample", "status": "inactive", "version": "1.0"}
+    )
+    client.get_plugin = MagicMock(return_value=current)
+    client._make_request = MagicMock(
+        side_effect=ClientError(
+            "API request failed (500): Could not fully remove the plugin sample/sample.php."
+        )
+    )
+    client.list_plugins = MagicMock(return_value=[])
+
+    result = client.delete_plugin("sample/sample")
+
+    assert result == {
+        "deleted": True,
+        "plugin": "sample/sample",
+        "status": "absent_after_partial_delete_error",
+        "api_error": "API request failed (500): Could not fully remove the plugin sample/sample.php.",
+    }
+
+
 def test_upgrade_plugin_uses_native_update_without_delete_or_reinstall():
     client = WordPressClient.__new__(WordPressClient)
     client.config = WpcomConfig()
@@ -218,8 +291,9 @@ def test_upgrade_plugin_uses_native_update_without_delete_or_reinstall():
     client._make_wpcom_request.assert_called_once_with(
         "POST",
         "/sites/example.com/plugins/sample%2Fsample/update/",
+        interactive_token_refresh=False,
     )
-    client._assert_jetpack_plugin_management_connected.assert_called_once_with()
+    client._assert_jetpack_plugin_management_connected.assert_called_once_with(interactive_token_refresh=False)
     client.update_plugin.assert_not_called()
     client.delete_plugin.assert_not_called()
     client.install_plugin.assert_not_called()
@@ -281,10 +355,31 @@ def test_upgrade_plugin_fails_when_readback_is_not_current():
         client.upgrade_plugin("sample/sample")
 
 
-def test_upgrade_plugin_auto_acquires_missing_wpcom_token(monkeypatch):
+def test_make_wpcom_request_auto_acquires_missing_wpcom_token(monkeypatch):
     client = WordPressClient.__new__(WordPressClient)
     client.config = WpcomConfig(wpcom_access_token=None)
+    client._dispatch_wpcom_request = MagicMock(return_value=DummyResponse(200, {"id": "sample/sample"}))
 
+    def fake_acquire(config):
+        config.wpcom_access_token = "fresh-token"
+        return {"site": config.wpcom_site, "token_saved": True}
+
+    monkeypatch.setattr("wordpress_cli.client.acquire_wpcom_access_token", fake_acquire)
+
+    result = client._make_wpcom_request("POST", "/sites/example.com/plugins/sample%2Fsample/update/")
+
+    assert result == {"id": "sample/sample"}
+    client._dispatch_wpcom_request.assert_called_once_with(
+        "POST",
+        f"{WPCOM_API_BASE_URL}/sites/example.com/plugins/sample%2Fsample/update/",
+        "fresh-token",
+        None,
+    )
+
+
+def test_upgrade_plugin_does_not_prompt_for_missing_wpcom_token(monkeypatch):
+    client = WordPressClient.__new__(WordPressClient)
+    client.config = WpcomConfig(wpcom_access_token=None)
     current = create_plugin(
         {
             "plugin": "sample/sample",
@@ -297,38 +392,43 @@ def test_upgrade_plugin_auto_acquires_missing_wpcom_token(monkeypatch):
             "latest_version_source": "wordpress.org",
         }
     )
-    upgraded = create_plugin(
+    client.get_plugin = MagicMock(return_value=current)
+    client._assert_jetpack_plugin_management_connected = MagicMock()
+    acquire = MagicMock()
+    monkeypatch.setattr("wordpress_cli.client.acquire_wpcom_access_token", acquire)
+
+    with pytest.raises(ClientError, match="WordPress.com access token is missing"):
+        client.upgrade_plugin("sample/sample")
+
+    acquire.assert_not_called()
+
+
+def test_upgrade_plugin_does_not_prompt_for_invalid_wpcom_token(monkeypatch):
+    client = WordPressClient.__new__(WordPressClient)
+    client.config = WpcomConfig(wpcom_access_token="stale-token")
+    current = create_plugin(
         {
             "plugin": "sample/sample",
             "name": "Sample",
             "status": "active",
-            "version": "1.1",
-            "update_status": "current",
+            "version": "1.0",
+            "update_status": "available",
             "latest_version": "1.1",
             "update_version": "1.1",
             "latest_version_source": "wordpress.org",
         }
     )
-    plugin_reads = [current, upgraded]
-    client.get_plugin = MagicMock(side_effect=lambda plugin, include_update_status=False: plugin_reads.pop(0))
+    client.get_plugin = MagicMock(return_value=current)
     client._assert_jetpack_plugin_management_connected = MagicMock()
-    client._dispatch_wpcom_request = MagicMock(return_value=DummyResponse(200, {"id": "sample/sample"}))
+    client._dispatch_wpcom_request = MagicMock(return_value=DummyResponse(401, {"error": "invalid_token"}))
+    acquire = MagicMock()
+    monkeypatch.setattr("wordpress_cli.client.acquire_wpcom_access_token", acquire)
 
-    def fake_acquire(config):
-        config.wpcom_access_token = "fresh-token"
-        return {"site": config.wpcom_site, "token_saved": True}
+    with pytest.raises(ClientError, match="WordPress.com access token is invalid or expired"):
+        client.upgrade_plugin("sample/sample")
 
-    monkeypatch.setattr("wordpress_cli.client.acquire_wpcom_access_token", fake_acquire)
-
-    result = client.upgrade_plugin("sample/sample")
-
-    assert result.version == "1.1"
-    client._dispatch_wpcom_request.assert_called_once_with(
-        "POST",
-        f"{WPCOM_API_BASE_URL}/sites/example.com/plugins/sample%2Fsample/update/",
-        "fresh-token",
-        None,
-    )
+    assert client.config.clear_count == 1
+    acquire.assert_not_called()
 
 
 def test_make_wpcom_request_reacquires_on_invalid_token_once(monkeypatch):
@@ -576,8 +676,17 @@ def test_upgrade_plugin_proceeds_when_connected_user_can_manage_configured_site_
 
     assert result.version == "1.1"
     assert client._make_wpcom_request.call_args_list == [
-        call("GET", "/sites/example.com/plugins", retry_on_forbidden=True),
-        call("POST", "/sites/example.com/plugins/sample%2Fsample/update/"),
+        call(
+            "GET",
+            "/sites/example.com/plugins",
+            retry_on_forbidden=True,
+            interactive_token_refresh=False,
+        ),
+        call(
+            "POST",
+            "/sites/example.com/plugins/sample%2Fsample/update/",
+            interactive_token_refresh=False,
+        ),
     ]
 
 
@@ -654,7 +763,46 @@ def test_upgrade_plugin_fails_before_update_request_when_wpcom_plugin_endpoint_i
         "GET",
         "/sites/example.com/plugins",
         retry_on_forbidden=True,
+        interactive_token_refresh=False,
     )
+
+
+def test_upgrade_plugin_does_not_prompt_when_wpcom_plugin_endpoint_is_forbidden(monkeypatch):
+    client = WordPressClient.__new__(WordPressClient)
+    client.config = WpcomConfig(wpcom_access_token="stale-token")
+    client.get_plugin = MagicMock(
+        return_value=create_plugin(
+            {
+                "plugin": "sample/sample",
+                "name": "Sample",
+                "status": "active",
+                "version": "1.0",
+                "update_status": "available",
+                "latest_version": "1.1",
+                "update_version": "1.1",
+                "latest_version_source": "wordpress.org",
+            }
+        )
+    )
+    client._get_jetpack_connection_data = MagicMock(
+        return_value={
+            "currentUser": {
+                "isConnected": True,
+                "permissions": {"manage_plugins": True},
+            }
+        }
+    )
+    client._dispatch_wpcom_request = MagicMock(
+        return_value=DummyResponse(403, {"error": "authorization_required"})
+    )
+    acquire = MagicMock()
+    monkeypatch.setattr("wordpress_cli.client.acquire_wpcom_access_token", acquire)
+
+    with pytest.raises(ClientError, match=WPCOM_PLUGIN_AUTHORIZATION_ERROR):
+        client.upgrade_plugin("sample/sample")
+
+    assert client.config.clear_count == 0
+    acquire.assert_not_called()
 
 
 def test_vulnerability_affects_version_with_max_and_min_ranges():

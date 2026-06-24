@@ -13,13 +13,14 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import analytics, auth, calendar, chat, cloud, docs, drive, gmail, lookerstudio, searchconsole, sheets, webstore
+from .commands import analytics, auth, calendar, chat, cloud, contacts, docs, drive, gmail, lookerstudio, searchconsole, sheets, webstore
 
 app.add_typer(auth.app, name="auth", help="Manage authentication")
 register_commands(app, get_config, analytics, name="analytics", help="Access Google Analytics data")
 register_commands(app, get_config, calendar, name="calendar", help="Access Google Calendar events")
 register_commands(app, get_config, chat, name="chat", help="Access Google Chat messages")
 register_commands(app, get_config, cloud, name="cloud", help="Manage Google Cloud resources")
+register_commands(app, get_config, contacts, name="contacts", help="Access Google Contacts")
 register_commands(app, get_config, docs, name="docs", help="Manage Google Docs documents")
 register_commands(app, get_config, drive, name="drive", help="Manage Google Drive files")
 register_commands(app, get_config, gmail, name="gmail", help="Access Gmail messages")

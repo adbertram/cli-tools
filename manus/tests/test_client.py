@@ -40,6 +40,8 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
             return FakeResponse({"ok": True, "task": {"id": "task-1", "status": "running"}})
         if url.endswith("/v2/task.list"):
             return FakeResponse({"ok": True, "data": []})
+        if url.endswith("/v2/usage.availableCredits"):
+            return FakeResponse({"ok": True, "data": {"total_credits": 25}})
         if url.endswith("/v2/task.listMessages"):
             return FakeResponse({"ok": True, "messages": []})
         if url.endswith("/v2/task.delete"):
@@ -75,6 +77,7 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
     assert confirm_response == {"ok": True, "task_id": "task-1", "confirmed": True}
 
     expected_urls = [
+        "/v2/usage.availableCredits",
         "/v2/task.create",
         "/v2/task.detail",
         "/v2/task.list",
@@ -87,7 +90,7 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
     ]
     assert [url.removeprefix("https://api.manus.ai") for _, url, _ in calls] == expected_urls
 
-    create_method, _, create_kwargs = calls[0]
+    create_method, _, create_kwargs = calls[1]
     assert create_method == "POST"
     assert create_kwargs["headers"]["x-manus-api-key"] == "test-key"
     assert create_kwargs["json"] == {
@@ -98,10 +101,10 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
         "share_visibility": "team",
     }
 
-    _, _, detail_kwargs = calls[1]
+    _, _, detail_kwargs = calls[2]
     assert detail_kwargs["params"] == {"task_id": "task-1"}
 
-    _, _, list_kwargs = calls[2]
+    _, _, list_kwargs = calls[3]
     assert list_kwargs["params"] == {
         "limit": 3,
         "order": "asc",
@@ -110,14 +113,14 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
         "project_id": "proj-1",
     }
 
-    _, _, send_kwargs = calls[3]
+    _, _, send_kwargs = calls[4]
     assert send_kwargs["json"] == {
         "task_id": "task-1",
         "message": {"content": "follow-up"},
         "agent_profile": "manus-1.6-lite",
     }
 
-    _, _, messages_kwargs = calls[4]
+    _, _, messages_kwargs = calls[5]
     assert messages_kwargs["params"] == {
         "task_id": "task-1",
         "limit": 25,
@@ -126,25 +129,61 @@ def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
         "verbose": "true",
     }
 
-    _, _, update_kwargs = calls[5]
+    _, _, update_kwargs = calls[6]
     assert update_kwargs["json"] == {
         "task_id": "task-1",
         "title": "Updated",
         "enable_visible_in_task_list": False,
     }
 
-    _, _, stop_kwargs = calls[6]
+    _, _, stop_kwargs = calls[7]
     assert stop_kwargs["json"] == {"task_id": "task-1"}
 
-    _, _, delete_kwargs = calls[7]
+    _, _, delete_kwargs = calls[8]
     assert delete_kwargs["json"] == {"task_id": "task-1"}
 
-    _, _, confirm_kwargs = calls[8]
+    _, _, confirm_kwargs = calls[9]
     assert confirm_kwargs["json"] == {
         "task_id": "task-1",
         "event_id": "evt-1",
         "input": {"approved": True},
     }
+
+
+def test_create_task_fails_before_task_create_when_no_credits(monkeypatch):
+    client = make_client(monkeypatch)
+    calls = []
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if url.endswith("/v2/usage.availableCredits"):
+            return FakeResponse({"ok": True, "data": {"total_credits": 0}})
+        return FakeResponse({"ok": True, "task_id": "task-1"})
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    try:
+        client.create_task(message={"content": "hello"})
+    except client_module.ClientError as exc:
+        assert "Manus account has 0 available credits" in str(exc)
+        assert "open-subscription" in str(exc)
+    else:  # pragma: no cover - defensive failure
+        raise AssertionError("Expected ClientError")
+
+    assert [url.removeprefix("https://api.manus.ai") for _, url, _ in calls] == [
+        "/v2/usage.availableCredits"
+    ]
+
+
+def test_available_credits_accepts_current_root_level_api_shape(monkeypatch):
+    client = make_client(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        return FakeResponse({"ok": True, "total_credits": -5, "refresh_credits": -5})
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    assert client.available_credits()["total_credits"] == -5
 
 
 def test_wait_for_task_returns_task_and_messages_on_stopped_status(monkeypatch):

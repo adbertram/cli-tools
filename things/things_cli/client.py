@@ -1092,21 +1092,69 @@ class ThingsClient:
         Raises:
             ClientError: If todo not found or AppleScript fails
         """
-        # Get title before deletion for response
-        try:
-            todo = self.get_todo(uuid)
-            title = todo.title
-        except ClientError:
-            title = uuid
+        # Read the current state first. get_todo reads from SQLite, which works
+        # for completed/logbook items, so it is the authoritative existence and
+        # status check. A missing todo is an error, not a silently-ignored
+        # delete of a phantom UUID.
+        todo = self.get_todo(uuid)
+        title = todo.title
 
-        script = f'''
+        # Things3 AppleScript cannot delete a completed todo via `to do id`:
+        # once a todo is completed it leaves its active list (it lives in the
+        # Logbook, or stays under its project but out of the project's `to dos`
+        # collection), so `delete (to do id "<uuid>")` raises -1728
+        # ("Can't get to do id ..."). The `... of list "Logbook"` selector only
+        # resolves completed todos that are NOT in a project, so it is not a
+        # universal fix. The one path that resolves and trashes every completed
+        # todo (project-scoped or not) is to reopen it and delete it inside a
+        # single AppleScript transaction: `to do id` reads fine for a completed
+        # todo, `set status to open` returns it to an active list, and `delete`
+        # on that same already-resolved reference then succeeds. For an
+        # incomplete todo the existing direct-delete path already works, so it
+        # is preserved unchanged.
+        if todo.status == TaskStatus.INCOMPLETE:
+            script = f'''
         tell application "Things3"
             set theToDo to (to do id "{uuid}")
             delete theToDo
         end tell
         '''
+        else:
+            script = f'''
+        tell application "Things3"
+            set theToDo to (to do id "{uuid}")
+            set status of theToDo to open
+            delete theToDo
+        end tell
+        '''
 
-        self._run_applescript(script)
+        try:
+            self._run_applescript(script)
+        except AppleScriptTimeoutError as exc:
+            # osascript can be killed between `set status to open` and `delete`,
+            # leaving a previously-completed todo reopened but not trashed.
+            # Report the durable read-back state instead of a generic timeout so
+            # the caller knows whether the delete completed and whether the
+            # status was left changed.
+            try:
+                after = self.get_todo(uuid)
+            except ClientError:
+                # The todo is gone from the read path; treat as deleted.
+                return {"uuid": uuid, "title": title, "deleted": True}
+            if after.trashed:
+                return {"uuid": uuid, "title": title, "deleted": True}
+            status_note = ""
+            if after.status != todo.status:
+                status_note = (
+                    f" Its status was also changed from {int(todo.status)} to "
+                    f"{int(after.status)} before the timeout; the todo is "
+                    "recoverable by re-running delete once Things3 is responsive."
+                )
+            raise ClientError(
+                f"{exc} Read-back after the timeout shows todo {uuid} was not "
+                f"trashed (trashed={after.trashed}).{status_note}"
+            ) from exc
+
         return {"uuid": uuid, "title": title, "deleted": True}
 
     def update_todo(

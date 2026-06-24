@@ -124,6 +124,26 @@ def test_list_resource_sends_patient_limit_and_filters(monkeypatch, tmp_path):
     }
 
 
+def test_list_resource_enforces_limit_when_server_returns_extra_entries(monkeypatch, tmp_path):
+    def fake_request(method, url, **kwargs):
+        return FakeResponse(
+            {
+                "resourceType": "Bundle",
+                "entry": [
+                    {"resource": {"resourceType": "Patient", "id": "patient-1"}},
+                    {"resource": {"resourceType": "Patient", "id": "patient-2"}},
+                ],
+            }
+        )
+
+    monkeypatch.setattr("mychart_cli.client.requests.request", fake_request)
+
+    client = MychartClient(config=FakeConfig(tmp_path))
+    rows = client.list_resource("Patient", limit=1)
+
+    assert rows == [{"resourceType": "Patient", "id": "patient-1"}]
+
+
 def test_get_patient_requires_patient_context(tmp_path):
     class NoPatientConfig(FakeConfig):
         patient_id = None

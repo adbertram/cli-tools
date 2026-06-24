@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import sys
+import time
 import webbrowser
 from typing import Optional
 from urllib.parse import urlencode
 
+import requests
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.oauth import extract_code_from_input
 from cli_tools_shared.output import print_info
@@ -17,6 +19,8 @@ from .config import Config
 WPCOM_OAUTH_AUTH_URL = "https://public-api.wordpress.com/oauth2/authorize"
 WPCOM_OAUTH_TOKEN_URL = "https://public-api.wordpress.com/oauth2/token"
 WPCOM_OAUTH_SCOPE = "global"
+WPCOM_TOKEN_MAX_ATTEMPTS = 3
+WPCOM_TOKEN_RETRY_DELAYS_SECONDS = (1.0, 2.0)
 WPCOM_SAVE_CREDENTIAL_COMMAND = (
     "wordpress org token save-credential "
     "--client-id ... --client-secret ... --site ... --redirect-uri ..."
@@ -174,16 +178,34 @@ def _parse_wpcom_json(response: requests.Response) -> dict:
     return payload
 
 
-def _request_wpcom_token(data: dict):
-    import requests
+def _request_wpcom_token(data: dict) -> requests.Response:
+    """POST the OAuth token request, retrying pre-response network failures."""
+    last_error: requests.RequestException | None = None
+    for attempt in range(1, WPCOM_TOKEN_MAX_ATTEMPTS + 1):
+        try:
+            return requests.request(
+                method="POST",
+                url=WPCOM_OAUTH_TOKEN_URL,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data=data,
+                timeout=60,
+            )
+        except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout) as exc:
+            last_error = exc
+            if attempt == WPCOM_TOKEN_MAX_ATTEMPTS:
+                break
+            delay = WPCOM_TOKEN_RETRY_DELAYS_SECONDS[attempt - 1]
+            print_info(
+                "WordPress.com token request hit a transient network error; "
+                f"retrying attempt {attempt + 1}/{WPCOM_TOKEN_MAX_ATTEMPTS}."
+            )
+            time.sleep(delay)
 
-    return requests.request(
-        method="POST",
-        url=WPCOM_OAUTH_TOKEN_URL,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data=data,
-        timeout=60,
-    )
+    error_type = type(last_error).__name__ if last_error is not None else "unknown"
+    raise ClientError(
+        "WordPress.com token request failed before receiving a response after "
+        f"{WPCOM_TOKEN_MAX_ATTEMPTS} attempts ({error_type})."
+    ) from last_error

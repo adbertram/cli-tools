@@ -76,6 +76,44 @@ def test_auth_status_exits_2_when_messages_database_is_not_accessible(monkeypatc
     assert profile["credential_types"]["custom"]["api_test"].startswith("failed:")
 
 
+def test_auth_status_reports_full_disk_access_capability_flags(monkeypatch):
+    monkeypatch.setattr(
+        "imessage_cli.commands.auth.get_client",
+        lambda: FakeClient(authenticated=True),
+    )
+
+    result = CliRunner().invoke(app, ["auth", "status"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    custom = payload["profiles"][0]["credential_types"]["custom"]
+    for flag in (
+        "messages_db_accessible",
+        "messages_app_available",
+        "contacts_accessible",
+    ):
+        assert custom[flag] is True
+        assert isinstance(custom[flag], bool)
+
+
+def test_auth_status_reports_full_disk_access_blocked_capability_flags(monkeypatch):
+    monkeypatch.setattr(
+        "imessage_cli.commands.auth.get_client",
+        lambda: FakeClient(authenticated=False),
+    )
+
+    result = CliRunner().invoke(app, ["auth", "status"])
+
+    assert result.exit_code == 2, result.output
+    payload = json.loads(result.stdout)
+    custom = payload["profiles"][0]["credential_types"]["custom"]
+    assert custom["messages_db_accessible"] is False
+    assert isinstance(custom["messages_db_accessible"], bool)
+    api_test = custom["api_test"]
+    assert "not accessible" in api_test.lower()
+    assert "database" in api_test.lower()
+
+
 def test_auth_login_accepts_force_and_outputs_result(monkeypatch):
     monkeypatch.setattr(
         "imessage_cli.commands.auth.get_client",

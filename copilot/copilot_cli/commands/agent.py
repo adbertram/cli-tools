@@ -458,10 +458,18 @@ def get_agent(
             if response_instructions:
                 bot["configuration"]["gPTSettings"]["responseInstructions"] = response_instructions
 
+        # Overlay the same normalized identity/status fields that `agent list`
+        # produces so both subcommands agree on field names and values
+        # (id, published, label-form statecode/statuscode, schema aliases).
+        # format_bot_for_display is the single shared normalizer; the detailed
+        # payload (configuration object, components, GPT instructions) is
+        # preserved because we update onto the assembled bot rather than
+        # replacing it with the compact list shape.
+        bot.update(format_bot_for_display(bot))
+
         if table:
-            formatted = format_bot_for_display(bot)
             print_table(
-                [formatted],
+                [bot],
                 columns=["name", "botid", "statecode", "published"],
                 headers=["Name", "Agent ID", "State", "Published"],
             )
@@ -764,6 +772,10 @@ def update_agent(
                 typer.echo(f"Error reading response format file: {e}", err=True)
                 raise typer.Exit(1)
 
+        # NOTE: agent update takes no inline tool/knowledge payload, so no
+        # capacity pre-check is needed here. If inline tool/knowledge params are
+        # ever added, call ensure_tools_and_knowledge_entitled() (from
+        # ..capacity) when the attach count >= 1, before any mutation.
         client = get_client()
 
         # Get current agent name for success message
@@ -949,6 +961,10 @@ def create_agent(
                 typer.echo(f"Error reading response format file: {e}", err=True)
                 raise typer.Exit(1)
 
+        # NOTE: agent create takes no inline tool/knowledge payload, so no
+        # capacity pre-check is needed here. If inline tool/knowledge params are
+        # ever added, call ensure_tools_and_knowledge_entitled() (from
+        # ..capacity) when the attach count >= 1, before any mutation.
         client = get_client()
         result = client.create_bot(
             name=name,
@@ -2167,6 +2183,16 @@ def knowledge_add(
 
     try:
         client = get_client()
+        # Capacity pre-check: block attaching knowledge to an environment with
+        # no Copilot Studio capacity, before any mutation.
+        from ..capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="attach knowledge"
+        )
         client.associate_knowledge_with_agent(resolved_agent_id, component_id)
         print_success(f"Knowledge source associated with agent successfully.")
     except Exception as e:
@@ -2245,6 +2271,18 @@ def knowledge_upload(
             mime_type = "application/octet-stream"
 
         client = get_client()
+
+        # Capacity pre-check: block creating/replacing a knowledge source on an
+        # environment with no Copilot Studio capacity, before any mutation
+        # (including the --force delete of an existing source).
+        from ..capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="attach knowledge"
+        )
 
         # Check if a knowledge source with this name already exists for the agent
         existing_sources = client.list_knowledge_sources(resolved_agent_id, source_type="file")
@@ -2497,6 +2535,16 @@ def azure_search_add(
 
     try:
         client = get_client()
+        # Capacity pre-check: block attaching knowledge to an environment with
+        # no Copilot Studio capacity, before any mutation.
+        from ..capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="attach knowledge"
+        )
         component_id = client.add_azure_ai_search_knowledge_source(
             bot_id=resolved_agent_id,
             name=name,
@@ -4134,6 +4182,17 @@ def tool_add(
 
     try:
         client = get_client()
+
+        # Capacity pre-check: block attaching tools to an environment with no
+        # Copilot Studio capacity, before any mutation.
+        from ..capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="attach tools"
+        )
 
         component_id = client.add_tool(
             bot_id=agent_id,

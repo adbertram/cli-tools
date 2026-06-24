@@ -4,6 +4,7 @@ import fnmatch
 import random
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlparse
 
@@ -346,6 +347,16 @@ class LinkedInClient:
             retry=retry,
         )
 
+    def _invalidate_post_read_caches(self) -> None:
+        """Remove cached post reads after a successful post mutation."""
+        cache_dir = Path(self.config.storage_dir) / "cache"
+        if not cache_dir.exists():
+            return
+        for prefix in ("list_posts_", "get_post_", "search_posts_"):
+            for cache_file in cache_dir.glob(f"{prefix}*.json"):
+                if cache_file.is_file():
+                    cache_file.unlink()
+
     @cached
     def list_posts(
         self,
@@ -432,6 +443,7 @@ class LinkedInClient:
         post_urn = response.headers.get("x-restli-id") or response.headers.get("X-RestLi-Id")
         if not post_urn:
             raise ClientError("LinkedIn create response did not include x-restli-id.")
+        self._invalidate_post_read_caches()
         return {
             "id": post_urn,
             "author": author,
@@ -502,6 +514,7 @@ class LinkedInClient:
             permission_author=permission_author,
             extra_headers={"X-RestLi-Method": "PARTIAL_UPDATE"},
         )
+        self._invalidate_post_read_caches()
         return {
             "id": post_urn,
             "commentary": commentary,
@@ -516,6 +529,7 @@ class LinkedInClient:
             permission_author=permission_author,
             extra_headers={"X-RestLi-Method": "DELETE"},
         )
+        self._invalidate_post_read_caches()
         return {
             "id": post_urn,
             "deleted": True,

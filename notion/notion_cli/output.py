@@ -1169,3 +1169,120 @@ def format_page_for_display(page: Dict, properties_to_show: Optional[List[str]] 
         result[prop_name] = extract_property_value(prop_value)
 
     return result
+
+
+def format_block_for_display(block: Dict) -> Dict:
+    """
+    Format a block for display output.
+
+    Args:
+        block: Raw block from Notion API
+
+    Returns:
+        Simplified block record for display
+    """
+    block_type = block.get("type", "unknown")
+    block_content = block.get(block_type, {})
+
+    # Extract text content if available
+    text_content = ""
+    if isinstance(block_content, dict) and "rich_text" in block_content:
+        text_content = "".join(
+            rt.get("plain_text", "") for rt in block_content.get("rich_text", [])
+        )
+    elif isinstance(block_content, dict) and "text" in block_content:
+        text_content = "".join(
+            rt.get("plain_text", "") for rt in block_content.get("text", [])
+        )
+    elif block_type == "child_page":
+        text_content = block_content.get("title", "")
+    elif block_type == "child_database":
+        text_content = block_content.get("title", "")
+
+    display = {
+        "id": block.get("id", ""),
+        "type": block_type,
+        "text": text_content[:100] + ("..." if len(text_content) > 100 else ""),
+        "has_children": block.get("has_children", False),
+        "created_time": block.get("created_time", ""),
+        "last_edited_time": block.get("last_edited_time", ""),
+    }
+
+    # Surface is_toggleable for any block type that supports it (heading_1/2/3
+    # today; the API may add more). Read it directly off the type-specific
+    # object so we stay forward-compatible without hardcoding a list.
+    if isinstance(block_content, dict) and "is_toggleable" in block_content:
+        display["is_toggleable"] = bool(block_content.get("is_toggleable"))
+
+    return display
+
+
+# Block types whose text is a single rich_text array and can be edited in place
+# by replacing that array via PATCH /v1/blocks/{block_id}. Editing in place keeps
+# the block ID, so comments anchored to the block survive (unlike delete+recreate).
+# Single source of truth shared by `pages blocks update` and
+# `database page content update-block`.
+TEXT_EDITABLE_BLOCK_TYPES = (
+    "paragraph",
+    "heading_1",
+    "heading_2",
+    "heading_3",
+    "bulleted_list_item",
+    "numbered_list_item",
+    "to_do",
+    "toggle",
+    "quote",
+    "callout",
+)
+
+
+def build_text_block_update(
+    block_type: str,
+    text: Optional[str] = None,
+    checked: Optional[bool] = None,
+    markdown: bool = False,
+) -> Dict:
+    """
+    Build the type-specific PATCH body for an in-place block text/checked update.
+
+    Returns a dict shaped as ``{block_type: {...}}`` suitable for
+    ``client.update_block(block_id, ...)``. Caller is responsible for verifying
+    ``block_type`` is editable (see ``TEXT_EDITABLE_BLOCK_TYPES``) and that
+    ``checked`` is only passed for ``to_do`` blocks.
+
+    Args:
+        block_type: The Notion block type key (e.g. "paragraph").
+        text: New content; replaces the block's rich_text when given. Interpreted
+            as plain text by default, or as inline Markdown when ``markdown`` is
+            True.
+        checked: New checked state; only meaningful for ``to_do`` blocks.
+        markdown: When True, parse ``text`` as inline Markdown via
+            ``text_to_rich_text`` so links (``[label](url)``), inline code
+            (`` `code` ``), bold, and italic become real Notion rich_text
+            annotations/links instead of literal characters. When False, ``text``
+            is stored verbatim as a single plain-text run.
+
+    Returns:
+        Update payload dict for the block's type-specific object.
+
+    Raises:
+        ValueError: When ``markdown`` is True but ``text`` parses to an empty
+            rich_text array (fail-fast: never silently degrade to plain text).
+    """
+    update_data: Dict = {block_type: {}}
+    if text is not None:
+        if markdown:
+            rich_text = text_to_rich_text(text)
+            if not rich_text:
+                raise ValueError(
+                    "Markdown content parsed to empty rich_text; refusing to "
+                    "update the block with no content."
+                )
+            update_data[block_type]["rich_text"] = rich_text
+        else:
+            update_data[block_type]["rich_text"] = [
+                {"type": "text", "text": {"content": text}}
+            ]
+    if checked is not None:
+        update_data[block_type]["checked"] = checked
+    return update_data

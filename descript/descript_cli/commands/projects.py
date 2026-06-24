@@ -3,32 +3,35 @@ from typing import Optional, List
 
 import typer
 
-from ..client import get_client, ClientError
-from cli_tools_shared.filters import validate_filters, apply_filters
-from cli_tools_shared import FilterMap
+from ..platform import (
+    PlatformCLIError,
+    get_project_json,
+    list_projects_json,
+    select_object_properties,
+    select_properties,
+)
+from cli_tools_shared.filters import apply_filters, validate_filters
 from cli_tools_shared.output import print_json, print_table, print_error, handle_error
 
 app = typer.Typer(help="Manage Descript projects", no_args_is_help=True)
 
 
-def _resolve_property(data: dict, prop: str):
-    """Resolve a property path like 'owner.email' from a nested dict."""
-    parts = prop.split(".")
-    current = data
-    for part in parts:
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-        else:
-            return None
-    return current
-
-
 @app.command("list")
 def list_projects(
-    limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of projects to list"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Maximum number of projects to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display (supports dot notation: owner.email)"),
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Filter projects whose name contains this text"),
+    folder_path: Optional[str] = typer.Option(None, "--folder-path", help="Filter projects by folder path"),
+    created_by: Optional[str] = typer.Option(None, "--created-by", help="Filter by creator user ID; use 'me' for current user"),
+    created_after: Optional[str] = typer.Option(None, "--created-after", help="Filter projects created after this ISO 8601 timestamp"),
+    created_before: Optional[str] = typer.Option(None, "--created-before", help="Filter projects created before this ISO 8601 timestamp"),
+    updated_after: Optional[str] = typer.Option(None, "--updated-after", help="Filter projects updated after this ISO 8601 timestamp"),
+    updated_before: Optional[str] = typer.Option(None, "--updated-before", help="Filter projects updated before this ISO 8601 timestamp"),
+    sort: Optional[str] = typer.Option(None, "--sort", "-s", help="Sort field: name, created_at, updated_at, last_viewed_at"),
+    direction: Optional[str] = typer.Option(None, "--direction", help="Sort direction: asc, desc"),
+    cursor: Optional[str] = typer.Option(None, "--cursor", help="Pagination cursor from a previous response"),
 ):
     """
     List your Descript projects.
@@ -42,27 +45,29 @@ def list_projects(
         descript projects list -p "name,owner.email"
     """
     try:
-        client = get_client()
-        projects = client.list_projects(limit=limit)
+        output_data = list_projects_json(
+            limit=limit,
+            name=name,
+            folder_path=folder_path,
+            created_by=created_by,
+            created_after=created_after,
+            created_before=created_before,
+            updated_after=updated_after,
+            updated_before=updated_before,
+            sort=sort,
+            direction=direction,
+            cursor=cursor,
+        )
 
-        # Apply client-side filtering
         if filter:
             try:
                 validate_filters(filter)
-            except Exception:
-                pass
-            projects = apply_filters([p.model_dump() for p in projects], filter)
-            output_data = projects if isinstance(projects, list) and all(isinstance(p, dict) for p in projects) else [p.model_dump() for p in projects]
-        else:
-            output_data = [p.model_dump() for p in projects]
+            except Exception as e:
+                print_error(str(e))
+                raise typer.Exit(1)
+            output_data = apply_filters(output_data, filter)
 
-        # Select properties (supports dot notation)
-        if properties:
-            selected = [p.strip() for p in properties.split(",")]
-            output_data = [
-                {prop: _resolve_property(row, prop) for prop in selected}
-                for row in output_data
-            ]
+        output_data = select_properties(output_data, properties)
 
         if table:
             if output_data:
@@ -74,7 +79,7 @@ def list_projects(
         else:
             print_json(output_data)
 
-    except ClientError as e:
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:
@@ -85,6 +90,7 @@ def list_projects(
 def get_project(
     project_id: str = typer.Argument(help="Project ID (UUID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ):
     """
     Get a specific project by ID.
@@ -94,9 +100,7 @@ def get_project(
         descript projects get <project-id> --table
     """
     try:
-        client = get_client()
-        project = client.get_project(project_id)
-        output = project.model_dump()
+        output = select_object_properties(get_project_json(project_id), properties)
 
         if table:
             headers = list(output.keys())
@@ -105,7 +109,7 @@ def get_project(
         else:
             print_json(output)
 
-    except ClientError as e:
+    except PlatformCLIError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:

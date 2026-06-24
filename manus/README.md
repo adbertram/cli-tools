@@ -11,12 +11,14 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 The Manus CLI provides:
 - `auth` for API-key authentication
 - `task` for Manus task lifecycle operations
+- `usage` for credit-balance checks
 - `cache` for cache management
 
 The CLI now targets the current v2 API surface:
 - Base URL: `https://api.manus.ai`
 - API key header: `x-manus-api-key`
 - Task endpoints: `task.create`, `task.detail`, `task.list`, `task.sendMessage`, `task.listMessages`, `task.update`, `task.stop`, `task.delete`, `task.confirmAction`
+- Usage endpoint: `usage.availableCredits`
 
 ## Authentication
 
@@ -31,6 +33,8 @@ manus auth logout
 ### Create
 
 Create a new task. By default the CLI polls `task.listMessages` until the task stops, errors, or pauses for a confirmable user action, then returns the task plus recent messages. A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues until `--timeout` expires.
+
+Before creating a task, the CLI checks `usage.availableCredits` and fails before task creation when `total_credits <= 0`.
 
 ```bash
 manus task create "Write a Python function for Fibonacci sequence"
@@ -152,4 +156,10 @@ manus auth profiles delete staging
 
 ```bash
 manus cache --help
+```
+
+## Usage
+
+```bash
+manus usage available-credits
 ```

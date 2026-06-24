@@ -26,6 +26,9 @@ from ..output import (
     print_table,
     handle_error,
     format_page_for_display,
+    format_block_for_display,
+    build_text_block_update,
+    TEXT_EDITABLE_BLOCK_TYPES,
     print_success,
     print_warning,
     blocks_to_markdown,
@@ -238,20 +241,12 @@ def page_list(
             limit=limit,
         )
 
-        if not results:
-            typer.echo("No pages found.")
-            raise typer.Exit(0)
-
         # Format results
         formatted = [format_search_result_for_display(r) for r in results]
 
         # Apply client-side filter if provided (Notion search API doesn't support rich filtering)
         if filter:
             formatted = apply_filters(formatted, filter)
-
-        if not formatted:
-            typer.echo("No pages found matching filter.")
-            raise typer.Exit(0)
 
         # Parse properties option
         display_columns = None
@@ -1864,52 +1859,6 @@ def _nest_section_under_heading(client, heading_block_id: str, progress_callback
     return (created_count, len(section_block_ids))
 
 
-def format_block_for_display(block: dict) -> dict:
-    """
-    Format a block for display output.
-
-    Args:
-        block: Raw block from Notion API
-
-    Returns:
-        Simplified block for display
-    """
-    block_type = block.get("type", "unknown")
-    block_content = block.get(block_type, {})
-
-    # Extract text content if available
-    text_content = ""
-    if "rich_text" in block_content:
-        text_content = "".join(
-            rt.get("plain_text", "") for rt in block_content.get("rich_text", [])
-        )
-    elif "text" in block_content:
-        text_content = "".join(
-            rt.get("plain_text", "") for rt in block_content.get("text", [])
-        )
-    elif block_type == "child_page":
-        text_content = block_content.get("title", "")
-    elif block_type == "child_database":
-        text_content = block_content.get("title", "")
-
-    display = {
-        "id": block.get("id", ""),
-        "type": block_type,
-        "text": text_content[:100] + ("..." if len(text_content) > 100 else ""),
-        "has_children": block.get("has_children", False),
-        "created_time": block.get("created_time", ""),
-        "last_edited_time": block.get("last_edited_time", ""),
-    }
-
-    # Surface is_toggleable for any block type that supports it (heading_1/2/3 today;
-    # the API may add more). Read it directly off the type-specific object so we
-    # stay forward-compatible without hardcoding a list.
-    if isinstance(block_content, dict) and "is_toggleable" in block_content:
-        display["is_toggleable"] = bool(block_content.get("is_toggleable"))
-
-    return display
-
-
 @blocks_app.command("list")
 def blocks_list(
     page_id: str = typer.Option(
@@ -2084,7 +2033,20 @@ def blocks_update(
         None,
         "--text",
         "-t",
-        help="New text content for text-based blocks (paragraph, heading, etc.)",
+        help="New PLAIN-TEXT content for text-based blocks (paragraph, heading, etc.). "
+        "Markdown syntax is stored literally; use --markdown/--md-file for links and inline code.",
+    ),
+    markdown: Optional[str] = typer.Option(
+        None,
+        "--markdown",
+        "-m",
+        help="New MARKDOWN content; parses [text](url) links, `inline code`, **bold**, "
+        "and *italic* into real Notion rich_text in place.",
+    ),
+    md_file: Optional[str] = typer.Option(
+        None,
+        "--md-file",
+        help="File containing MARKDOWN content for the block (parsed like --markdown).",
     ),
     checked: Optional[bool] = typer.Option(
         None,
@@ -2150,21 +2112,37 @@ def blocks_update(
         # Determine update data
         update_data = None
 
+        content_sources = [
+            name
+            for name, value in (
+                ("--text", text),
+                ("--markdown", markdown),
+                ("--md-file", md_file),
+                ("--json", json_data),
+                ("--json-file", json_file),
+            )
+            if value is not None
+        ]
+        if len(content_sources) > 1:
+            print_warning(
+                "Specify only one content source: --text, --markdown, --md-file, --json, or --json-file"
+            )
+            raise typer.Exit(1)
+
         if json_file:
             with open(json_file, 'r', encoding='utf-8') as f:
                 update_data = json.load(f)
         elif json_data:
             update_data = json.loads(json_data)
-        elif text is not None or checked is not None or toggleable is not None:
+        elif md_file:
+            with open(md_file, 'r', encoding='utf-8') as f:
+                markdown = f.read()
+        if markdown is not None or text is not None or checked is not None or toggleable is not None:
             # Get current block to determine type
             current_block = client.get_block(block_id)
             block_type = current_block.get("type")
 
-            if block_type not in [
-                "paragraph", "heading_1", "heading_2", "heading_3",
-                "bulleted_list_item", "numbered_list_item", "to_do",
-                "toggle", "quote", "callout"
-            ]:
+            if block_type not in TEXT_EDITABLE_BLOCK_TYPES:
                 print_warning(f"Block type '{block_type}' does not support simple text updates. Use --json instead.")
                 raise typer.Exit(1)
 
@@ -2174,28 +2152,28 @@ def blocks_update(
                 )
                 raise typer.Exit(1)
 
-            # Build update data
-            update_data = {block_type: {}}
-
-            if text is not None:
-                update_data[block_type]["rich_text"] = [
-                    {"type": "text", "text": {"content": text}}
-                ]
-
-            if checked is not None and block_type == "to_do":
-                update_data[block_type]["checked"] = checked
+            # Build the shared text/checked payload (checked applies only to to_do).
+            update_data = build_text_block_update(
+                block_type,
+                text=markdown if markdown is not None else text,
+                checked=checked if block_type == "to_do" else None,
+                markdown=markdown is not None,
+            )
 
             if toggleable is not None:
                 update_data[block_type]["is_toggleable"] = toggleable
                 # Notion's PATCH /blocks/{id} for headings requires rich_text in the
                 # body even when only flipping is_toggleable. Preserve existing text
-                # if --text was not also provided.
-                if text is None:
+                # if no replacement rich_text was also provided.
+                if text is None and markdown is None:
                     existing_rich_text = current_block.get(block_type, {}).get("rich_text", [])
                     update_data[block_type]["rich_text"] = existing_rich_text
 
         if not update_data:
-            print_warning("No update data specified. Use --text, --checked, --toggleable, --json, or --json-file")
+            print_warning(
+                "No update data specified. Use --text, --markdown, --md-file, "
+                "--checked, --toggleable, --json, or --json-file"
+            )
             raise typer.Exit(1)
 
         # Perform update
@@ -2225,8 +2203,8 @@ def blocks_update(
         else:
             print_success(f"Block {block_id} updated successfully.")
 
-    except FileNotFoundError:
-        print_warning(f"File not found: {json_file}")
+    except FileNotFoundError as e:
+        print_warning(f"File not found: {e.filename}")
         raise typer.Exit(1)
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
@@ -2389,6 +2367,16 @@ def blocks_append(
         "--is-toggleable",
         help="Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json/--json-file)",
     ),
+    synced: bool = typer.Option(
+        False,
+        "--synced",
+        help="Wrap the supplied content in one original synced block",
+    ),
+    synced_from: Optional[str] = typer.Option(
+        None,
+        "--synced-from",
+        help="Create a duplicate synced block from the original synced block ID",
+    ),
 ):
     """
     Append child blocks to a block or page.
@@ -2402,21 +2390,48 @@ def blocks_append(
         notion pages blocks append BLOCK_ID --json '[{"paragraph":{"rich_text":[{"text":{"content":"Hello"}}]}}]'
         notion pages blocks append PAGE_ID --after BLOCK_ID --text "Inserted after specific block"
         notion pages blocks append PAGE_ID --file chapter.md --is-toggleable
+        notion pages blocks append PAGE_ID --file synced.md --synced
+        notion pages blocks append PAGE_ID --synced-from ORIGINAL_SYNCED_BLOCK_ID
     """
     try:
-        client = get_client()
-
         # Determine content source
         blocks = None
+        content_sources = [
+            name for name, value in (
+                ("--text", text),
+                ("--file", file),
+                ("--json", json_data),
+                ("--json-file", json_file),
+            )
+            if value is not None
+        ]
 
-        if json_file:
+        if synced_from:
+            if synced or content_sources:
+                print_warning("--synced-from cannot be combined with --synced or content inputs")
+                raise typer.Exit(1)
+            blocks = [{
+                "object": "block",
+                "type": "synced_block",
+                "synced_block": {
+                    "synced_from": {
+                        "type": "block_id",
+                        "block_id": synced_from,
+                    },
+                },
+            }]
+        elif synced and len(content_sources) != 1:
+            print_warning("--synced requires exactly one content input: --text, --file, --json, or --json-file")
+            raise typer.Exit(1)
+
+        if blocks is None and json_file:
             with open(json_file, 'r', encoding='utf-8') as f:
                 blocks = json.load(f)
-        elif json_data:
+        elif blocks is None and json_data:
             blocks = json.loads(json_data)
-        elif text:
+        elif blocks is None and text:
             blocks = text_to_blocks(text, is_toggleable=is_toggleable)
-        elif file:
+        elif blocks is None and file:
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
             blocks = text_to_blocks(content, is_toggleable=is_toggleable)
@@ -2424,6 +2439,18 @@ def blocks_append(
         if not blocks:
             print_warning("No content specified. Use --text, --file, --json, or --json-file")
             raise typer.Exit(1)
+
+        if synced:
+            blocks = [{
+                "object": "block",
+                "type": "synced_block",
+                "synced_block": {
+                    "synced_from": None,
+                    "children": blocks,
+                },
+            }]
+
+        client = get_client()
 
         # Define progress callback for nesting-aware upload
         def nesting_progress_cb(stage, message):

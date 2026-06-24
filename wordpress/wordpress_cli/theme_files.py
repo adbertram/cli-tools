@@ -1,4 +1,4 @@
-"""SSH/SFTP helpers for pushing WordPress theme files."""
+"""SSH helpers for pushing WordPress theme files."""
 
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ printf 'backup_path=%s\n' "$backup_path"
 
 @dataclass(frozen=True)
 class SshConfig:
-    """Explicit SSH/SFTP connection settings."""
+    """Explicit SSH connection settings."""
 
     host: str
     user: Optional[str] = None
@@ -126,7 +126,7 @@ class SshConfig:
     identity_file: Optional[Path] = None
 
     def destination(self) -> str:
-        """Return the user@host destination accepted by ssh and sftp."""
+        """Return the user@host destination accepted by ssh."""
         return f"{self.user}@{self.host}" if self.user else self.host
 
     def public_dict(self) -> dict:
@@ -208,7 +208,7 @@ def push_theme_file(
         return result
 
     temp_path = _temporary_remote_path(destination["remote_path"], timestamp)
-    _sftp_put(config, source["path"], temp_path)
+    _ssh_put(config, source["path"], temp_path)
     applied = _remote_apply(
         config,
         normalized_remote_root,
@@ -367,17 +367,18 @@ def _temporary_remote_path(remote_path: str, timestamp: str) -> str:
     return f"{path.parent}/.{path.name}.cli-upload-{timestamp}-{os.getpid()}"
 
 
-def _sftp_put(config: SshConfig, local_path: str, temp_path: str) -> None:
-    batch = f"put {_quote_sftp_path(local_path)} {_quote_sftp_path(temp_path)}\n"
-    result = subprocess.run(
-        _sftp_command(config),
-        input=batch,
-        capture_output=True,
-        text=True,
-    )
+def _ssh_put(config: SshConfig, local_path: str, temp_path: str) -> None:
+    with Path(local_path).open("rb") as payload:
+        result = subprocess.run(
+            _ssh_upload_command(config, temp_path),
+            stdin=payload,
+            capture_output=True,
+        )
     if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "unknown SFTP error"
-        raise ClientError(f"SFTP upload failed: {message}")
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        stdout = result.stdout.decode("utf-8", errors="replace").strip()
+        message = stderr or stdout or "unknown SSH upload error"
+        raise ClientError(f"SSH upload failed: {message}")
 
 
 def _remote_apply(
@@ -436,16 +437,9 @@ def _ssh_command(config: SshConfig, remote_command: str) -> list[str]:
     return command
 
 
-def _sftp_command(config: SshConfig) -> list[str]:
-    command = ["sftp", "-b", "-", "-P", str(config.port)]
-    if config.identity_file is not None:
-        command.extend(["-i", str(config.identity_file)])
-    command.append(config.destination())
-    return command
-
-
-def _quote_sftp_path(path: str) -> str:
-    return '"' + path.replace("\\", "\\\\").replace('"', '\\"') + '"'
+def _ssh_upload_command(config: SshConfig, temp_path: str) -> list[str]:
+    remote_command = "cat > " + shlex.quote(temp_path)
+    return _ssh_command(config, remote_command)
 
 
 def _parse_key_value_output(output: str) -> dict[str, str]:

@@ -74,6 +74,7 @@ app.add_typer(filters_app, name="filters")
 
 GMAIL_MESSAGE_PROPERTIES = {
     'id',
+    'name',
     'from',
     'to',
     'subject',
@@ -84,6 +85,18 @@ GMAIL_MESSAGE_PROPERTIES = {
 }
 
 
+def resolve_output_properties(properties: Optional[List[str]]) -> List[str]:
+    if not properties:
+        return []
+
+    return [
+        item.strip()
+        for value in properties
+        for item in value.split(',')
+        if item.strip()
+    ]
+
+
 def resolve_gmail_message_properties(properties: Optional[List[str]], include_body: bool = False) -> List[str]:
     if not properties:
         return ['id', 'from', 'subject', 'date']
@@ -92,12 +105,7 @@ def resolve_gmail_message_properties(properties: Optional[List[str]], include_bo
     if include_body:
         supported_properties.add('body')
 
-    parsed_properties = [
-        item.strip()
-        for value in properties
-        for item in value.split(',')
-        if item.strip()
-    ]
+    parsed_properties = resolve_output_properties(properties)
     invalid_properties = [
         item for item in parsed_properties if item not in supported_properties
     ]
@@ -252,7 +260,7 @@ def gmail_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     label: Optional[str] = typer.Option(None, "--label", help="Filter by label (e.g., INBOX, SENT)"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
-    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments, body with --include-body"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, name, from, to, subject, date, threadId, labelIds, attachments, body with --include-body"),
     include_body: bool = typer.Option(False, "--include-body", help="Include decoded message body text in each result"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -298,6 +306,7 @@ def gmail_list(
 
             full_msg = {
                 'id': msg_detail['id'],
+                'name': headers.get('Subject', ''),
                 'from': headers.get('From', ''),
                 'to': headers.get('To', ''),
                 'subject': headers.get('Subject', ''),
@@ -1320,11 +1329,15 @@ def labels_list(
         if filter:
             labels = apply_filters(labels, filter)
         labels = labels[:limit]
-        if properties:
-            labels = [{k: v for k, v in label_item.items() if k in properties} for label_item in labels]
+        props_to_include = resolve_output_properties(properties)
+        if props_to_include:
+            labels = [
+                {k: v for k, v in label_item.items() if k in props_to_include}
+                for label_item in labels
+            ]
 
         if table:
-            table_cols = properties[:3] if properties else ["id", "name"]
+            table_cols = props_to_include[:3] if props_to_include else ["id", "name"]
             print_table(labels, table_cols, table_cols)
         else:
             print_json({
@@ -1466,11 +1479,15 @@ def filters_list(
         if filter:
             filters = apply_filters(filters, filter)
         filters = filters[:limit]
-        if properties:
-            filters = [{k: v for k, v in record.items() if k in properties} for record in filters]
+        props_to_include = resolve_output_properties(properties)
+        if props_to_include:
+            filters = [
+                {k: v for k, v in record.items() if k in props_to_include}
+                for record in filters
+            ]
 
         if table:
-            table_cols = properties[:4] if properties else ["id", "from", "subject", "add_label_ids"]
+            table_cols = props_to_include[:4] if props_to_include else ["id", "from", "subject", "add_label_ids"]
             print_table(filters, table_cols, table_cols)
         else:
             print_json(filters)

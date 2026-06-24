@@ -11,6 +11,9 @@ from ..output import (
     print_table,
     handle_error,
     format_page_for_display,
+    format_block_for_display,
+    build_text_block_update,
+    TEXT_EDITABLE_BLOCK_TYPES,
     print_success,
     print_warning,
     blocks_to_markdown,
@@ -398,7 +401,10 @@ def _parse_name_value(raw: str, flag: str) -> tuple:
 def database_create(
     parent_page_id: str = typer.Argument(
         ...,
-        help="The parent page ID the new database is created under",
+        help=(
+            "The parent page ID the new database is created under. "
+            "Database and data_source IDs are not valid parents."
+        ),
     ),
     title: str = typer.Option(
         ...,
@@ -497,6 +503,9 @@ def database_create(
 ):
     """
     Create a new database under a parent page.
+
+    PARENT_PAGE_ID must be a page ID. Notion does not allow creating a
+    database with a database or data_source parent.
 
     The schema is supplied via raw JSON (--properties, the Notion
     initial_data_source.properties object) and/or convenience flags. A title
@@ -724,20 +733,12 @@ def database_list(
             limit=limit,
         )
 
-        if not results:
-            typer.echo("No databases found.")
-            raise typer.Exit(0)
-
         # Format results
         formatted = [format_database_for_list(db) for db in results]
 
         # Apply client-side filter if provided
         if filter:
             formatted = apply_filters(formatted, filter)
-
-        if not formatted:
-            typer.echo("No databases found matching filter.")
-            raise typer.Exit(0)
 
         # Parse properties option
         display_columns = None
@@ -1727,6 +1728,197 @@ def content_clear(
 
         print_success(f"Cleared all content from page {page_id}")
         print_json({"page_id": page_id, "cleared": True})
+
+    except Exception as e:
+        exit_code = handle_error(e)
+        raise typer.Exit(exit_code)
+
+
+@content_app.command("list-blocks")
+def content_list_blocks(
+    page_id: str = typer.Argument(
+        ...,
+        help="The page ID to list content blocks for",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="Recursively include nested child blocks",
+    ),
+    table: bool = typer.Option(
+        False,
+        "--table",
+        "-t",
+        help="Display as formatted table",
+    ),
+    limit: Optional[int] = typer.Option(
+        None,
+        "--limit",
+        "-l",
+        help="Maximum number of top-level blocks to return (default: all blocks)",
+    ),
+    filter: Optional[List[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., type:eq:paragraph, has_children:eq:true)",
+    ),
+    properties: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Comma-separated fields to include (id,type,text,has_children,is_toggleable,created_time,last_edited_time)",
+    ),
+):
+    """
+    List a page's content blocks with their block IDs, types, and text.
+
+    Use this to map paragraphs/headings to their block IDs so a targeted,
+    non-destructive edit can be made with 'content update-block --block-id'.
+    Editing a block in place preserves the block ID, so any inline comments
+    anchored to OTHER blocks are not affected.
+
+    Examples:
+        notion database page content list-blocks PAGE_ID
+        notion database page content list-blocks PAGE_ID --table
+        notion database page content list-blocks PAGE_ID --recursive
+        notion database page content list-blocks PAGE_ID --filter "type:eq:paragraph"
+        notion database page content list-blocks PAGE_ID --properties "id,type,text" --table
+    """
+    try:
+        client = get_client()
+
+        if filter:
+            try:
+                validate_filters(filter)
+            except FilterValidationError as e:
+                print_warning(str(e))
+                raise typer.Exit(1)
+
+        # Default (limit=None) fetches the COMPLETE child list via full
+        # has_more/next_cursor pagination. Recursive runs always fetch every
+        # top-level block before descending.
+        fetch_limit = None if recursive else limit
+        blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
+
+        if not blocks:
+            typer.echo("No blocks found.")
+            raise typer.Exit(0)
+
+        formatted = [format_block_for_display(b) for b in blocks]
+
+        if filter:
+            formatted = apply_filters(formatted, filter)
+
+        if limit is not None:
+            formatted = formatted[:limit]
+
+        prop_list = None
+        if properties:
+            prop_list = [p.strip() for p in properties.split(",")]
+            formatted = [
+                {prop: block.get(prop) for prop in prop_list if prop in block}
+                for block in formatted
+            ]
+
+        if table:
+            columns = prop_list or ["id", "type", "text", "has_children", "is_toggleable"]
+            print_table(formatted, columns=columns)
+        else:
+            print_json(formatted)
+
+        typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
+
+    except Exception as e:
+        exit_code = handle_error(e)
+        raise typer.Exit(exit_code)
+
+
+@content_app.command("update-block")
+def content_update_block(
+    block_id: str = typer.Option(
+        ...,
+        "--block-id",
+        "-b",
+        help="The block ID to update in place",
+    ),
+    text: Optional[str] = typer.Option(
+        None,
+        "--text",
+        "-t",
+        help="New plain-text content for the block (replaces existing text)",
+    ),
+    checked: Optional[bool] = typer.Option(
+        None,
+        "--checked/--unchecked",
+        help="Set the checked state for a to_do block",
+    ),
+    table: bool = typer.Option(
+        False,
+        "--table",
+        help="Display the updated block as a formatted table",
+    ),
+):
+    """
+    Edit a single existing block's text IN PLACE without deleting it.
+
+    PATCHes the block's rich_text via the Notion API (PATCH /v1/blocks/{id}),
+    which preserves the block and its ID. Because the block ID is unchanged,
+    any inline/block-anchored comments on this page (including on OTHER blocks)
+    SURVIVE the edit. This is the non-destructive alternative to
+    'content set', which deletes and recreates every block and so destroys all
+    inline comments.
+
+    Supported block types: paragraph, heading_1/2/3, bulleted_list_item,
+    numbered_list_item, quote, callout, to_do, toggle.
+
+    Find block IDs with 'content list-blocks PAGE_ID'.
+
+    Examples:
+        notion database page content update-block --block-id BLOCK_ID --text "Revised sentence."
+        notion database page content update-block -b BLOCK_ID -t "New heading text"
+        notion database page content update-block -b TODO_BLOCK_ID --checked
+    """
+    try:
+        if text is None and checked is None:
+            print_warning("Nothing to update. Use --text and/or --checked/--unchecked.")
+            raise typer.Exit(1)
+
+        client = get_client()
+
+        # Read the current block to learn its type. The type-specific key names
+        # the rich_text container (e.g. block["paragraph"]["rich_text"]).
+        current_block = client.get_block(block_id)
+        block_type = current_block.get("type")
+
+        if block_type not in TEXT_EDITABLE_BLOCK_TYPES:
+            print_warning(
+                f"Block type '{block_type}' cannot be edited in place with this command. "
+                f"Editable types: {', '.join(TEXT_EDITABLE_BLOCK_TYPES)}. "
+                "For other block types, use 'notion pages blocks update --json'."
+            )
+            raise typer.Exit(1)
+
+        if checked is not None and block_type != "to_do":
+            print_warning(
+                f"--checked/--unchecked only applies to to_do blocks (got '{block_type}')."
+            )
+            raise typer.Exit(1)
+
+        update_data = build_text_block_update(block_type, text=text, checked=checked)
+
+        updated_block = client.update_block(block_id, update_data)
+
+        formatted = format_block_for_display(updated_block)
+        if table:
+            print_table([formatted])
+        else:
+            print_json(formatted)
+        print_success(
+            f"Block {block_id} updated in place (type {block_type}); "
+            "comments on this page were preserved."
+        )
 
     except Exception as e:
         exit_code = handle_error(e)

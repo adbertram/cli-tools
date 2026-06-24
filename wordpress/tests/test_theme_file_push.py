@@ -129,23 +129,26 @@ def test_push_theme_file_reports_missing_remote_sha256sum(tmp_path, monkeypatch)
         )
 
 
-def test_push_theme_file_yes_uploads_with_backup_and_verifies(tmp_path, monkeypatch):
+def test_push_theme_file_yes_uploads_over_ssh_with_backup_and_verifies(tmp_path, monkeypatch):
     local_file = tmp_path / "front-page.php"
     content = b"new homepage"
     local_file.write_bytes(content)
     digest = hashlib.sha256(content).hexdigest()
     calls = []
+    uploaded_payloads = []
 
-    def fake_run(cmd, input=None, capture_output=False, text=False):
+    def fake_run(cmd, input=None, stdin=None, capture_output=False, text=False):
         calls.append({"cmd": cmd, "input": input})
         if cmd[0] == "ssh" and len(calls) == 1:
             return subprocess.CompletedProcess(cmd, 0, stdout=_status_stdout(), stderr="")
-        if cmd[0] == "sftp":
-            assert "put " in input
-            assert str(local_file) in input
-            assert "/srv/www/wp-content/themes/ata/.front-page.php.cli-upload-" in input
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == "ssh":
+        if cmd[0] == "ssh" and len(calls) == 2:
+            assert stdin is not None
+            uploaded_payloads.append(stdin.read())
+            assert "cat > " in cmd[-1]
+            assert "$1" not in cmd[-1]
+            assert "/srv/www/wp-content/themes/ata/.front-page.php.cli-upload-" in cmd[-1]
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+        if cmd[0] == "ssh" and len(calls) == 3:
             stdout = "\n".join(
                 [
                     "remote_path=/srv/www/wp-content/themes/ata/front-page.php",
@@ -179,8 +182,9 @@ def test_push_theme_file_yes_uploads_with_backup_and_verifies(tmp_path, monkeypa
         "sha256": digest,
         "matches_local": True,
     }
-    assert [call["cmd"][0] for call in calls] == ["ssh", "sftp", "ssh"]
-    assert calls[1]["cmd"] == ["sftp", "-b", "-", "-P", "2222", "example.com"]
+    assert [call["cmd"][0] for call in calls] == ["ssh", "ssh", "ssh"]
+    assert calls[1]["cmd"][:4] == ["ssh", "-p", "2222", "example.com"]
+    assert uploaded_payloads == [content]
 
 
 def test_push_theme_file_rejects_path_traversal(tmp_path):

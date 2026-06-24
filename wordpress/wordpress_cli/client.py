@@ -58,8 +58,10 @@ JETPACK_PLUGIN_MANAGEMENT_ERROR = (
     "Connect the current WordPress admin user to WordPress.com through Jetpack before plugin updates can run."
 )
 WPCOM_PLUGIN_AUTHORIZATION_ERROR = (
-    "WordPress.com still denied plugin-management access after browser authorization. "
-    "Log in in the browser, approve the configured app for this site, then retry the plugin update."
+    "WordPress.com denied plugin-management access for the configured WPCOM_SITE even though the "
+    "WordPress.com token is present. This is not a missing-token state. Confirm the OAuth app is "
+    "authorized by the same WordPress.com account that can manage plugins for the Jetpack-connected "
+    "site, and confirm WPCOM_SITE identifies that exact site."
 )
 
 
@@ -346,35 +348,6 @@ class WordPressClient:
             )
         return themes
 
-    @staticmethod
-    def _theme_identifier_values(theme: dict) -> List[str]:
-        """Return exact identifiers users can discover from theme list output."""
-        values = [theme["theme"], theme["name"]]
-        textdomain = theme.get("textdomain")
-        if textdomain:
-            values.append(textdomain)
-        return values
-
-    def get_theme(self, theme: str) -> dict:
-        """Get a specific theme by stylesheet, textdomain, or exact name."""
-        if not theme or not theme.strip():
-            raise ValueError("theme cannot be empty")
-
-        normalized = theme.strip().casefold()
-        matches = [
-            installed
-            for installed in self.list_themes()
-            if normalized in {value.casefold() for value in self._theme_identifier_values(installed)}
-        ]
-        if not matches:
-            raise ClientError(
-                f"Theme not found: {theme}. Use a stylesheet, textdomain, or exact name from themes list."
-            )
-        if len(matches) > 1:
-            match_names = ", ".join(sorted(match["theme"] for match in matches))
-            raise ClientError(f"Theme identifier is ambiguous: {theme}. Matches: {match_names}")
-        return matches[0]
-
     def _wp_json_base_url(self) -> str:
         suffix = "/wp/v2"
         base_url = self.base_url.rstrip("/")
@@ -388,9 +361,15 @@ class WordPressClient:
         endpoint: str,
         data: Optional[Dict] = None,
         retry_on_forbidden: bool = False,
+        interactive_token_refresh: bool = True,
     ) -> Any:
         token = self.config.wpcom_access_token
         if not token:
+            if not interactive_token_refresh:
+                raise ClientError(
+                    "WordPress.com access token is missing. Run `wordpress org token` interactively, "
+                    "verify `wordpress org token status` reports ready true, then retry the command."
+                )
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
         if not token:
@@ -401,6 +380,11 @@ class WordPressClient:
 
         if wpcom_response_indicates_invalid_token(response):
             self.config.clear_wpcom_access_token()
+            if not interactive_token_refresh:
+                raise ClientError(
+                    "WordPress.com access token is invalid or expired. Run `wordpress org token` "
+                    "interactively, verify `wordpress org token status` reports ready true, then retry the command."
+                )
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
             if not token:
@@ -408,6 +392,8 @@ class WordPressClient:
             response = self._dispatch_wpcom_request(method, url, token, data)
 
         if response.status_code == 403 and retry_on_forbidden:
+            if not interactive_token_refresh:
+                raise ClientError(WPCOM_PLUGIN_AUTHORIZATION_ERROR)
             self.config.clear_wpcom_access_token()
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
@@ -869,137 +855,6 @@ class WordPressClient:
 
         response = self._make_request("DELETE", endpoint, params=params)
         return response
-
-    # ==================== Navigation Menu Methods ====================
-
-    def list_menus(self) -> List[dict]:
-        """List WordPress navigation menus."""
-        response = self._make_request("GET", "/menus", params={"per_page": 100})
-        if not isinstance(response, list):
-            raise ClientError(f"Expected menu list response to be a list, got {type(response)}")
-        return response
-
-    def list_menu_locations(self) -> dict:
-        """List WordPress navigation menu locations."""
-        response = self._make_request("GET", "/menu-locations")
-        if not isinstance(response, dict):
-            raise ClientError(f"Expected menu locations response to be a dict, got {type(response)}")
-        return response
-
-    def resolve_menu_id(self, *, menu: Optional[str] = None, location: Optional[str] = None) -> int:
-        """Resolve a menu ID from a menu ID/slug/name or a theme location."""
-        if bool(menu) == bool(location):
-            raise ValueError("Provide exactly one of menu or location")
-
-        if location is not None:
-            locations = self.list_menu_locations()
-            location_data = locations.get(location)
-            if not isinstance(location_data, dict):
-                raise ClientError(f"Menu location not found: {location}")
-            menu_id = location_data.get("menu")
-            if not isinstance(menu_id, int) or menu_id <= 0:
-                raise ClientError(f"Menu location has no assigned menu: {location}")
-            return menu_id
-
-        assert menu is not None
-        menu_identifier = menu.strip()
-        if not menu_identifier:
-            raise ValueError("menu cannot be empty")
-        if menu_identifier.isdigit():
-            return int(menu_identifier)
-
-        normalized = menu_identifier.casefold()
-        matches = [
-            raw_menu
-            for raw_menu in self.list_menus()
-            if str(raw_menu.get("slug", "")).casefold() == normalized
-            or str(raw_menu.get("name", "")).casefold() == normalized
-        ]
-        if not matches:
-            raise ClientError(f"Menu not found: {menu}")
-        if len(matches) > 1:
-            names = ", ".join(sorted(str(match.get("name", match.get("id"))) for match in matches))
-            raise ClientError(f"Menu identifier is ambiguous: {menu}. Matches: {names}")
-        menu_id = matches[0].get("id")
-        if not isinstance(menu_id, int):
-            raise ClientError(f"Resolved menu did not include an integer id: {menu}")
-        return menu_id
-
-    def list_menu_items(self, menu_id: int, limit: int = 100) -> List[dict]:
-        """List items in a navigation menu with automatic pagination."""
-        if menu_id <= 0:
-            raise ValueError("menu_id must be a positive integer")
-        if limit <= 0:
-            raise ValueError("limit must be a positive integer")
-
-        all_items: List[dict] = []
-        page = 1
-        remaining = limit
-        while remaining > 0:
-            per_page = min(remaining, 100)
-            response, headers = self._make_request(
-                "GET",
-                "/menu-items",
-                params={
-                    "menus": menu_id,
-                    "per_page": per_page,
-                    "page": page,
-                    "orderby": "menu_order",
-                    "order": "asc",
-                },
-                return_headers=True,
-            )
-            if not isinstance(response, list):
-                raise ClientError(f"Expected menu item list response to be a list, got {type(response)}")
-            all_items.extend(response)
-            if len(response) < per_page:
-                break
-            total_pages = int(headers.get("x-wp-totalpages", 1))
-            if page >= total_pages:
-                break
-            remaining -= len(response)
-            page += 1
-        return all_items
-
-    def add_page_to_menu(
-        self,
-        *,
-        page_id: int,
-        menu_id: int,
-        title: Optional[str] = None,
-        menu_order: Optional[int] = None,
-    ) -> dict:
-        """Add a page to a navigation menu, returning an existing item when already present."""
-        if page_id <= 0:
-            raise ValueError("page_id must be a positive integer")
-        if menu_id <= 0:
-            raise ValueError("menu_id must be a positive integer")
-
-        for item in self.list_menu_items(menu_id):
-            if (
-                item.get("type") == "post_type"
-                and item.get("object") == "page"
-                and item.get("object_id") == page_id
-            ):
-                return {"created": False, "menu_id": menu_id, "item": item}
-
-        data: Dict[str, Any] = {
-            "status": "publish",
-            "type": "post_type",
-            "object": "page",
-            "object_id": page_id,
-            "menus": menu_id,
-            "parent": 0,
-        }
-        if title is not None:
-            data["title"] = title
-        if menu_order is not None:
-            data["menu_order"] = menu_order
-
-        item = self._make_request("POST", "/menu-items", data=data)
-        if not isinstance(item, dict):
-            raise ClientError(f"Expected created menu item response to be a dict, got {type(item)}")
-        return {"created": True, "menu_id": menu_id, "item": item}
 
     # ==================== Media Methods ====================
 
@@ -1515,13 +1370,17 @@ class WordPressClient:
             raise ClientError(f"Could not normalize site identifier: {value}")
         return host
 
-    def _get_wpcom_site_record(self) -> dict:
+    def _get_wpcom_site_record(self, *, interactive_token_refresh: bool = True) -> dict:
         configured_site = self.config.wpcom_site
         if not configured_site:
             raise ClientError("Missing WordPress.com site identifier: WPCOM_SITE")
         normalized_configured_site = self._normalize_site_identifier(configured_site)
 
-        response = self._make_wpcom_request("GET", "/me/sites")
+        response = self._make_wpcom_request(
+            "GET",
+            "/me/sites",
+            interactive_token_refresh=interactive_token_refresh,
+        )
         if not isinstance(response, dict):
             raise ClientError(f"Expected WordPress.com /me/sites response to be a dict, got {type(response)}")
         sites = response.get("sites")
@@ -1564,7 +1423,7 @@ class WordPressClient:
         if not allowed:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-    def _assert_jetpack_plugin_management_connected(self) -> None:
+    def _assert_jetpack_plugin_management_connected(self, *, interactive_token_refresh: bool = True) -> None:
         connection = self._get_jetpack_connection_data()
         current_user = connection.get("currentUser")
         if not isinstance(current_user, dict):
@@ -1584,14 +1443,17 @@ class WordPressClient:
         if not manage_plugins:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-        self._assert_wpcom_plugin_endpoint_access()
+        self._assert_wpcom_plugin_endpoint_access(
+            interactive_token_refresh=interactive_token_refresh,
+        )
 
-    def _assert_wpcom_plugin_endpoint_access(self) -> None:
+    def _assert_wpcom_plugin_endpoint_access(self, *, interactive_token_refresh: bool = True) -> None:
         site = quote(self.config.wpcom_site, safe="")
         self._make_wpcom_request(
             "GET",
             f"/sites/{site}/plugins",
             retry_on_forbidden=True,
+            interactive_token_refresh=interactive_token_refresh,
         )
 
     def get_wordpress_org_plugin_info(self, slug: str) -> dict:
@@ -1799,8 +1661,31 @@ class WordPressClient:
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/plugins/{plugin}"
-        response = self._make_request("DELETE", endpoint)
+        current = self.get_plugin(plugin)
+        if current.status != "inactive":
+            raise ClientError(f"Plugin {current.plugin} is {current.status}; deactivate it before deleting")
+
+        endpoint = f"/plugins/{current.plugin}"
+        try:
+            response = self._make_request("DELETE", endpoint, retry=False)
+        except ClientError as exc:
+            message = str(exc)
+            if "Could not fully remove the plugin" not in message:
+                raise
+            still_installed = [installed for installed in self.list_plugins() if installed.plugin == current.plugin]
+            if still_installed:
+                installed = still_installed[0]
+                raise ClientError(
+                    "Plugin deletion failed and readback confirms the plugin is still installed: "
+                    f"plugin={installed.plugin}, status={installed.status}, version={installed.version}. "
+                    f"API error: {message}"
+                ) from exc
+            return {
+                "deleted": True,
+                "plugin": current.plugin,
+                "status": "absent_after_partial_delete_error",
+                "api_error": message,
+            }
 
         return response
 
@@ -1843,13 +1728,14 @@ class WordPressClient:
             raise ClientError(f"Plugin {plugin} does not have an available update")
         if not current.latest_version:
             raise ClientError(f"Plugin {plugin} does not have a known latest version")
-        self._assert_jetpack_plugin_management_connected()
+        self._assert_jetpack_plugin_management_connected(interactive_token_refresh=False)
 
         site = quote(self.config.wpcom_site, safe="")
         plugin_id = quote(plugin, safe="")
         response = self._make_wpcom_request(
             "POST",
             f"/sites/{site}/plugins/{plugin_id}/update/",
+            interactive_token_refresh=False,
         )
         if not isinstance(response, dict):
             raise ClientError(f"Expected WordPress.com plugin update response to be a dict, got {type(response)}")

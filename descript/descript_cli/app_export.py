@@ -760,6 +760,7 @@ def export_composition_local(
     return output_path
 
 
+DELETE_SIDEBAR_TIMEOUT_SECONDS = 15
 DELETE_MENU_TIMEOUT_SECONDS = 10
 DELETE_CONFIRM_WAIT_SECONDS = 3
 
@@ -819,9 +820,28 @@ def delete_composition_local(
     ws = _connect_cdp(ws_url, timeout=15)
     try:
         base = int(time.time() * 1000) % 100000
+        probe = base
 
-        # 1. Locate the id-scoped sidebar item and its context-menu button.
-        #    Each composition-sidebar-item's id attribute IS the composition UUID.
+        # 1. Open the composition popover. The composition list rows
+        #    (composition-sidebar-item, each whose id IS the composition UUID,
+        #    carrying a composition-context-menu-button) render ONLY inside the
+        #    composition-popover-content popover — they are absent from the
+        #    default editor DOM, so querying for them first returns ids: [].
+        #    Click the composition-popover-trigger to open it. The popover is
+        #    transient (closes on focus loss), so the locate loop below re-opens
+        #    it whenever composition-popover-content is not present.
+        trigger_expr = (
+            "(function(){"
+            "var open=!!document.querySelector('[data-testid=\"composition-popover-content\"]');"
+            "var t=document.querySelector('[data-testid=\"composition-popover-trigger\"]');"
+            "if(!t) return {trigger:false, open:open};"
+            "var r=t.getBoundingClientRect();"
+            "return {trigger:true, open:open, x:r.x+r.width/2, y:r.y+r.height/2};"
+            "})()"
+        )
+
+        # 2. Locate the id-scoped sidebar item and its context-menu button
+        #    inside the open popover.
         locate_expr = (
             "(function(){"
             "var item=document.querySelector('[data-testid=\"composition-sidebar-item\"][id=\"%s\"]');"
@@ -835,11 +855,25 @@ def delete_composition_local(
             "return {found:true, button:true, x:r.x+r.width/2, y:r.y+r.height/2, ix:ir.x+ir.width/2, iy:ir.y+ir.height/2};"
             "})()"
         ) % composition_id
-        loc = _cdp_eval_value(ws, base, locate_expr)
+        loc = None
+        deadline = time.time() + DELETE_SIDEBAR_TIMEOUT_SECONDS
+        while time.time() < deadline:
+            trig = _cdp_eval_value(ws, probe, trigger_expr)
+            probe += 1
+            if trig and trig.get("trigger") and not trig.get("open"):
+                print_info("Opening composition list...")
+                _cdp_click_point(ws, probe, trig["x"], trig["y"])
+                probe += 3
+                time.sleep(0.6)
+            loc = _cdp_eval_value(ws, probe, locate_expr)
+            probe += 1
+            if loc and loc.get("found") and loc.get("button"):
+                break
+            time.sleep(0.4)
         if not loc or not loc.get("found"):
             raise ClientError(
-                f"Composition {composition_id} not found in the Descript sidebar. "
-                f"Available sidebar item ids: {loc.get('ids') if loc else None}"
+                f"Composition {composition_id} not found in the Descript composition list. "
+                f"Available composition ids: {loc.get('ids') if loc else None}"
             )
         if not loc.get("button"):
             raise ClientError(
@@ -847,12 +881,14 @@ def delete_composition_local(
             )
 
         # Hover the item (the options button can be hover-gated), then click it.
-        _send_cdp_message(ws, base + 1, "Input.dispatchMouseEvent", {
+        _send_cdp_message(ws, probe, "Input.dispatchMouseEvent", {
             "type": "mouseMoved", "x": loc["ix"], "y": loc["iy"],
         })
+        probe += 1
         time.sleep(0.3)
         print_info(f"Opening context menu for '{composition_name}'...")
-        _cdp_click_point(ws, base + 2, loc["x"], loc["y"])
+        _cdp_click_point(ws, probe, loc["x"], loc["y"])
+        probe += 3  # _cdp_click_point uses 3 consecutive IDs (move/press/release)
         time.sleep(0.6)
 
         # 2. Find and click the Delete item (Radix menuitem).
@@ -867,7 +903,6 @@ def delete_composition_local(
         )
         deadline = time.time() + DELETE_MENU_TIMEOUT_SECONDS
         item = None
-        probe = base + 10
         while time.time() < deadline:
             item = _cdp_eval_value(ws, probe, delete_expr)
             probe += 1

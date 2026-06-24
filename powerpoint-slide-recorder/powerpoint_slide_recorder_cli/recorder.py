@@ -95,12 +95,64 @@ DEFAULT_RECORDING_LEAD_SECONDS = 1.0
 DEFAULT_SLIDE_PAUSE_SECONDS = 0.75
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
 DEFAULT_CUE_MARKER = "||"
+# Hard subprocess wall-clock bound on every PowerPoint-targeting osascript. The
+# in-AppleScript ``with timeout`` only bounds Apple-event waits once the script is
+# executing; it cannot bound the case where osascript never starts running because
+# a macOS Automation (AppleEvents) consent prompt or a blocking PowerPoint modal is
+# sitting in front of it. Without this subprocess-level timeout the recorder hangs
+# forever at the open/automation step with no diagnostic.
+OSASCRIPT_TIMEOUT_SECONDS = 30
+# Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
+# benign PowerPoint startup dialog cannot block the recording indefinitely.
+OPEN_DECK_DISMISS_ATTEMPTS = 8
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 INTER_SLIDE_ACTIONS = [{
     "key": "space",
     "reason": "next slide",
 }]
+# Benign PowerPoint startup/first-run dialogs the recorder auto-dismisses (data,
+# not control flow). Per Adam's standing rule the agent always auto-dismisses
+# demo/recording-related macOS dialogs and never asks, so a recognized startup
+# sheet is cleared automatically rather than surfaced as an error. Each entry is
+# matched case-insensitively: a dialog matches when any of its ``title_contains``
+# substrings appears in the window/sheet title OR any of its ``text_contains``
+# substrings appears in the dialog's static text. ``dismiss_button`` lists the
+# benign default buttons to click in priority order; when none are present the
+# generic_dismisser presses ``escape`` (the safe default). An UNKNOWN blocking
+# dialog matches no entry and is never clicked — open_deck() raises instead.
+POWERPOINT_STARTUP_DIALOGS = [
+    {
+        "name": "What's New",
+        "title_contains": ["What's New", "Whats New", "What’s New"],
+        "text_contains": ["What's New", "What’s New"],
+        "dismiss_button": ["Continue", "Get Started", "Close", "OK"],
+    },
+    {
+        "name": "Sign in",
+        "title_contains": ["Sign in", "Sign In", "Sign-in"],
+        "text_contains": ["Sign in", "sign in to", "Microsoft account", "work or school account"],
+        "dismiss_button": ["Sign in later", "Sign In Later", "Not now", "Not Now", "Skip", "Maybe later", "Cancel"],
+    },
+    {
+        "name": "Document Recovery",
+        "title_contains": ["Document Recovery", "Recovered"],
+        "text_contains": ["Document Recovery", "recovered", "AutoRecover", "wants to recover"],
+        "dismiss_button": ["Close", "Don't Save", "Discard", "Cancel"],
+    },
+    {
+        "name": "Update",
+        "title_contains": ["Update", "Updates Available", "What's Included"],
+        "text_contains": ["update is available", "updates are available", "new update", "Install Update"],
+        "dismiss_button": ["Later", "Not now", "Not Now", "Skip", "Close"],
+    },
+    {
+        "name": "First run",
+        "title_contains": ["Welcome", "Get started", "Get Started", "We've updated", "What’s Included", "What's Included"],
+        "text_contains": ["Welcome to", "Get started with", "We've made some changes", "accept the license", "License Agreement"],
+        "dismiss_button": ["Accept", "Continue", "Get Started", "Skip", "Close", "OK", "Done"],
+    },
+]
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
 PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
 SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
@@ -116,12 +168,12 @@ def slide_label(item, index):
     return f"{SLIDE_LABEL_PREFIX} {item[SLIDE_IDENTITY_FIELD]}"
 
 
-def run(command):
-    subprocess.run(command, check=True)
+def run(command, timeout=None):
+    subprocess.run(command, check=True, timeout=timeout)
 
 
-def capture(command):
-    completed = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE)
+def capture(command, timeout=None):
+    completed = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE, timeout=timeout)
     return completed.stdout.strip()
 
 
@@ -211,20 +263,68 @@ def parse_aspect_ratio(value):
     return int(match.group(1)), int(match.group(2))
 
 
-def best_display_mode_for_aspect_ratio(modes, aspect_width, aspect_height):
-    matches = []
-    for mode in modes:
-        if mode["pixel_width"] * aspect_height == aspect_width * mode["pixel_height"]:
-            matches.append(mode)
-    if len(matches) == 0:
-        raise RuntimeError(
-            f"No display mode with aspect ratio {aspect_width}x{aspect_height} is available on the main display"
+def mode_usable_pixels_for_output(mode, output_width, output_height):
+    """Return a display mode's usable (post-centered-crop) pixel size for the output AR.
+
+    PowerPoint always presents the slide centered and letterboxed/pillarboxed to
+    fill the screen, so the centered output-aspect-ratio rectangle of a captured
+    mode IS the slide. A mode whose own pixel ratio already matches the output AR
+    needs no crop and is usable at its full pixel size; any other mode is usable
+    only at its centered output-AR crop. Returns a ``(usable_width, usable_height)``
+    tuple. Both the output dimensions and the resulting crop are evaluated with the
+    same even-rounding the final mux applies, so usability matches what is recorded.
+    """
+    crop = centered_crop_for_output_aspect(
+        mode["pixel_width"], mode["pixel_height"], output_width, output_height
+    )
+    if crop is None:
+        return mode["pixel_width"], mode["pixel_height"]
+    return crop[0], crop[1]
+
+
+def best_display_mode_for_aspect_ratio(modes, aspect_width, aspect_height, output_width, output_height):
+    """Pick the highest-area display mode that can deliver the requested output AR.
+
+    A mode qualifies when its centered output-aspect-ratio crop is at least the
+    requested output size, so the slide can be captured and scaled to the output
+    without upscaling. A mode whose pixel ratio already equals the output AR needs
+    no crop; a mode with a different ratio (e.g. a 16:10 panel against 16:9 output)
+    qualifies through its centered letterbox crop. The exact-AR case still wins when
+    present because it has the largest usable area at a given pixel area and needs no
+    crop, so an external true-16:9 source is selected and recorded uncropped exactly
+    as before. Raises when no mode's usable region reaches the requested output.
+    """
+    if aspect_width * output_height != output_width * aspect_height:
+        raise ValueError(
+            f"Requested aspect ratio {aspect_width}x{aspect_height} does not match "
+            f"the output resolution {output_width}x{output_height}"
         )
-    return max(matches, key=lambda mode: (
-        mode["pixel_width"] * mode["pixel_height"],
-        mode["pixel_width"],
-        mode["pixel_height"],
-    ))
+
+    qualifying = []
+    for mode in modes:
+        usable_width, usable_height = mode_usable_pixels_for_output(mode, output_width, output_height)
+        if usable_width >= output_width and usable_height >= output_height:
+            qualifying.append(mode)
+    if len(qualifying) == 0:
+        raise RuntimeError(
+            f"No display mode can produce a {aspect_width}x{aspect_height} capture of at least "
+            f"{output_width}x{output_height} on the main display. The largest centered "
+            f"{aspect_width}x{aspect_height} crop of every available mode is smaller than the "
+            f"requested output. Use a higher-resolution display or --video-input source."
+        )
+
+    def ranking(mode):
+        usable_width, usable_height = mode_usable_pixels_for_output(mode, output_width, output_height)
+        exact = 1 if mode["pixel_width"] * aspect_height == aspect_width * mode["pixel_height"] else 0
+        return (
+            usable_width * usable_height,
+            exact,
+            mode["pixel_width"] * mode["pixel_height"],
+            mode["pixel_width"],
+            mode["pixel_height"],
+        )
+
+    return max(qualifying, key=ranking)
 
 
 def parse_capture_dimensions(output):
@@ -321,12 +421,30 @@ def osascript(*lines, args=None):
     return command
 
 
+def osascript_timed_out_error(timeout_seconds):
+    return RuntimeError(
+        f"osascript controlling Microsoft PowerPoint did not respond within "
+        f"{timeout_seconds} seconds and was killed. The most likely cause is a "
+        "macOS Automation (AppleEvents) consent prompt for controlling PowerPoint, "
+        "or a blocking PowerPoint dialog (first-run / sign-in / 'What's New' / "
+        "Document Recovery) sitting in front of the AppleScript. Grant Automation "
+        "access (System Settings -> Privacy & Security -> Automation) and dismiss any "
+        "open PowerPoint dialog, then retry."
+    )
+
+
 def run_osascript(*lines, args=None):
-    run(osascript(*lines, args=args))
+    try:
+        run(osascript(*lines, args=args), timeout=OSASCRIPT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise osascript_timed_out_error(OSASCRIPT_TIMEOUT_SECONDS) from error
 
 
 def capture_osascript(*lines, args=None):
-    return capture(osascript(*lines, args=args))
+    try:
+        return capture(osascript(*lines, args=args), timeout=OSASCRIPT_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as error:
+        raise osascript_timed_out_error(OSASCRIPT_TIMEOUT_SECONDS) from error
 
 
 def quote_applescript_text(value):
@@ -1101,7 +1219,19 @@ def record(config):
         if config["force_aspect_ratio"] is not None:
             display_restore_mode = current_display_mode()
             aspect_width, aspect_height = config["force_aspect_ratio"]
-            forced_mode = best_display_mode_for_aspect_ratio(available_display_modes(), aspect_width, aspect_height)
+            # Pick the highest-usable-area mode that can yield the output aspect ratio.
+            # On a panel with a true matching mode (e.g. an external 16:9 monitor) that
+            # exact mode wins and records uncropped. On a panel that only advertises a
+            # near ratio (e.g. the built-in 16:10 Liquid Retina XDR), the best 16:10
+            # mode is chosen and the centered 16:9 slide region is cropped below, so no
+            # external 16:9 display is required.
+            forced_mode = best_display_mode_for_aspect_ratio(
+                available_display_modes(),
+                aspect_width,
+                aspect_height,
+                config["output_width"],
+                config["output_height"],
+            )
             set_display_resolution(forced_mode["pixel_width"], forced_mode["pixel_height"])
 
         source_width, source_height = probe_capture_dimensions(config["ffmpeg_video_input"], config["ffmpeg_framerate"])

@@ -88,6 +88,7 @@ class ManusClient:
         structured_output_schema: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Create a new Manus AI task."""
+        self.assert_credits_available()
         payload: dict[str, Any] = {
             "message": message,
             "agent_profile": agent_profile,
@@ -135,6 +136,27 @@ class ManusClient:
             params["project_id"] = project_id
 
         return self._request_json("Task list", "GET", "/v2/task.list", params=params)
+
+    def available_credits(self) -> dict[str, Any]:
+        """Return the caller's current spendable Manus credit balance."""
+        payload = self._request_json("Available credits", "GET", "/v2/usage.availableCredits")
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        if not isinstance(data, dict):
+            raise ClientError("Available credits failed: API response did not include a credit balance object")
+        if not isinstance(data.get("total_credits"), int):
+            raise ClientError("Available credits failed: API response did not include integer total_credits")
+        return data
+
+    def assert_credits_available(self) -> dict[str, Any]:
+        """Fail before task creation when the account has no spendable credits."""
+        data = self.available_credits()
+        if data["total_credits"] <= 0:
+            raise ClientError(
+                "Manus account has 0 available credits. "
+                "Upgrade or add credits before creating a task: "
+                "https://manus.go.link/iW6sB?action=open-subscription"
+            )
+        return data
 
     def send_message(
         self,

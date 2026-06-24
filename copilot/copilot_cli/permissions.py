@@ -7,7 +7,7 @@ import typer
 from typing import Optional
 
 from .client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, print_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_error, command
 
 
 # Entity configuration for permission operations
@@ -222,6 +222,7 @@ def create_permissions_app(entity_type: str) -> typer.Typer:
     app = typer.Typer(help=f"Manage permissions for {display_name}s")
 
     @app.command("grant")
+    @command
     def cmd_grant(
         entity_id: str = typer.Argument(..., help=f"The {display_name} ID (GUID)"),
         principal: str = typer.Option(..., "--principal", "-p", help="User ID (GUID) to grant access to"),
@@ -231,6 +232,7 @@ def create_permissions_app(entity_type: str) -> typer.Typer:
         grant_permission(entity_type, entity_id, principal, level)
 
     @app.command("revoke")
+    @command
     def cmd_revoke(
         entity_id: str = typer.Argument(..., help=f"The {display_name} ID (GUID)"),
         principal: str = typer.Option(..., "--principal", "-p", help="User ID (GUID) to revoke access from"),
@@ -239,6 +241,7 @@ def create_permissions_app(entity_type: str) -> typer.Typer:
         revoke_permission(entity_type, entity_id, principal)
 
     @app.command("list")
+    @command
     def cmd_list(
         entity_id: str = typer.Argument(..., help=f"The {display_name} ID (GUID)"),
         table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -250,6 +253,7 @@ def create_permissions_app(entity_type: str) -> typer.Typer:
         list_permissions(entity_type, entity_id, table, limit=limit, filter=filter, properties=properties)
 
     @app.command("get")
+    @command
     def cmd_get(
         entity_id: str = typer.Argument(..., help=f"The {display_name} ID (GUID)"),
         principal_id: str = typer.Argument(..., help="Principal (user/service principal) object ID (GUID)"),

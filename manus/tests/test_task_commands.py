@@ -5,6 +5,7 @@ import typer
 from typer.testing import CliRunner
 
 from manus_cli.commands import task as task_commands
+from manus_cli.commands import usage as usage_commands
 from manus_cli.main import app
 
 
@@ -23,6 +24,10 @@ class FakeClient:
     def update_task(self, **kwargs):
         self.calls.append(("update_task", kwargs))
         return {"task_id": kwargs["task_id"], "task_title": kwargs.get("title")}
+
+    def available_credits(self):
+        self.calls.append(("available_credits", {}))
+        return {"total_credits": 25}
 
 
 def test_task_help_shows_v2_commands_and_compat_continue_alias(monkeypatch):
@@ -165,4 +170,16 @@ def test_main_help_includes_task_group(monkeypatch):
     assert result.exit_code == 0
     assert "task" in result.stdout
     assert "auth" in result.stdout
+    assert "usage" in result.stdout
     assert "cache" in result.stdout
+
+
+def test_usage_available_credits_outputs_balance(monkeypatch):
+    fake_client = FakeClient()
+    monkeypatch.setattr(usage_commands, "get_client", lambda: fake_client)
+
+    result = CliRunner().invoke(app, ["usage", "available-credits"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {"total_credits": 25}
+    assert fake_client.calls == [("available_credits", {})]
