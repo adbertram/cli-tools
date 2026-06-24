@@ -67,26 +67,28 @@ If no public API exists, spawn the `ui-web-test-engineer` agent to explore the a
 Explore <service-url> to discover internal/hidden REST APIs.
 
 1. Follow `references/secrets.md` before asking Adam for CLI credentials.
-2. Ask Adam only for credentials that are not already stored. Store newly provided reusable CLI credentials using `references/secrets.md`.
-3. Navigate to <service-url> and authenticate using those credentials
-4. Systematically explore the authenticated interface:
+2. If credentials are not in the secret manager, use the `lastpass` CLI tool to look them up. 
+3. If not found in LastPass, use browser automation to inspect the service's login page for third-party authentication providers (e.g., Google, Microsoft). If supported, ask Adam if he would like to use one.
+4. Ask Adam for manual credentials only if they cannot be found in the secret manager, LastPass, and third-party auth is unavailable or declined. Store newly provided reusable CLI credentials using `references/secrets.md`.
+5. Navigate to <service-url> and authenticate using those credentials
+6. Systematically explore the authenticated interface:
    - Visit every major section/page
    - Interact with data-heavy views (lists, dashboards, detail pages)
    - Perform CRUD-like actions (create, edit, delete) where safe to do so
    - Use search, filtering, sorting, and pagination features
-5. Monitor ALL network requests (XHR/Fetch) for JSON API endpoints. For each discovered endpoint, document:
+7. Monitor ALL network requests (XHR/Fetch) for JSON API endpoints. For each discovered endpoint, document:
    - URL pattern (e.g., /api/v1/items?page=1&limit=50)
    - HTTP method (GET, POST, PUT, DELETE, PATCH)
    - Request headers (especially Authorization, X-API-Key, cookies, CSRF tokens)
    - Request body (for POST/PUT/PATCH)
    - Response body structure (field names, types, nesting)
    - Authentication mechanism (Bearer token, session cookie, API key header, etc.)
-6. **BACKUP PLAN FOR BOT PROTECTION:** If the site blocks your automation with an interstitial bot-check (e.g. Datadome, PerimeterX "Almost there..."), do NOT give up. Instead, use the `run_command` tool to launch the user's REAL system Chrome in the background without stealing focus using `open -n -g`:
+8. **BACKUP PLAN FOR BOT PROTECTION:** If the site blocks your automation with an interstitial bot-check (e.g. Datadome, PerimeterX "Almost there..."), do NOT give up. Instead, use the `run_command` tool to launch the user's REAL system Chrome binary in the background without stealing focus using `open -n -g`:
    ```bash
    open -n -g -a "Google Chrome" --args --remote-debugging-port=9222 --no-first-run --no-default-browser-check --user-data-dir=$(mktemp -d)
    ```
-   Wait a few seconds for it to start listening, then write a temporary Python script that uses `playwright` to connect to `p.chromium.connect_over_cdp("http://127.0.0.1:9222")`. Because this uses the legitimate system Chrome executable, it reliably bypasses bot detection. Execute the script to perform the login, capture the required endpoint traces, and finally terminate the background Chrome process using `lsof -i :9222 -t | xargs kill -9`.
-7. Identify patterns across endpoints:
+   Wait a few seconds for it to start listening, then write a temporary Python script that uses `playwright` to connect to `p.chromium.connect_over_cdp("http://127.0.0.1:9222")`. Because this uses the legitimate system Chrome executable instead of Playwright's Chromium, it reliably bypasses bot detection. Execute the script to perform the login, capture the required endpoint traces, and finally terminate the background Chrome process using `lsof -i :9222 -t | xargs kill -9`.
+9. Identify patterns across endpoints:
    - Base URL prefix (e.g., /api/v2/)
    - Pagination style (offset, cursor, page number)
    - Error response format
@@ -355,6 +357,13 @@ def list_items(self, limit: int = 100) -> list[dict]:
    - Implement `--limit`/`-l` option on list commands
    - Split into `commands/<group>.py` only when multiple groups justify it
 
+**For API type with `browser_session` auth:**
+If you scaffolded an `api` type but used `--auth-type browser_session` (e.g., internal APIs requiring browser cookies), the API template does NOT provide `BrowserAutomation` by default. You MUST manually:
+1. `<name>_cli/browser.py`: Create this file and define a `BrowserAutomation` subclass.
+2. `<name>_cli/config.py`: Import your `BrowserAutomation` subclass and implement `def get_browser(self):`.
+3. `<name>_cli/client.py`: Ensure client uses the browser automation session for auth/requests.
+Failure to do this will cause `test-cli-tool.sh` browser automation checks to fail.
+
 **For Wrapper type:**
 1. `<name>_cli/client.py`:
    - Map wrapper methods to underlying CLI commands
@@ -594,7 +603,6 @@ Search for the service credential entry without printing secret values:
 
 ```bash
 lastpass items list --filter "name:like:%<service-name>%" --properties id,name,username,url --table
-lastpass items list --filter "url:like:%<service-domain>%" --properties id,name,username,url --table
 ```
 
 If no unambiguous LastPass entry contains the credential values required by the
