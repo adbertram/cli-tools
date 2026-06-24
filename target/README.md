@@ -2,9 +2,7 @@
 
 ## DESCRIPTION
 
-A command-line interface for [Target](https://www.target.com) using browser automation. Target consumer CLI for searching products, adding to cart, and checking out.
-
-Use this CLI when you need repeatable access to Target workflows that are only available through the website.
+A command-line interface for Target using browser automation. Use this CLI when you need repeatable access to Target workflows for searching products, adding to cart, and checking out through the website.
 
 ## Installation
 

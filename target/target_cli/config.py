@@ -40,6 +40,10 @@ class Config(BaseConfig):
         from .browser import TargetBrowser
         return TargetBrowser(self)
 
+    def test_connection(self) -> dict:
+        browser = self.get_browser()
+        return browser.test_session()
+
 
 # Singleton pattern for config (per profile)
 _configs: dict = {}

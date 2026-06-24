@@ -32,52 +32,50 @@ class TargetClient:
         """Search for items on Target."""
         url = f"https://www.target.com/s?searchTerm={query.replace(' ', '+')}"
         results = []
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            try:
-                page.wait_for_selector('div[data-test="product-grid"]', timeout=15000)
-            except Exception:
-                pass # might not exist or might be different
-            
-            for _ in range(5):
-                page.mouse.wheel(0, 1000)
-                page.wait_for_timeout(500)
-                
-            elements = page.query_selector_all('[data-test="product-details"]')
-            for el in elements[:limit]:
-                title_el = el.query_selector('a[data-test="@web/ProductCard/title"]')
-                price_el = el.query_selector('span[data-test="current-price"]')
-                if title_el:
-                    title = title_el.inner_text().strip()
-                    href = title_el.get_attribute("href") or ""
-                    url_full = f"https://www.target.com{href}" if href.startswith('/') else href
-                    tcin = href.split('/A-')[-1].split('?')[0] if '/A-' in href else ""
-                    price = price_el.inner_text().strip() if price_el else "Unknown"
-                    results.append({
-                        "id": tcin,
-                        "title": title,
-                        "price": price,
-                        "url": url_full
-                    })
+        page = self._get_browser().get_page(url)
+        try:
+            page.wait_for_selector('div[data-test="product-grid"]', timeout=15000)
+        except Exception:
+            pass
+
+        for _ in range(5):
+            page.evaluate("() => window.scrollBy(0, 1000)")
+            page.wait_for_timeout(500)
+
+        elements = page.locator('[data-test="product-details"]').all()
+        for el in elements[:limit]:
+            title_el = el.locator('a[data-test="@web/ProductCard/title"]')
+            price_el = el.locator('span[data-test="current-price"]')
+            if title_el.count() > 0:
+                title = title_el.inner_text().strip()
+                href = title_el.get_attribute("href") or ""
+                url_full = f"https://www.target.com{href}" if href.startswith('/') else href
+                tcin = href.split('/A-')[-1].split('?')[0] if '/A-' in href else ""
+                price = price_el.inner_text().strip() if price_el.count() > 0 else "Unknown"
+                results.append({
+                    "id": tcin,
+                    "title": title,
+                    "price": price,
+                    "url": url_full
+                })
         return results
 
     @cached
     def get_item(self, item_id: str) -> dict:
         """Get details for a specific item."""
         url = f"https://www.target.com/p/-/A-{item_id}"
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            page.wait_for_selector('h1[data-test="product-title"]', timeout=15000)
-            title = page.locator('h1[data-test="product-title"]').inner_text().strip()
-            price_el = page.locator('span[data-test="product-price"]')
-            price = price_el.inner_text().strip() if price_el.count() > 0 else "Unknown"
-            
-            return {
-                "id": item_id,
-                "title": title,
-                "price": price,
-                "url": url
-            }
+        page = self._get_browser().get_page(url)
+        page.wait_for_selector('h1[data-test="product-title"]', timeout=15000)
+        title = page.locator('h1[data-test="product-title"]').inner_text().strip()
+        price_el = page.locator('span[data-test="product-price"]')
+        price = price_el.inner_text().strip() if price_el.count() > 0 else "Unknown"
+
+        return {
+            "id": item_id,
+            "title": title,
+            "price": price,
+            "url": url
+        }
 
     @cached
     def list_items(self, limit: int = 100) -> List[dict]:
@@ -88,101 +86,102 @@ class TargetClient:
         """Get cart contents."""
         url = "https://www.target.com/cart"
         items = []
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            try:
-                page.wait_for_selector('div[data-test="cartItem"]', timeout=10000)
-                cart_items = page.locator('div[data-test="cartItem"]').all()
-                for item in cart_items:
-                    title_el = item.locator('[data-test="cartItem-title"]')
-                    title = title_el.inner_text().strip() if title_el.count() > 0 else "Unknown"
-                    items.append({"title": title})
-            except Exception:
-                pass
-            
-            total_el = page.locator('[data-test="cart-summary-total"]')
-            total = total_el.inner_text().strip() if total_el.count() > 0 else "$0.00"
+        page = self._get_browser().get_page(url)
+        try:
+            page.wait_for_selector('div[data-test="cartItem"]', timeout=10000)
+            cart_items = page.locator('div[data-test="cartItem"]').all()
+            for item in cart_items:
+                title_el = item.locator('[data-test="cartItem-title"]')
+                title = title_el.inner_text().strip() if title_el.count() > 0 else "Unknown"
+                items.append({"title": title})
+        except Exception:
+            pass
+
+        total_el = page.locator('[data-test="cart-summary-total"]')
+        total = total_el.inner_text().strip() if total_el.count() > 0 else "$0.00"
             
         return {"items": items, "total": total}
 
     def add_to_cart(self, item_id: str) -> None:
         """Add item to cart."""
         url = f"https://www.target.com/p/-/A-{item_id}"
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            # Target has "Ship it" or "Pick it up"
-            # Try Ship It first
-            ship_btn = page.locator('button[data-test="shipItButton"]')
-            if ship_btn.count() > 0 and ship_btn.is_visible():
-                ship_btn.click()
+        page = self._get_browser().get_page(url)
+        try:
+            page.wait_for_selector(
+                'button[data-test="shipItButton"]:not([disabled]), button[data-test="orderPickupButton"]:not([disabled]), button:has-text("Add to cart"):not([disabled])',
+                timeout=15000
+            )
+        except Exception:
+            pass
+
+        ship_btn = page.locator('button[data-test="shipItButton"]:not([disabled])')
+        if ship_btn.count() > 0 and ship_btn.is_visible():
+            ship_btn.click()
+        else:
+            pickup_btn = page.locator('button[data-test="orderPickupButton"]:not([disabled])')
+            if pickup_btn.count() > 0 and pickup_btn.is_visible():
+                pickup_btn.click()
             else:
-                pickup_btn = page.locator('button[data-test="orderPickupButton"]')
-                if pickup_btn.count() > 0 and pickup_btn.is_visible():
-                    pickup_btn.click()
+                add_btn = page.locator('button:has-text("Add to cart"):not([disabled])')
+                if add_btn.count() > 0 and add_btn.is_visible():
+                    add_btn.click()
                 else:
-                    add_btn = page.locator('button:has-text("Add to cart")').first
-                    if add_btn.count() > 0 and add_btn.is_visible():
-                        add_btn.click()
-                    else:
-                        raise ClientError("Could not find Add to Cart / Ship It button.")
-            
-            # Wait for confirmation modal
-            page.wait_for_selector('div[data-test="addToCartModal"]', timeout=10000)
+                    raise ClientError("Could not find an active Add to Cart, Ship It, or Order Pickup button.")
+
+        try:
+            page.wait_for_selector('div[role="dialog"]:has-text("Added to cart")', timeout=15000)
+        except Exception:
+            try:
+                page.wait_for_selector('text=Added to cart', timeout=15000)
+            except Exception:
+                raise ClientError("Timed out waiting for 'Added to cart' confirmation drawer.")
 
     def remove_from_cart(self, item_id: str) -> None:
         """Remove item from cart."""
         url = "https://www.target.com/cart"
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            # This is a stub for removal since actual data-test might vary
-            raise NotImplementedError("Cart item removal needs exact DOM mapping")
+        self._get_browser().get_page(url)
+        raise NotImplementedError("Cart item removal needs exact DOM mapping")
 
     def checkout(self, delivery: str) -> str:
         """Proceed to checkout."""
         url = "https://www.target.com/checkout"
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="networkidle")
-            try:
-                page.wait_for_selector('button[data-test="placeOrderButton"]', timeout=15000)
-                # We do not actually click it for safety during testing unless explicitly run
-                return "Checkout page reached successfully. Ready to place order."
-            except Exception:
-                raise ClientError("Could not reach checkout place order button.")
+        page = self._get_browser().get_page(url)
+        try:
+            page.wait_for_selector('button[data-test="placeOrderButton"]', timeout=15000)
+            return "Checkout page reached successfully. Ready to place order."
+        except Exception:
+            raise ClientError("Could not reach checkout place order button.")
 
     def set_store(self, zip_code: str) -> str:
         """Set the home store using a zip code or city/state."""
         url = "https://www.target.com/"
-        with self._get_browser().cdp_session() as page:
-            page.goto(url, wait_until="domcontentloaded")
-            
-            # Click the store location button in the header
-            try:
-                page.wait_for_selector('a[data-test="@web/StoreLocation/PrimaryStore"]', timeout=10000)
-                page.click('a[data-test="@web/StoreLocation/PrimaryStore"]')
-            except Exception:
-                try:
-                    page.wait_for_selector('button[data-test="@web/StoreLocation/PrimaryStore"]', timeout=10000)
-                    page.click('button[data-test="@web/StoreLocation/PrimaryStore"]')
-                except Exception:
-                    # fallback to any button containing 'My store'
-                    page.click('button:has-text("My store")')
+        page = self._get_browser().get_page(url)
 
-            # Wait for modal search input
+        try:
+            page.wait_for_selector('button[data-test="@web/StoreName/Button"]', timeout=10000)
+            page.locator('button[data-test="@web/StoreName/Button"]').click()
+        except Exception:
             try:
-                page.wait_for_selector('input[id="zipOrCityState"]', timeout=10000)
-                search_input = page.locator('input[id="zipOrCityState"]')
+                page.wait_for_selector('button[id="web-store-id-msg-btn"]', timeout=10000)
+                page.locator('button[id="web-store-id-msg-btn"]').click()
             except Exception:
-                search_input = page.locator('input[type="search"]').first
-                
-            search_input.fill(zip_code)
+                page.locator('button:has-text("My store")').click()
+
+        page.wait_for_selector('input[id="zip-code-city-or-state"]', timeout=10000)
+        search_input = page.locator('input[id="zip-code-city-or-state"]')
+
+        search_input.fill(zip_code)
+
+        try:
+            page.locator('button:has-text("Look up")').click()
+        except Exception:
             search_input.press("Enter")
-            
-            page.wait_for_selector('button:has-text("Set as my store")', timeout=15000)
-            btn = page.locator('button:has-text("Set as my store")').first
-            btn.click()
-            
-            page.wait_for_timeout(3000)
-            return f"Successfully set home store near {zip_code}."
+
+        page.wait_for_selector('button[data-test="@web/StoreMenu/ShopThisStoreButton"]', timeout=15000)
+        page.locator('button[data-test="@web/StoreMenu/ShopThisStoreButton"]').click()
+
+        page.wait_for_timeout(3000)
+        return f"Successfully set home store near {zip_code}."
 
 
 _client: Optional[TargetClient] = None
