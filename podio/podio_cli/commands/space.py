@@ -17,6 +17,7 @@ from typing import Optional, Any
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..config import get_config
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_warning, handle_api_error, format_response
 from ..filter_map import FilterMap, apply_properties
 
@@ -119,6 +120,7 @@ def list_spaces(
 
 
 @app.command("find-by-url", hidden=True)
+@command
 def find_space_by_url_deprecated(
     url: str = typer.Argument(..., help="Podio space URL"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),

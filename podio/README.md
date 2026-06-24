@@ -497,6 +497,20 @@ podio comment delete 98765 --no-hook
 Manage Podio tasks.
 
 ```bash
+# List tasks (bare list returns the current user's tasks)
+podio task list
+
+# List tasks server-side filtered (each filter reaches the Podio GET /task/ query)
+podio task list --reference item:12345     # all tasks on an item, regardless of assignee
+podio task list --created-by user:77109345 # tasks created by a user (reference form required)
+podio task list --responsible 77109345     # tasks a user is responsible for
+podio task list --external-id my-ref       # tasks by external_id
+podio task list --org 3747840              # tasks in an organization
+podio task list --space 10479826           # tasks in a space
+podio task list --app 30560419             # tasks in an app
+podio task list --completed false --grouping due_date --sort created_on
+podio task list --filter "status:active" --properties "task_id,text,due_date" --table
+
 # Get a task
 podio task get <task_id>
 
@@ -512,6 +526,11 @@ podio task complete <task_id>
 # Delete a task
 podio task delete <task_id>
 
+# Note: Podio requires every task query to carry one security scope
+# (--reference, --created-by, --responsible, --org, --space, or --app).
+# A bare `podio task list` defaults to --responsible 0 (your own tasks).
+# --reference and --created-by use the type:id form (item:12345, user:77109345).
+
 # Task labels
 podio task list-labels
 podio task create-label <text> [--color <hex_or_name>]
@@ -521,6 +540,9 @@ podio task delete-label <label_id>
 
 **Examples:**
 ```bash
+# List all tasks attached to an item (any assignee)
+podio task list --reference item:12345
+
 # Create task from command-line options
 podio task create --text "Follow up with client" --ref-type item --ref-id 12345 --due-date 2025-01-15
 

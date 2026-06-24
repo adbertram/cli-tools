@@ -43,6 +43,7 @@ import typer
 
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
 from ..filter_map import FilterMap, apply_properties
 
@@ -52,6 +53,16 @@ app = typer.Typer(help="Manage Podio tasks")
 # Subcommand group for label operations
 label_app = typer.Typer(help="Manage task labels")
 app.add_typer(label_app, name="label")
+
+
+# Podio requires every GET /task/ query to carry at least one security scope.
+# If none of these is supplied the API rejects the query as "not restrictive
+# enough", so we default to responsible=0 (the current user's tasks).
+# Reference: https://developers.podio.com/doc/tasks/get-tasks-77949
+TASK_LIST_SECURITY_SCOPE_PARAMS = (
+    "org", "space", "app", "responsible", "reference", "created_by",
+)
+TASK_LIST_DEFAULT_SCOPE_PARAM = "responsible"
 
 
 @app.command("list")
@@ -64,12 +75,20 @@ def list_tasks(
     sort: Optional[str] = typer.Option(None, "--sort", "-s", help="Sort by: created_on, completed_on, rank"),
     responsible: Optional[int] = typer.Option(None, "--responsible", help="Filter by responsible user ID"),
     space: Optional[int] = typer.Option(None, "--space", help="Filter by space ID"),
+    reference: Optional[str] = typer.Option(None, "--reference", help="Filter by attached object as TYPE:ID (e.g., item:12345). Lists all tasks on that object regardless of assignee."),
+    created_by: Optional[str] = typer.Option(None, "--created-by", help="Filter by creator as TYPE:ID (Podio requires the reference form, e.g. user:77109345)"),
+    external_id: Optional[str] = typer.Option(None, "--external-id", help="Filter by task external_id"),
+    org: Optional[int] = typer.Option(None, "--org", help="Filter by organization ID"),
+    app_id: Optional[int] = typer.Option(None, "--app", help="Filter by app ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """
     List tasks for the authenticated user.
 
-    Supports filtering, grouping, and sorting via API parameters.
+    Supports server-side filtering, grouping, and sorting via API parameters.
+    Provide a scope flag (--reference, --created-by, --org, --space, --app, or
+    --responsible) to reach tasks beyond your own; a bare list returns the
+    current user's tasks.
 
     Filter examples:
         --filter "status:active"
@@ -81,27 +100,53 @@ def list_tasks(
         podio task list --completed false
         podio task list --grouping due_date
         podio task list --space 12345 --sort created_on
+        podio task list --reference item:12345
+        podio task list --created-by user:77109345
+        podio task list --external-id my-external-ref
+        podio task list --org 56789
+        podio task list --app 24681012
+        podio task list --responsible 77109345
         podio task list --filter "status:active" --properties "task_id,text,due_date"
         podio task list --table
     """
     try:
+        # Validate --reference format before any network call (fail-fast).
+        if reference is not None:
+            ref_parts = reference.split(":")
+            if len(ref_parts) != 2 or not ref_parts[0] or not ref_parts[1]:
+                print_error(
+                    f"Invalid --reference value '{reference}'. "
+                    "Expected TYPE:ID, e.g. item:12345."
+                )
+                raise typer.Exit(2)
+
         client = get_client()
 
-        # Build API parameters - require responsible filter to satisfy API requirement
-        # API error "Query not restrictive enough" requires one of: org, space, app, responsible, reference, created_by, completed_by
-        params = {"limit": limit, "responsible": 0}  # 0 means current user's tasks
-        if completed is not None:
-            params["completed"] = completed
-        if grouping:
-            params["grouping"] = grouping
-        if sort:
-            params["sort_by"] = sort
-        if responsible:
-            params["responsible"] = responsible
-        if space:
-            params["space"] = space
+        # Data-driven assembly: a single mapping of exact Podio API query-string
+        # parameter names to their CLI values. Only non-None values are sent, so
+        # adding a future server-side filter means adding one entry here.
+        api_params = {
+            "completed": completed,
+            "grouping": grouping,
+            "sort_by": sort,
+            "responsible": responsible,
+            "space": space,
+            "reference": reference,
+            "created_by": created_by,
+            "external_id": external_id,
+            "org": org,
+            "app": app_id,
+        }
+        params = {"limit": limit}
+        params.update({name: value for name, value in api_params.items() if value is not None})
 
-        # Use raw transport for task listing
+        # Podio requires at least one security scope; default to the current
+        # user's tasks when no scope flag was supplied.
+        if not any(scope in params for scope in TASK_LIST_SECURITY_SCOPE_PARAMS):
+            params[TASK_LIST_DEFAULT_SCOPE_PARAM] = 0
+
+        # Use raw transport for task listing. Every GET kwarg except url/handler
+        # is urlencoded onto the query string by the transport.
         result = client.transport.GET(url="/task/", **params)
         formatted = format_response(result)
 
@@ -118,6 +163,9 @@ def list_tasks(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
+    except typer.Exit:
+        # Preserve explicit exit codes (e.g. invalid --reference format).
+        raise
     except Exception as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
@@ -490,15 +538,17 @@ def update_task(
 
 
 @app.command("list-labels", hidden=True)
+@command
 def list_labels_deprecated(
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """[DEPRECATED] Use 'podio task label list' instead."""
     print_warning("'podio task list-labels' is deprecated. Use 'podio task label list' instead.")
-    return label_list(table=table)
+    return label_list(limit=100, filter=None, properties=None, table=table)
 
 
 @app.command("create-label", hidden=True)
+@command
 def create_label_deprecated(
     text: str = typer.Argument(..., help="Label text/name"),
     color: Optional[str] = typer.Option(None, "--color", help="Label color (hex code or color name)"),
@@ -510,6 +560,7 @@ def create_label_deprecated(
 
 
 @app.command("update-labels", hidden=True)
+@command
 def update_labels_deprecated(
     task_id: int = typer.Argument(..., help="Task ID"),
     labels: str = typer.Option(..., "--labels", help="Comma-separated label IDs or names"),
@@ -521,6 +572,7 @@ def update_labels_deprecated(
 
 
 @app.command("delete-label", hidden=True)
+@command
 def delete_label_deprecated(
     label_id: int = typer.Argument(..., help="Label ID to delete"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),

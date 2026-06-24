@@ -42,6 +42,7 @@ from typing import Optional, Any
 
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_success, print_warning, handle_api_error, format_response
 from ..filter_map import FilterMap, apply_properties
 
@@ -250,6 +251,7 @@ def create_webhook(
 
 
 @app.command("create-field", hidden=True)
+@command
 def create_field_webhook_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
@@ -342,13 +344,14 @@ def list_webhooks(
 
 
 @app.command("list-field", hidden=True)
+@command
 def list_field_webhooks_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """[DEPRECATED] Use 'podio webhook field list' instead."""
     print_warning("'podio webhook list-field' is deprecated. Use 'podio webhook field list' instead.")
-    return field_list(field_id=field_id, table=table)
+    return field_list(field_id=field_id, limit=100, filter=None, properties=None, table=table)
 
 
 @app.command("verify")

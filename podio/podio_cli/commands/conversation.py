@@ -55,6 +55,7 @@ import typer
 
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
 from ..filter_map import FilterMap, apply_properties
 
@@ -317,6 +318,7 @@ def reply_to_conversation(
 
 
 @app.command("add-participants", hidden=True)
+@command
 def add_participants_deprecated(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     participants: str = typer.Option(..., "--participants", help="Comma-separated list of user IDs to add"),
