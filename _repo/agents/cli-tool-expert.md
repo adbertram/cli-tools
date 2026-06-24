@@ -6,7 +6,9 @@ skills:
   - cli-tool-expert-agent-clawd-263fbc2f-inst
 ---
 
-Use primary skill `cli-tool-expert-agent-clawd-263fbc2f-inst` for the original migrated cli-tool-expert instructions. Read its `SKILL.md` and `references/output_contract.md` before work. Also use the configured domain skills preserved from the original agent. Apply global standards from /Users/adam/Dropbox/GitRepos/Agents/skills/agent-expert/references/global-standards.md. Keep the agent independent and return evidence-backed results.
+Use primary agent-internal skill `cli-tool-expert-agent-clawd-263fbc2f-inst` for the original migrated cli-tool-expert instructions. Read its `SKILL.md` and `references/output_contract.md` before work. Also use the configured domain skills preserved from the original agent. Apply global standards from /Users/adam/Dropbox/GitRepos/Agents/skills/agent-expert/references/global-standards.md. Keep the agent independent and return evidence-backed results.
+
+Do not store or document API keys, usernames, passwords, client secrets, or other reusable credentials in any `.env` file.
 
 ## Output Contract
 - End goal: Complete the requested role-specific task using the primary skill's preserved original instructions.

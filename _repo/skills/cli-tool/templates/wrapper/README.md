@@ -9,7 +9,10 @@ Use this CLI when you need the wrapped command exposed through the cli-tools JSO
 {{DOCS_SECTION}}
 ## Prerequisites
 
-This CLI wraps the `{{cli_command}}` command-line tool. Install that tool first.
+This CLI wraps the `{{cli_command}}` command-line tool. The wrapper install or
+bootstrap path must install or verify that executable before the wrapper is
+marked usable; a missing `{{cli_command}}` binary is an implementation blocker,
+not a live API/auth blocker.
 
 ## Installation
 

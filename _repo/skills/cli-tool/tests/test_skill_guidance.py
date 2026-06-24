@@ -60,6 +60,57 @@ def test_skill_places_usage_json_in_cli_skill_folder():
     assert "do not import `cli_test_utils` from ad-hoc Python" in text
 
 
+def test_service_skills_reference_adjacent_usage_json_path():
+    skills_root = SKILL_ROOT.parent
+    service_skills = sorted(skills_root.glob("*-cli/SKILL.md"))
+    assert service_skills
+
+    ambiguous = [
+        str(path.relative_to(skills_root))
+        for path in service_skills
+        if "**MANDATORY: Consult `usage.json` before executing ANY"
+        in path.read_text()
+    ]
+    assert ambiguous == []
+
+    google_skill = (skills_root / "google-cli" / "SKILL.md").read_text()
+    assert (
+        "Consult the adjacent `usage.json` at "
+        "`<cli-tools-root>/_repo/skills/<tool>-cli/usage.json`"
+    ) in google_skill
+
+
+def test_notion_pages_get_out_file_is_not_json_stdout():
+    notion_skill = (SKILL_ROOT.parent / "notion-cli" / "SKILL.md").read_text()
+    notion_words = _words(notion_skill)
+
+    assert "When `pages get` uses `--out-file`, the Markdown file is the command output." in notion_skill
+    assert "Do not redirect stdout to a `.json` file" in notion_words
+    assert "do not parse stdout with `python3 -m json.tool` or `jq`" in notion_words
+    assert "checking that the `--out-file` path exists and is non-empty" in notion_words
+    assert "run a separate `notion pages get PAGE_ID` command without `--markdown` or `--out-file`" in notion_words
+
+
+def test_skill_documents_find_cli_tools_json_array_contract():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "one JSON array of records" in text_words
+    assert 'jq -e \'.[] | select(.name == "google")\' <file>' in text
+    assert "Do not treat the output as JSONL records" in text_words
+
+
+def test_update_workflow_discovers_source_directory_before_reads():
+    text = _read("workflows/update-cli.md")
+    text_words = _words(text)
+
+    assert "Resolve and Navigate to CLI Source Directory" in text
+    assert "Do not assume `<cli-tools-root>/<name>` exists" in text
+    assert "Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh`" in text
+    assert "derive the source directory from the matching record's `readme` parent" in text_words
+    assert "Only after the source directory is proven" in text_words
+
+
 def test_create_workflow_requires_lastpass_profile_live_smoke_for_non_wrappers():
     text = _read("workflows/create-cli.md")
 
@@ -72,6 +123,23 @@ def test_create_workflow_requires_lastpass_profile_live_smoke_for_non_wrappers()
     assert "<name> auth status --profile <profile-name>" in text
     assert "LIVE_AUTH_BLOCKED: LastPass has no usable" in text
     assert "At least one live read-only service smoke command succeeded" in text
+
+
+def test_wrapper_workflows_require_upstream_binary_provisioning():
+    create_text = _read("workflows/create-cli.md")
+    update_text = _read("workflows/update-cli.md")
+    templates_text = _read("references/templates.md")
+    templates_words = _words(templates_text)
+    wrapper_readme = _read("templates/wrapper/README.md")
+
+    assert "Wrapper Upstream CLI Provisioning Gate" in create_text
+    assert "Wrapper Upstream CLI Provisioning Gate" in update_text
+    assert "official upstream binary named by `CLI_COMMAND`" in create_text
+    assert "Missing `CLI_COMMAND` is an implementation blocker" in update_text
+    assert "Wrapper CLIs must provision the official upstream binary" in templates_text
+    assert "npm, pipx, uv, or a vendor installer" in templates_words
+    assert "Install that tool first" not in wrapper_readme
+    assert "a missing `{{cli_command}}` binary is an implementation blocker" in wrapper_readme
 
 
 def test_skill_requires_launcher_interpreter_for_cli_importing_task_scripts():
@@ -94,6 +162,18 @@ def test_skill_requires_bounded_schema_safe_usage_json_inspection():
     assert "Avoid full-map dumps, recursive walks, interactive extractors" in text_words
     assert "probes that can block or emit excessive output" in text_words
     assert "MISSING_JSON_PATH: commands.<group>.<subcommand>" in text_words
+    assert "do not run `if key in node` until `node` has been proven to be a dict" in text_words
+    assert "MISSING_JSON_PATH: commands.items.commands.search available=[create,get,list,password,username]" in text_words
+
+
+def test_lastpass_skill_documents_search_via_items_list_filter():
+    text = _read("../lastpass-cli/SKILL.md")
+    usage = json.loads(_read("../lastpass-cli/usage.json"))
+    text_words = _words(text)
+
+    assert "Vault search uses `lastpass items list --filter`, not `lastpass items search`" in text_words
+    assert "search" not in usage["commands"]["items"]["commands"]
+    assert "list" in usage["commands"]["items"]["commands"]
 
 
 def test_skill_requires_existing_path_operands_for_repo_probes():
@@ -164,6 +244,16 @@ def test_skill_requires_shaped_expected_auth_status_probes():
     assert "can exit `2` while returning structured JSON" in text
 
 
+def test_test_workflow_documents_direct_typer_exit_assertions():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Direct Typer command calls" in text
+    assert "assert `pytest.raises(typer.Exit)` or `pytest.raises(click.exceptions.Exit)`" in text
+    assert "`typer.Exit` is Click's `Exit` exception and is not a `SystemExit`" in text_words
+    assert "wrappers such as `run_app(app)`" in text
+
+
 def test_config_standards_forbid_arbitrary_config_auth_probes():
     text = _read("references/config-standards.md")
     text_words = _words(text)
@@ -191,6 +281,27 @@ def test_copilot_guidance_forbids_inferred_format_flags():
     assert "`copilot agent list --help`" in text_words
 
 
+def test_playwright_cli_guidance_distinguishes_eval_from_run_code():
+    text = _read("../playwright-cli/SKILL.md")
+    text_words = _words(text)
+
+    assert "Eval Versus Run-Code" in text
+    assert "`eval` executes JavaScript in the browser DOM context" in text
+    assert "It does not receive a Playwright `page` object" in text_words
+    assert "Do not pass `async (page) => page.locator(...)` to `eval`" in text_words
+    assert "use `run-code` with `async (page) => { ... }`" in text_words
+
+
+def test_playwright_cli_run_code_wrapper_surfaces_failure_stdout():
+    text = _read("../playwright-cli/SKILL.md")
+    text_words = _words(text)
+
+    assert "print stdout as failure evidence" in text_words
+    assert "because `run-code` writes markdown `### Error` output to stdout" in text_words
+    assert 'printf \'PLAYWRIGHT_FAILED:%s rc=%s stdout=%s stderr=%s\\n\'' in text
+    assert '[ -s "$out" ] && sed -n \'1,80p\' "$out" >&2' in text
+
+
 def test_skill_requires_structured_cli_json_parsing_from_files():
     text = _read("SKILL.md")
     text_words = _words(text)
@@ -206,7 +317,8 @@ def test_skill_requires_structured_cli_json_parsing_from_files():
     assert 'python3 - "$json_file"' in text
     assert "GET /api/providers" in text_words
     assert "MISSING_JSON_PATH: providers[0].config" in text
-    assert "KeyError: 'config'" in text
+    assert "JSON_CONTRACT_MISMATCH: expected list root, got object keys=[...]" in text
+    assert "rows[:10]" in text
 
 
 def test_skill_requires_literal_searches_for_template_tokens():
@@ -252,7 +364,8 @@ def test_test_workflow_documents_safe_harness_collection_command():
     assert "python -m pytest --collect-only" in text
     assert "--force" in text
     assert "not a replacement" in text
-    assert "test-cli-tool.sh --cli-name" in text
+    assert "<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name" in text
+    assert "validation through `test-cli-tool.sh --cli-name" not in text
     assert "Targeted harness execution" in text
     assert "pass `--cli-name \"$TOOL_NAME\"`" in text_words
     assert "Use `--force` only for batch or collect-only harness" in text_words
@@ -302,6 +415,17 @@ def test_test_workflow_documents_shared_package_pytest_command():
     assert "ModuleNotFoundError:" in text
     assert "cli_tools_shared" in text_words
     assert "uv run --project <cli-tools-root>/_repo/cli-tools-shared --with pytest python -m pytest" in text_words
+    assert "Do not combine shared-package test paths and per-tool test paths in one pytest invocation" in text_words
+    assert "each suite resolves imports through its own uv project" in text_words
+
+
+def test_skill_requires_tool_scoped_uv_for_python_source_introspection():
+    text = _read("SKILL.md")
+    text_words = _words(text)
+
+    assert "tool-scoped Python introspection" in text
+    assert "uv run --project <tool-dir> python" in text_words
+    assert "not run system `python3` or bare `python`" in text_words
 
 
 def test_test_workflow_requires_expected_red_wrapper_for_test_first_runs():
@@ -314,6 +438,30 @@ def test_test_workflow_requires_expected_red_wrapper_for_test_first_runs():
     assert "validate the expected failure text" in text_words
     assert "EXPECTED_RED: test-first failure confirmed before implementation." in text
     assert "UNEXPECTED_PASS: test-first run passed before implementation." in text
+    assert "do not key the wrapper only to directional pytest diff prose" in text_words
+    assert "Left contains one more item" in text
+    assert "Right contains one more item" in text
+
+
+def test_test_workflow_documents_table_output_assertion_boundaries():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Table-output assertions" in text
+    assert "Table output is display-only and may shorten cell values" in text_words
+    assert "Do not assert full untruncated URLs, UUIDs, descriptions" in text_words
+    assert "Assert those full values against default JSON output instead" in text_words
+    assert "cell-level ellipsis is acceptable" in text_words
+
+
+def test_test_workflow_warns_about_direct_typer_command_calls():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Direct Typer command calls" in text
+    assert "pass every Typer argument and option parameter explicitly" in text_words
+    assert "typer.models.OptionInfo" in text
+    assert "Prefer extracting a pure helper for command logic" in text_words
 
 
 def test_common_issues_uses_supported_test_cli_tool_invocation():

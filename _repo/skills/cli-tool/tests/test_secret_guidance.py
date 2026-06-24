@@ -137,6 +137,38 @@ def test_secret_guidance_shapes_expected_missing_has_checks():
     )
 
 
+def test_expect_helper_guidance_invokes_interpreter_not_generated_path():
+    secrets_text = _read_skill("references/secrets.md")
+    assert "expect /path/to/auth_login.expect" in secrets_text, (
+        "secrets.md must show generated Expect helpers run through the expect interpreter."
+    )
+    assert "do not execute the\ngenerated file path directly from Bash" in secrets_text, (
+        "secrets.md must forbid direct Bash execution of generated non-executable Expect helpers."
+    )
+    assert "`Permission denied` before Expect runs" in secrets_text, (
+        "secrets.md must document the root-cause failure from missing executable bits."
+    )
+    assert "Use `chmod +x` only when a durable checked-in script intentionally has a valid\nshebang" in secrets_text, (
+        "secrets.md must prevent chmod from becoming the default generated-helper workaround."
+    )
+
+
+def test_expect_force_login_captures_prompt_values_before_spawn():
+    secrets_text = _read_skill("references/secrets.md")
+    assert "Before launching `auth login --force`, capture every value" in secrets_text, (
+        "secrets.md must require capturing prompt values before a forced login starts."
+    )
+    assert "CLI-tools secret manager or from a pre-force snapshot" in secrets_text, (
+        "Expect automation must source values from the secret manager or a pre-force snapshot."
+    )
+    assert "Do not read CLIENT_ID, CLIENT_SECRET" in secrets_text, (
+        "Expect automation must not read static OAuth inputs from the target profile after force starts."
+    )
+    assert "validate only that each variable is non-empty without printing it" in secrets_text, (
+        "Expect automation guidance must prevent empty sends without exposing secrets."
+    )
+
+
 def test_cli_tool_workflows_include_secret_storage_review_rule():
     create_text = _read_skill("workflows/create-cli.md")
     assert (

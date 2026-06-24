@@ -605,6 +605,68 @@ place and both the tests and CLIs follow automatically.
 
 ---
 
+## macOS Permission (TCC) Error — Grant the Launching App, Not the Binary
+
+### Symptom
+A CLI that reads protected data fails with a macOS privacy error even though it is
+installed correctly and otherwise healthy, and an `auth status` capability flag is
+`false`:
+
+```bash
+$ imessage messages list
+Error: Cannot open iMessage database: unable to open database file. Grant Full Disk Access...
+
+$ imessage auth status
+# ... "messages_db_accessible": false ...
+```
+
+This applies to ANY CLI that touches a TCC-gated resource: Full Disk Access
+(`~/Library/Messages/chat.db`, Mail, Safari data), Contacts, Calendars,
+Automation / Apple Events, etc.
+
+### Cause
+macOS TCC grants the permission to the **responsible process** — the application
+that LAUNCHES the CLI — not to the Python interpreter or the `~/.local/bin/<tool>`
+launcher. Adding the interpreter binary to the permission list usually does nothing
+for a CLI started from an app, because TCC attributes the access to the parent app.
+
+### Fix
+Identify the launching app, grant IT the permission, then restart that app.
+
+```bash
+# Who launched this shell? Walk the parent chain and read the bundle id:
+ps -o pid=,ppid=,comm= -p "$PPID"
+echo "$__CFBundleIdentifier"        # e.g. com.anthropic.claudefordesktop
+```
+
+- **Run by hand from a terminal** -> grant the terminal app (Terminal / iTerm2 /
+  Ghostty / Warp).
+- **Run by Claude Code (inside the Claude desktop app)** -> grant **Claude**
+  (`/Applications/Claude.app`, bundle `com.anthropic.claudefordesktop`).
+- **Headless (launchd / ssh / daemon — no GUI app)** -> there is no app to grant;
+  add the CLI's REAL interpreter binary (resolve the uv-tool venv `python3` — do not
+  guess the path):
+
+```bash
+launcher="$(command -v <tool>)"
+interp="$(head -1 "$launcher" | sed 's/^#!//')"
+python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$interp"
+# e.g. /opt/homebrew/Cellar/python@3.14/<ver>/Frameworks/Python.framework/Versions/3.14/bin/python3.14
+```
+
+Then: System Settings -> Privacy & Security -> the relevant permission (e.g. Full
+Disk Access) -> enable the app -> **fully quit and reopen it** (TCC changes take
+effect only on restart) -> re-check `<tool> auth status`.
+
+### Recurrence Prevention
+When a CLI hits a macOS privacy/permission wall, grant Full Disk Access (or the
+specific TCC permission) to the **launching app**, not the interpreter — and restart
+that app afterward. The interpreter binary is the correct target ONLY for headless
+launchers with no responsible app. A `*_accessible: false` field in `auth status` is
+a TCC grant gap, not a CLI bug — do not "fix" it in code.
+
+---
+
 ## Quick Reference: Test After Fixes
 
 Always verify fixes work:

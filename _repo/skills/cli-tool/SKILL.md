@@ -38,14 +38,17 @@ For any request that uses an existing CLI tool, read `workflows/skill-router.md`
 
 <tool_discovery>
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate the
-available CLI tools from the source tree. The script prints JSON records with
-`name`, `readme`, and `description`, where `description` is extracted from each
-tool README's `## DESCRIPTION` block. The default mode is JSON, and `--json` is
-accepted as an explicit alias for that default. Pass `--markdown` for a compact
-`- name: <first sentence>` list (~2K tokens) suitable for context injection; the
-Claude (`SessionStart` in `~/.claude/settings.json`) and Codex (`SessionStart`
-in `~/.codex/hooks.json`) session-start hooks call it this way to preload the
-CLI-tool roster every session.
+available CLI tools from the source tree. The script prints one JSON array of
+records with `name`, `readme`, and `description`, where `description` is
+extracted from each tool README's `## DESCRIPTION` block. The default mode is
+JSON, and `--json` is accepted as an explicit alias for that default. When
+filtering the saved output with `jq`, iterate the array explicitly, for example
+`jq -e '.[] | select(.name == "google")' <file>`. Do not treat the output as
+JSONL records. Pass `--markdown` for a compact `- name: <first sentence>` list
+(~2K tokens) suitable for context injection; the Claude (`SessionStart` in
+`~/.claude/settings.json`) and Codex (`SessionStart` in `~/.codex/hooks.json`)
+session-start hooks call it this way to preload the CLI-tool roster every
+session.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
@@ -266,10 +269,18 @@ fi
 ```
 
 For API or CLI response verification, inspect or validate the JSON contract
-before indexing nested keys. Do not assume shapes such as every `GET
-/api/providers` item having a top-level `config` key. Check the container type
-and required paths explicitly; if the contract is missing, fail with
-`MISSING_JSON_PATH: providers[0].config` instead of a raw `KeyError: 'config'`.
+before indexing, slicing, or selecting nested keys. Do not assume shapes such as
+every `GET /api/providers` item having a top-level `config` key, or a CLI
+`list` command's parsed root being sliceable, until the saved JSON proves the
+container type. Check the container type and required paths explicitly; if the
+contract is missing, fail with `MISSING_JSON_PATH: providers[0].config` or
+`JSON_CONTRACT_MISMATCH: expected list root, got object keys=[...]` instead of
+a raw `KeyError`, `TypeError`, or `rows[:10]` failure.
+
+Treat the parser as its own batch stage. Capture and return the parser status
+before running later update, cleanup, summary, or verification commands, or
+carry it into a `batch_rc` that becomes the final exit status. Do not let a
+later successful CLI command mask a failed JSON parser.
 </principle>
 
 <principle name="Literal Searches For Template Tokens">
@@ -372,9 +383,31 @@ live in `<pkg>_cli.client`.
 
 This interpreter rule is only for ad-hoc imports and direct config probes. Do
 not use the installed CLI interpreter to run a tool's pytest suite. The uv tool
-venv contains runtime dependencies, not test-only dependencies such as
-`pytest`. For focused per-tool tests, use the direct pytest command in
-`workflows/test-cli.md`:
+venv (from `uv tool install`) contains runtime dependencies, not test-only
+dependencies such as `pytest`.
+
+Every CLI must declare `pytest` as a dev dependency so `uv sync` installs it
+into the project `.venv`. Use the scaffold convention:
+
+```toml
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+```
+
+Once that group is declared and synced, run the suite through the project venv
+interpreter — `uv run pytest` (from the tool dir) or `.venv/bin/python -m
+pytest`. Both resolve the project `.venv`, where editable `cli-tools-shared`
+imports cleanly. Never run a bare global `pytest`: when `pytest` is absent from
+the project `.venv`, `uv run pytest` silently falls back to the global pipx
+pytest, whose interpreter cannot import editable `cli-tools-shared`, so test
+modules fail collection with `ModuleNotFoundError: No module named
+'cli_tools_shared'`.
+
+For focused per-tool tests (and as a fallback for any tool whose dev group is
+not yet synced), use the direct pytest command in `workflows/test-cli.md`, which
+injects pytest into the run with `--with pytest`:
 
 ```bash
 uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
@@ -409,10 +442,13 @@ exit "$status"
 
 When probing a CLI source checkout rather than the installed launcher, use that
 tool's `pyproject.toml` environment so editable sources such as
-`cli-tools-shared` resolve, but still keep parent output bounded. For PayPal
-source probes and tests, do not run bare `python` heredocs from
-`/Users/adam/Dropbox/GitRepos/cli-tools/paypal` and do not print unbounded
-`uv run` output directly to the parent tool result:
+`cli-tools-shared` resolve, but still keep parent output bounded.
+
+For any tool-scoped Python introspection against source files, run
+`uv run --project <tool-dir> python ...` from the target tool environment. Do
+not run system `python3` or bare `python` from inside `_personal/<tool>` or
+another tool source directory. For PayPal source probes and tests, do not print
+unbounded `uv run` output directly to the parent tool result:
 
 ```bash
 workspace=/path/to/task-workspace
@@ -491,13 +527,34 @@ root type, root keys, and `commands` keys; for deeper command paths, print only
 the current node type and keys before indexing. When a `jq` key is not a valid
 identifier, including keys with hyphens such as `replace-section`, use bracket
 notation such as `.commands.pages.commands.content.commands["replace-section"]`
-instead of dot notation. Avoid full-map dumps, recursive walks, interactive
+instead of dot notation. When filtering `to_entries` rows against a side array
+or lookup map, bind the current row before piping into the side data; jq changes
+`.` to the side value inside that pipeline. Use
+`map(. as $entry | select($actions | index($entry.key)))`, not
+`map(select($actions | index(.key)))`, because the latter evaluates `.key`
+against `$actions`.
+Avoid full-map dumps, recursive walks, interactive
 extractors, or probes that can block or emit excessive output. Before
 dereferencing a nested command path, inspect the available keys
 at the current level and fail clearly with `MISSING_JSON_PATH:
-commands.<group>.<subcommand>` when the path is absent. Do not assume command
-groups, subcommands, or fields such as `name` exist from memory or from another
-tool's map.
+commands.<group>.<subcommand>` when the path is absent. Generated command
+groups nest children under a `commands` object at each level, so a subcommand
+path alternates group name and `commands`: use
+`.commands.gmail.commands.labels.commands.add`, not
+`.commands.gmail.labels.add` or `.commands.gmail.labels.commands.add`, after
+the parent keys have been inspected. Do not assume command groups,
+subcommands, or fields such as `name` exist from memory or from another tool's
+map.
+In Python helpers, validate the container before membership checks: do not run
+`if key in node` until `node` has been proven to be a dict. A missing child is
+a contract error, not `None`; fail with the full alternating command path and
+available keys, for example `MISSING_JSON_PATH:
+commands.items.commands.search available=[create,get,list,password,username]`.
+
+Usage nodes can omit documentation-only fields such as `examples` even when
+they include `options`. Before reading `node["examples"]`, inspect the node's
+keys and treat examples as optional with `node.get("examples", [])`; reserve
+`MISSING_JSON_PATH` failures for fields required by the usage contract.
 </principle>
 
 <principle name="⛔ Zero Test Failures Policy">

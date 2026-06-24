@@ -498,10 +498,14 @@ python-dotenv>=1.0.0
 ```
 
 ### Automatic CLI Installation
-The new-cli-tool script automatically:
-1. Checks if underlying CLI is in PATH
-2. If not found, installs via Homebrew
-3. Uses package mapping for non-standard names
+Wrapper CLIs must provision the official upstream binary named by
+`CLI_COMMAND`. A completed wrapper cannot leave the wrapped binary as a manual
+user prerequisite or report it as a live API smoke-test/auth blocker.
+
+The `new-cli-tool` script automatically:
+1. Checks if the underlying CLI is in PATH
+2. If not found, installs known Homebrew-distributed CLIs
+3. Uses package mapping for non-standard Homebrew names
 
 | CLI Command | Brew Package |
 |-------------|--------------|
@@ -511,6 +515,12 @@ The new-cli-tool script automatically:
 | `az` | `azure-cli` |
 | `kubectl` | `kubernetes-cli` |
 | `rg` | `ripgrep` |
+
+If the official upstream CLI is distributed through npm, pipx, uv, or a vendor
+installer instead of Homebrew, add that official bootstrap to the wrapper source
+or repo-owned install workflow before marking the wrapper complete. API-key auth
+may remain user-configured only after the upstream binary is present and
+`<cli-command> --help` exits `0`.
 
 ---
 
@@ -562,7 +572,9 @@ Main Typer application that registers command groups:
 """Main entry point for MyTool CLI."""
 import typer
 from typing import Optional
+from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
+from .config import get_config
 
 app = typer.Typer(
     name="mytool",
@@ -572,8 +584,8 @@ app = typer.Typer(
 
 # Register command modules
 from .commands import resource1, resource2
-app.add_typer(resource1.app, name="resource1", help="Manage resource1")
-app.add_typer(resource2.app, name="resource2", help="Manage resource2")
+register_commands(app, get_config, resource1, name="resource1", help="Manage resource1")
+register_commands(app, get_config, resource2, name="resource2", help="Manage resource2")
 
 @app.callback(invoke_without_command=True)
 def callback(

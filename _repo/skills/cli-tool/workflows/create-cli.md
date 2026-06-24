@@ -271,7 +271,24 @@ Execute the appropriate command:
 - `--auth-type` - Authentication type (repeatable for multiple types, AND semantics): `none`, `api_key` (default), `personal_access_token`, `oauth`, `oauth_authorization_code`, `username_password`, `browser_session`. Use `none` to skip auth scaffolding entirely. Example: `--auth-type api_key --auth-type browser_session`
 - `--no-venv` - Skip virtual environment creation
 - `--no-aliases` - Skip symlink/PowerShell setup
-- `--no-install` - Skip underlying CLI installation (wrapper only)
+- `--no-install` - Skip installation only when you are deliberately leaving the CLI uninstalled for a scaffold-only artifact; do not use it for a completed wrapper CLI.
+
+## Step 3.4: Wrapper Upstream CLI Provisioning Gate
+
+For wrapper CLIs, the official upstream binary named by `CLI_COMMAND` is part of
+the wrapper's implementation contract. The wrapper is not usable until that
+binary is installed or bootstrapped by the wrapper creation/install path and
+`<cli-command> --help` exits `0`.
+
+If `new-cli-tool` cannot install the upstream binary because the official
+distribution is not Homebrew (for example npm, pipx, uv, or a vendor installer),
+add the official install/bootstrap path to the wrapper source or repo-owned
+install workflow before reporting the wrapper complete. Do not tell Adam to
+install the wrapped CLI manually as the normal completion state.
+
+Missing `CLI_COMMAND` is an implementation blocker, not a live API smoke-test or
+API-key-auth blocker. API-key auth may remain user-configured only after the
+official upstream binary is present and executable.
 
 ## Step 3.5: Post-Creation Validation
 
@@ -434,6 +451,7 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 - **Re-run until all pass** - Execute the script repeatedly until `"success": true`
 - **Warnings are acceptable** - Only failures must be fixed; warnings may be addressed later
 - **No exceptions for "wrapper CLIs" or "passthrough patterns"** - If the test expects an option, implement it
+- **Wrapper upstream binary failures are implementation failures** - Install or bootstrap the official `CLI_COMMAND` dependency before reporting completion
 - **Auth-required CLIs without credentials** - Follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
 **Common failures and fixes:**

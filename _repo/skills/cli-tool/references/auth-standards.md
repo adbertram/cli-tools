@@ -241,6 +241,13 @@ import typer
 - Values are lists of credential type strings (e.g., `["api_key"]`, `["browser_session"]`)
 - Every command in the file should have an entry
 - Single-credential CLIs can omit this dict (all commands use the single type)
+- Command modules that declare `COMMAND_CREDENTIALS` must be mounted with
+  `register_commands(app, get_config, module, name="...", help="...")` from
+  `cli_tools_shared.command_registry`, not bare `app.add_typer(...)`.
+  `register_commands()` injects the shared `--profile` command-group option and
+  checks credentials before command execution. Infrastructure groups without
+  `COMMAND_CREDENTIALS`, such as `auth`, `cache`, and `profiles`, may still use
+  their owning shared app factories and normal `app.add_typer(...)`.
 - A command with a `--dry-run` or preview path that only prints the planned
   request and does not call a live API must not be blocked by registration-time
   credential checks. Map it to `["no_auth"]` and make the command enforce the
@@ -255,18 +262,18 @@ import typer
 | Behavior | Description |
 |----------|-------------|
 | Without `--force` | Idempotent - may skip if already authenticated |
-| With `--force` | Clears existing session/credentials FIRST, then initiates fresh authentication |
+| With `--force` | Clears existing ephemeral runtime state FIRST, preserving static credentials such as API keys, passwords, CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI, then initiates fresh authentication |
 
 Implementation by template type:
 
 | Template | --force Behavior |
 |----------|------------------|
-| API | Call `config.clear_credentials()` before prompting for API key |
+| API | Call `config.clear_ephemeral()` before prompting; do not clear static API keys or other reusable credentials |
 | Browser | Call `config.clear_session()` before opening browser login |
 | Wrapper | Call underlying CLI's logout command before running login |
-| OAuth (built-in) | Clears OAuth app credentials and tokens, prompts for CLIENT_ID/CLIENT_SECRET/REDIRECT_URI, then re-runs the auth flow |
+| OAuth (built-in) | Clears OAuth tokens and other ephemeral runtime state, preserves CLIENT_ID/CLIENT_SECRET/REDIRECT_URI, then re-runs the auth flow |
 
-**OAuth --force note:** For CLIs using the built-in `oauth_login` handler (via `OAUTH_*` class vars), `--force` clears OAuth app credentials and tokens first, then prompts again for CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI before opening the browser authorization flow.
+**OAuth --force note:** For CLIs using the built-in `oauth_login` handler (via `OAUTH_*` class vars), `--force` must preserve OAuth app credentials such as CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI while clearing tokens and other ephemeral state before opening the browser authorization flow. Automation that needs to re-enter static prompt values must still capture them from the CLI-tools secret manager or a pre-force snapshot before invoking the forced login; do not source prompt values from a profile after the forced process has started.
 
 ## auth login --credential-type Flag (Multi-Credential CLIs)
 
@@ -304,10 +311,10 @@ def auth_login(
     """Login to service."""
     config = get_config()
 
-    # Clear existing session if --force is specified
+    # Clear only ephemeral runtime state if --force is specified
     if force:
-        config.clear_session()  # or clear_credentials() for API type
-        print_info("Existing session cleared")
+        config.clear_ephemeral()
+        print_info("Existing ephemeral auth state cleared")
 
     # Continue with normal login flow...
 ```

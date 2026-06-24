@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import textwrap
 import tomllib
 from pathlib import Path
@@ -94,6 +95,42 @@ def _read_env_file(path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         values[key] = value
     return values
+
+
+def test_new_cli_tool_wrapper_fails_when_upstream_cli_cannot_be_provisioned(
+    tmp_path: Path,
+) -> None:
+    tool_name = "scaffold-wrapper-missing-upstream"
+    tool_dir = REPO_ROOT / tool_name
+    isolated_bin = tmp_path / "bin"
+    isolated_bin.mkdir()
+    env = os.environ.copy()
+    env["PATH"] = str(isolated_bin)
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SKILL_ROOT / "scripts/new-cli-tool"),
+                "--name",
+                tool_name,
+                "--type",
+                "wrapper",
+                "--cli-command",
+                "missing-upstream-cli-for-test",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 1
+        assert "WRAPPER_UPSTREAM_INSTALL_BLOCKED" in result.stderr
+        assert not tool_dir.exists()
+    finally:
+        shutil.rmtree(tool_dir, ignore_errors=True)
 
 
 @pytest.mark.parametrize(

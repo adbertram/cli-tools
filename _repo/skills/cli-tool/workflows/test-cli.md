@@ -29,7 +29,7 @@ harness itself, collect tests with the batch confirmation flag so
 uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest --collect-only <cli-tools-root>/_repo/skills/cli-tool/tests --force
 ```
 
-This only proves the harness collects. It is not a replacement for CLI-specific validation through `test-cli-tool.sh --cli-name "$TOOL_NAME"`.
+This only proves the harness collects. It is not a replacement for CLI-specific validation through `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name "$TOOL_NAME"`.
 
 **Harness batch execution:** When validating harness unit tests without a
 specific CLI target, run pytest through the cli-tool skill uv project and pass
@@ -61,17 +61,27 @@ against harness tests and the selection includes any CLI-dependent test, pass
 `--cli-name "$TOOL_NAME"`. Use `--force` only for batch or collect-only harness
 checks where CLI-dependent tests are allowed to skip.
 
-**Direct per-tool pytest execution:** When running a tool's own tests directly,
-use that tool's uv project environment and add pytest to the run environment.
-Invoke pytest as `python -m pytest`; do not run a bare `pytest` executable,
-because uv can resolve that executable from a different environment and collect
-tests without the tool package importable. Do not run `PYTHONPATH=. pytest`,
-a tool-local `.venv/bin/python`, or another ambient interpreter; shared
-dependencies such as `cli_tools_shared` are resolved by the uv project declared
-in the tool's `pyproject.toml`, and pytest is supplied with `--with pytest`.
-If ambient `python3 -m pytest` fails during collection with
-`ModuleNotFoundError: No module named 'cli_tools_shared'`, treat the command as
-a wrong test environment and rerun with the uv project command below.
+**Direct per-tool pytest execution:** First resolve the actual tool directory
+that contains the target CLI's `pyproject.toml`; do not derive it from the CLI
+command name. Some tools live below `_personal/`, for example `ata-blog` lives at
+`<cli-tools-root>/_personal/ata-blog`, so `<cli-tools-root>/$TOOL_NAME` is not a
+safe project path. Every CLI must declare `pytest` as a dev dependency
+(`[dependency-groups]` `dev = ["pytest>=7.0.0"]`) so `uv sync` installs it into
+the project `.venv`. Run a tool's own tests through the project venv
+interpreter, not a bare global `pytest`. The always-safe command is the uv
+project run below, which injects pytest with `--with pytest` and works whether or
+not the dev group has been synced. After `uv sync`, `uv run pytest` (from the
+tool dir) and `.venv/bin/python -m pytest` are equally valid because both resolve
+the project `.venv` where editable `cli_tools_shared` imports cleanly.
+
+Do not run a bare `pytest` executable, `PYTHONPATH=. pytest`, ambient
+`python3 -m pytest`, or any other interpreter outside the tool's `.venv`/uv
+project. When `pytest` is missing from the project `.venv`, `uv run pytest`
+silently falls back to the global pipx pytest, whose interpreter cannot import
+editable `cli_tools_shared`; the suite then fails collection with
+`ModuleNotFoundError: No module named 'cli_tools_shared'`. If you hit that error,
+the fix is to declare+sync the dev group (or use the `--with pytest` command
+below), not to switch to another ambient interpreter.
 
 Before reading or passing a tool's test paths to `sed`, `cat`, `nl`, `wc`,
 `head`, `tail`, `grep`, `rg`, or direct `pytest`, discover the real test files
@@ -87,7 +97,7 @@ as `<cli-tools-root>/tests/conftest.py` exist. Discover the harness files under
 and read or pass only those proven paths.
 
 ```bash
-uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests
+uv run --project <tool-dir> --with pytest python -m pytest <tool-dir>/tests
 ```
 
 **Direct shared-package pytest execution:** When running tests for
@@ -104,6 +114,11 @@ that run:
 uv run --project <cli-tools-root>/_repo/cli-tools-shared --with pytest python -m pytest <cli-tools-root>/_repo/cli-tools-shared/tests
 ```
 
+Do not combine shared-package test paths and per-tool test paths in one pytest
+invocation. Run the shared-package command above separately from the direct
+per-tool pytest command so each suite resolves imports through its own uv
+project.
+
 **Expected-red test-first runs:** When a direct per-tool or shared-package
 pytest run is intended to fail before implementation, do not run the bare
 pytest command. Wrap it, capture the status and output, validate the expected
@@ -113,9 +128,25 @@ pass, unexpected failure text, or any other status remains a tool failure.
 For `cli-tools-shared`, use the direct shared-package pytest command above in
 the wrapper instead of a `$TOOL_NAME` project path.
 
+When the red proof is a pytest assertion diff for a list or dict comparison, do
+not key the wrapper only to directional pytest diff prose. Pytest can describe
+the same cardinality bug as `Left contains one more item` or
+`Right contains one more item` depending on operand order. Prefer a stable
+domain-specific assertion message, exception type, or exact value from the diff;
+if pytest prose is the only signal, require the test node name and accept both
+directional variants.
+
+**Table-output assertions:** Table output is display-only and may shorten cell
+values for readability, while still showing every returned row. Do not assert
+full untruncated URLs, UUIDs, descriptions, or other long scalar values in
+Rich-rendered table stdout. Assert those full values against default JSON
+output instead. For table stdout, assert stable headers, row presence, visible
+labels, and the absence of row truncation; a cell-level ellipsis is acceptable
+when the JSON output preserves the full value.
+
 ```bash
 tmp_output="$(mktemp)"
-if uv run --project <cli-tools-root>/$TOOL_NAME --with pytest python -m pytest <cli-tools-root>/$TOOL_NAME/tests/test_new_feature.py >"$tmp_output" 2>&1; then
+if uv run --project <tool-dir> --with pytest python -m pytest <tool-dir>/tests/test_new_feature.py >"$tmp_output" 2>&1; then
   status=0
 else
   status=$?
@@ -148,6 +179,27 @@ method the command can call on that object, including cleanup methods reached in
 `finally` blocks such as `close()`. Missing lifecycle methods are test-fixture
 bugs; add the method to the fake instead of changing the production cleanup
 path.
+
+**Command test fake helper signatures:** When a command test monkeypatches a
+helper function, keep the fake signature compatible with the production call,
+including keyword-only arguments such as `profile`. Capture and assert those
+arguments in the test. A `TypeError` from a fake that omits a new keyword
+argument is a test-stub bug, not an implementation bug.
+
+**Direct Typer command calls:** When a unit test calls a `@app.command` function
+directly instead of using `CliRunner`, pass every Typer argument and option
+parameter explicitly, including newly added options whose CLI defaults are
+`typer.Option(...)`. A direct Python call does not apply Typer's CLI default
+conversion; omitted parameters can reach command logic as `typer.models.OptionInfo`
+objects and make truthiness checks take the wrong branch. Prefer extracting a
+pure helper for command logic and testing that helper when direct invocation
+would require many CLI-only option defaults.
+
+When a direct-called command helper is expected to exit via `raise typer.Exit(...)`,
+assert `pytest.raises(typer.Exit)` or `pytest.raises(click.exceptions.Exit)`, not
+`pytest.raises(SystemExit)`. `typer.Exit` is Click's `Exit` exception and is not a
+`SystemExit`; `SystemExit` assertions belong around wrappers such as `run_app(app)`
+that intentionally convert CLI execution into a process exit.
 
 **Run the test script for structured JSON results:**
 

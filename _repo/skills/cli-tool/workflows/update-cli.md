@@ -234,10 +234,14 @@ def get_resource(
         print_json(result)
 ```
 
-2. Mount the subcommand app in `<name>_cli/main.py`:
+2. Mount the subcommand app in `<name>_cli/main.py`. If the command module
+declares `COMMAND_CREDENTIALS`, use `register_commands()` so credential checks
+and the shared `--profile` option are installed:
 
 ```python
-app.add_typer(newresource.app, name="newresource")
+from cli_tools_shared.command_registry import register_commands
+
+register_commands(app, get_config, newresource, name="newresource", help="Manage new resources")
 ```
 
 3. If you created `commands/newresource.py`, import it in `main.py` before the
@@ -347,6 +351,26 @@ After changes, use the install script:
 ```
 
 The script returns JSON with `success`, `install_output`, and `help_works`. Verify `"success": true` before proceeding.
+
+## Step 4.5: Wrapper Upstream CLI Provisioning Gate
+
+For wrapper CLIs, read the configured `CLI_COMMAND` from the wrapper's runtime
+config or `.env.example`, then verify the official upstream binary is installed
+and executable before reporting the update complete:
+
+```bash
+command -v <cli-command>
+<cli-command> --help
+```
+
+If the official upstream binary is missing, install or bootstrap it through the
+wrapper source or repo-owned install path before continuing. For upstream CLIs
+distributed outside Homebrew, use the official package manager or vendor
+installer for that CLI instead of leaving the binary as a manual prerequisite.
+
+Missing `CLI_COMMAND` is an implementation blocker, not a live API smoke-test or
+API-key-auth blocker. API-key auth may remain user-configured only after the
+official upstream binary is present and executable.
 
 ## Step 5: Test Changes
 

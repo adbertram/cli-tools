@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cli_test_utils import discover_list_commands, run_cli_command
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
+COMMAND_ONLY_CREDENTIAL_TYPES = {"no_auth"}
 CLI_SELECTION_FIXTURE = "cli_name"
 CLI_NAME_REQUIRED_MESSAGE = (
     "WARNING: No --cli-name specified for CLI-dependent tests.\n"
@@ -143,10 +144,15 @@ def _required_credential_types_for_list_commands(
             command_credentials = flat_credentials
         else:
             command_credentials = _command_credentials_from_module(module_file)
-        required_types.update(
+        credential_types = (
             command_credentials.get(cmd_path)
             or command_credentials.get(" ".join(parts[1:]))
             or command_credentials.get(parts[-1], [])
+        )
+        required_types.update(
+            credential_type
+            for credential_type in credential_types
+            if credential_type not in COMMAND_ONLY_CREDENTIAL_TYPES
         )
 
     return sorted(required_types)

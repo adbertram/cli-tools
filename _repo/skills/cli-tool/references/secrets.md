@@ -100,6 +100,18 @@ Prefer non-echoing command input such as stdin, `SECRET_VALUE`, or a first-class
 
 When `expect` is unavoidable, disable logging before sending any secret and re-enable it only after the prompt has advanced past the secret input:
 
+Before launching `auth login --force`, capture every value the automation will
+send from the CLI-tools secret manager or from a pre-force snapshot of the
+profile. Do not read CLIENT_ID, CLIENT_SECRET, passwords, API keys, or other
+prompt inputs from the target profile after the forced login process has
+started. A forced auth flow is allowed to clear stale runtime profile state
+before prompting, and older/custom CLIs may have cleared static credential
+fields as well; reading from the profile at that point can turn the sent value
+empty and make Expect loop on prompts such as `Enter Client ID:`. Treat the
+secret manager (or the pre-force snapshot) as the source for Expect environment
+variables, validate only that each variable is non-empty without printing it,
+then spawn the forced login.
+
 ```tcl
 set timeout -1
 log_user 1
@@ -121,6 +133,19 @@ expect {
 ```
 
 Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into Terminal.app or GUI prompts through Computer Use; use the CLI-tools secret manager or the CLI's own non-echoing input path.
+
+If you write an `expect` helper script to a task workspace, do not execute the
+generated file path directly from Bash. Agent-created helper files are not
+guaranteed to have an executable bit, so direct execution can fail with
+`Permission denied` before Expect runs. Invoke the interpreter explicitly:
+
+```bash
+expect /path/to/auth_login.expect
+```
+
+Use `chmod +x` only when a durable checked-in script intentionally has a valid
+shebang and direct execution is part of its contract; it is not the default fix
+for generated auth helpers.
 
 ## Naming
 

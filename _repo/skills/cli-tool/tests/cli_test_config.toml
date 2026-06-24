@@ -280,3 +280,11 @@ command_timeout = 120
 [cli_specific.weather.param_fixtures]
 "conditions list" = { "_pos1" = "zip_code" }
 "forecast list" = { "_pos1" = "zip_code" }
+
+[cli_specific.target]
+list_commands = [
+    "products list",
+]
+
+[cli_specific.target.param_fixtures]
+"products list" = { "_pos1" = "query" }

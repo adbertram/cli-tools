@@ -488,8 +488,13 @@ Examples:
             if not is_cli_available(args.cli_command):
                 print_warning(f"CLI '{args.cli_command}' not found in PATH")
                 if not install_cli_with_brew(args.cli_command):
-                    print_warning("Continuing without underlying CLI installed...")
-                    print_warning(f"You'll need to install '{args.cli_command}' manually before using the wrapper")
+                    print_error(
+                        "WRAPPER_UPSTREAM_INSTALL_BLOCKED: "
+                        f"'{args.cli_command}' is missing and could not be installed automatically. "
+                        "Add the official installer/bootstrap path for this upstream CLI, "
+                        "or use --no-install only for scaffold-only work."
+                    )
+                    sys.exit(1)
             else:
                 print_success(f"Found '{args.cli_command}' in PATH")
     else:  # api or browser

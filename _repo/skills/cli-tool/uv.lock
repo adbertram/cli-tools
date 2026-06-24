@@ -193,6 +193,9 @@ requires-dist = [
     { name = "websockets", specifier = "==15.0.1" },
 ]
 
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=7.0.0" }]
+
 [[package]]
 name = "click"
 version = "8.4.0"

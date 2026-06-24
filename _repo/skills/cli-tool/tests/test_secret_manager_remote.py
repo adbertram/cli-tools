@@ -8,6 +8,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -346,7 +348,10 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
     env = _base_env(fake_bin, tmp_path)
     env["FAKE_REMOTE_LOG_DIR"] = str(remote_log_dir)
 
-    master_fd, slave_fd = pty.openpty()
+    try:
+        master_fd, slave_fd = pty.openpty()
+    except OSError as exc:
+        pytest.skip(f"PTY allocation is unavailable on this host: {exc}")
     proc = subprocess.Popen(
         ["bash", str(SECRETS_SCRIPT), "--remote-host", "example-host", "set", "example-secret"],
         stdin=subprocess.PIPE,
