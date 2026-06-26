@@ -4,10 +4,12 @@ import typer
 from typing import Optional, List, Any
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
-from ..parsers import format_local_time_only
+from cli_tools_shared.output import command, print_json, print_table, handle_error
+from ..parsers import format_local_time
 
 app = typer.Typer(help="View unified activity timeline", no_args_is_help=True)
+
+TIMELINE_TABLE_TIME_FORMAT = '%m%d-%H%M'
 
 
 def format_event_type(event_type: str) -> str:
@@ -20,10 +22,12 @@ def format_event_type(event_type: str) -> str:
         'assistant_message': 'assistant',
         'thinking': 'thinking',
         'agent_warmup': 'warmup',
+        'skill_load': 'skill_load',
+        'mcp_call': 'mcp_call',
         'skill': 'skill',
         'tool_call': 'tool',
-        'subagent_start': 'agent',
-        'subagent_tool': 'agent-tool',
+        'subagent_start': 'agent_invocation',
+        'subagent_tool': 'tool',
         'error': 'error',
     }
     return labels.get(event_type, event_type)
@@ -59,6 +63,7 @@ def truncate_value(value: Any, max_length: int = 40) -> str:
 
 
 @app.command("list")
+@command
 def list_timeline(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
     session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter by session ID"),
@@ -122,8 +127,9 @@ def list_timeline(
             for item in items:
                 item['type'] = format_event_type(item.get('event_type', ''))
                 item['status'] = format_status(item.get('status', ''))
-                # Format timestamp in local timezone (time only)
-                item['time'] = format_local_time_only(item.get('timestamp', ''))
+                # Format timestamp in local timezone with date and time.
+                item['time'] = format_local_time(item.get('timestamp', ''), TIMELINE_TABLE_TIME_FORMAT)
+                item['model'] = item.get('model') or ''
                 # Format agent name for subagent tool calls
                 item['agent'] = item.get('agent_name') or ''
                 # Format input/output for display (full or truncated)
@@ -135,14 +141,16 @@ def list_timeline(
                     item['output_preview'] = truncate_value(item.get('output'), 50)
                 # Format cost metrics for Claude Max tracking
                 turn_cost = item.get('turn_cost')
+                turn_number = item.get('turn_number')
                 session_total = item.get('session_total')
+                item['turn_number_fmt'] = str(turn_number) if turn_number else ''
                 item['turn_cost_fmt'] = f"{turn_cost:,}" if turn_cost else ''
                 item['session_total_fmt'] = f"{session_total:,}" if session_total else ''
 
-            columns = ["time", "session_id", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
-            headers = ["Time", "Session", "Type", "Agent", "Name", "Status", "Turn Cost", "Session Total", "Input", "Output"]
+            columns = ["time", "session_id", "turn_number_fmt", "model", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
+            headers = ["Date/Time", "Session", "Turn", "Model", "Type", "Agent", "Name", "Status", "Cost", "Total", "Input", "Output"]
             # Use unlimited columns when --wide is specified to show input/output
-            print_table(items, columns, headers, max_columns=0 if wide else 8)
+            print_table(items, columns, headers, max_columns=0 if wide else 10)
         else:
             print_json(items)
 
@@ -151,6 +159,7 @@ def list_timeline(
 
 
 @app.command("consolidated")
+@command
 def consolidated_timeline(
     session_id: str = typer.Option(..., "--session-id", "-S", help="Session UUID (required)"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
@@ -194,8 +203,9 @@ def consolidated_timeline(
             for item in items:
                 item['type'] = format_event_type(item.get('event_type', ''))
                 item['status'] = format_status(item.get('status', ''))
-                # Format timestamp in local timezone (time only)
-                item['time'] = format_local_time_only(item.get('timestamp', ''))
+                # Format timestamp in local timezone with date and time.
+                item['time'] = format_local_time(item.get('timestamp', ''), TIMELINE_TABLE_TIME_FORMAT)
+                item['model'] = item.get('model') or ''
                 # Format agent name for subagent tool calls
                 item['agent'] = item.get('agent_name') or ''
                 # Format input/output for display (full or truncated)
@@ -207,14 +217,16 @@ def consolidated_timeline(
                     item['output_preview'] = truncate_value(item.get('output'), 50)
                 # Format cost metrics for Claude Max tracking
                 turn_cost = item.get('turn_cost')
+                turn_number = item.get('turn_number')
                 session_total = item.get('session_total')
+                item['turn_number_fmt'] = str(turn_number) if turn_number else ''
                 item['turn_cost_fmt'] = f"{turn_cost:,}" if turn_cost else ''
                 item['session_total_fmt'] = f"{session_total:,}" if session_total else ''
 
-            columns = ["time", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
-            headers = ["Time", "Type", "Agent", "Name", "Status", "Turn Cost", "Session Total", "Input", "Output"]
+            columns = ["time", "turn_number_fmt", "model", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
+            headers = ["Date/Time", "Turn", "Model", "Type", "Agent", "Name", "Status", "Cost", "Total", "Input", "Output"]
             # Use unlimited columns when --wide is specified to show input/output
-            print_table(items, columns, headers, max_columns=0 if wide else 7)
+            print_table(items, columns, headers, max_columns=0 if wide else 9)
         else:
             print_json(items)
 
@@ -223,6 +235,7 @@ def consolidated_timeline(
 
 
 @app.command("get")
+@command
 def get_timeline(
     session_id: str = typer.Argument(..., help="Session UUID"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
@@ -248,8 +261,9 @@ def get_timeline(
             for item in items:
                 item['type'] = format_event_type(item.get('event_type', ''))
                 item['status'] = format_status(item.get('status', ''))
-                # Format timestamp in local timezone (time only)
-                item['time'] = format_local_time_only(item.get('timestamp', ''))
+                # Format timestamp in local timezone with date and time.
+                item['time'] = format_local_time(item.get('timestamp', ''), TIMELINE_TABLE_TIME_FORMAT)
+                item['model'] = item.get('model') or ''
                 # Format agent name for subagent tool calls
                 item['agent'] = item.get('agent_name') or ''
                 # Format input/output for display (full or truncated)
@@ -261,14 +275,16 @@ def get_timeline(
                     item['output_preview'] = truncate_value(item.get('output'), 50)
                 # Format cost metrics for Claude Max tracking
                 turn_cost = item.get('turn_cost')
+                turn_number = item.get('turn_number')
                 session_total = item.get('session_total')
+                item['turn_number_fmt'] = str(turn_number) if turn_number else ''
                 item['turn_cost_fmt'] = f"{turn_cost:,}" if turn_cost else ''
                 item['session_total_fmt'] = f"{session_total:,}" if session_total else ''
 
-            columns = ["time", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
-            headers = ["Time", "Type", "Agent", "Name", "Status", "Turn Cost", "Session Total", "Input", "Output"]
+            columns = ["time", "turn_number_fmt", "model", "type", "agent", "name", "status", "turn_cost_fmt", "session_total_fmt", "input_preview", "output_preview"]
+            headers = ["Date/Time", "Turn", "Model", "Type", "Agent", "Name", "Status", "Cost", "Total", "Input", "Output"]
             # Use unlimited columns when --wide is specified to show input/output
-            print_table(items, columns, headers, max_columns=0 if wide else 7)
+            print_table(items, columns, headers, max_columns=0 if wide else 9)
         else:
             print_json(items)
 

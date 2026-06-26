@@ -3,7 +3,7 @@ import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import (
     format_local_time,
     resolve_date_selector,
@@ -18,6 +18,7 @@ app = typer.Typer(help="List and query sessions", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_sessions(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -151,6 +152,7 @@ def list_sessions(
 
 
 @app.command("get")
+@command
 def get_session(
     session_id: str = typer.Argument(..., help="Session UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -188,6 +190,7 @@ def get_session(
 
 
 @app.command("search")
+@command
 def search_sessions(
     query: str = typer.Argument(..., help="Search query"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),

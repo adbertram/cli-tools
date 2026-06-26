@@ -2,13 +2,14 @@
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
 
 app = typer.Typer(help="Search across session transcripts", no_args_is_help=True)
 
 
 @app.command("run")
+@command
 def search(
     query: str = typer.Argument(..., help="Keyword(s) to search for (case-insensitive)"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Restrict to a specific project"),

@@ -3,13 +3,14 @@ import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
 
 app = typer.Typer(help="List and query projects", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_projects(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
@@ -54,6 +55,7 @@ def list_projects(
 
 
 @app.command("get")
+@command
 def get_project(
     name: str = typer.Argument(..., help="Project name"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

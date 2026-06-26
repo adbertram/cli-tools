@@ -3,12 +3,13 @@ import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 
 app = typer.Typer(help="Query subagent invocations", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_subagent_activity(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
     session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter to specific session"),
@@ -74,6 +75,7 @@ def list_subagent_activity(
 
 
 @app.command("get")
+@command
 def get_subagent(
     subagent_id: str = typer.Argument(..., help="Subagent/tool call ID"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),

@@ -10,6 +10,8 @@ class TimelineEventType(str, Enum):
     ASSISTANT_MESSAGE = "assistant_message"  # Assistant text response (no tool calls)
     THINKING = "thinking"             # Claude's thinking/reasoning (hidden by default)
     AGENT_WARMUP = "agent_warmup"     # Subagent warmup initialization (not a real user message)
+    SKILL_LOAD = "skill_load"         # Skill tool invocation
+    MCP_CALL = "mcp_call"             # MCP server function call
     SKILL = "skill"                   # Skill/command invocation (/start-post-pipeline)
     TOOL_CALL = "tool_call"           # Tool call in main session
     SUBAGENT_START = "subagent_start" # Subagent launched
@@ -25,6 +27,7 @@ class TimelineEntry(CLIModel):
     timestamp: str
     event_type: TimelineEventType
     name: str  # Tool name, skill name, or subagent type
+    model: Optional[str] = None  # Claude model that produced this row
     status: Optional[str] = None  # success, error, etc.
     agent_id: Optional[str] = None  # For subagent-related events
     agent_name: Optional[str] = None  # Subagent type (e.g., "Explore", "Bash") for agent tool calls
@@ -38,6 +41,8 @@ class TimelineEntry(CLIModel):
     cache_read_tokens: Optional[int] = None  # Tokens read from cache (discounted)
     cache_creation_tokens: Optional[int] = None  # Tokens used to create cache
     # Computed cost metrics for Claude Max tracking
+    turn_id: Optional[str] = None  # Stable source message ID for this API turn
+    turn_number: Optional[int] = None  # Sequential turn number within the timeline
     turn_cost: Optional[int] = None  # Effective tokens for this API turn
     session_total: Optional[int] = None  # Cumulative session cost up to this point
     # Conversation tracking

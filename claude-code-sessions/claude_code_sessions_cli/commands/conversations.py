@@ -4,13 +4,14 @@ from typing import Optional, List
 
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
 
 app = typer.Typer(help="List conversations within sessions", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_conversations(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
     session_id: Optional[str] = typer.Option(None, "--session-id", "-s", help="Filter to specific session"),
@@ -79,6 +80,7 @@ def list_conversations(
 
 
 @app.command("get")
+@command
 def get_conversation(
     conversation_id: str = typer.Argument(..., help="Conversation ID (session_id:conv_number, e.g. abc123:1)"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
