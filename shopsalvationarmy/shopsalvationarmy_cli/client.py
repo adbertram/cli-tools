@@ -348,6 +348,8 @@ class ShopSalvationArmyClient:
     def _parse_item_page(self, soup: BeautifulSoup, item_id: str) -> Dict:
         """Parse Shop The Salvation Army item detail page."""
         try:
+            from datetime import datetime
+
             # Extract title - usually in h1 or h2
             title = "N/A"
             title_elem = soup.find("h1")
@@ -356,16 +358,61 @@ class ShopSalvationArmyClient:
             if title_elem:
                 title = title_elem.get_text(strip=True)
 
-            # Extract price
-            price = "N/A"
-            price_elem = soup.find(string=re.compile(r"Current Bid|Buy Now|Price"))
-            if price_elem:
-                # Look for the price value nearby
-                parent = price_elem.find_parent()
-                if parent:
-                    price_text = parent.find(string=re.compile(r"\$[\d,]+\.?\d*"))
-                    if price_text:
-                        price = price_text.strip()
+            # Detect auction status from closed banner or "Ended" label
+            closed_msg = soup.find(class_="awe-rt-ListingClosedMessage")
+            ended_label = soup.find(class_="label-default")
+            if closed_msg or (ended_label and "ended" in ended_label.get_text(strip=True).lower()):
+                auction_status = "ended"
+            else:
+                auction_status = "active"
+
+            # Extract auction end date from data attribute on the ending DTTM span
+            auction_end_date = None
+            end_date_elem = soup.find(class_="awe-rt-endingDTTM")
+            if end_date_elem and end_date_elem.get("data-initial-dttm"):
+                raw_date = end_date_elem["data-initial-dttm"]
+                try:
+                    dt = datetime.strptime(raw_date, "%m/%d/%Y %H:%M:%S")
+                    auction_end_date = dt.strftime("%Y-%m-%dT%H:%M:%S")
+                except ValueError:
+                    auction_end_date = raw_date
+
+            # Extract winning bid (ended auctions) or current bid (active auctions)
+            winning_bid = None
+            current_price = None
+            for li in soup.find_all("li", class_="list-group-item"):
+                text = li.get_text(strip=True)
+                if "Winning Bid:" in text:
+                    m = re.search(r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)", text)
+                    if m:
+                        winning_bid = float(m.group(1).replace(",", ""))
+                        current_price = winning_bid
+                    break
+
+            if current_price is None:
+                price_elem = soup.find(string=re.compile(r"Current Bid|Buy Now|Price"))
+                if price_elem:
+                    parent = price_elem.find_parent()
+                    if parent:
+                        price_text = parent.find(string=re.compile(r"\$[\d,]+\.?\d*"))
+                        if price_text:
+                            m = re.search(r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)", price_text.strip())
+                            if m:
+                                current_price = float(m.group(1).replace(",", ""))
+
+            # Extract buy-it-now price from JS variable
+            buy_it_now_price = None
+            for script in soup.find_all("script"):
+                script_text = script.get_text()
+                bin_match = re.search(r"buyNowPriceForJS\s*=\s*['\"]([^'\"]+)['\"]", script_text)
+                if bin_match:
+                    bin_str = bin_match.group(1).strip()
+                    if bin_str:
+                        try:
+                            buy_it_now_price = float(bin_str.replace(",", ""))
+                        except ValueError:
+                            pass
+                    break
 
             # Extract bids
             bids = None
@@ -373,26 +420,31 @@ class ShopSalvationArmyClient:
             if bids_elem:
                 bids = bids_elem.strip()
 
-            # Extract time remaining
+            # Extract time remaining (only meaningful for active auctions)
             time_left = None
-            time_elem = soup.find(string=re.compile(r"Time Remaining"))
-            if time_elem:
-                parent = time_elem.find_parent()
-                if parent:
-                    time_text = parent.find(string=re.compile(r"\d+\s+Days?\s+\d+:\d+:\d+"))
-                    if time_text:
-                        time_left = time_text.strip()
+            if auction_status == "active":
+                time_elem = soup.find(string=re.compile(r"Time Remaining"))
+                if time_elem:
+                    parent = time_elem.find_parent()
+                    if parent:
+                        time_text = parent.find(string=re.compile(r"\d+\s+Days?\s+\d+:\d+:\d+"))
+                        if time_text:
+                            time_left = time_text.strip()
 
             # Extract condition/description
             description = ""
             desc_elem = soup.find("div", class_=lambda x: x and "description" in x.lower() if x else False)
             if desc_elem:
-                description = desc_elem.get_text(strip=True)[:500]  # Limit length
+                description = desc_elem.get_text(strip=True)[:500]
 
             return {
                 "id": item_id,
                 "title": title,
-                "price": price,
+                "current_price": current_price,
+                "winning_bid": winning_bid,
+                "buy_it_now_price": buy_it_now_price,
+                "auction_status": auction_status,
+                "auction_end_date": auction_end_date,
                 "bids": bids,
                 "time_left": time_left,
                 "description": description,

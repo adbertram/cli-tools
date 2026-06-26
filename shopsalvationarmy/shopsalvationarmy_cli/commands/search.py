@@ -124,6 +124,8 @@ def search_get(
         print_status(f"Fetching item {item_id}...")
 
         item = client.get_item(item_id)
+        has_bin = item.get("buy_it_now_price") is not None and item.get("buy_it_now_price") > 0
+        item["available"] = item.get("auction_status", "active") != "ended" or has_bin
 
         if table:
             # Format key details for table
