@@ -1,0 +1,108 @@
+{
+  "tool": "whisper",
+  "description": "CLI wrapper for whisper.cpp (whisper-cli) local speech-to-text",
+  "total_commands": 2,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    }
+  ],
+  "commands": {
+    "transcripts": {
+      "help": "Transcription operations",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Transcribe an audio or video file using whisper.cpp.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to audio/video file to transcribe"
+            }
+          ],
+          "options": [
+            {
+              "name": "--language",
+              "type": "TEXT",
+              "required": false,
+              "help": "Language code (e.g., en, es, fr, de)",
+              "short": "-L",
+              "default": "en"
+            },
+            {
+              "name": "--word-timestamps",
+              "type": "bool",
+              "required": false,
+              "help": "Emit word-level timestamps (adds a 'words' array)",
+              "short": "-w"
+            },
+            {
+              "name": "--model",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to a ggml model file (default: WHISPER_CPP_MODEL or small.en)",
+              "short": "-m"
+            },
+            {
+              "name": "--output-dir",
+              "type": "TEXT",
+              "required": false,
+              "help": "Directory to save the JSON transcript",
+              "short": "-o"
+            },
+            {
+              "name": "--prompt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Initial prompt to bias vocabulary/spellings (default: WHISPER_CPP_PROMPT, else none)",
+              "short": "-P"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display segments as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Transcription timeout in seconds",
+              "default": "600"
+            }
+          ]
+        },
+        "models": {
+          "help": "List local ggml model files found in the models directory.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use for local, offline transcription of audio and video files with whisper.cpp. Commands follow `whisper <group> <action>` pattern. The primary command is `whisper transcripts create <file>` which outputs a JSON transcript with timestamped segments; add `--word-timestamps` for a word-level array. `whisper transcripts models` lists local ggml models. Output is uniform with the openai-whisper CLI.",
+  "discovered_at": "2026-06-25T22:37:29Z"
+}
