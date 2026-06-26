@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Scaffold a _repo/skills/<name>-cli/ directory with SKILL.md and usage.json.
+# Usage: create-cli-tool-skill <tool-name>
+# Example: create-cli-tool-skill stripe
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_TOOLS_DIR="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+SKILLS_DIR="${CLI_TOOLS_DIR}/_repo/skills"
+
+NAME="${1:-}"
+if [[ -z "${NAME}" ]]; then
+    echo "Usage: create-cli-tool-skill <tool-name>" >&2
+    echo "Example: create-cli-tool-skill stripe" >&2
+    exit 1
+fi
+
+# Normalize: lowercase, strip trailing -cli if provided
+NAME="$(echo "${NAME}" | tr '[:upper:]' '[:lower:]')"
+NAME="${NAME%-cli}"
+
+SKILL_DIR="${SKILLS_DIR}/${NAME}-cli"
+
+if [[ -d "${SKILL_DIR}" ]]; then
+    echo "Error: ${SKILL_DIR} already exists" >&2
+    exit 1
+fi
+
+mkdir -p "${SKILL_DIR}"
+
+# Derive display name (PascalCase)
+DISPLAY_NAME="$(python3 -c "import sys; n=sys.argv[1]; print(''.join(w.capitalize() for w in n.replace('-','_').split('_')))" "${NAME}")"
+
+cat > "${SKILL_DIR}/SKILL.md" <<SKILLMD
+---
+name: ${NAME}-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Execute ${DISPLAY_NAME} operations using the \`${NAME}\` CLI tool.
+  CLI interface for ${DISPLAY_NAME}.
+  Triggers: ${NAME}, ${NAME} cli
+---
+
+<objective>
+Execute ${DISPLAY_NAME} operations using the \`${NAME}\` CLI. All ${DISPLAY_NAME} interactions should use this CLI.
+</objective>
+
+<quick_start>
+The \`${NAME}\` CLI follows this pattern:
+\`\`\`bash
+${NAME} <command-group> <action> [arguments] [options]
+\`\`\`
+
+| Task | Command |
+|------|---------|
+| Authenticate | \`${NAME} auth login\` |
+| Check auth | \`${NAME} auth status\` |
+</quick_start>
+
+<essential_principles>
+<principle name="Usage Reference">
+**MANDATORY: Verify the live command shape before executing ANY \`${NAME}\` command.**
+Consult \`usage.json\` when the repo or installed package ships it. If \`usage.json\` is absent, use \`${NAME} --help\`, the relevant subcommand \`--help\`, and \`README.md\` instead. Never guess at command syntax.
+</principle>
+
+<principle name="Command Groups">
+- **auth** -- Authentication management (login, logout, status, test) and nested \`auth profiles\`
+- **cache** -- Local response cache management
+</principle>
+</essential_principles>
+
+<reference_index>
+**\`usage.json\`** -- Complete command tree with arguments, options, defaults, and usage instructions when present.
+**\`${NAME} --help\` and subcommand \`--help\`** -- Live installed command tree and option list.
+**\`README.md\`** -- Supplemental examples and workflow notes.
+</reference_index>
+
+<success_criteria>
+- Command executes without error
+- Output is displayed in requested format
+- Correct command and flags used, verified against the live help output or \`usage.json\` when present
+</success_criteria>
+SKILLMD
+
+echo "Created ${SKILL_DIR}/SKILL.md"
+
+# Generate usage.json from the installed CLI
+REGEN="${SCRIPT_DIR}/regenerate-usage-json"
+if [[ -x "${REGEN}" ]]; then
+    echo "Generating usage.json from installed '${NAME}' CLI..."
+    "${REGEN}" "${NAME}" --usage-json "${SKILL_DIR}/usage.json"
+    echo "Created ${SKILL_DIR}/usage.json"
+else
+    echo "Warning: regenerate-usage-json not found at ${REGEN} — skipping usage.json" >&2
+    echo "Run it manually: regenerate-usage-json ${NAME} ${SKILL_DIR}/usage.json"
+fi
+
+echo ""
+echo "Skill scaffolded: ${SKILL_DIR}"
+echo "Next: review SKILL.md and fill in the quick_start table and command groups."

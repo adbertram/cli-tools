@@ -270,7 +270,7 @@
       "commands": {
         "get": {
           "help": "Get details for a specific item.",
-          "usage_instructions": "Use to get details of a specific listing by ID.",
+          "usage_instructions": "Use to get details of a specific listing by ID. JSON output includes `available` (bool: true if the item is still purchasable — computed from auction state and BIN price), `buy_it_now_price` (float or null), and `current_price`. When destination shipping cannot be calculated but item details are available, output includes `shippingEstimate: null`, `shippingEstimateUnavailable: true`, and `shippingEstimateError` instead of failing the command. Always check `available` before recording a listing; skip if false.",
           "arguments": [
             {
               "name": "item_id",

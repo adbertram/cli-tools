@@ -20,17 +20,18 @@ jira <command-group> <action> [arguments] [options]
 | Task | Command |
 |------|---------|
 | Show CLI version | `jira --version` |
-| List projects | `jira projects list --profile basic-site --query Eng --table` |
-| Get a project | `jira projects get ENG --profile basic-site` |
-| List tickets | `jira tickets list --profile basic-site --filter "project:ENG" --limit 25` |
-| Search with JQL | `jira tickets list --profile basic-site --jql "project = ENG ORDER BY updated DESC"` |
-| Get a ticket | `jira tickets get ENG-1 --profile basic-site` |
-| Create a ticket | `jira tickets create --profile basic-site --project ENG --summary "Title"` |
-| Update a ticket | `jira tickets update ENG-1 --profile basic-site --summary "New title"` |
-| Add a comment | `jira tickets comment ENG-1 --profile basic-site --body "Comment text"` |
-| List transitions | `jira tickets transitions ENG-1 --profile basic-site` |
-| Transition a ticket | `jira tickets transition ENG-1 --profile basic-site --transition-id 31` |
-| Check auth | `jira auth status` |
+| List profiles | `jira auth profiles list --table` |
+| Check auth | `jira auth status --table` |
+| List projects | `jira projects list --query Eng --table` |
+| Get a project | `jira projects get ENG` |
+| List tickets | `jira tickets list --filter "project:ENG" --limit 25` |
+| Search with JQL | `jira tickets list --jql "project = ENG ORDER BY updated DESC"` |
+| Get a ticket | `jira tickets get ENG-1` |
+| Create a ticket | `jira tickets create --project ENG --summary "Title"` |
+| Update a ticket | `jira tickets update ENG-1 --summary "New title"` |
+| Add a comment | `jira tickets comment ENG-1 --body "Comment text"` |
+| List transitions | `jira tickets transitions ENG-1` |
+| Transition a ticket | `jira tickets transition ENG-1 --transition-id 31` |
 </quick_start>
 
 <essential_principles>
@@ -55,9 +56,13 @@ Jira auth is profile-typed, not one ambiguous default:
 Create the profile first, then log into it:
 
 ```bash
-jira auth profiles create basic-site --auth-type site_basic
-jira auth login --profile basic-site
+jira auth profiles create my-site --auth-type site_basic
+jira auth login --profile my-site
 ```
+
+Before passing `--profile`, run `jira auth profiles list --table` and use an
+existing profile name. For normal commands, omit `--profile` to use the active
+profile.
 
 For OAuth 2.0 3LO profiles, bind the target Jira Cloud site during profile
 creation so login can choose the correct resource when the OAuth grant includes

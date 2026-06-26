@@ -306,7 +306,12 @@ Create todos from:
 
 **SKIP tests do NOT require todos** - they indicate features not applicable to this CLI.
 
-**EXCEPTION: --filter is NEVER skippable.** All list commands must expose --filter regardless of API support. If tests skip filter checks, investigate why and ensure --filter is implemented.
+**EXCEPTION — these structural skips are NEVER acceptable. Treat them as failures and create fix todos:**
+- **commands directory** — every CLI must have a `commands/` directory; skips citing "no commands directory found" mean the CLI is incomplete
+- **list commands** — every CLI must expose at least one `list` command; skips citing "no list commands found" mean the CLI is incomplete
+- **get commands** — every CLI must expose at least one `get` command; skips citing "no get commands found" mean the CLI is incomplete
+- **filters.py** — every CLI must have `filters.py`; skips citing "filters.py not found" mean the CLI is incomplete
+- **--filter on list commands** — every list command must expose `--filter`; skips or absences here mean the CLI is incomplete
 
 ## Step 3: Work Through Every Todo (MANDATORY)
 
@@ -576,6 +581,10 @@ Browser CLIs should be nearly identical to the `_repo/skills/cli-tool/templates/
 Testing is complete ONLY when:
 - [ ] pytest shows ZERO FAILED tests
 - [ ] ALL AI Review items verified correct
+- [ ] CLI has a `commands/` directory (mandatory — no exceptions)
+- [ ] CLI has at least one `list` command (mandatory — no exceptions)
+- [ ] CLI has at least one `get` command (mandatory — no exceptions)
+- [ ] CLI has `filters.py` (mandatory — no exceptions)
 - [ ] ALL list commands expose --filter flag (no exceptions)
 - [ ] filter_translator properly implements translation (API or client-side)
 - [ ] ALL timestamps displayed use format_local_time utility (local timezone)

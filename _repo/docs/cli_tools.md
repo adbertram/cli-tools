@@ -2,6 +2,7 @@
 
 | CLI | Description |
 |---|---|
+| `adobe-podcast` | Adobe Podcast Enhance — upload audio/video, run AI speech enhancement, download result |
 | `ahrefs` | The `ahrefs` CLI provides a command-line interface for Ahrefs (browser automation). Use it when you need repeatable access to ahrefs workflows that are only available through a signed-in website. |
 | `airbnb` | Use this CLI to search public renter stay availability and read Airbnb host listings, reservations, and messages. It does not automate a browser or use Airbnb partner APIs; host reads use `airbnb auth login` to import Adam's current Chrome cookies, while renter search uses public search page JSON state. |
 | `airtable` | The `airtable` CLI provides a command-line interface for Airtable API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -53,6 +54,7 @@
 | `lastpass` | The `lastpass` CLI wraps lpass with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `leanpub` | The `leanpub` CLI provides a command-line interface for Leanpub API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `linkedin` | The `linkedin` CLI lets you create and manage LinkedIn personal and page posts. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `macspeech` | Transcribe local audio on-device via Apple SFSpeechRecognizer with contextual-string vocabulary biasing |
 | `mailchimp` | The `mailchimp` CLI provides a command-line interface for Mailchimp API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
@@ -62,10 +64,11 @@
 | `msword` | The `msword` CLI lets you read Word docs, convert to markdown, and extract comments with context. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `mychart` | The `mychart` CLI provides command-line access to Epic MyChart SMART on FHIR patient record. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `n8n` | The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `nextdoor` | CLI for Nextdoorcom |
+| `nextdoor` | The `nextdoor` CLI provides browser-session-authenticated access to Nextdoor's GraphQL API (feed, me, notifications, search). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `notifier` | The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `openai-whisper` | The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `partnerstack` | The `partnerstack` CLI provides a command-line interface for Partnerstack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `paypal` | The `paypal` CLI provides a command-line interface for PayPal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
@@ -91,7 +94,7 @@
 | `usps` | The `usps` CLI provides a command-line interface for Usps API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `venmo` | The `venmo` CLI provides a command-line interface for Venmo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `whisper` | The `whisper` CLI wraps whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
 | `wordpress` | The `wordpress` CLI provides a command-line interface for Wordpress API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `wpengine` | Command-line access to the WP Engine Hosting Platform API. Use this CLI when agents or automation need JSON-first access to WP Engine accounts, sites, installs, cache purge operations, SSH keys, and documented SSH/SFTP connection details. |
 | `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

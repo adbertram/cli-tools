@@ -529,6 +529,88 @@ uv tool install -e <cli-tools-root>/<name> --force --refresh
 
 ---
 
+## The CLI's Own Launcher Fails: ModuleNotFoundError for Its OWN Package (Deleted/Moved Editable Source)
+
+### Symptom
+The installed launcher itself — not an ad-hoc probe — fails on every invocation
+because Python cannot find the CLI's own top-level package:
+```bash
+$ myservice --help
+Traceback (most recent call last):
+  File "/Users/<user>/.local/bin/myservice", line 4, in <module>
+    from myservice_cli.main import app
+ModuleNotFoundError: No module named 'myservice_cli'
+```
+The launcher shebang is correct and the uv tool venv exists; only the CLI's own
+package is unresolvable. This is NOT the wrong-interpreter case above (its deps
+like `cli_tools_shared` import fine — it's the tool's *own* module that's gone).
+
+### Root Cause
+CLI tools are installed with `uv tool install -e` (editable). An editable
+install does NOT copy the package into the venv — it writes a `.pth` finder that
+points `sys.path` back at the on-disk source directory. If that source directory
+is later deleted, moved, or renamed (e.g. a folder removed from a Dropbox/iCloud
+synced repo, a `git clean`, a manual `mv`), the finder's mapping dangles and the
+tool's own package no longer resolves. The receipt still lists the old editable
+path, so reinstalling from it would also fail until the source is back.
+
+### Diagnosis
+Prove the source dir is gone and find the path the install expects:
+```bash
+# 1) The uv-receipt records the editable source path the tool was installed from
+cat ~/.local/share/uv/tools/<pkg-name>/uv-receipt.toml
+#   requirements = [{ name = "<pkg>", editable = "<cli-tools-root>/<tool>" }]
+
+# 2) The editable .pth finder records the exact module->source MAPPING
+finder=$(ls ~/.local/share/uv/tools/<pkg-name>/lib/python*/site-packages/__editable___*<pkg>*_finder.py)
+grep -nE 'MAPPING|NAMESPACES' "$finder"
+#   MAPPING: {'<pkg>': '<cli-tools-root>/<tool>/<pkg>'}
+
+# 3) Confirm the source dir is actually missing
+ls -la <cli-tools-root>/<tool> 2>&1 || echo "MISSING_SOURCE_DIR"
+```
+
+### Fix — Recover the Source, Then Reinstall
+Restore the source tree, then run the standard installer (which rebuilds the
+editable install against it). Recovery sources, in priority order:
+
+1. **VCS** — if the tool is committed, `git checkout`/`git restore` it. Check
+   `git log --all -- '<tool>/*'` and `git stash list` first.
+2. **uv git checkout cache** — if the tool was ever installed from a git URL, uv
+   keeps full clones under `~/.cache/uv/git-v0/checkouts/<repo-hash>/<commit>/`.
+   These are complete, real source trees (not metadata). Find them with a bounded
+   search and pick the newest by mtime; diff the candidates to confirm they agree:
+   ```bash
+   find ~/.cache/uv/git-v0/checkouts -type d -name '<pkg>' 2>/dev/null
+   ```
+3. **Dropbox/cloud file revisions** — for a synced repo, use the `dropbox` CLI
+   (`dropbox files history <path>` then `dropbox files restore`). CAVEAT: a
+   deleted folder's *content blobs* can be purged server-side even while tombstone
+   metadata (and thus `files history` revs) survive — restore then fails with
+   `invalid_revision` and download with `not_found`. Verify a candidate rev is
+   actually downloadable before trusting it; prefer sources 1–2 when available.
+
+Cross-validate whichever copy you use (e.g. compare restored file sizes/hashes
+against another surviving source) before reinstalling. Then:
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh <tool>
+myservice --help   # must exit 0
+```
+A recovered `pyproject.toml`/`uv.lock` may carry a stale dependency source (e.g.
+`cli-tools-shared @ git+...#subdirectory=cli-tools-shared`). Align it to the
+current repo-local convention — `"cli-tools-shared"` in `dependencies` plus
+`[tool.uv.sources]` `cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }` — delete the stale `uv.lock`, and reinstall.
+
+### Recurrence Prevention
+An editable uv-tool install is only as alive as its source directory — deleting
+or moving the source silently breaks the installed command. When a uv-installed
+CLI fails with `ModuleNotFoundError` for its **own** package, read the editable
+`.pth` finder MAPPING and `uv-receipt.toml` to find the expected source path and
+confirm whether it still exists, before assuming a code bug. `validate-cli-tool.sh`
+asserts the editable install and launcher shebang; run it after any recovery.
+
+---
+
 ## Import Errors on Startup
 
 ### Symptom

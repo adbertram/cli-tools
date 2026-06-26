@@ -42,7 +42,8 @@
               "help": "Clear existing credentials and re-authenticate",
               "short": "-F"
             }
-          ]
+          ],
+          "usage_instructions": "Use `cvs auth login` only from an interactive/PTY-capable terminal surface. The command opens a normal browser window with no automation attached, waits for the user to finish login/OTP/CAPTCHA, then requires terminal input (press Enter) to capture the session. In Hermes/Codex, do not run this as a foreground non-PTY terminal command because `/dev/tty` may be unavailable and the process can wait until timeout; use `terminal(..., pty=true)` / `exec_command` with `tty: true`, or an approved visible-browser handoff that can provide terminal input. Do not automate CVS credential entry, OTP/CAPTCHA, or browser-session capture outside the CLI auth handoff."
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",

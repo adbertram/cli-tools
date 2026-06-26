@@ -12,20 +12,24 @@ Execute nextdoor operations using the `nextdoor` CLI. All Nextdoor interactions 
 </objective>
 
 <quick_start>
-The `nextdoor` CLI follows this pattern:
+The `nextdoor` CLI exposes top-level data commands plus `auth` and `cache`
+subapps:
 ```bash
-nextdoor <command-group> <action> [arguments] [options]
+nextdoor <command> [arguments] [options]
 ```
 
 | Task | Command |
 |------|---------|
 | Check auth status | `nextdoor auth status` |
 | Login to Nextdoor | `nextdoor auth login` |
-| List feed | `nextdoor feed list` |
-| List notifications | `nextdoor notifications list` |
-| Get current user | `nextdoor me get` |
-| Search | `nextdoor search list <query>` |
+| View feed | `nextdoor feed --limit 25` |
+| View notifications | `nextdoor notifications --table` |
+| Get current user | `nextdoor me --table` |
+| Search | `nextdoor search "<query>"` |
 | List profiles | `nextdoor auth profiles list` |
+
+All data commands support `--table/-t`, `--properties/-p`, and (except `me`)
+`--filter/-f`; `feed` and `notifications` also support `--limit/-l`.
 </quick_start>
 
 <essential_principles>

@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-24T19:20:33Z",
+  "discovered_at": "2026-06-25T15:32:44Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -615,6 +615,12 @@
               "type": "bool",
               "required": false,
               "help": "Set or clear the clip content-structure-complete flag"
+            },
+            {
+              "name": "--recording-review-human",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the clip recording human-review flag"
             },
             {
               "name": "--feedback-requested",
@@ -1713,6 +1719,12 @@
               "type": "bool",
               "required": false,
               "help": "Mark script human review as complete"
+            },
+            {
+              "name": "--recording-review-human",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the demo recording human-review flag"
             },
             {
               "name": "--dictation-recorded",

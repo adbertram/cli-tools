@@ -63,6 +63,11 @@ If a diagnostic task must import WordPress CLI internals directly, use the live
 `wordpress` launcher shebang interpreter and the actual source module paths.
 There is no `wordpress_cli.auth` module; auth commands are mounted from shared
 CLI tooling, and the WordPress API client factory lives in `wordpress_cli.client`.
+For task-workspace scripts that intentionally import `wordpress_cli.client`, do
+not add local `sys.path` bootstraps to satisfy Pyright; run the script with the
+launcher-derived interpreter and, if Hermes reports `reportMissingImports`, add a
+line-local suppression such as
+`from wordpress_cli.client import get_client  # pyright: ignore[reportMissingImports]`.
 
 ```bash
 launcher="$(command -v wordpress)"

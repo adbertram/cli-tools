@@ -16,7 +16,8 @@ no_auth_clis = [
     "msword",
     "notifier",
     "things",
-    "whisper",
+    "openai-whisper",
+    "macspeech",
     "snagit",
     "claude-code-sessions",
     "powerpoint-slide-recorder",
@@ -29,13 +30,13 @@ no_auth_clis = [
 orchestration_clis = []
 
 # CLIs that don't need filters.py (orchestration CLIs, simple wrappers)
-no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder"]
+no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder", "macspeech"]
 
 # Browser automation CLIs (use BrowserAutomation backed by browser-harness)
 browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook_marketplace", "facebook"]
 
 # Wrapper CLIs that don't use profiles (wrap system commands, not services)
-wrapper_clis = ["lastpass", "imessage", "whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
+wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
 
 [output]
 # Rich table requirements

@@ -71,6 +71,16 @@ Incompatible with `--table` (JSON only). Scan takes ~20-60s per post depending o
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Auth Status Probes">
+`ata-blog auth status` can exit `2` while still emitting structured JSON that
+reports the active profile with `"authenticated": false` and a message such as
+`Not authenticated. Run 'ata-blog auth login' to configure.` When checking
+whether auth exists, wrap the command and treat that unauthenticated JSON as an
+expected diagnostic result only after validating both the `2` exit status and
+`"authenticated": false`. Do not let the expected unauthenticated status surface
+as an unhandled tool failure.
+</principle>
+
 <principle name="Source Change Validation">
 This service skill is not the lifecycle owner. For any ata-blog CLI source edit,
 testing, or troubleshooting task, use the repo-owned `cli-tool` skill and its
@@ -93,6 +103,17 @@ write guidance and use a server-side WordPress execution path instead.
 If a diagnostic task must import WordPress CLI internals, there is no
 `wordpress_cli.auth` module. Use the live `wordpress` launcher shebang
 interpreter and the actual module documented by the `wordpress-cli` skill.
+</principle>
+
+<principle name="Bulk WordPress Content Cleanup">
+For sitewide ATA WordPress post cleanup, fetch raw post content with
+`context=edit` and update through the WordPress CLI/API path. Do not rely on a
+plain-text prefilter that expects disclosure copy to be contiguous text: live
+content often wraps the label in tags such as `<strong>Paid link disclosure:</strong>`.
+Apply the narrow structural removal pattern to each post's raw HTML first, then
+record a match only when the raw HTML actually changes. Verify completion with
+an independent raw-content scan across all posts for the forbidden visible
+snippets, not by reusing the same candidate-selection prefilter.
 </principle>
 
 <principle name="Plugin Maintenance Batch Runtime Limits">

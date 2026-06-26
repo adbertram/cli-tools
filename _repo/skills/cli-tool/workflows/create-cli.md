@@ -425,19 +425,33 @@ Invoke the `debloat` skill on the CLI directory.
 
 ## Step 7: Test the CLI
 
-Run basic tests manually:
+### 7.1 Verify installation
 
 ```bash
-cd <cli-tools-root>/<name>
-
-# Verify installation
 <name> --version
 <name> --help
+```
 
-# Test auth commands
+### 7.2 Verify authentication (BLOCKING GATE)
+
+**Browser-session CLIs (`--auth-type browser_session` / `MANUAL_LOGIN=True`):**
+The agent CANNOT run `auth login` automatically — it opens a GUI browser window. Do NOT attempt to run it. Instead:
+1. Tell the user: "Please run `<name> auth login` in your terminal and complete the sign-in. Let me know when done."
+2. Wait for explicit confirmation before continuing.
+3. Run `<name> auth status` and check that `authenticated: true` before proceeding.
+4. If not authenticated, repeat — do not proceed to Step 7.3 or Step 8 until confirmed.
+
+**All other CLIs:**
+```bash
 <name> auth status
-<name> auth login
+```
+If not authenticated, ask the user to provide credentials or run the relevant auth command, then verify `auth status` passes.
 
+**Re-auth check:** If Step 8 testing takes longer than ~30 minutes, re-run `<name> auth status` before continuing — browser sessions expire and a mid-test 403 is not a pipeline bug.
+
+### 7.3 Smoke test a live command
+
+```bash
 # Test a list command
 <name> <resource> list --table
 <name> <resource> list | jq '.'

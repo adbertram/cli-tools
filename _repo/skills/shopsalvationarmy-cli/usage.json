@@ -283,7 +283,7 @@
         },
         "get": {
           "help": "Get details for a specific item.",
-          "usage_instructions": "Use `shopsalvationarmy search get` with the documented arguments and options shown below.",
+          "usage_instructions": "Use `shopsalvationarmy search get` to fetch details for a specific listing. JSON output includes `available` (bool: true if the item is still purchasable — computed from auction_status and buy_it_now_price), `auction_status` (active or ended), `buy_it_now_price` (float or null; 0.0 means no BIN), and `current_price`. Always check `available` before recording a listing; skip if false.",
           "arguments": [
             {
               "name": "item_id",

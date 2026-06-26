@@ -1,7 +1,7 @@
 {
-  "tool": "whisper",
+  "tool": "openai-whisper",
   "description": "CLI wrapper for OpenAI Whisper speech-to-text transcription",
-  "discovered_at": "2026-06-20T19:56:36Z",
+  "discovered_at": "2026-06-25T21:42:19Z",
   "total_commands": 4,
   "global_options": [
     {
@@ -22,11 +22,11 @@
         "create": {
           "help": "Transcribe an audio or video file using OpenAI Whisper. Outputs JSON transcript with text and timestamped segments.",
           "examples": [
-            "whisper transcripts create video.mp4",
-            "whisper transcripts create video.mp4 --model base",
-            "whisper transcripts create audio.wav --language es",
-            "whisper transcripts create video.mp4 --word-timestamps",
-            "whisper transcripts create video.mp4 -o ./transcripts/ --table"
+            "openai-whisper transcripts create video.mp4",
+            "openai-whisper transcripts create video.mp4 --model base",
+            "openai-whisper transcripts create audio.wav --language es",
+            "openai-whisper transcripts create video.mp4 --word-timestamps",
+            "openai-whisper transcripts create video.mp4 -o ./transcripts/ --table"
           ],
           "usage_instructions": "Transcribe an audio or video file. FILE_PATH is a required positional argument. Use --model/-m to select the Whisper model (tiny, base, small, medium, large, turbo; default: turbo). Use --language/-L for language code (default: en). Use --word-timestamps/-w for word-level timing. Use --output-dir/-o to save output files. Default timeout is 600s.",
           "arguments": [
@@ -42,9 +42,8 @@
               "name": "--model",
               "type": "TEXT",
               "required": false,
-              "help": "Whisper model: tiny, base, small, medium, large, turbo",
-              "short": "-m",
-              "default": "turbo"
+              "help": "Whisper model: tiny, base, small, medium, large, turbo (and .en/large-v* variants). Defaults to OPENAI_WHISPER_MODEL or 'turbo'",
+              "short": "-m"
             },
             {
               "name": "--language",
@@ -81,15 +80,27 @@
               "required": false,
               "help": "Transcription timeout in seconds",
               "default": "600"
+            },
+            {
+              "name": "--initial-prompt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Vocabulary-biasing prompt passed to Whisper as --initial_prompt. Defaults to OPENAI_WHISPER_INITIAL_PROMPT; omitted entirely when empty"
+            },
+            {
+              "name": "--temperature",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Sampling temperature passed to Whisper as --temperature. Omitted when not provided"
             }
           ]
         },
         "get": {
           "help": "Get details of an existing transcript file.",
           "examples": [
-            "whisper transcripts get video.json",
-            "whisper transcripts get video.json --table",
-            "whisper transcripts get video.json --properties \"text,language\""
+            "openai-whisper transcripts get video.json",
+            "openai-whisper transcripts get video.json --table",
+            "openai-whisper transcripts get video.json --properties \"text,language\""
           ],
           "usage_instructions": "Read a transcript JSON file. FILE_PATH is a required positional argument (path to the .json transcript). Use --table/-t for formatted output, --properties/-p to select fields.",
           "arguments": [
@@ -120,10 +131,10 @@
         "list": {
           "help": "List existing transcript JSON files in a directory.",
           "examples": [
-            "whisper transcripts list",
-            "whisper transcripts list ./transcripts/",
-            "whisper transcripts list --table",
-            "whisper transcripts list --filter \"language:eq:en\""
+            "openai-whisper transcripts list",
+            "openai-whisper transcripts list ./transcripts/",
+            "openai-whisper transcripts list --table",
+            "openai-whisper transcripts list --filter \"language:eq:en\""
           ],
           "usage_instructions": "List transcript JSON files in a directory. DIRECTORY is an optional positional argument (defaults to current directory). Use --table/-t for formatted output, --filter/-f for filtering, --limit/-l to cap results (default 100).",
           "arguments": [
@@ -170,8 +181,8 @@
         "models": {
           "help": "List available Whisper models.",
           "examples": [
-            "whisper transcripts models",
-            "whisper transcripts models --table"
+            "openai-whisper transcripts models",
+            "openai-whisper transcripts models --table"
           ],
           "usage_instructions": "List all available Whisper models with their sizes and capabilities. Use --table/-t for formatted output.",
           "arguments": [],
@@ -188,5 +199,5 @@
       }
     }
   },
-  "usage_instructions": "Use for transcribing audio and video files to text using OpenAI Whisper. Commands follow `whisper <group> <action>` pattern. The primary command is `transcripts create` to transcribe files. Supports multiple models (tiny, base, small, medium, large, turbo) with turbo as default. Runs locally -- no API key needed."
+  "usage_instructions": "Use for transcribing audio and video files to text using OpenAI Whisper. Commands follow `openai-whisper <group> <action>` pattern. The primary command is `transcripts create` to transcribe files. Supports multiple models (tiny, base, small, medium, large, turbo) with turbo as default. Runs locally -- no API key needed."
 }

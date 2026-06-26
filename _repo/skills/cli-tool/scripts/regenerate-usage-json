@@ -163,16 +163,37 @@ def assemble_commands(
     return root
 
 
+def seed_usage(cli_name: str) -> dict:
+    """Minimal top-level usage.json skeleton for a brand-new CLI skill.
+
+    Matches the canonical schema other tools ship (see openai-whisper-cli):
+    ``commands``/``total_commands`` are placeholders populated from live
+    ``--help`` discovery; ``discovered_at`` is stamped on write.
+    """
+    return {
+        "tool": cli_name,
+        "description": f"CLI interface for {cli_name}",
+        "discovered_at": "",
+        "total_commands": 0,
+        "global_options": [],
+        "commands": {},
+        "usage_instructions": (
+            f"Use the `{cli_name}` CLI. Run `{cli_name} --help` to discover "
+            "command groups and `--help` on any subcommand for its options."
+        ),
+    }
+
+
 def build_usage(
     cli_name: str,
     cli_executable: str,
     usage_path: Path,
     discovered_at: str | None = None,
 ) -> tuple[dict, int]:
-    if not usage_path.is_file():
-        raise SystemExit(f"usage.json not found: {usage_path}")
-
-    old_usage = json.loads(usage_path.read_text())
+    if usage_path.is_file():
+        old_usage = json.loads(usage_path.read_text())
+    else:
+        old_usage = seed_usage(cli_name)
     config = load_config()
     skip_list = config["command_discovery"]["skip_list"]
     timeout = config["general"]["command_timeout"]
@@ -238,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         usage_path,
         discovered_at=args.discovered_at,
     )
-    old_text = usage_path.read_text()
+    old_text = usage_path.read_text() if usage_path.is_file() else ""
     new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
     changed = new_text != old_text
 

@@ -6,8 +6,9 @@ description: >-
   execution, or CLI lifecycle work. DO NOT run cli-tools commands, guess
   command syntax, or load individual [tool]-cli skills directly before this
   router selects them. For service operations, route through
-  workflows/skill-router.md to [cli-tools-root]/_repo/skills/[tool]-cli/SKILL.md
-  and the adjacent usage.json. For lifecycle work, delegate to cli-tool-expert
+  [cli-tools-root]/_repo/skills/cli-tool/workflows/skill-router.md to
+  [cli-tools-root]/_repo/skills/[tool]-cli/SKILL.md and the adjacent
+  usage.json. For lifecycle work, delegate to cli-tool-expert
   and use this skill's lifecycle workflows. Triggers: any cli tool, cli
   command, service cli, [tool] cli, run cli, execute cli, create cli, update
   cli, test cli, fix cli, add command, list cli tools, cli standards.
@@ -18,7 +19,7 @@ Route every cli-tools request to the correct repo-owned CLI skill or lifecycle w
 </objective>
 
 <agent_routing>
-Service-operation routing stays in the current session: use `workflows/skill-router.md`, then load the selected service skill and its adjacent `usage.json`.
+Service-operation routing stays in the current session: use `<cli-tools-root>/_repo/skills/cli-tool/workflows/skill-router.md`, then load the selected service skill and its adjacent `usage.json`.
 
 When this skill is invoked for CLI lifecycle work by a parent agent session and the current agent is not `cli-tool-expert`, delegate the lifecycle work to `cli-tool-expert` instead of performing CLI implementation work inline. Pass the complete user request, relevant file paths, constraints, and required validation.
 
@@ -33,7 +34,7 @@ implementation detail. Service CLI skills and CLI lifecycle workflows live under
 `<cli-tools-root>/_repo/skills`; project-specific workflows that merely call a
 CLI belong to the target project's skill scope.
 
-For any request that uses an existing CLI tool, read `workflows/skill-router.md` before selecting a service skill. The selected service skill's `SKILL.md` and adjacent `usage.json` are mandatory before running any command.
+For any request that uses an existing CLI tool, read `<cli-tools-root>/_repo/skills/cli-tool/workflows/skill-router.md` before selecting a service skill. Do not look for the workflow at `<cli-tools-root>/_repo/skills/skill-router.md`. The selected service skill's `SKILL.md` and adjacent `usage.json` are mandatory before running any command.
 </skill_router>
 
 <tool_discovery>
@@ -44,11 +45,16 @@ extracted from each tool README's `## DESCRIPTION` block. The default mode is
 JSON, and `--json` is accepted as an explicit alias for that default. When
 filtering the saved output with `jq`, iterate the array explicitly, for example
 `jq -e '.[] | select(.name == "google")' <file>`. Do not treat the output as
-JSONL records. Pass `--markdown` for a compact `- name: <first sentence>` list
-(~2K tokens) suitable for context injection; the Claude (`SessionStart` in
-`~/.claude/settings.json`) and Codex (`SessionStart` in `~/.codex/hooks.json`)
-session-start hooks call it this way to preload the CLI-tool roster every
-session.
+JSONL records. When parsing the saved JSON with Python, do not wrap a quoted
+heredoc parser inside a single-quoted `bash -lc '...'` command; that quote layer
+can strip Python string literals such as `Path('/tmp/cli-tools.json')` before
+Python starts. Instead invoke the parser as a standalone multiline command and
+pass the JSON file path as argv, for example `python3 - "$json_file" <<'PY'`,
+then read `sys.argv[1]` inside Python. Pass `--markdown` for a compact
+`- name: <first sentence>` list (~2K tokens) suitable for context injection;
+the Claude (`SessionStart` in `~/.claude/settings.json`) and Codex
+(`SessionStart` in `~/.codex/hooks.json`) session-start hooks call it this way
+to preload the CLI-tool roster every session.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
@@ -289,6 +295,15 @@ backticks, dollar signs, parentheses, or other regex metacharacters, use
 literal matching: `rg -n -F -- '{{description}}' <existing-path>`. Do not pass
 tokens such as `{{name}}`, `{{description}}`, or `{{AUTH_IMPORT}}` as regex
 patterns unless every regex metacharacter is intentionally escaped.
+
+Keep CLI skill and `usage.json` inspection searches line-local unless a real
+cross-line match is deliberately required. Do not use Hermes `search_files` or
+plain `rg` with a pattern containing a literal `\n` escape such as
+`"list": \{\n\s+"help"`; ripgrep rejects that without multiline mode, and
+`search_files` has no multiline flag. Prefer separate fixed-string probes for
+single-line anchors, or read the bounded JSON/Markdown section and inspect the
+adjacent lines directly. Use `rg -U` only in a shell probe where multiline
+matching is intentional and explicitly stated.
 </principle>
 
 <principle name="Per-Tool Project Config Discovery">
@@ -353,6 +368,18 @@ When a deterministic command reaches a boundary that requires AI judgment, retur
 **Every uv-installed CLI has its own isolated interpreter at `~/.local/share/uv/tools/<pkg-name>/bin/python3`.** The launcher at `~/.local/bin/<cli>` has a shebang that points to it. Running `python3 -c "import <cli>_cli.main"` or `python3 - <<'PY'` with ANY other interpreter (system python, Homebrew python, the test venv) will fail with `ModuleNotFoundError` because the CLI's dependencies are installed ONLY in that uv tool venv. Those failures are NOT CLI bugs — they are wrong-interpreter diagnoses.
 
 **Rule:** For any ad-hoc import/smoke test of a CLI's modules, inspect the live launcher and use the interpreter from its shebang. Do not derive the uv tool path from the command name. This also applies to task-workspace scripts that import CLI packages or internals such as `<pkg>_cli.commands`; run those scripts with the launcher shebang interpreter instead of ambient `python3`.
+
+When writing a task-workspace Python script that intentionally imports installed
+CLI internals, make the runtime contract visible in the source. Prefer a shebang
+that points at `/usr/bin/env <cli>` only when the CLI itself executes Python
+files; otherwise include a header comment naming the launcher-derived interpreter
+that must run the script. If Hermes/Pyright reports `reportMissingImports` for
+that intentional CLI-internal import because the editor interpreter is not the
+launcher interpreter, suppress only that import line (for example
+`from <pkg>_cli.client import get_client  # pyright: ignore[reportMissingImports]`).
+Do not add brittle `sys.path` bootstraps into ad-hoc scripts just to satisfy the
+editor; they can make the script run against a different source checkout than the
+installed CLI launcher uses.
 
 ```bash
 launcher="$(command -v <cli>)"
@@ -703,7 +730,7 @@ A successful skill invocation:
 - Removes unused local helpers, local models, and direct dependencies
 - Meets workflow-specific success criteria
 - Updates cli_tools.md for new CLI tools
-- Invokes `/create-cli-tool-skill` after successful CLI creation
+- Runs `_repo/skills/cli-tool/scripts/create-cli-tool-skill <name>` after successful CLI creation
 - **⛔ Passes test-cli-tool.sh with ZERO FAILURES** (warnings acceptable)
 
 **BLOCKING: Do NOT mark any CLI work as complete if test-cli-tool.sh shows failures.**

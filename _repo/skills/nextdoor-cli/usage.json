@@ -316,6 +316,21 @@
       "arguments": [],
       "options": [
         {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of items",
+          "short": "-l",
+          "default": "50"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
           "name": "--table",
           "type": "bool",
           "required": false,
@@ -367,5 +382,5 @@
     }
   },
   "total_commands": 16,
-  "discovered_at": "2026-06-24T21:24:49Z"
+  "discovered_at": "2026-06-24T22:05:03Z"
 }
