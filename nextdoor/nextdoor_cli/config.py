@@ -1,24 +1,26 @@
-"""Configuration management for Nextdoor CLI."""
+"""Configuration management for Nextdoor CLI (browser automation).
+
+Uses BaseConfig from cli_tools_shared for profile-aware env loading and the
+persistent Chromium user-data-dir session model. Browser automation lives in
+browser.py; the persistent profile is the single source of truth for the
+authenticated session, so this config does NOT override the inherited
+browser-session credential checks.
+"""
 
 from pathlib import Path
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
-from cli_tools_shared.exceptions import ClientError
+
+NEXTDOOR_HOST = "nextdoor.com"
+NEXTDOOR_ORIGIN = f"https://{NEXTDOOR_HOST}"
+NEXTDOOR_ALLOWED_DOMAINS = (NEXTDOOR_HOST,)
 
 
 class Config(BaseConfig):
     DIST_NAME = "nextdoor-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
-    DEFAULT_BASE_URL = "https://nextdoor.com/api/gql"
-    # Uncomment when auth login needs required non-secret config first.
-    # AUTH_CONFIG_PROMPTS = [("BASE_URL", "Nextdoor base URL", False)]
-    # Uncomment when the user must create a token/app before logging in.
-    # AUTH_SETUP_INSTRUCTIONS = (
-    #     "Before logging in:\n"
-    #     "  1. Create the required token/app: https://example.com/settings/api\n"
-    #     "  2. Follow the service instructions, then continue here."
-    # )
+    DEFAULT_BASE_URL = f"{NEXTDOOR_ORIGIN}/api/gql"
 
     def __init__(self, profile=None):
         super().__init__(
@@ -31,9 +33,10 @@ class Config(BaseConfig):
         """Profile-aware storage directory for runtime state."""
         return self.get_profile_data_dir()
 
-    def has_credentials(self) -> bool:
-        import os
-        return bool(os.getenv("BROWSER_SESSION_COOKIES"))
+    @property
+    def headless(self) -> bool:
+        val = self._get("HEADLESS")
+        return val is None or val.lower() == "true"
 
     def get_browser(self):
         """Return the browser automation instance for this config."""
@@ -41,14 +44,21 @@ class Config(BaseConfig):
         return NextdoorBrowser(self)
 
     def test_connection(self) -> dict:
-        """Validate saved credentials with a live API call."""
+        """Validate the saved session by making a real authenticated API call.
+
+        Cookie presence alone is not proof of authentication — Nextdoor sets
+        session cookies for logged-out visitors too. This makes a live ``getMe``
+        GraphQL call, which fails loudly (no fallback) when the session is not
+        authenticated server-side, so 'auth test' surfaces the real problem.
+        """
         from .client import NextdoorClient
 
+        client = NextdoorClient(config=self)
         try:
-            NextdoorClient(config=self).list_items(limit=1)
-            return {"api_test": "passed"}
-        except ClientError as exc:
-            return {"api_test": f"failed: {exc}"}
+            user = client.get_me()
+        finally:
+            client.close()
+        return {"api_test": "passed", "user_id": user.get("id")}
 
 
 _configs = {}

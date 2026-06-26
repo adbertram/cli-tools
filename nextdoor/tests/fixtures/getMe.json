@@ -1,0 +1,4318 @@
+{
+  "me": {
+    "appGroup": "us1",
+    "configs": {
+      "hoodComposerConfig": {
+        "ghostText": "What\u2019s on your mind, neighbor?",
+        "eventStockPhotos": [
+          {
+            "url": "https://us1-photo.nextdoor.com/static/images/local_events/default-event-cover-photo-0.jpg",
+            "__typename": "Image"
+          },
+          {
+            "url": "https://us1-photo.nextdoor.com/static/images/local_events/default-event-cover-photo-1.jpg",
+            "__typename": "Image"
+          },
+          {
+            "url": "https://us1-photo.nextdoor.com/static/images/local_events/default-event-cover-photo-2.jpg",
+            "__typename": "Image"
+          },
+          {
+            "url": "https://us1-photo.nextdoor.com/static/images/local_events/default-event-cover-photo-3.jpg",
+            "__typename": "Image"
+          }
+        ],
+        "__typename": "PostComposerConfigs"
+      },
+      "groupsComposerConfig": {
+        "ghostText": "Share something with the group ...",
+        "__typename": "PostComposerConfigs"
+      },
+      "repostComposerConfig": {
+        "ghostText": "Add your thoughts",
+        "__typename": "PostComposerConfigs"
+      },
+      "mapComposerConfig": {
+        "mapPinTypes": [],
+        "__typename": "PostComposerConfigs"
+      },
+      "introComposerConfig": {
+        "ghostText": "Say something about yourself, ask a question, or share a recommendation...",
+        "title": "\ud83d\udc4b Adam, say hello to your neighbors",
+        "__typename": "PostComposerConfigs"
+      },
+      "buildingGroupIntroComposerConfig": {
+        "ghostText": "Introduce yourself and share how long you've lived here or something you'd love to talk to other residents about...",
+        "title": "Say hello to your fellow residents \ud83d\udc4b",
+        "__typename": "PostComposerConfigs"
+      },
+      "templatedPostingConfig": {
+        "shouldShowTemplate": true,
+        "templateTopics": [
+          {
+            "topic": "Local Businesses",
+            "index": 1,
+            "templates": [
+              {
+                "text": "If you haven't tried [business name] yet, you're missing out. Their [specific item/service] is [why it's great]. [Insert a tip neighbors should know.]",
+                "spans": [
+                  {
+                    "text": "If you haven't tried ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[business name]",
+                    "ghostText": "[business name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " yet, you're missing out. Their ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[specific item/service]",
+                    "ghostText": "[specific item/service]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[why it's great]",
+                    "ghostText": "[why it's great]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Insert a tip neighbors should know.]",
+                    "ghostText": "[Insert a tip neighbors should know.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Shoutout to [business name] on [street/area] \u2014 [specific reason they're great]. Ask for [person/item] when you go.",
+                "spans": [
+                  {
+                    "text": "Shoutout to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[business name]",
+                    "ghostText": "[business name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[street/area]",
+                    "ghostText": "[street/area]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[specific reason they're great]",
+                    "ghostText": "[specific reason they're great]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Ask for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[person/item]",
+                    "ghostText": "[person/item]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " when you go.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Best kept secret in [neighborhood]: [business name]. Go on [day/time] to avoid the crowd and get [specific thing].",
+                "spans": [
+                  {
+                    "text": "Best kept secret in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ": ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[business name]",
+                    "ghostText": "[business name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Go on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[day/time]",
+                    "ghostText": "[day/time]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " to avoid the crowd and get ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[specific thing]",
+                    "ghostText": "[specific thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Business name] just started offering [new product/service] and it's [reaction]. Went [last week/recently] and [what happened].",
+                "spans": [
+                  {
+                    "text": "[Business name]",
+                    "ghostText": "[Business name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " just started offering ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[new product/service]",
+                    "ghostText": "[new product/service]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and it's ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[reaction]",
+                    "ghostText": "[reaction]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Went ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[last week/recently]",
+                    "ghostText": "[last week/recently]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[what happened]",
+                    "ghostText": "[what happened]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Hidden gem alert: [business name] has been [doing something] for [x years] and most people don't know about it. It\u2019s worth checking them out!",
+                "spans": [
+                  {
+                    "text": "Hidden gem alert: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[business name]",
+                    "ghostText": "[business name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " has been ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[doing something]",
+                    "ghostText": "[doing something]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[x years]",
+                    "ghostText": "[x years]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and most people don't know about it. It\u2019s worth checking them out!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Parents & Kids",
+            "index": 10,
+            "templates": [
+              {
+                "text": "Looking for [age]-year-old playdate buddies for my kid. We're usually free [days/times] and love [activities]. Comment below if this seems like a good fit!",
+                "spans": [
+                  {
+                    "text": "Looking for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[age]",
+                    "ghostText": "[age]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "-year-old playdate buddies for my kid. We're usually free ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[days/times]",
+                    "ghostText": "[days/times]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and love ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[activities]",
+                    "ghostText": "[activities]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Comment below if this seems like a good fit!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Heads up parents: [hazard/issue/thing to know] near [location]. Saw it [when] \u2014 wanted to flag for anyone with kids in the area.",
+                "spans": [
+                  {
+                    "text": "Heads up parents: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[hazard/issue/thing to know]",
+                    "ghostText": "[hazard/issue/thing to know]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Saw it ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[when]",
+                    "ghostText": "[when]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 wanted to flag for anyone with kids in the area.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Any recommendations for [kids activity/class/camp] in the area for a [age]-year-old who's into [interest]? Tried [x] but looking for more options.",
+                "spans": [
+                  {
+                    "text": "Any recommendations for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[kids activity/class/camp]",
+                    "ghostText": "[kids activity/class/camp]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " in the area for a ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[age]",
+                    "ghostText": "[age]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "-year-old who's into ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[interest]",
+                    "ghostText": "[interest]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "? Tried ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[x]",
+                    "ghostText": "[x]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " but looking for more options.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "My [age]-year-old is looking for ways to earn some money this [summer/season/year]. They're available for [lawn mowing/babysitting/pet sitting/etc.] in the [neighborhood/street] area. Reliable kid \u2014 comment if you're interested!",
+                "spans": [
+                  {
+                    "text": "My ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[age]",
+                    "ghostText": "[age]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "-year-old is looking for ways to earn some money this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[summer/season/year]",
+                    "ghostText": "[summer/season/year]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". They're available for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[lawn mowing/babysitting/pet sitting/etc.]",
+                    "ghostText": "[lawn mowing/babysitting/pet sitting/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " in the ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood/street]",
+                    "ghostText": "[neighborhood/street]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " area. Reliable kid \u2014 comment if you're interested!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[School/program] near [neighborhood] just opened registration for [thing]. Deadline is [date] \u2014 sharing in case other parents missed it.",
+                "spans": [
+                  {
+                    "text": "[School/program]",
+                    "ghostText": "[School/program]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " just opened registration for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[thing]",
+                    "ghostText": "[thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Deadline is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[date]",
+                    "ghostText": "[date]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 sharing in case other parents missed it.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Events",
+            "index": 0,
+            "templates": [
+              {
+                "text": "Heads up neighbors \u2014 [event name] is happening at [location] on [date] at [time]. Worth checking out if you're into [type of thing].",
+                "spans": [
+                  {
+                    "text": "Heads up neighbors \u2014 ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[event name]",
+                    "ghostText": "[event name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is happening at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[date]",
+                    "ghostText": "[date]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[time]",
+                    "ghostText": "[time]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Worth checking out if you're into ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[type of thing]",
+                    "ghostText": "[type of thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Anyone going to [event] this [weekend/week]? Would love to meet up with neighbors there.",
+                "spans": [
+                  {
+                    "text": "Anyone going to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[event]",
+                    "ghostText": "[event]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[weekend/week]",
+                    "ghostText": "[weekend/week]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "? Would love to meet up with neighbors there.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Reminder: [event] is coming up on [date]. Last year [something notable about it] \u2014 don't miss it.",
+                "spans": [
+                  {
+                    "text": "Reminder: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[event]",
+                    "ghostText": "[event]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is coming up on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[date]",
+                    "ghostText": "[date]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Last year ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[something notable about it]",
+                    "ghostText": "[something notable about it]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 don't miss it.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "I've been going to [event] for [# years] years. This year it's at [location] \u2014 here's what to know: [tip].",
+                "spans": [
+                  {
+                    "text": "I've been going to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[event]",
+                    "ghostText": "[event]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[# years]",
+                    "ghostText": "[# years]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " years. This year it's at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 here's what to know: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[tip]",
+                    "ghostText": "[tip]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Looking for people to join me at [event] on [date]. [1 sentence about what it is]. Comment or DM if interested!",
+                "spans": [
+                  {
+                    "text": "Looking for people to join me at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[event]",
+                    "ghostText": "[event]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[date]",
+                    "ghostText": "[date]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[1 sentence about what it is]",
+                    "ghostText": "[1 sentence about what it is]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Comment or DM if interested!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Kind Neighbor",
+            "index": 2,
+            "templates": [
+              {
+                "text": "Saw a neighbor [helping another neighbor with something specific] today on [street]. Small moment but it reminded me why I love living here.",
+                "spans": [
+                  {
+                    "text": "Saw a neighbor ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[helping another neighbor with something specific]",
+                    "ghostText": "[helping another neighbor with something specific]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " today on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[street]",
+                    "ghostText": "[street]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Small moment but it reminded me why I love living here.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Thank you to whoever [did the kind thing] on [street/area] \u2014 you made my [day/week]!",
+                "spans": [
+                  {
+                    "text": "Thank you to whoever ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[did the kind thing]",
+                    "ghostText": "[did the kind thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[street/area]",
+                    "ghostText": "[street/area]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 you made my ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[day/week]",
+                    "ghostText": "[day/week]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Just wanted to shout out [neighbor name/description] who [specific kind act] during [situation]. This neighborhood is lucky to have people like that.",
+                "spans": [
+                  {
+                    "text": "Just wanted to shout out ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighbor name/description]",
+                    "ghostText": "[neighbor name/description]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " who ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[specific kind act]",
+                    "ghostText": "[specific kind act]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " during ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[situation]",
+                    "ghostText": "[situation]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". This neighborhood is lucky to have people like that.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Someone [kind act] for my [family member/pet/property] and I have no idea who it was. Please come forward so I can thank you!",
+                "spans": [
+                  {
+                    "text": "Someone ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[kind act]",
+                    "ghostText": "[kind act]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for my ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[family member/pet/property]",
+                    "ghostText": "[family member/pet/property]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and I have no idea who it was. Please come forward so I can thank you!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "If [description] is your neighbor, consider yourself lucky. They've [specific act] for [me/multiple neighbors] more times than I can count.",
+                "spans": [
+                  {
+                    "text": "If ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[description]",
+                    "ghostText": "[description]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is your neighbor, consider yourself lucky. They've ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[specific act]",
+                    "ghostText": "[specific act]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[me/multiple neighbors]",
+                    "ghostText": "[me/multiple neighbors]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " more times than I can count.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Good Vibes",
+            "index": 8,
+            "templates": [
+              {
+                "text": "Noticed [positive observation about neighborhood] lately. Hard to put into words but it feels like [neighborhood name] is [heading in a good direction/coming together/etc.].",
+                "spans": [
+                  {
+                    "text": "Noticed ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[positive observation about neighborhood]",
+                    "ghostText": "[positive observation about neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " lately. Hard to put into words but it feels like ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood name]",
+                    "ghostText": "[neighborhood name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[heading in a good direction/coming together/etc.]",
+                    "ghostText": "[heading in a good direction/coming together/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Positive change in neighborhood] finally happened. Small thing to some, big deal to those of us who [have been waiting/live nearby/use it daily].",
+                "spans": [
+                  {
+                    "text": "[Positive change in neighborhood]",
+                    "ghostText": "[Positive change in neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " finally happened. Small thing to some, big deal to those of us who ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[have been waiting/live nearby/use it daily]",
+                    "ghostText": "[have been waiting/live nearby/use it daily]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Something that was broken/missing/a problem] got fixed. Shoutout to whoever made that happen.",
+                "spans": [
+                  {
+                    "text": "[Something that was broken/missing/a problem]",
+                    "ghostText": "[Something that was broken/missing/a problem]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " got fixed. Shoutout to whoever made that happen.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "The [park/street/corner/spot] on [location] looks so much better after [what changed]. Little things like this add up.",
+                "spans": [
+                  {
+                    "text": "The ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[park/street/corner/spot]",
+                    "ghostText": "[park/street/corner/spot]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " looks so much better after ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[what changed]",
+                    "ghostText": "[what changed]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Little things like this add up.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Business/organization in neighborhood] just [good news]. Worth celebrating \u2014 they're a staple of this community.",
+                "spans": [
+                  {
+                    "text": "[Business/organization in neighborhood]",
+                    "ghostText": "[Business/organization in neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " just ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[good news]",
+                    "ghostText": "[good news]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Worth celebrating \u2014 they're a staple of this community.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Meet Neighbors",
+            "index": 5,
+            "templates": [
+              {
+                "text": "Anyone else in [neighborhood] into [hobby/interest]? Would love to connect or maybe start a [group/meetup]. Comment if interested!",
+                "spans": [
+                  {
+                    "text": "Anyone else in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " into ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[hobby/interest]",
+                    "ghostText": "[hobby/interest]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "? Would love to connect or maybe start a ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[group/meetup]",
+                    "ghostText": "[group/meetup]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Comment if interested!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Looking for a [tennis/running/book club/etc.] partner in [neighborhood]. I [skill level/how often] \u2014 comment if interested!",
+                "spans": [
+                  {
+                    "text": "Looking for a ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[tennis/running/book club/etc.]",
+                    "ghostText": "[tennis/running/book club/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " partner in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". I ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[skill level/how often]",
+                    "ghostText": "[skill level/how often]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 comment if interested!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "I run a casual [activity] group that meets [when/where]. All levels welcome \u2014 drop a comment if you want to join.",
+                "spans": [
+                  {
+                    "text": "I run a casual ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[activity]",
+                    "ghostText": "[activity]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " group that meets ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[when/where]",
+                    "ghostText": "[when/where]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". All levels welcome \u2014 drop a comment if you want to join.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "New to the neighborhood and looking for fellow [interest] people. Back in [previous place] I had a whole crew \u2014 hoping to find the same here.",
+                "spans": [
+                  {
+                    "text": "New to the neighborhood and looking for fellow ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[interest]",
+                    "ghostText": "[interest]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " people. Back in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[previous place]",
+                    "ghostText": "[previous place]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " I had a whole crew \u2014 hoping to find the same here.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "My kid is into [activity] and I'm hoping to find other [age group] nearby to [practice/play/do the thing with]. Comment if interested!",
+                "spans": [
+                  {
+                    "text": "My kid is into ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[activity]",
+                    "ghostText": "[activity]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and I'm hoping to find other ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[age group]",
+                    "ghostText": "[age group]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " nearby to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[practice/play/do the thing with]",
+                    "ghostText": "[practice/play/do the thing with]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Comment if interested!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Local Nature",
+            "index": 4,
+            "templates": [
+              {
+                "text": "The [flowers/trees/plants] on [street/trail/park] are [blooming/changing/etc.] right now. Perfect time to [walk/visit] if you haven't.",
+                "spans": [
+                  {
+                    "text": "The ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[flowers/trees/plants]",
+                    "ghostText": "[flowers/trees/plants]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[street/trail/park]",
+                    "ghostText": "[street/trail/park]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " are ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[blooming/changing/etc.]",
+                    "ghostText": "[blooming/changing/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " right now. Perfect time to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[walk/visit]",
+                    "ghostText": "[walk/visit]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " if you haven't.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Just spotted [animal/plant/natural thing] near [location]. [Any relevant details \u2014 safe, rare, seasonal, etc.].",
+                "spans": [
+                  {
+                    "text": "Just spotted ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[animal/plant/natural thing]",
+                    "ghostText": "[animal/plant/natural thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Any relevant details \u2014 safe, rare, seasonal, etc.]",
+                    "ghostText": "[Any relevant details \u2014 safe, rare, seasonal, etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Heads up: [nature hazard \u2014 bees, poison ivy, etc.] near [location]. Saw it [when] \u2014 worth avoiding if you're [walking/hiking/etc.] there.",
+                "spans": [
+                  {
+                    "text": "Heads up: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[nature hazard \u2014 bees, poison ivy, etc.]",
+                    "ghostText": "[nature hazard \u2014 bees, poison ivy, etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Saw it ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[when]",
+                    "ghostText": "[when]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 worth avoiding if you're ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[walking/hiking/etc.]",
+                    "ghostText": "[walking/hiking/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " there.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Spotted this [plant/animal/natural sight] near [location] and had to share. [One sentence about what made it special \u2014 in bloom, rare sighting, etc.]. Moments like this remind me why I love living in [neighborhood name].",
+                "spans": [
+                  {
+                    "text": "Spotted this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[plant/animal/natural sight]",
+                    "ghostText": "[plant/animal/natural sight]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and had to share. ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[One sentence about what made it special \u2014 in bloom, rare sighting, etc.]",
+                    "ghostText": "[One sentence about what made it special \u2014 in bloom, rare sighting, etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Moments like this remind me why I love living in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood name]",
+                    "ghostText": "[neighborhood name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Quick nature update for [neighborhood]: [seasonal observation]. Happens every [time of year] but it never gets old.",
+                "spans": [
+                  {
+                    "text": "Quick nature update for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ": ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[seasonal observation]",
+                    "ghostText": "[seasonal observation]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Happens every ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[time of year]",
+                    "ghostText": "[time of year]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " but it never gets old.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Neighborhood Pics",
+            "index": 6,
+            "templates": [
+              {
+                "text": "Caught this [photo/video] of [subject] near [location] [today/this week]. [One sentence reaction].",
+                "spans": [
+                  {
+                    "text": "Caught this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[photo/video]",
+                    "ghostText": "[photo/video]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " of ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[subject]",
+                    "ghostText": "[subject]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[today/this week]",
+                    "ghostText": "[today/this week]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[One sentence reaction]",
+                    "ghostText": "[One sentence reaction]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Neighborhood name] in [season] is something else. Took this [on my walk/from my yard/while driving] near [location].",
+                "spans": [
+                  {
+                    "text": "[Neighborhood name]",
+                    "ghostText": "[Neighborhood name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[season]",
+                    "ghostText": "[season]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is something else. Took this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[on my walk/from my yard/while driving]",
+                    "ghostText": "[on my walk/from my yard/while driving]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Been [painting/photographing/filming] in the neighborhood and wanted to share. This is [location/subject].",
+                "spans": [
+                  {
+                    "text": "Been ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[painting/photographing/filming]",
+                    "ghostText": "[painting/photographing/filming]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " in the neighborhood and wanted to share. This is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location/subject]",
+                    "ghostText": "[location/subject]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Not sure if anyone else noticed but [subject] near [location] is [beautiful/interesting/wild] right now. Worth a detour.",
+                "spans": [
+                  {
+                    "text": "Not sure if anyone else noticed but ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[subject]",
+                    "ghostText": "[subject]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[beautiful/interesting/wild]",
+                    "ghostText": "[beautiful/interesting/wild]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " right now. Worth a detour.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Local [artist/photographer] here \u2014 been documenting [neighborhood name] for [x years]. Here's a recent one: [attach]. Happy to share more if neighbors are interested.",
+                "spans": [
+                  {
+                    "text": "Local ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[artist/photographer]",
+                    "ghostText": "[artist/photographer]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " here \u2014 been documenting ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood name]",
+                    "ghostText": "[neighborhood name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[x years]",
+                    "ghostText": "[x years]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Here's a recent one: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[attach]",
+                    "ghostText": "[attach]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Happy to share more if neighbors are interested.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Hidden Gems",
+            "index": 3,
+            "templates": [
+              {
+                "text": "My favorite spot in [neighborhood] that nobody talks about: [place name]. Best time to go is [time/day/season] because [reason].",
+                "spans": [
+                  {
+                    "text": "My favorite spot in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " that nobody talks about: ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[place name]",
+                    "ghostText": "[place name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Best time to go is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[time/day/season]",
+                    "ghostText": "[time/day/season]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " because ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[reason]",
+                    "ghostText": "[reason]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "I've lived here [x years] and only recently discovered [place]. It's [description] \u2014 perfect for [activity/occasion].",
+                "spans": [
+                  {
+                    "text": "I've lived here ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[x years]",
+                    "ghostText": "[x years]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and only recently discovered ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[place]",
+                    "ghostText": "[place]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". It's ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[description]",
+                    "ghostText": "[description]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 perfect for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[activity/occasion]",
+                    "ghostText": "[activity/occasion]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "If you want [experience/thing], skip [obvious option] and go to [hidden gem] instead. [Reason why it's better].",
+                "spans": [
+                  {
+                    "text": "If you want ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[experience/thing]",
+                    "ghostText": "[experience/thing]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ", skip ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[obvious option]",
+                    "ghostText": "[obvious option]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and go to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[hidden gem]",
+                    "ghostText": "[hidden gem]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " instead. ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Reason why it's better]",
+                    "ghostText": "[Reason why it's better]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Moved here from [other place] and couldn't believe [neighborhood] had [place name]. It rivals [well-known comparison].",
+                "spans": [
+                  {
+                    "text": "Moved here from ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[other place]",
+                    "ghostText": "[other place]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and couldn't believe ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " had ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[place name]",
+                    "ghostText": "[place name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". It rivals ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[well-known comparison]",
+                    "ghostText": "[well-known comparison]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Place name] on [street/area] is seriously underrated. It's [what it is] and [why it's special]. Go before everyone finds out.",
+                "spans": [
+                  {
+                    "text": "[Place name]",
+                    "ghostText": "[Place name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[street/area]",
+                    "ghostText": "[street/area]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is seriously underrated. It's ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[what it is]",
+                    "ghostText": "[what it is]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[why it's special]",
+                    "ghostText": "[why it's special]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Go before everyone finds out.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Sports",
+            "index": 9,
+            "templates": [
+              {
+                "text": "Shoutout to [team name] for [win/achievement] this [weekend/season]. They have been working hard \u2014 go [team name]!",
+                "spans": [
+                  {
+                    "text": "Shoutout to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[team name]",
+                    "ghostText": "[team name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " for ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[win/achievement]",
+                    "ghostText": "[win/achievement]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[weekend/season]",
+                    "ghostText": "[weekend/season]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". They have been working hard \u2014 go ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[team name]",
+                    "ghostText": "[team name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Team name] has games every [day] at [location]. Come out and cheer \u2014 they could use the support.",
+                "spans": [
+                  {
+                    "text": "[Team name]",
+                    "ghostText": "[Team name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " has games every ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[day]",
+                    "ghostText": "[day]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Come out and cheer \u2014 they could use the support.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Looking for players for our [sport] team/league. We play [how often] at [location]. [Skill level] welcome \u2014 comment to join.",
+                "spans": [
+                  {
+                    "text": "Looking for players for our ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[sport]",
+                    "ghostText": "[sport]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " team/league. We play ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[how often]",
+                    "ghostText": "[how often]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Skill level]",
+                    "ghostText": "[Skill level]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " welcome \u2014 comment to join.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Team name] made it to [tournament/playoffs/championship]. Game is [date] at [location] \u2014 let's pack the stands.",
+                "spans": [
+                  {
+                    "text": "[Team name]",
+                    "ghostText": "[Team name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " made it to ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[tournament/playoffs/championship]",
+                    "ghostText": "[tournament/playoffs/championship]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Game is ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[date]",
+                    "ghostText": "[date]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 let's pack the stands.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Starting a [sport] pickup game at [location] on [day/time]. All ages/levels. Show up or comment to be added to the group chat.",
+                "spans": [
+                  {
+                    "text": "Starting a ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[sport]",
+                    "ghostText": "[sport]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " pickup game at ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " on ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[day/time]",
+                    "ghostText": "[day/time]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". All ages/levels. Show up or comment to be added to the group chat.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          },
+          {
+            "topic": "Pets",
+            "index": 7,
+            "templates": [
+              {
+                "text": "What's the best spot in [neighborhood] to take a [dog/cat/pet type]? [Pet name] is tired of our usual route near [location] and we're looking for new adventures.",
+                "spans": [
+                  {
+                    "text": "What's the best spot in ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[neighborhood]",
+                    "ghostText": "[neighborhood]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " to take a ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[dog/cat/pet type]",
+                    "ghostText": "[dog/cat/pet type]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "? ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Pet name]",
+                    "ghostText": "[Pet name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " is tired of our usual route near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " and we're looking for new adventures.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Introducing [pet name], our [breed/type]. We're usually out near [area] around [time] \u2014 would love for them to make some neighborhood friends.",
+                "spans": [
+                  {
+                    "text": "Introducing ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[pet name]",
+                    "ghostText": "[pet name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ", our ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[breed/type]",
+                    "ghostText": "[breed/type]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". We're usually out near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[area]",
+                    "ghostText": "[area]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " around ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[time]",
+                    "ghostText": "[time]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 would love for them to make some neighborhood friends.",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Pet name] discovered [park/trail/spot] today and is now officially obsessed. Highly recommend for other [dogs/cats/etc.].",
+                "spans": [
+                  {
+                    "text": "[Pet name]",
+                    "ghostText": "[Pet name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " discovered ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[park/trail/spot]",
+                    "ghostText": "[park/trail/spot]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " today and is now officially obsessed. Highly recommend for other ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[dogs/cats/etc.]",
+                    "ghostText": "[dogs/cats/etc.]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ".",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "[Pet name] turns [age] today. [One fun fact about them]. Say hi if you see us around the neighborhood!",
+                "spans": [
+                  {
+                    "text": "[Pet name]",
+                    "ghostText": "[Pet name]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " turns ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[age]",
+                    "ghostText": "[age]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " today. ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[One fun fact about them]",
+                    "ghostText": "[One fun fact about them]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". Say hi if you see us around the neighborhood!",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              },
+              {
+                "text": "Spotted this [animal] in our yard/near [location] \u2014 anyone recognize them? [Description]. [Lost or just visiting?]",
+                "spans": [
+                  {
+                    "text": "Spotted this ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[animal]",
+                    "ghostText": "[animal]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " in our yard/near ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[location]",
+                    "ghostText": "[location]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": " \u2014 anyone recognize them? ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Description]",
+                    "ghostText": "[Description]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": ". ",
+                    "ghostText": null,
+                    "editable": false,
+                    "__typename": "PostComposerTemplateSpan"
+                  },
+                  {
+                    "text": "[Lost or just visiting?]",
+                    "ghostText": "[Lost or just visiting?]",
+                    "editable": true,
+                    "__typename": "PostComposerTemplateSpan"
+                  }
+                ],
+                "__typename": "PostComposerTemplate"
+              }
+            ],
+            "__typename": "PostComposerTemplateTopic"
+          }
+        ],
+        "__typename": "PostComposerConfigs"
+      },
+      "composerActionsConfig": {
+        "actionTileRows": [
+          {
+            "actionTiles": [
+              {
+                "actionType": "OPEN_MEDIA_GALLERY",
+                "icon": "BLOCKS_PHOTOS",
+                "label": "Add media",
+                "__typename": "ComposerActionTile"
+              },
+              {
+                "actionType": "ENTER_FSF_SUBFLOW",
+                "icon": "BLOCKS_SHOPPING_BAG",
+                "label": "Sell / Give",
+                "__typename": "ComposerActionTile"
+              }
+            ],
+            "__typename": "ComposerActionRow"
+          },
+          {
+            "actionTiles": [
+              {
+                "actionType": "ENTER_EVENT_SUBFLOW",
+                "icon": "BLOCKS_CALENDAR",
+                "label": "Create event",
+                "__typename": "ComposerActionTile"
+              },
+              {
+                "actionType": "ENTER_POLL_SUBFLOW",
+                "icon": "BLOCKS_POLL",
+                "label": "Create poll",
+                "__typename": "ComposerActionTile"
+              }
+            ],
+            "__typename": "ComposerActionRow"
+          }
+        ],
+        "__typename": "PostComposerConfigs"
+      },
+      "__typename": "MeConfigs"
+    },
+    "isVerified": true,
+    "isLimitedAccess": false,
+    "limitedAccessExpiration": null,
+    "limitedAccessReason": null,
+    "userType": "NEIGHBOR",
+    "neighborhood": {
+      "id": "neighborhood_291766",
+      "isTrial": false,
+      "name": "Nextdoor Eagle Crossing West",
+      "shortName": "Eagle Crossing West",
+      "slug": "eaglecrossingwest",
+      "centroid": {
+        "latDegrees": 38.07414604972568,
+        "lonDegrees": -87.5269354104428,
+        "__typename": "GeoPoint"
+      },
+      "city": "Evansville",
+      "state": "IN",
+      "__typename": "Neighborhood"
+    },
+    "agencyInfo": null,
+    "ownedBusinesses": [],
+    "availableAudiences": [
+      {
+        "audienceName": {
+          "text": "Anyone",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 6,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": true,
+        "privacyPolicyVersion": "2",
+        "distributedVersion": "v4.1",
+        "distributedAudienceDescription": {
+          "text": "Anyone on or off Nextdoor",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 25,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_SECONDARY",
+                  "fallbackColorHEX": "#666666",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "MINI",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "__typename": "DistributedAudience"
+      },
+      {
+        "audienceName": {
+          "text": "Nearby neighborhoods",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 20,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": false,
+        "nearbyAudiences": [
+          {
+            "neighborhoodId": "neighborhood_290050",
+            "neighborhoodName": {
+              "text": "Nextdoor Ashmore/Edin/Broad/Fox",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_296067",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_449668",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_166665",
+            "neighborhoodName": {
+              "text": "Nextdoor Oak Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290953",
+            "neighborhoodName": {
+              "text": "Nextdoor Srawberry Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290955",
+            "neighborhoodName": {
+              "text": "Nextdoor Stone Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_451594",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State Road",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_329491",
+            "neighborhoodName": {
+              "text": "Nextdoor Bentwood Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_328092",
+            "neighborhoodName": {
+              "text": "Nextdoor Falcon Ridge Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_357533",
+            "neighborhoodName": {
+              "text": "Nextdoor Covington Heights",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290724",
+            "neighborhoodName": {
+              "text": "Nextdoor Eagle Crossing North",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_479781",
+            "neighborhoodName": {
+              "text": "Nextdoor Zoar Church Rd",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_291366",
+            "neighborhoodName": {
+              "text": "Nextdoor Copperfield",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_291367",
+            "neighborhoodName": {
+              "text": "Nextdoor Oak Meadow",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_307752",
+            "neighborhoodName": {
+              "text": "Nextdoor Creekside Meadows",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_255018",
+            "neighborhoodName": {
+              "text": "Nextdoor Bridlewood",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_307756",
+            "neighborhoodName": {
+              "text": "Nextdoor Malibu Park",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_293424",
+            "neighborhoodName": {
+              "text": "Nextdoor Carrington",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_507058",
+            "neighborhoodName": {
+              "text": "Nextdoor South Daylight",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_336187",
+            "neighborhoodName": {
+              "text": "Nextdoor Windham Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_226883",
+            "neighborhoodName": {
+              "text": "Nextdoor Stonecrest",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_536775",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchan Trace",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_301256",
+            "neighborhoodName": {
+              "text": "Nextdoor Crowne Ridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_427464",
+            "neighborhoodName": {
+              "text": "Nextdoor Village of Stone Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_455240",
+            "neighborhoodName": {
+              "text": "Nextdoor N Green River Rd",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_300884",
+            "neighborhoodName": {
+              "text": "Nextdoor Cayman Ridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_309332",
+            "neighborhoodName": {
+              "text": "Nextdoor Havenwood Meadows",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_358612",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_197719",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State Road Brookview",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_331735",
+            "neighborhoodName": {
+              "text": "Nextdoor Brownwood Lane",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_387038",
+            "neighborhoodName": {
+              "text": "Nextdoor Daylight",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_458082",
+            "neighborhoodName": {
+              "text": "Nextdoor Outerbanks Darmstadt",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_300262",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville Park",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_314343",
+            "neighborhoodName": {
+              "text": "Nextdoor Windemere Farms",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_293735",
+            "neighborhoodName": {
+              "text": "Nextdoor Darmstadt",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290793",
+            "neighborhoodName": {
+              "text": "Nextdoor Breckingridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_330472",
+            "neighborhoodName": {
+              "text": "Nextdoor Wynnfield",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_439532",
+            "neighborhoodName": {
+              "text": "Nextdoor Walnut",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_255981",
+            "neighborhoodName": {
+              "text": "Nextdoor Clear Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_474733",
+            "neighborhoodName": {
+              "text": "Nextdoor Earl",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_312304",
+            "neighborhoodName": {
+              "text": "Nextdoor Blue Grass Farms",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_314228",
+            "neighborhoodName": {
+              "text": "Nextdoor Deerfield Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_432117",
+            "neighborhoodName": {
+              "text": "Nextdoor North Side",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_417657",
+            "neighborhoodName": {
+              "text": "Nextdoor Saint Charles Cove",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_294395",
+            "neighborhoodName": {
+              "text": "Nextdoor Green River Estates III",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_466941",
+            "neighborhoodName": {
+              "text": "Nextdoor Hawthorne Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          }
+        ],
+        "__typename": "NearbyNeighborhoodAudience"
+      },
+      {
+        "audienceName": {
+          "text": "Your neighborhood",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 17,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": false,
+        "neighborhoodId": "neighborhood_291766",
+        "neighborhoodAudienceDescription": {
+          "text": "Eagle Crossing West only",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 24,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_SECONDARY",
+                  "fallbackColorHEX": "#666666",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "MINI",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "__typename": "NeighborhoodAudience"
+      }
+    ],
+    "classifiedAvailableAudiences": [
+      {
+        "audienceName": {
+          "text": "Anyone",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 6,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": true,
+        "privacyPolicyVersion": "2",
+        "distributedVersion": "v4.1",
+        "distributedAudienceDescription": {
+          "text": "Anyone on or off Nextdoor",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 25,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_SECONDARY",
+                  "fallbackColorHEX": "#666666",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "MINI",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "__typename": "DistributedAudience"
+      },
+      {
+        "audienceName": {
+          "text": "Nearby neighborhoods",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 20,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": false,
+        "nearbyAudiences": [
+          {
+            "neighborhoodId": "neighborhood_290050",
+            "neighborhoodName": {
+              "text": "Nextdoor Ashmore/Edin/Broad/Fox",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_296067",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_449668",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_166665",
+            "neighborhoodName": {
+              "text": "Nextdoor Oak Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290953",
+            "neighborhoodName": {
+              "text": "Nextdoor Srawberry Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290955",
+            "neighborhoodName": {
+              "text": "Nextdoor Stone Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_451594",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State Road",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_329491",
+            "neighborhoodName": {
+              "text": "Nextdoor Bentwood Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_328092",
+            "neighborhoodName": {
+              "text": "Nextdoor Falcon Ridge Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_357533",
+            "neighborhoodName": {
+              "text": "Nextdoor Covington Heights",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290724",
+            "neighborhoodName": {
+              "text": "Nextdoor Eagle Crossing North",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_479781",
+            "neighborhoodName": {
+              "text": "Nextdoor Zoar Church Rd",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_291366",
+            "neighborhoodName": {
+              "text": "Nextdoor Copperfield",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_291367",
+            "neighborhoodName": {
+              "text": "Nextdoor Oak Meadow",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_307752",
+            "neighborhoodName": {
+              "text": "Nextdoor Creekside Meadows",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_255018",
+            "neighborhoodName": {
+              "text": "Nextdoor Bridlewood",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_307756",
+            "neighborhoodName": {
+              "text": "Nextdoor Malibu Park",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_293424",
+            "neighborhoodName": {
+              "text": "Nextdoor Carrington",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_507058",
+            "neighborhoodName": {
+              "text": "Nextdoor South Daylight",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_336187",
+            "neighborhoodName": {
+              "text": "Nextdoor Windham Hill",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_226883",
+            "neighborhoodName": {
+              "text": "Nextdoor Stonecrest",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_536775",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchan Trace",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_301256",
+            "neighborhoodName": {
+              "text": "Nextdoor Crowne Ridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_427464",
+            "neighborhoodName": {
+              "text": "Nextdoor Village of Stone Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_455240",
+            "neighborhoodName": {
+              "text": "Nextdoor N Green River Rd",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_300884",
+            "neighborhoodName": {
+              "text": "Nextdoor Cayman Ridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_309332",
+            "neighborhoodName": {
+              "text": "Nextdoor Havenwood Meadows",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_358612",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_197719",
+            "neighborhoodName": {
+              "text": "Nextdoor Old State Road Brookview",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_331735",
+            "neighborhoodName": {
+              "text": "Nextdoor Brownwood Lane",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_387038",
+            "neighborhoodName": {
+              "text": "Nextdoor Daylight",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_458082",
+            "neighborhoodName": {
+              "text": "Nextdoor Outerbanks Darmstadt",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_300262",
+            "neighborhoodName": {
+              "text": "Nextdoor McCutchanville Park",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_314343",
+            "neighborhoodName": {
+              "text": "Nextdoor Windemere Farms",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_293735",
+            "neighborhoodName": {
+              "text": "Nextdoor Darmstadt",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_290793",
+            "neighborhoodName": {
+              "text": "Nextdoor Breckingridge",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_330472",
+            "neighborhoodName": {
+              "text": "Nextdoor Wynnfield",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_439532",
+            "neighborhoodName": {
+              "text": "Nextdoor Walnut",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_255981",
+            "neighborhoodName": {
+              "text": "Nextdoor Clear Creek",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_474733",
+            "neighborhoodName": {
+              "text": "Nextdoor Earl",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_312304",
+            "neighborhoodName": {
+              "text": "Nextdoor Blue Grass Farms",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_314228",
+            "neighborhoodName": {
+              "text": "Nextdoor Deerfield Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_432117",
+            "neighborhoodName": {
+              "text": "Nextdoor North Side",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_417657",
+            "neighborhoodName": {
+              "text": "Nextdoor Saint Charles Cove",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_294395",
+            "neighborhoodName": {
+              "text": "Nextdoor Green River Estates III",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          },
+          {
+            "neighborhoodId": "neighborhood_466941",
+            "neighborhoodName": {
+              "text": "Nextdoor Hawthorne Estates",
+              "__typename": "StyledText"
+            },
+            "isSelected": true,
+            "__typename": "SelectiveNearbyAudienceSubselection"
+          }
+        ],
+        "__typename": "NearbyNeighborhoodAudience"
+      },
+      {
+        "audienceName": {
+          "text": "Your neighborhood",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 17,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_PRIMARY",
+                  "fallbackColorHEX": "#000000",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "DETAIL",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "isDefault": false,
+        "neighborhoodId": "neighborhood_291766",
+        "neighborhoodAudienceDescription": {
+          "text": "Eagle Crossing West only",
+          "maxLines": null,
+          "styles": [
+            {
+              "start": 0,
+              "length": 24,
+              "attributes": {
+                "standardColor": {
+                  "colorName": "FG_SECONDARY",
+                  "fallbackColorHEX": "#666666",
+                  "__typename": "StandardColor"
+                },
+                "standardFont": "MINI",
+                "isStrikethrough": false,
+                "isLink": false,
+                "standardIconV2": null,
+                "pillColor": null,
+                "action": null,
+                "__typename": "StyledTextStyleAttribute"
+              },
+              "__typename": "StyledTextStyle"
+            }
+          ],
+          "__typename": "StyledText"
+        },
+        "__typename": "NeighborhoodAudience"
+      }
+    ],
+    "user": {
+      "id": "user_57902626",
+      "legacyUserId": "57902626",
+      "secureUserId": "secureUser_01rF5cRYF2W-9-4X4",
+      "name": {
+        "displayName": "Adam Bertram",
+        "__typename": "PersonalName"
+      },
+      "avatar": {
+        "avatarType": "LETTER_AVATAR",
+        "image": {
+          "url": "https://d19rpgkrjeba2z.cloudfront.net/839f64fa07b71633/static/nextdoorv2/images/avatars/color-2/a.png",
+          "__typename": "Image"
+        },
+        "__typename": "UserAvatar"
+      },
+      "hasUnverifiedFeed": false,
+      "feedOrderingModePreferences": {
+        "availableOrderingModes": [
+          {
+            "name": "top_posts",
+            "displayName": "Top posts",
+            "__typename": "FeedOrderingMode"
+          },
+          {
+            "name": "recent_activity",
+            "displayName": "Recent activity",
+            "__typename": "FeedOrderingMode"
+          },
+          {
+            "name": "recent_posts",
+            "displayName": "Recent posts",
+            "__typename": "FeedOrderingMode"
+          }
+        ],
+        "orderingMode": {
+          "name": "top_posts",
+          "displayName": "Top posts",
+          "__typename": "FeedOrderingMode"
+        },
+        "__typename": "FeedOrderingModePreferences"
+      },
+      "stickyFeedBannerNUXStates": [
+        {
+          "name": "STICKY_FEED_BANNER",
+          "isEnabled": false,
+          "contentId": null,
+          "content": null,
+          "viewEvent": {
+            "name": "sticky_feed_banner_None",
+            "analyticsPayload": null,
+            "__typename": "ViewEvent"
+          },
+          "__typename": "StickyFeedBannerNUXState"
+        }
+      ],
+      "sharingNUXStates": [
+        {
+          "name": "SHARING",
+          "isEnabled": false,
+          "contentId": null,
+          "content": null,
+          "__typename": "SharingNUXState"
+        }
+      ],
+      "commentFilteringNUXStates": [
+        {
+          "name": "COMMENT_FILTERING",
+          "isEnabled": true,
+          "content": {
+            "coachmarkTitle": {
+              "text": "Control what you see in your feed",
+              "maxLines": null,
+              "styles": [
+                {
+                  "start": 0,
+                  "length": 33,
+                  "attributes": {
+                    "standardColor": {
+                      "colorName": "FG_PRIMARY",
+                      "fallbackColorHEX": "#000000",
+                      "__typename": "StandardColor"
+                    },
+                    "standardFont": "BODY_TITLE",
+                    "isStrikethrough": false,
+                    "isLink": false,
+                    "standardIconV2": null,
+                    "pillColor": null,
+                    "action": null,
+                    "__typename": "StyledTextStyleAttribute"
+                  },
+                  "__typename": "StyledTextStyle"
+                }
+              ],
+              "__typename": "StyledText"
+            },
+            "coachmarkDescription": {
+              "text": "Comments that may break the guidelines are hidden. Select filtered comments to see all comments.",
+              "maxLines": null,
+              "styles": [
+                {
+                  "start": 0,
+                  "length": 96,
+                  "attributes": {
+                    "standardColor": {
+                      "colorName": "FG_PRIMARY",
+                      "fallbackColorHEX": "#000000",
+                      "__typename": "StandardColor"
+                    },
+                    "standardFont": "DETAIL",
+                    "isStrikethrough": false,
+                    "isLink": false,
+                    "standardIconV2": null,
+                    "pillColor": null,
+                    "action": null,
+                    "__typename": "StyledTextStyleAttribute"
+                  },
+                  "__typename": "StyledTextStyle"
+                }
+              ],
+              "__typename": "StyledText"
+            },
+            "__typename": "CommentFilteringNUXStateContent"
+          },
+          "__typename": "CommentFilteringNUXState"
+        }
+      ],
+      "commentRankingNUXStates": [
+        {
+          "name": "COMMENT_RANKING",
+          "isEnabled": false,
+          "content": null,
+          "__typename": "CommentRankingNUXState"
+        }
+      ],
+      "ccComposerFeedPostToGroupsNuxStates": [
+        {
+          "name": "CC_COMPOSER_FEED_POST_TO_GROUPS",
+          "isEnabled": true,
+          "content": {
+            "title": {
+              "text": "Select to also post to groups",
+              "maxLines": null,
+              "styles": [
+                {
+                  "start": 0,
+                  "length": 29,
+                  "attributes": {
+                    "standardColor": {
+                      "colorName": "FG_PRIMARY",
+                      "fallbackColorHEX": "#000000",
+                      "__typename": "StandardColor"
+                    },
+                    "standardFont": "BODY_TITLE",
+                    "isStrikethrough": false,
+                    "isLink": false,
+                    "standardIconV2": null,
+                    "pillColor": null,
+                    "action": null,
+                    "__typename": "StyledTextStyleAttribute"
+                  },
+                  "__typename": "StyledTextStyle"
+                }
+              ],
+              "__typename": "StyledText"
+            },
+            "__typename": "NUXStateContent"
+          },
+          "__typename": "NUXStateWithContent"
+        }
+      ],
+      "sortCoachmarkNUXState": [
+        {
+          "name": "FEED_SORTING_COACHMARK",
+          "isEnabled": false,
+          "__typename": "NUXStateWithContent"
+        }
+      ],
+      "multiLocationCoachmarkNUXState": [
+        {
+          "name": "MULTI_LOCATION_COACHMARK",
+          "isEnabled": false,
+          "__typename": "NUXStateWithContent"
+        }
+      ],
+      "feedStickyCommentNUXStates": [
+        {
+          "name": "FEED_STICKY_COMMENT",
+          "isEnabled": true,
+          "__typename": "NUXStateWithContent"
+        }
+      ],
+      "authorCommentFilteringNUXStates": [
+        {
+          "name": "AUTHOR_COMMENT_FILTERING",
+          "isEnabled": false,
+          "__typename": "NUXStateWithContent"
+        }
+      ],
+      "__typename": "UserProfile"
+    },
+    "userCommunitySections": [],
+    "myEntityPage": null,
+    "entityPageUserFeatureEligibility": null,
+    "__typename": "Me"
+  },
+  "requestId": "7bd327bc-a873-47b0-a4ec-77acd44926b9"
+}

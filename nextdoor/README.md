@@ -2,7 +2,8 @@
 
 ## DESCRIPTION
 
-A command-line interface for Nextdoor. CLI for Nextdoorcom.
+A command-line interface for Nextdoor's GraphQL API, authenticated with a saved
+browser session.
 
 Use this CLI when you need scriptable, JSON-first access to Nextdoor from agents, automation, or terminal workflows.
 
@@ -133,9 +134,14 @@ nextdoor feed --limit 2
 ```json
 [
   {
-    "id": "item-1",
-    "title": "Example Post",
-    "type": "post"
+    "id": 489235186,
+    "type": "POST",
+    "title": "🐱 Kittens Looking for Loving Homes 🐱"
+  },
+  {
+    "id": 6658602269397747960,
+    "type": "PROMO",
+    "title": "Homeaglow"
   }
 ]
 ```
@@ -176,25 +182,25 @@ CACHE_ENABLED=true
 CACHE_TTL=3600
 ```
 
-Authentication profile variables (CLI-managed runtime auth state):
+### Authentication (browser session)
 
-```bash
-ACTIVE=true
-ACCESS_TOKEN=<access_token_written_by_cli>
-REFRESH_TOKEN=<refresh_token_written_by_cli>
-TOKEN_EXPIRES_AT=2026-01-01T00:00:00Z
-```
+This is a browser-session CLI. `nextdoor auth login` opens a persistent
+Chromium profile; the logged-in Nextdoor session lives entirely in that profile
+under
+`~/.local/share/cli-tools/nextdoor/authentication_profiles/<profile>/browser-data/chromium-profile/`.
+There are no API keys, passwords, or tokens to store. Data commands read the
+live session cookies from that profile and replay them as GraphQL POST
+requests.
 
-Reusable raw credentials belong in the CLI-tools secret manager, not in `.env` files. If this CLI persists secret-manager references into the active profile, they look like:
+Authentication is verified by a real server check, not by cookie presence:
+Nextdoor sets a `ndp_session_id` cookie even for logged-out visitors, so
+`auth status` loads an auth-required page and treats a redirect to `/login/` as
+not authenticated, and `auth test` makes a live `getMe` call. If the session is
+stale, data commands fail loudly with `session is not authenticated ... run
+'nextdoor auth login --force'` (exit code 2 on `auth test`).
 
-```bash
-API_KEY=secret://nextdoor-api-key
-PERSONAL_ACCESS_TOKEN=secret://nextdoor-personal-access-token
-CLIENT_ID=secret://nextdoor-client-id
-CLIENT_SECRET=secret://nextdoor-client-secret
-USERNAME=secret://nextdoor-username
-PASSWORD=secret://nextdoor-password
-```
+The profile `.env` carries only `ACTIVE=true` — no reusable credentials. Do not
+put credentials in any `.env` file.
 
 
 ## Cache
@@ -233,13 +239,45 @@ nextdoor feed --limit 200 > feed.json
 
 ## Output Contract
 
-Commands return plain JSON records. The default feed record shape is:
+Commands return plain JSON records (a JSON array for list commands, a JSON
+object for `me`). Each list command has a stable normalized record shape and a
+matching default table column order; both are defined together in
+`nextdoor_cli/client.py` so they cannot drift.
+
+`feed` — personalized feed items (GraphQL `PersonalizedFeed`). Items are
+heterogeneous (POST, PROMO ads, ...):
 
 | Field | Description |
 |-------|-------------|
-| `id` | Stable item identifier |
-| `title` | Item title or preview |
-| `type` | Type of feed item |
+| `id` | Item `contentId` |
+| `type` | `feedItemType` (e.g. `POST`, `PROMO`) |
+| `title` | POST → `post.subject`; PROMO → sponsor name; other types → `null` |
+
+`search` — search-bar suggestions (GraphQL `getDynamicSearchBarSuggestions`).
+The API returns a list of plain strings, each wrapped as a record:
+
+| Field | Description |
+|-------|-------------|
+| `suggestion` | Suggestion text |
+
+`notifications` — dashboard badge/shortcut entries (GraphQL `dashboardBadges`):
+
+| Field | Description |
+|-------|-------------|
+| `id` | Shortcut `type` slug (e.g. `saved_bookmarks`, `events`) |
+| `label` | Display title (e.g. `Bookmarks`) |
+| `badges` | Unread badge value (`null` when none) |
+
+`me` — the raw authenticated user object (GraphQL `getMe`, `data.me.user`),
+returned as a JSON object. Top-level fields include `id`, `legacyUserId`,
+`secureUserId`, `name` (`{displayName, ...}`), `avatar`, `hasUnverifiedFeed`,
+`feedOrderingModePreferences`, and various NUX-state arrays. `--table` renders
+it as a field/value table, summarizing nested objects/lists for readability
+(use default JSON output for the full structure).
+
+When a request hits a logged-out session, the affected command fails loudly
+(exit code 1, error on stderr; `auth test` exits 2) rather than returning empty
+or wrong data.
 
 ## Requirements
 

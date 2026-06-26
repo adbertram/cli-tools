@@ -13,15 +13,20 @@ from cli_tools_shared.filters import (
 from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
 from . import __version__
-from .client import get_client
+from .client import (
+    FEED_COLUMNS,
+    NOTIFICATION_COLUMNS,
+    SEARCH_COLUMNS,
+    get_client,
+)
 from .config import get_config
 
 from cli_tools_shared.auth_commands import create_auth_app
 
-COLUMNS = ["id", "name", "status"]
+# Table columns come from client.py, where each normalize function owns both
+# the record shape and its column order, so the two can never drift.
 
 app = create_app(name="nextdoor", help="CLI interface for Nextdoor API", version=__version__)
-items_app = typer.Typer(help="Manage nextdoor items", no_args_is_help=True)
 
 
 def _property_fields(properties: Optional[str]) -> Optional[List[str]]:
@@ -41,7 +46,16 @@ def _validate(filters: Optional[List[str]]) -> None:
         raise typer.Exit(1)
 
 
-def _render(rows: List[dict], table: bool, properties: Optional[str], empty: str) -> None:
+def _fetch(fetch):
+    """Run ``fetch(client)`` and guarantee the client is closed afterward."""
+    client = get_client()
+    try:
+        return fetch(client)
+    finally:
+        client.close()
+
+
+def _render(rows: List[dict], table: bool, properties: Optional[str], columns, empty: str) -> None:
     fields = _property_fields(properties)
     if fields:
         rows = apply_properties_filter(rows, properties)
@@ -51,16 +65,50 @@ def _render(rows: List[dict], table: bool, properties: Optional[str], empty: str
     if not rows:
         print_info(empty)
         return
-    columns = fields or COLUMNS
-    print_table(rows, columns, [column.replace("_", " ").title() for column in columns])
+    selected = list(fields or columns)
+    print_table(rows, selected, [column.replace("_", " ").title() for column in selected])
 
 
-def _list(fetch, filters, table, properties, empty) -> None:
+def _list(fetch, filters, table, properties, columns, empty) -> None:
     _validate(filters)
-    rows = fetch()
+    rows = _fetch(fetch)
     if filters:
         rows = apply_filters(rows, filters)
-    _render(rows, table, properties, empty)
+    _render(rows, table, properties, columns, empty)
+
+
+def _table_value(value) -> str:
+    """Render one record value for the field/value table.
+
+    Scalars render as-is. Nested objects/lists are summarized compactly so the
+    table stays readable (a deeply nested user profile would otherwise dump a
+    wall of text). The full structure is always available via default JSON
+    output.
+    """
+    if isinstance(value, dict):
+        for key in ("displayName", "text", "name", "title", "url"):
+            inner = value.get(key)
+            if isinstance(inner, str) and inner:
+                return inner
+        return f"{{{len(value)} fields}}"
+    if isinstance(value, list):
+        return f"[{len(value)} items]"
+    return str(value)
+
+
+def _render_record(fetch, table: bool, properties: Optional[str], empty: str) -> None:
+    row = _fetch(fetch)
+    fields = _property_fields(properties)
+    if fields:
+        _render([row], table, properties, fields, empty)
+    elif table:
+        print_table(
+            [{"field": key, "value": _table_value(value)} for key, value in row.items()],
+            ["field", "value"],
+            ["Field", "Value"],
+        )
+    else:
+        print_json(row)
 
 
 @app.command("feed")
@@ -72,7 +120,7 @@ def feed(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """View personalized feed."""
-    _list(lambda: get_client().get_feed(limit), filter, table, properties, "No feed items found.")
+    _list(lambda client: client.get_feed(limit), filter, table, properties, FEED_COLUMNS, "No feed items found.")
 
 
 @app.command("me")
@@ -82,39 +130,26 @@ def me(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """View current user profile."""
-    row = get_client().get_me()
-    fields = _property_fields(properties)
-    if fields:
-        _render([row], table, properties, "No user found.")
-    elif table:
-        print_table(
-            [{"field": key, "value": str(value)} for key, value in row.items()],
-            ["field", "value"],
-            ["Field", "Value"],
-        )
-    else:
-        print_json(row)
+    _render_record(lambda client: client.get_me(), table, properties, "No user found.")
 
 
 @app.command("notifications")
 @command
 def notifications(
+    limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of items"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """View unread notifications and badges."""
-    row = get_client().get_notifications()
-    fields = _property_fields(properties)
-    if fields:
-        _render([row], table, properties, "No notifications found.")
-    elif table:
-        print_table(
-            [{"field": key, "value": str(value)} for key, value in row.items()],
-            ["field", "value"],
-            ["Field", "Value"],
-        )
-    else:
-        print_json(row)
+    _list(
+        lambda client: client.get_notifications()[:limit],
+        filter,
+        table,
+        properties,
+        NOTIFICATION_COLUMNS,
+        "No notifications found.",
+    )
 
 
 @app.command("search")
@@ -126,7 +161,16 @@ def search(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Search Nextdoor suggestions."""
-    _list(lambda: get_client().search(query), filter, table, properties, "No search results found.")
+    _list(
+        lambda client: client.search(query),
+        filter,
+        table,
+        properties,
+        SEARCH_COLUMNS,
+        "No search results found.",
+    )
+
+
 app.add_typer(create_auth_app(get_config, tool_name="nextdoor"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 

@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-"nextdoor" = "nextdoor_cli.main:app"
+"nextdoor" = "nextdoor_cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

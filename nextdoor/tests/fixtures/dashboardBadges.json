@@ -1,0 +1,25 @@
+{
+  "me": {
+    "shortcuts": [
+      {
+        "type": "saved_bookmarks",
+        "title": "Bookmarks",
+        "badges": null,
+        "__typename": "Shortcut"
+      },
+      {
+        "type": "events",
+        "title": "Events",
+        "badges": null,
+        "__typename": "Shortcut"
+      },
+      {
+        "type": "interests",
+        "title": "Interests",
+        "badges": null,
+        "__typename": "Shortcut"
+      }
+    ],
+    "__typename": "Me"
+  }
+}
