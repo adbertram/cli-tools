@@ -694,7 +694,7 @@ def files_history(
             for i, rev in enumerate(revisions):
                 table_data.append({
                     "#": i + 1,
-                    "rev": rev.get("rev", "")[:12],
+                    "rev": rev.get("rev", ""),
                     "size": format_size(rev.get("size", 0)),
                     "modified": rev.get("server_modified", "-"),
                 })

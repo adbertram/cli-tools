@@ -762,6 +762,21 @@ class DropboxClient:
         except AuthError as e:
             self._handle_auth_error(e)
         except ApiError as e:
+            error = getattr(e, "error", None)
+            if error is not None and getattr(error, "is_invalid_revision", None) \
+                    and error.is_invalid_revision():
+                raise ClientError(
+                    f"Cannot restore '{path}' to revision '{rev}': Dropbox rejected "
+                    "the revision as invalid_revision. The revision id is correct and "
+                    "complete, but Dropbox will not restore it. The usual cause is that "
+                    "the revision has aged past this account's version-history retention "
+                    "window (about 30 days on Basic/Plus/Professional), so 'files history' "
+                    "still lists it but 'files restore' can no longer reach it. Restore "
+                    "this version from the Dropbox website (Deleted files / version "
+                    "history), which can reach further back, then retry. Also confirm the "
+                    "rev is the full untruncated value from 'dropbox files history "
+                    "<path>' (JSON output), not a shortened display value."
+                )
             self._handle_api_error(e)
 
     def restore_deleted_folder(self, path: str) -> Dict[str, Any]:
