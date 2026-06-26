@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "macspeech-cli"
+version = "0.1.0"
+description = "CLI wrapper for macspeech-helper"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "cli-tools-shared",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+"macspeech" = "macspeech_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["macspeech_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

@@ -1,0 +1,148 @@
+{
+  "tool": "macspeech",
+  "description": "CLI interface for macspeech",
+  "discovered_at": "2026-06-25T22:03:13Z",
+  "total_commands": 4,
+  "global_options": [],
+  "commands": {
+    "transcripts": {
+      "help": "Transcription operations",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Transcribe an audio file on-device via Apple Speech.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the audio file to transcribe"
+            }
+          ],
+          "options": [
+            {
+              "name": "--language",
+              "type": "TEXT",
+              "required": false,
+              "help": "Language code (e.g., en, es, fr). 'en' maps to locale en-US",
+              "short": "-L",
+              "default": "en"
+            },
+            {
+              "name": "--contextual-strings",
+              "type": "TEXT",
+              "required": false,
+              "help": "Semicolon-separated phrases fed to SFSpeechRecognitionRequest.contextualStrings for vocabulary biasing (e.g. 'worktree;subagent;detached HEAD'). Defaults to MACSPEECH_CONTEXTUAL_STRINGS; omitted entirely when empty"
+            },
+            {
+              "name": "--punctuation",
+              "type": "bool",
+              "required": false,
+              "help": "Add automatic punctuation (SFSpeechRecognitionRequest.addsPunctuation, macOS 13+)",
+              "default": "punctuation"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Transcription timeout in seconds",
+              "default": "300"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display per-word segments as a table",
+              "short": "-t"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details of an existing macspeech transcript file.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to a transcript JSON file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display per-word segments as a table",
+              "short": "-t"
+            }
+          ]
+        },
+        "list": {
+          "help": "List macspeech transcript JSON files in a directory.",
+          "arguments": [
+            {
+              "name": "directory",
+              "type": "DIRECTORY",
+              "required": false,
+              "help": "Directory to search for transcript JSON files",
+              "default": "."
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., language:eq:en)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "status": {
+          "help": "Show Speech Recognition authorization status (passive — never prompts).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `macspeech` CLI. Run `macspeech --help` to discover command groups and `--help` on any subcommand for its options."
+}
