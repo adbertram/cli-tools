@@ -36,6 +36,13 @@ from .http_session import (
     BrowserAuthenticatedHttpClient,
     BrowserCookie,
     DEFAULT_BROWSER_HEADERS,
+    DEFAULT_REQUESTS_BASE_DELAY,
+    DEFAULT_REQUESTS_JITTER,
+    DEFAULT_REQUESTS_MAX_DELAY,
+    DEFAULT_REQUESTS_MAX_RETRIES,
+    DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES,
+    RequestsRetryPolicy,
+    request_with_retry,
 )
 from .auth_commands import create_auth_app
 from .cache_commands import create_cache_app
@@ -145,6 +152,13 @@ __all__ = [
     "BrowserAuthenticatedHttpClient",
     "BrowserCookie",
     "DEFAULT_BROWSER_HEADERS",
+    "RequestsRetryPolicy",
+    "request_with_retry",
+    "DEFAULT_REQUESTS_MAX_RETRIES",
+    "DEFAULT_REQUESTS_BASE_DELAY",
+    "DEFAULT_REQUESTS_MAX_DELAY",
+    "DEFAULT_REQUESTS_JITTER",
+    "DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES",
     "create_auth_app",
     "create_cache_app",
     "create_profiles_app",

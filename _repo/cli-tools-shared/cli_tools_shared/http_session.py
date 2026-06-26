@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import gzip
 import json
+import random
 import time
 import zlib
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
+
+import requests
 
 from .exceptions import ClientError
 
@@ -34,6 +37,121 @@ DEFAULT_BROWSER_HEADERS = {
     ),
 }
 DEFAULT_BROWSER_JSON_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# ---------------------------------------------------------------------------
+# requests-session retry policy
+#
+# Exponential-backoff-with-jitter retry for clients built on the ``requests``
+# library. This is the shared replacement for the per-CLI ``_calculate_retry_delay``
+# / ``_is_retryable`` / ``_get_retry_after`` helpers that several tools had copied
+# verbatim. (``BrowserAutomationJsonClient`` below keeps its own simpler linear
+# retry because it drives requests through a browser page, not ``requests``.)
+# ---------------------------------------------------------------------------
+
+DEFAULT_REQUESTS_MAX_RETRIES = 3
+DEFAULT_REQUESTS_BASE_DELAY = 1.0
+DEFAULT_REQUESTS_MAX_DELAY = 30.0
+DEFAULT_REQUESTS_JITTER = 0.1
+DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+# Transport-level exceptions that are safe to retry (the request never reached a
+# response, so retrying cannot duplicate a server-side effect mid-stream).
+RETRYABLE_REQUEST_EXCEPTIONS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
+@dataclass(frozen=True)
+class RequestsRetryPolicy:
+    """Retry decisions for ``requests``-backed HTTP clients.
+
+    Encapsulates everything that a retry loop needs to decide: which HTTP status
+    codes and transport exceptions are retryable, how long to back off
+    (exponential growth with bounded jitter, capped at ``max_delay``), and how to
+    honor a server ``Retry-After`` header. Drive a single request through the
+    policy with :func:`request_with_retry`.
+    """
+
+    max_retries: int = DEFAULT_REQUESTS_MAX_RETRIES
+    base_delay: float = DEFAULT_REQUESTS_BASE_DELAY
+    max_delay: float = DEFAULT_REQUESTS_MAX_DELAY
+    jitter: float = DEFAULT_REQUESTS_JITTER
+    retryable_status_codes: frozenset[int] = DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES
+
+    def calculate_delay(self, attempt: int, retry_after: Optional[float] = None) -> float:
+        """Seconds to wait before the retry following ``attempt`` (0-based).
+
+        A server-provided ``retry_after`` wins (still capped at ``max_delay``).
+        Otherwise the delay is ``base_delay * 2**attempt`` plus proportional
+        ``+/- jitter`` noise, capped at ``max_delay``.
+        """
+        if retry_after is not None:
+            return min(retry_after, self.max_delay)
+        delay = self.base_delay * (2 ** attempt)
+        jitter_range = delay * self.jitter
+        delay += random.uniform(-jitter_range, jitter_range)
+        return min(delay, self.max_delay)
+
+    def is_retryable_response(self, response: requests.Response) -> bool:
+        """True when ``response`` carries a retryable HTTP status code."""
+        return response.status_code in self.retryable_status_codes
+
+    def is_retryable_exception(self, exception: BaseException) -> bool:
+        """True when a transport ``exception`` is safe to retry."""
+        return isinstance(exception, RETRYABLE_REQUEST_EXCEPTIONS)
+
+    def retry_after_seconds(self, response: requests.Response) -> Optional[float]:
+        """Parse the ``Retry-After`` header as seconds; ``None`` if absent/invalid."""
+        value = response.headers.get("Retry-After")
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return None
+
+
+def request_with_retry(
+    send: Callable[[], requests.Response],
+    policy: RequestsRetryPolicy,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+) -> requests.Response:
+    """Call ``send`` until it yields a non-retryable response or attempts run out.
+
+    ``send`` performs one HTTP attempt and returns its ``requests.Response``;
+    callers own request construction inside it (headers, auth/token refresh,
+    cookies). The final response is returned even when it still carries a
+    retryable status after retries are exhausted — callers inspect
+    ``response.ok`` themselves. If every attempt raised a retryable transport
+    exception and none produced a response, the last exception propagates so the
+    caller can wrap it in its own error type.
+    """
+    last_response: Optional[requests.Response] = None
+    last_exception: Optional[BaseException] = None
+
+    for attempt in range(policy.max_retries + 1):
+        try:
+            response = send()
+            last_response = response
+            if policy.is_retryable_response(response) and attempt < policy.max_retries:
+                sleep(policy.calculate_delay(attempt, policy.retry_after_seconds(response)))
+                continue
+            return response
+        except requests.exceptions.RequestException as exc:
+            last_exception = exc
+            if policy.is_retryable_exception(exc) and attempt < policy.max_retries:
+                sleep(policy.calculate_delay(attempt))
+                continue
+            break
+
+    if last_response is not None:
+        return last_response
+    if last_exception is not None:
+        raise last_exception
+    raise ClientError("request_with_retry made no attempts; max_retries must be >= 0.")
 
 
 class BrowserAuthStateError(ClientError):
