@@ -36,10 +36,18 @@ class Config(BaseConfig):
         return AdobePodcastBrowser(self)
 
     def test_connection(self) -> dict:
-        """Validate saved credentials by checking the access token is present."""
+        """Validate saved credentials by making a lightweight API call."""
+        from .client import AdobePodcastClient, ClientError  # lazy import avoids circular dep
         if not self.access_token:
             return {"api_test": "failed: no access token — run 'adobe-podcast auth login'"}
-        return {"api_test": "passed"}
+        try:
+            client = AdobePodcastClient(config=self)
+            import time as _time
+            ts = int(_time.time() * 1000)
+            client._request("GET", f"{self.base_url}/api/v1/enhance_speech_tracks?time={ts}")
+            return {"api_test": "passed"}
+        except ClientError as exc:
+            return {"api_test": f"failed: {exc}"}
 
 
 _configs = {}
