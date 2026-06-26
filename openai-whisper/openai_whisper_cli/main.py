@@ -1,10 +1,10 @@
-"""Main entry point for Whisper CLI wrapper."""
+"""Main entry point for OpenAI Whisper CLI wrapper."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from .client import ClientError
 
 app = create_app(
-    name="whisper",
+    name="openai-whisper",
     help="CLI wrapper for OpenAI Whisper speech-to-text transcription",
     version=__version__,
     cache_support=False,

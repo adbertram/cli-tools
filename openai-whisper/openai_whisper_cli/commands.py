@@ -50,12 +50,14 @@ def extract_fields(items: list, fields: list) -> list:
 @app.command("create")
 def transcripts_create(
     file_path: str = typer.Argument(..., help="Path to audio/video file to transcribe"),
-    model: str = typer.Option("turbo", "--model", "-m", help="Whisper model: tiny, base, small, medium, large, turbo"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Whisper model: tiny, base, small, medium, large, turbo (and .en/large-v* variants). Defaults to OPENAI_WHISPER_MODEL or 'turbo'."),
     language: str = typer.Option("en", "--language", "-L", help="Language code (e.g., en, es, fr, de)"),
     word_timestamps: bool = typer.Option(False, "--word-timestamps", "-w", help="Enable word-level timestamps"),
     output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="Directory to save output files"),
     table: bool = typer.Option(False, "--table", "-t", help="Display segments as table"),
     timeout: int = typer.Option(600, "--timeout", help="Transcription timeout in seconds"),
+    initial_prompt: Optional[str] = typer.Option(None, "--initial-prompt", help="Vocabulary-biasing prompt passed to Whisper as --initial_prompt. Defaults to OPENAI_WHISPER_INITIAL_PROMPT; omitted entirely when empty."),
+    temperature: Optional[float] = typer.Option(None, "--temperature", help="Sampling temperature passed to Whisper as --temperature. Omitted when not provided."),
 ):
     """
     Transcribe an audio or video file using OpenAI Whisper.
@@ -63,21 +65,34 @@ def transcripts_create(
     Outputs JSON transcript with text and timestamped segments.
 
     Examples:
-        whisper transcripts create video.mp4
-        whisper transcripts create video.mp4 --model base
-        whisper transcripts create audio.wav --language es
-        whisper transcripts create video.mp4 --word-timestamps
-        whisper transcripts create video.mp4 -o ./transcripts/ --table
+        openai-whisper transcripts create video.mp4
+        openai-whisper transcripts create video.mp4 --model base
+        openai-whisper transcripts create audio.wav --language es
+        openai-whisper transcripts create video.mp4 --word-timestamps
+        openai-whisper transcripts create video.mp4 -o ./transcripts/ --table
+        openai-whisper transcripts create audio.mp3 --initial-prompt "worktree, subagent, Codex"
+        openai-whisper transcripts create audio.mp3 --temperature 0
     """
     try:
+        from .config import get_config
+        config = get_config()
+
+        # Resolve model: explicit flag wins, else env default (OPENAI_WHISPER_MODEL), else 'turbo'.
+        resolved_model = model if model is not None else config.default_model
+
         # Validate model
         try:
-            whisper_model = WhisperModel(model.lower())
+            whisper_model = WhisperModel(resolved_model.lower())
         except ValueError:
             from cli_tools_shared.output import print_error
             valid_models = ", ".join([m.value for m in WhisperModel])
-            print_error(f"Invalid model '{model}'. Valid models: {valid_models}")
+            print_error(f"Invalid model '{resolved_model}'. Valid models: {valid_models}")
             raise typer.Exit(1)
+
+        # Resolve initial prompt: explicit flag wins, else env default; empty -> no prompt.
+        resolved_initial_prompt = initial_prompt if initial_prompt is not None else config.default_initial_prompt
+        if resolved_initial_prompt is not None and resolved_initial_prompt.strip() == "":
+            resolved_initial_prompt = None
 
         # Validate file exists
         if not Path(file_path).exists():
@@ -96,6 +111,8 @@ def transcripts_create(
             word_timestamps=word_timestamps,
             output_dir=output_dir,
             timeout=timeout,
+            initial_prompt=resolved_initial_prompt,
+            temperature=temperature,
         )
 
         if table:
@@ -131,10 +148,10 @@ def transcripts_list(
     List existing transcript JSON files in a directory.
 
     Examples:
-        whisper transcripts list
-        whisper transcripts list ./transcripts/
-        whisper transcripts list --table
-        whisper transcripts list --filter "language:eq:en"
+        openai-whisper transcripts list
+        openai-whisper transcripts list ./transcripts/
+        openai-whisper transcripts list --table
+        openai-whisper transcripts list --filter "language:eq:en"
     """
     import json
     import glob
@@ -212,9 +229,9 @@ def transcripts_get(
     Get details of an existing transcript file.
 
     Examples:
-        whisper transcripts get video.json
-        whisper transcripts get video.json --table
-        whisper transcripts get video.json --properties "text,language"
+        openai-whisper transcripts get video.json
+        openai-whisper transcripts get video.json --table
+        openai-whisper transcripts get video.json --properties "text,language"
     """
     import json
     from .models import create_transcript
@@ -272,8 +289,8 @@ def transcripts_models(
     List available Whisper models.
 
     Examples:
-        whisper transcripts models
-        whisper transcripts models --table
+        openai-whisper transcripts models
+        openai-whisper transcripts models --table
     """
     try:
         models = [

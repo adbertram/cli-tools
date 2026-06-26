@@ -11,13 +11,27 @@ from .base import CLIModel
 
 
 class WhisperModel(str, Enum):
-    """Available Whisper model sizes."""
+    """Available Whisper model sizes.
 
+    Values match the names accepted by the underlying whisper engine
+    (whisper.available_models()). English-only (.en) and versioned large
+    variants are included; member names use underscores while the string
+    values keep the engine's exact hyphenated/dotted spelling.
+    """
+
+    TINY_EN = "tiny.en"
     TINY = "tiny"
+    BASE_EN = "base.en"
     BASE = "base"
+    SMALL_EN = "small.en"
     SMALL = "small"
+    MEDIUM_EN = "medium.en"
     MEDIUM = "medium"
+    LARGE_V1 = "large-v1"
+    LARGE_V2 = "large-v2"
+    LARGE_V3 = "large-v3"
     LARGE = "large"
+    LARGE_V3_TURBO = "large-v3-turbo"
     TURBO = "turbo"
 
 

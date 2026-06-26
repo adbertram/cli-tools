@@ -133,6 +133,8 @@ class WhisperClient:
         word_timestamps: bool = False,
         output_dir: Optional[str] = None,
         timeout: int = 600,
+        initial_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
     ) -> Transcript:
         """
         Transcribe an audio/video file using Whisper.
@@ -144,6 +146,10 @@ class WhisperClient:
             word_timestamps: Enable word-level timestamps
             output_dir: Directory to save output files (default: same as input)
             timeout: Command timeout in seconds (default: 10 minutes)
+            initial_prompt: Optional vocabulary-biasing prompt passed to the
+                engine as --initial_prompt. Omitted when None or empty.
+            temperature: Optional sampling temperature passed to the engine as
+                --temperature. Omitted when None.
 
         Returns:
             Transcript model with text and segments
@@ -174,6 +180,14 @@ class WhisperClient:
 
         if word_timestamps:
             args.extend(["--word_timestamps", "True"])
+
+        # Vocabulary biasing: only pass --initial_prompt when non-empty.
+        if initial_prompt is not None and initial_prompt.strip() != "":
+            args.extend(["--initial_prompt", initial_prompt])
+
+        # Sampling temperature: only pass when explicitly provided.
+        if temperature is not None:
+            args.extend(["--temperature", str(temperature)])
 
         # Run transcription
         self._run_command(args, timeout=timeout)

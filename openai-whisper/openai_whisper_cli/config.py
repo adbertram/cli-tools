@@ -8,10 +8,10 @@ from dotenv import set_key
 
 
 class Config(BaseConfig):
-    """Configuration manager for Whisper CLI wrapper."""
+    """Configuration manager for OpenAI Whisper CLI wrapper."""
 
     CREDENTIAL_TYPES: list = []  # custom field set; managed by this subclass
-    DIST_NAME = "whisper-cli"
+    DIST_NAME = "openai-whisper-cli"
 
     def __init__(self, profile: Optional[str] = None):
         super().__init__(
@@ -34,6 +34,27 @@ class Config(BaseConfig):
         if self.cli_path:
             return self.cli_path
         return self.cli_command
+
+    @property
+    def default_model(self) -> str:
+        """Default Whisper model when the --model flag is not provided.
+
+        Sourced from OPENAI_WHISPER_MODEL; falls back to 'turbo' (the engine
+        default and prior hardcoded value).
+        """
+        return os.getenv("OPENAI_WHISPER_MODEL", "turbo")
+
+    @property
+    def default_initial_prompt(self) -> Optional[str]:
+        """Default vocabulary-biasing initial prompt when --initial-prompt is omitted.
+
+        Sourced from OPENAI_WHISPER_INITIAL_PROMPT. Unset by default; an empty
+        or whitespace-only value is treated as no prompt.
+        """
+        value = os.getenv("OPENAI_WHISPER_INITIAL_PROMPT")
+        if value is not None and value.strip() == "":
+            return None
+        return value
 
     def is_cli_available(self) -> bool:
         """Check if the underlying CLI is available in PATH."""
