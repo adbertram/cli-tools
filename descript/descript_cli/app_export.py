@@ -760,9 +760,14 @@ def export_composition_local(
     return output_path
 
 
-DELETE_SIDEBAR_TIMEOUT_SECONDS = 15
-DELETE_MENU_TIMEOUT_SECONDS = 10
+SIDEBAR_TIMEOUT_SECONDS = 15
+MENU_TIMEOUT_SECONDS = 10
 DELETE_CONFIRM_WAIT_SECONDS = 3
+RENAME_COMMIT_WAIT_SECONDS = 3
+
+# Backwards-compatible aliases (the delete path referenced these names).
+DELETE_SIDEBAR_TIMEOUT_SECONDS = SIDEBAR_TIMEOUT_SECONDS
+DELETE_MENU_TIMEOUT_SECONDS = MENU_TIMEOUT_SECONDS
 
 
 def _cdp_eval_value(ws, msg_id: int, expression: str):
@@ -794,6 +799,172 @@ def _cdp_click_point(ws, msg_id: int, x: float, y: float) -> None:
         time.sleep(0.05)
 
 
+def _cdp_press_key(
+    ws,
+    msg_id: int,
+    key: str,
+    code: str,
+    *,
+    command: bool = False,
+) -> None:
+    """Dispatch a real keyDown/keyUp for a single key via CDP.
+
+    Synthetic keyboard events are ignored by Radix/contenteditable rename
+    fields, so renaming drives Input.dispatchKeyEvent the same way clicks use
+    Input.dispatchMouseEvent. Pass command=True for a Cmd-modified chord
+    (e.g. Cmd+A select-all on macOS).
+    """
+    modifiers = 4 if command else 0  # CDP bit 3 (value 4) == Meta/Command.
+    for offset, event_type in enumerate(["keyDown", "keyUp"]):
+        _send_cdp_message(ws, msg_id + offset, "Input.dispatchKeyEvent", {
+            "type": event_type,
+            "key": key,
+            "code": code,
+            "modifiers": modifiers,
+        })
+        time.sleep(0.05)
+
+
+def _cdp_type_text(ws, msg_id: int, text: str) -> None:
+    """Insert literal text into the focused field via CDP Input.insertText.
+
+    insertText commits the whole string as one composed input event, which
+    contenteditable/Radix rename fields accept, avoiding per-character key
+    synthesis. Caller must ensure the rename field is focused first.
+    """
+    _send_cdp_message(ws, msg_id, "Input.insertText", {"text": text})
+    time.sleep(0.1)
+
+
+def _open_composition_context_menu(
+    ws,
+    composition_id: str,
+    composition_name: str,
+    probe: int,
+) -> int:
+    """Open the id-scoped composition's sidebar context menu via CDP.
+
+    Shared by delete and rename. Opens the composition popover if needed,
+    locates the `composition-sidebar-item` whose id is the composition UUID,
+    hovers it, and clicks its `composition-context-menu-button` so the Radix
+    context menu is open. Returns the next free CDP message id to continue
+    with. Raises ClientError if the item or its menu button is not found.
+    """
+    # 1. Open the composition popover. The composition list rows
+    #    (composition-sidebar-item, each whose id IS the composition UUID,
+    #    carrying a composition-context-menu-button) render ONLY inside the
+    #    composition-popover-content popover — they are absent from the
+    #    default editor DOM, so querying for them first returns ids: [].
+    #    Click the composition-popover-trigger to open it. The popover is
+    #    transient (closes on focus loss), so the locate loop below re-opens
+    #    it whenever composition-popover-content is not present.
+    trigger_expr = (
+        "(function(){"
+        "var open=!!document.querySelector('[data-testid=\"composition-popover-content\"]');"
+        "var t=document.querySelector('[data-testid=\"composition-popover-trigger\"]');"
+        "if(!t) return {trigger:false, open:open};"
+        "var r=t.getBoundingClientRect();"
+        "return {trigger:true, open:open, x:r.x+r.width/2, y:r.y+r.height/2};"
+        "})()"
+    )
+
+    # 2. Locate the id-scoped sidebar item and its context-menu button
+    #    inside the open popover.
+    locate_expr = (
+        "(function(){"
+        "var item=document.querySelector('[data-testid=\"composition-sidebar-item\"][id=\"%s\"]');"
+        "if(!item){var all=Array.from(document.querySelectorAll('[data-testid=\"composition-sidebar-item\"]'));"
+        "return {found:false, ids: all.map(function(e){return e.id;})};}"
+        "item.scrollIntoView({block:'center'});"
+        "var ir=item.getBoundingClientRect();"
+        "var btn=item.querySelector('[data-testid=\"composition-context-menu-button\"]');"
+        "if(!btn) return {found:true, button:false};"
+        "var r=btn.getBoundingClientRect();"
+        "return {found:true, button:true, x:r.x+r.width/2, y:r.y+r.height/2, ix:ir.x+ir.width/2, iy:ir.y+ir.height/2};"
+        "})()"
+    ) % composition_id
+    loc = None
+    deadline = time.time() + SIDEBAR_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        trig = _cdp_eval_value(ws, probe, trigger_expr)
+        probe += 1
+        if trig and trig.get("trigger") and not trig.get("open"):
+            print_info("Opening composition list...")
+            _cdp_click_point(ws, probe, trig["x"], trig["y"])
+            probe += 3
+            time.sleep(0.6)
+        loc = _cdp_eval_value(ws, probe, locate_expr)
+        probe += 1
+        if loc and loc.get("found") and loc.get("button"):
+            break
+        time.sleep(0.4)
+    if not loc or not loc.get("found"):
+        raise ClientError(
+            f"Composition {composition_id} not found in the Descript composition list. "
+            f"Available composition ids: {loc.get('ids') if loc else None}"
+        )
+    if not loc.get("button"):
+        raise ClientError(
+            f"Composition {composition_id} has no context-menu button in the sidebar DOM."
+        )
+
+    # Hover the item (the options button can be hover-gated), then click it.
+    _send_cdp_message(ws, probe, "Input.dispatchMouseEvent", {
+        "type": "mouseMoved", "x": loc["ix"], "y": loc["iy"],
+    })
+    probe += 1
+    time.sleep(0.3)
+    print_info(f"Opening context menu for '{composition_name}'...")
+    _cdp_click_point(ws, probe, loc["x"], loc["y"])
+    probe += 3  # _cdp_click_point uses 3 consecutive IDs (move/press/release)
+    time.sleep(0.6)
+    return probe
+
+
+def _click_context_menu_item(
+    ws,
+    probe: int,
+    labels: tuple,
+    action: str,
+    timeout: int = MENU_TIMEOUT_SECONDS,
+) -> int:
+    """Find and click a Radix menuitem by visible text via CDP.
+
+    `labels` is a tuple of acceptable lowercase menu-item texts (e.g.
+    ('delete', 'delete composition')). Returns the next free CDP message id.
+    Raises ClientError listing the menu items seen if no label matches.
+    """
+    labels_js = ",".join("'%s'" % label for label in labels)
+    item_expr = (
+        "(function(){"
+        "var labels=[%s];"
+        "var els=Array.from(document.querySelectorAll('[role=\"menuitem\"]'));"
+        "var hit=els.find(function(e){var t=(e.textContent||'').trim().toLowerCase(); return labels.indexOf(t)!==-1;});"
+        "if(!hit) return {found:false, items: els.map(function(e){return (e.textContent||'').trim();})};"
+        "var r=hit.getBoundingClientRect();"
+        "return {found:true, x:r.x+r.width/2, y:r.y+r.height/2, text:hit.textContent.trim()};"
+        "})()"
+    ) % labels_js
+    deadline = time.time() + timeout
+    item = None
+    while time.time() < deadline:
+        item = _cdp_eval_value(ws, probe, item_expr)
+        probe += 1
+        if item and item.get("found"):
+            break
+        time.sleep(0.3)
+    if not item or not item.get("found"):
+        raise ClientError(
+            f"{action} item did not appear in the composition context menu. "
+            f"Menu items seen: {item.get('items') if item else None}"
+        )
+    print_info(f"Clicking {item['text']}...")
+    _cdp_click_point(ws, probe + 1, item["x"], item["y"])
+    probe += 4  # one eval id consumed above + 3 for the click
+    time.sleep(0.8)
+    return probe
+
+
 def delete_composition_local(
     project_id: str,
     composition_id: str,
@@ -819,104 +990,17 @@ def delete_composition_local(
 
     ws = _connect_cdp(ws_url, timeout=15)
     try:
-        base = int(time.time() * 1000) % 100000
-        probe = base
+        probe = int(time.time() * 1000) % 100000
 
-        # 1. Open the composition popover. The composition list rows
-        #    (composition-sidebar-item, each whose id IS the composition UUID,
-        #    carrying a composition-context-menu-button) render ONLY inside the
-        #    composition-popover-content popover — they are absent from the
-        #    default editor DOM, so querying for them first returns ids: [].
-        #    Click the composition-popover-trigger to open it. The popover is
-        #    transient (closes on focus loss), so the locate loop below re-opens
-        #    it whenever composition-popover-content is not present.
-        trigger_expr = (
-            "(function(){"
-            "var open=!!document.querySelector('[data-testid=\"composition-popover-content\"]');"
-            "var t=document.querySelector('[data-testid=\"composition-popover-trigger\"]');"
-            "if(!t) return {trigger:false, open:open};"
-            "var r=t.getBoundingClientRect();"
-            "return {trigger:true, open:open, x:r.x+r.width/2, y:r.y+r.height/2};"
-            "})()"
+        # 1. Open the id-scoped composition's sidebar context menu.
+        probe = _open_composition_context_menu(
+            ws, composition_id, composition_name, probe,
         )
-
-        # 2. Locate the id-scoped sidebar item and its context-menu button
-        #    inside the open popover.
-        locate_expr = (
-            "(function(){"
-            "var item=document.querySelector('[data-testid=\"composition-sidebar-item\"][id=\"%s\"]');"
-            "if(!item){var all=Array.from(document.querySelectorAll('[data-testid=\"composition-sidebar-item\"]'));"
-            "return {found:false, ids: all.map(function(e){return e.id;})};}"
-            "item.scrollIntoView({block:'center'});"
-            "var ir=item.getBoundingClientRect();"
-            "var btn=item.querySelector('[data-testid=\"composition-context-menu-button\"]');"
-            "if(!btn) return {found:true, button:false};"
-            "var r=btn.getBoundingClientRect();"
-            "return {found:true, button:true, x:r.x+r.width/2, y:r.y+r.height/2, ix:ir.x+ir.width/2, iy:ir.y+ir.height/2};"
-            "})()"
-        ) % composition_id
-        loc = None
-        deadline = time.time() + DELETE_SIDEBAR_TIMEOUT_SECONDS
-        while time.time() < deadline:
-            trig = _cdp_eval_value(ws, probe, trigger_expr)
-            probe += 1
-            if trig and trig.get("trigger") and not trig.get("open"):
-                print_info("Opening composition list...")
-                _cdp_click_point(ws, probe, trig["x"], trig["y"])
-                probe += 3
-                time.sleep(0.6)
-            loc = _cdp_eval_value(ws, probe, locate_expr)
-            probe += 1
-            if loc and loc.get("found") and loc.get("button"):
-                break
-            time.sleep(0.4)
-        if not loc or not loc.get("found"):
-            raise ClientError(
-                f"Composition {composition_id} not found in the Descript composition list. "
-                f"Available composition ids: {loc.get('ids') if loc else None}"
-            )
-        if not loc.get("button"):
-            raise ClientError(
-                f"Composition {composition_id} has no context-menu button in the sidebar DOM."
-            )
-
-        # Hover the item (the options button can be hover-gated), then click it.
-        _send_cdp_message(ws, probe, "Input.dispatchMouseEvent", {
-            "type": "mouseMoved", "x": loc["ix"], "y": loc["iy"],
-        })
-        probe += 1
-        time.sleep(0.3)
-        print_info(f"Opening context menu for '{composition_name}'...")
-        _cdp_click_point(ws, probe, loc["x"], loc["y"])
-        probe += 3  # _cdp_click_point uses 3 consecutive IDs (move/press/release)
-        time.sleep(0.6)
 
         # 2. Find and click the Delete item (Radix menuitem).
-        delete_expr = (
-            "(function(){"
-            "var els=Array.from(document.querySelectorAll('[role=\"menuitem\"]'));"
-            "var del=els.find(function(e){var t=(e.textContent||'').trim().toLowerCase(); return t==='delete'||t==='delete composition';});"
-            "if(!del) return {found:false, items: els.map(function(e){return (e.textContent||'').trim();})};"
-            "var r=del.getBoundingClientRect();"
-            "return {found:true, x:r.x+r.width/2, y:r.y+r.height/2, text:del.textContent.trim()};"
-            "})()"
+        probe = _click_context_menu_item(
+            ws, probe, ("delete", "delete composition"), "Delete",
         )
-        deadline = time.time() + DELETE_MENU_TIMEOUT_SECONDS
-        item = None
-        while time.time() < deadline:
-            item = _cdp_eval_value(ws, probe, delete_expr)
-            probe += 1
-            if item and item.get("found"):
-                break
-            time.sleep(0.3)
-        if not item or not item.get("found"):
-            raise ClientError(
-                "Delete item did not appear in the composition context menu. "
-                f"Menu items seen: {item.get('items') if item else None}"
-            )
-        print_info("Clicking Delete...")
-        _cdp_click_point(ws, probe + 1, item["x"], item["y"])
-        time.sleep(0.8)
 
         # 3. Confirm dialog, if Descript shows one (Radix AlertDialog).
         confirm_expr = (
@@ -947,5 +1031,110 @@ def delete_composition_local(
                 time.sleep(0.8)
                 break
             time.sleep(0.3)
+    finally:
+        ws.close()
+
+
+def _enter_rename_mode_via_double_click(ws, composition_id: str, probe: int) -> int:
+    """Fallback rename trigger: double-click the composition title.
+
+    Used only when the context menu exposes no Rename item. Locates the
+    id-scoped sidebar item's title element and dispatches a double-click
+    (clickCount 2) via CDP, which Descript treats as an inline-rename gesture.
+    Returns the next free CDP message id. Raises ClientError if the title
+    element cannot be located.
+    """
+    title_expr = (
+        "(function(){"
+        "var item=document.querySelector('[data-testid=\"composition-sidebar-item\"][id=\"%s\"]');"
+        "if(!item) return {found:false};"
+        "var t=item.querySelector('[data-testid=\"composition-name\"]') "
+        "|| item.querySelector('[contenteditable]') || item;"
+        "var r=t.getBoundingClientRect();"
+        "return {found:true, x:r.x+r.width/2, y:r.y+r.height/2};"
+        "})()"
+    ) % composition_id
+    loc = _cdp_eval_value(ws, probe, title_expr)
+    probe += 1
+    if not loc or not loc.get("found"):
+        raise ClientError(
+            f"Composition {composition_id} title element not found to enter rename mode."
+        )
+    print_info("Double-clicking the composition title to rename...")
+    for click_count in (1, 2):
+        for event_type in ("mousePressed", "mouseReleased"):
+            params = {
+                "type": event_type,
+                "x": loc["x"],
+                "y": loc["y"],
+                "button": "left",
+                "clickCount": click_count,
+            }
+            if event_type == "mousePressed":
+                params["buttons"] = 1
+            _send_cdp_message(ws, probe, "Input.dispatchMouseEvent", params)
+            probe += 1
+            time.sleep(0.05)
+    time.sleep(0.6)
+    return probe
+
+
+def rename_composition_local(
+    project_id: str,
+    composition_id: str,
+    composition_name: str,
+    new_name: str,
+) -> None:
+    """Rename a composition by driving the Descript desktop app's own UI.
+
+    Descript exposes no rename API — a composition name is an internal
+    collaborative-document (OT) edit the app computes internally, exactly like
+    delete. So this drives the id-scoped sidebar context menu -> Rename via CDP
+    (falling back to double-clicking the title if no Rename item exists),
+    select-all + type the new name + Enter, letting the app produce the correct
+    document delta. Requires Descript running with CDP on port 9222; the project
+    auto-opens via its descript:// deep link. The caller verifies the new name
+    via the compositions list and fails loudly if it did not take.
+    """
+    _ensure_project_open(project_id)
+
+    print_info("Activating Descript...")
+    _run_applescript('tell application "Descript" to activate')
+    time.sleep(1)
+
+    ws_url = _get_project_page_ws(project_id)
+    if not ws_url:
+        raise ClientError("Lost connection to Descript")
+
+    ws = _connect_cdp(ws_url, timeout=15)
+    try:
+        probe = int(time.time() * 1000) % 100000
+
+        # 1. Open the id-scoped composition's sidebar context menu.
+        probe = _open_composition_context_menu(
+            ws, composition_id, composition_name, probe,
+        )
+
+        # 2. Click the Rename item (Radix menuitem). If the menu has no Rename
+        #    item, fall back to the app's double-click-title rename affordance.
+        try:
+            probe = _click_context_menu_item(
+                ws, probe, ("rename", "rename composition"), "Rename",
+            )
+        except ClientError:
+            print_info("No Rename menu item; falling back to double-click rename...")
+            probe = _enter_rename_mode_via_double_click(ws, composition_id, probe)
+
+        # 3. Replace the text: select-all, type the new name, commit with Enter.
+        #    The rename field is a contenteditable/Radix input that ignores
+        #    synthetic events, so these go through real CDP key/text dispatch.
+        print_info(f"Renaming to '{new_name}'...")
+        _cdp_press_key(ws, probe, "a", "KeyA", command=True)  # Cmd+A select-all
+        probe += 2
+        _cdp_type_text(ws, probe, new_name)
+        probe += 1
+        _cdp_press_key(ws, probe, "Enter", "Enter")  # commit
+        probe += 2
+        time.sleep(RENAME_COMMIT_WAIT_SECONDS)
     finally:
         ws.close()

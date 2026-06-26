@@ -384,6 +384,77 @@ def delete_composition(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("rename")
+def rename_composition(
+    project_id: str = typer.Argument(help="Project ID (UUID)"),
+    new_name: str = typer.Option(..., "--new-name", help="New composition name"),
+    composition_id: Optional[str] = typer.Option(None, "--composition-id", help="Composition ID (UUID)"),
+    composition: Optional[str] = typer.Option(None, "--composition", "-C", help="Composition name or ID"),
+):
+    """
+    Rename a composition in a project via Descript app automation.
+
+    Descript exposes no rename API (a composition name is an internal
+    collaborative-document edit, exactly like delete), so this drives the
+    desktop app's own id-scoped sidebar context-menu Rename via CDP (typing the
+    new name with real key events), then verifies the new name. Requires
+    Descript running with CDP on port 9222; the project auto-opens via its
+    descript://project/<id> deep link. No Accessibility grant is needed (there
+    is no native save dialog).
+
+    Provide the target as --composition-id (UUID) or --composition (name or ID).
+
+    Example:
+        descript compositions rename <project-id> --composition-id <id> --new-name m1c1
+        descript compositions rename <project-id> --composition "Old Name" --new-name m1c1
+    """
+    try:
+        from ..app_export import rename_composition_local
+
+        target = composition_id or composition
+        if not target:
+            print_error("Provide --composition-id or --composition.")
+            raise typer.Exit(1)
+
+        if not new_name.strip():
+            print_error("--new-name must not be empty.")
+            raise typer.Exit(1)
+
+        comp_id, comp_name = _resolve_composition(project_id, target)
+        print_info(f"Target composition: {comp_name} ({comp_id})")
+
+        if comp_name == new_name:
+            print_success(f"Composition '{comp_name}' ({comp_id}) already has that name.")
+            return
+
+        rename_composition_local(project_id, comp_id, comp_name, new_name)
+
+        updated = list_compositions_json(project_id)
+        match = [c for c in updated if c.get("id") == comp_id]
+        if not match:
+            print_error(
+                f"Composition {comp_id} is no longer present after the rename attempt."
+            )
+            raise typer.Exit(1)
+        actual = str(match[0].get("name", ""))
+        if actual != new_name:
+            print_error(
+                f"Rename did not take: composition {comp_id} name is '{actual}', "
+                f"expected '{new_name}'."
+            )
+            raise typer.Exit(1)
+
+        print_success(f"Renamed composition '{comp_name}' to '{new_name}' ({comp_id}).")
+
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @app.command("assets")
 def list_assets(
     project_id: str = typer.Argument(help="Project ID (UUID)"),
@@ -437,6 +508,9 @@ COMMAND_CREDENTIALS = {
         "custom"
     ],
     "list": [
+        "custom"
+    ],
+    "rename": [
         "custom"
     ]
 }
