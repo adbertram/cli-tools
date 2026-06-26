@@ -113,7 +113,17 @@ def search_get(
         client = ShopGoodwillClient(require_auth=False)
         item = client.get_item(item_id)
         if item.get("allowShippingCalculation"):
-            item["shippingEstimate"] = client.calculate_shipping(item)
+            try:
+                item["shippingEstimate"] = client.calculate_shipping(item)
+            except ClientError as shipping_error:
+                item["shippingEstimate"] = None
+                item["shippingEstimateUnavailable"] = True
+                item["shippingEstimateError"] = str(shipping_error)
+
+        item["buy_it_now_price"] = item.get("buyNowPrice")
+        auction_expired = item.get("isItemEndTimeExpire", False)
+        has_bin = item.get("buyNowPrice") is not None and item.get("buyNowPrice") > 0
+        item["available"] = not auction_expired or has_bin
 
         if table:
             buy_now_price = item.get("buyNowPrice")

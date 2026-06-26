@@ -92,7 +92,11 @@ shopgoodwill search get 123456789
 ```
 
 When ShopGoodwill enables shipping calculation for a listing, item detail output
-includes a `shippingEstimate` object calculated to ZIP `47725`.
+includes a `shippingEstimate` object calculated to ZIP `47725`. If ShopGoodwill
+returns listing details but rejects the shipping estimate (for example,
+`PACKAGE.WEIGHT.INVALID`), the command still returns the listing with
+`shippingEstimate: null`, `shippingEstimateUnavailable: true`, and
+`shippingEstimateError`.
 
 ## Output Formats
 

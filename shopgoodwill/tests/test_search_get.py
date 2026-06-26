@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from shopgoodwill_cli.client import ShopGoodwillClient
+from shopgoodwill_cli.client import ClientError, ShopGoodwillClient
 from shopgoodwill_cli.commands import search
 
 
@@ -52,6 +52,11 @@ class _NoShippingCalculationClient(_FakeClient):
 
     def calculate_shipping(self, item):
         raise AssertionError("shipping should not be calculated")
+
+
+class _ShippingCalculationFailureClient(_FakeClient):
+    def calculate_shipping(self, item):
+        raise ClientError("Shipping calculation failed: PACKAGE.WEIGHT.INVALID")
 
 
 def test_search_get_table_shows_buy_now_price_when_available(monkeypatch):
@@ -109,6 +114,18 @@ def test_search_get_does_not_calculate_shipping_when_unavailable(monkeypatch):
 
     assert result.exit_code == 0
     assert "shippingEstimate" not in result.stdout
+
+
+def test_search_get_returns_item_when_shipping_calculation_fails(monkeypatch):
+    monkeypatch.setattr(search, "ShopGoodwillClient", _ShippingCalculationFailureClient)
+
+    result = runner.invoke(search.app, ["get", "267415400"])
+
+    assert result.exit_code == 0
+    assert '"itemId": 267415400' in result.stdout
+    assert '"shippingEstimate": null' in result.stdout
+    assert '"shippingEstimateUnavailable": true' in result.stdout
+    assert "PACKAGE.WEIGHT.INVALID" in result.stdout
 
 
 def test_calculate_shipping_parses_shopgoodwill_estimate_response(monkeypatch):
