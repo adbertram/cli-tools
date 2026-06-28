@@ -43,6 +43,10 @@ airtable <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Base And Table Names">
+`records`, `tables`, and `fields` commands operate against one Airtable base at a time. If the target base matters, resolve it with `airtable bases get <base-name>` and pass the returned `app...` ID with `--base`; do not rely on the default base. Table-name arguments are Airtable table names inside that selected base, not project CLI resource names such as CourseCraft `modules`.
+</principle>
+
 <principle name="Command Groups">
 - **auth** -- Authentication management (login, logout, status, refresh, test) and nested `auth profiles`
 - **cache** -- Local response cache management

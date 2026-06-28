@@ -1,7 +1,7 @@
 {
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
-  "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when needed.",
+  "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
   "discovered_at": "2026-06-17T15:44:25Z",
   "total_commands": 28,
   "global_options": [
@@ -460,7 +460,7 @@
         },
         "get": {
           "help": "Get a single field schema by ID or name.",
-          "usage_instructions": "Get one field definition by TABLE_ID and FIELD_ID. TABLE_ID may be a table ID or table name; FIELD_ID may be a field ID or field name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output.",
+          "usage_instructions": "Get one field definition by TABLE_ID and FIELD_ID. TABLE_ID may be a table ID or Airtable table name in the selected base; FIELD_ID may be a field ID or field name. Use --base/-b to override AIRTABLE_BASE_ID and --table/-t for tabular output. Do not pass project CLI resource names unless they are also real Airtable table names in that base.",
           "arguments": [
             {
               "name": "table_id",
@@ -504,7 +504,7 @@
             "airtable fields list tblXXXXXXXXXXXXXX",
             "airtable fields list \"Slides\" --table"
           ],
-          "usage_instructions": "List schema fields for TABLE_ID, which may be a table ID or table name. Use --base/-b to override AIRTABLE_BASE_ID, --limit/-l to cap results, --filter/-f with field:op:value expressions such as name:eq:Status or type:eq:singleLineText, --properties/-p to project specific keys, and --table/-t for tabular output.",
+          "usage_instructions": "List schema fields for TABLE_ID, which may be a table ID or Airtable table name in the selected base. Use --base/-b to override AIRTABLE_BASE_ID, --limit/-l to cap results, --filter/-f with field:op:value expressions such as name:eq:Status or type:eq:singleLineText, --properties/-p to project specific keys, and --table/-t for tabular output. Do not pass project CLI resource names unless they are also real Airtable table names in that base.",
           "arguments": [
             {
               "name": "table_id",
