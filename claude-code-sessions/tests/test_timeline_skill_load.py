@@ -230,6 +230,9 @@ def test_timeline_groups_assistant_work_until_next_user_request(tmp_path):
 
 def test_consolidated_timeline_table_should_include_date_when_formatting_timestamp(monkeypatch):
     class FakeClient:
+        def resolve_session_id(self, identifier, project=None):
+            return identifier
+
         def get_timeline(self, **kwargs):
             return [
                 TimelineEntry(
@@ -258,6 +261,7 @@ def test_consolidated_timeline_table_should_include_date_when_formatting_timesta
 
     timeline_commands.consolidated_timeline(
         session_id="session-123",
+        session_name=None,
         project="TestProject",
         table=True,
         wide=False,

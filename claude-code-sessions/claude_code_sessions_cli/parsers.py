@@ -513,6 +513,8 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
     total_cache_creation_tokens = 0
     # Conversation tracking
     current_conversation_id = 1
+    # Session display name (custom title); last one in file order wins
+    custom_title = None
 
     try:
         # Collect all entries for conversation detection
@@ -522,6 +524,14 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
         for entry in all_entries:
             entry_type = entry.get('type', '')
             timestamp = entry.get('timestamp')
+
+            # Capture the session display name. Multiple custom-title entries
+            # may exist (the title gets regenerated); file order is chronological
+            # so the last non-empty one is the current name.
+            if entry_type == 'custom-title':
+                title = entry.get('customTitle')
+                if title:
+                    custom_title = title
 
             # Track timestamps
             if timestamp:
@@ -573,6 +583,7 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
 
         return SessionSummary(
             id=session_id,
+            custom_title=custom_title,
             project=project_name,
             project_path=project_path,
             created_at=created_at or '',
@@ -590,6 +601,68 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
         )
     except Exception:
         return None
+
+
+def scan_session_title(session_path: Path) -> Optional[str]:
+    """
+    Read a session file and return its current custom title, or None.
+
+    Lightweight name lookup: substring-prefilters each line on the
+    '"custom-title"' marker and JSON-parses only candidate lines, so untitled
+    sessions cost a cheap string scan instead of a full parse. Multiple
+    custom-title entries may exist (the title gets regenerated); file order is
+    chronological, so the LAST non-empty customTitle wins.
+    """
+    title: Optional[str] = None
+    try:
+        with open(session_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '"custom-title"' not in line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get('type') == 'custom-title':
+                    value = entry.get('customTitle')
+                    if value:
+                        title = value
+    except (OSError, UnicodeDecodeError):
+        return None
+    return title
+
+
+def scan_session_titles(
+    projects_dir: Path,
+    project_dir: Optional[Path] = None,
+) -> Iterator[Tuple[str, str, Optional[str], str]]:
+    """
+    Scan sessions for their custom titles.
+
+    Yields (session_id, project, title, last_activity) for every session file.
+    When project_dir is given, only that project is scanned; otherwise every
+    project under projects_dir is scanned (no row cap). title is None when the
+    session has no custom title. last_activity is an ISO timestamp derived from
+    the file mtime, used only for display/ordering in collision messages.
+    """
+    if project_dir is not None:
+        project_dirs = [project_dir]
+    elif projects_dir.exists():
+        project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+    else:
+        project_dirs = []
+
+    for pdir in project_dirs:
+        project_name = extract_project_name(pdir.name)
+        for session_file in pdir.glob('*.jsonl'):
+            title = scan_session_title(session_file)
+            last_activity = datetime.fromtimestamp(
+                session_file.stat().st_mtime
+            ).isoformat()
+            yield session_file.stem, project_name, title, last_activity
 
 
 def parse_conversation_summaries(

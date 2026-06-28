@@ -11,6 +11,7 @@ class SessionSummary(CLIModel):
     """Summary view of a session for list commands."""
 
     id: str
+    custom_title: Optional[str] = None
     project: str
     project_path: str = ""
     created_at: str

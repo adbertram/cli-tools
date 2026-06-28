@@ -1,4 +1,5 @@
 """Claude Code Sessions client for reading local session data."""
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -20,6 +21,8 @@ from .parsers import (
     search_session_file,
     in_date_window,
     extract_user_prompts,
+    scan_session_titles,
+    format_local_time,
 )
 from .models import (
     Project,
@@ -37,6 +40,14 @@ from .models import (
 class ClientError(Exception):
     """Custom exception for Claude Code Sessions errors."""
     pass
+
+
+# A session ID is a canonical UUID (case-insensitive). Anything else passed
+# where a session ID is accepted is treated as a session name (custom title).
+SESSION_ID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE,
+)
 
 
 class ClaudeCodeSessionsClient:
@@ -180,6 +191,69 @@ class ClaudeCodeSessionsClient:
         raise ClientError(f"Project not found: {project_name}")
 
     # ==================== Session Methods ====================
+
+    def resolve_session_id(
+        self,
+        identifier: str,
+        project: Optional[str] = None,
+    ) -> str:
+        """
+        Resolve a session identifier (ID or name) to a session ID.
+
+        If identifier is a UUID, it is returned unchanged. Otherwise it is
+        treated as a session name and matched case-insensitively (exact, not
+        substring) against session custom titles, scoped to project when given.
+
+        Raises:
+            ClientError: if the name matches zero sessions, or more than one
+                (the collision is listed; this never silently picks one).
+        """
+        if SESSION_ID_RE.match(identifier):
+            return identifier
+
+        project_dir = self._get_project_dir(project) if project else None
+
+        wanted = identifier.strip().lower()
+        matches = [
+            (session_id, project_name, last_activity)
+            for session_id, project_name, title, last_activity
+            in scan_session_titles(self.projects_dir, project_dir)
+            if title is not None and title.strip().lower() == wanted
+        ]
+
+        if not matches:
+            if project:
+                # Check globally — maybe it exists in a different project.
+                global_matches = [
+                    (sid, pname, la)
+                    for sid, pname, title, la
+                    in scan_session_titles(self.projects_dir, None)
+                    if title is not None and title.strip().lower() == wanted
+                ]
+                if global_matches:
+                    found_in = ", ".join(sorted({m[1] for m in global_matches}))
+                    raise ClientError(
+                        f'Session "{identifier}" not found in project "{project}". '
+                        f"Found in: {found_in}. "
+                        "Omit --project to auto-resolve, or pass the correct project."
+                    )
+            raise ClientError(
+                f'No session named "{identifier}". '
+                "Run 'claude-code-sessions sessions list' to see names, "
+                "or pass a session ID."
+            )
+
+        if len(matches) > 1:
+            matches.sort(key=lambda m: m[2] or '', reverse=True)
+            lines = [f'{len(matches)} sessions match "{identifier}":']
+            for session_id, project_name, last_activity in matches:
+                short_id = f'{session_id[:4]}…'
+                when = format_local_time(last_activity)
+                lines.append(f'  {short_id}  {project_name}   {when}')
+            lines.append('Re-run with a session ID.')
+            raise ClientError('\n'.join(lines))
+
+        return matches[0][0]
 
     def list_sessions(
         self,
@@ -420,6 +494,17 @@ class ClaudeCodeSessionsClient:
                 if session:
                     return session
 
+        raise ClientError(f"Session not found: {session_id}")
+
+    def get_session_project(self, session_id: str) -> str:
+        """Return the project name that owns session_id (searches all projects)."""
+        if not self.projects_dir.exists():
+            raise ClientError(f"Session not found: {session_id}")
+        for project_dir in self.projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            if (project_dir / f"{session_id}.jsonl").exists():
+                return extract_project_name(project_dir.name)
         raise ClientError(f"Session not found: {session_id}")
 
     def search_sessions(
@@ -821,7 +906,7 @@ class ClaudeCodeSessionsClient:
     def get_timeline(
         self,
         session_id: str,
-        project: str,
+        project: Optional[str] = None,
         limit: int = 500,
         show_thinking: bool = False,
     ) -> List[TimelineEntry]:
@@ -830,13 +915,15 @@ class ClaudeCodeSessionsClient:
 
         Args:
             session_id: Session UUID
-            project: Project name
+            project: Project name (auto-derived from session_id when None)
             limit: Maximum entries
             show_thinking: Include Claude's thinking/reasoning blocks (default: False)
 
         Returns:
             List of TimelineEntry models sorted chronologically
         """
+        if project is None:
+            project = self.get_session_project(session_id)
         project_dir = self._get_project_dir(project)
         project_name = extract_project_name(project_dir.name)
 

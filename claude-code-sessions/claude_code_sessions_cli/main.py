@@ -11,8 +11,9 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import projects, sessions, subagent_activity, tool_calls, todos, skills, timeline, conversations, search
+from .commands import auth, projects, sessions, subagent_activity, tool_calls, todos, skills, timeline, conversations, search
 
+app.add_typer(auth.app, name="auth", help="Check local Claude access")
 app.add_typer(projects.app, name="projects", help="List and query projects")
 app.add_typer(sessions.app, name="sessions", help="List and query sessions")
 app.add_typer(conversations.app, name="conversations", help="List conversations within sessions")

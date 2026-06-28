@@ -1,16 +1,18 @@
 """Configuration management for ClaudeCodeSessions CLI wrapper."""
 import os
 import shutil
+from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.credentials import CredentialType
 from dotenv import set_key
 
 
 class Config(BaseConfig):
     """Configuration manager for ClaudeCodeSessions CLI wrapper."""
 
-    CREDENTIAL_TYPES: list = []  # custom field set; managed by this subclass
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DIST_NAME = "claude-code-sessions-cli"
 
     def __init__(self, profile: Optional[str] = None):
@@ -55,6 +57,21 @@ class Config(BaseConfig):
             pass
         return None
 
+    def test_connection(self) -> dict:
+        """Verify the local Claude transcript store is readable."""
+        claude_home = os.getenv("CLAUDE_CODE_SESSIONS_CLAUDE_HOME") or os.getenv("CLAUDE_HOME")
+        claude_dir = Path(claude_home).expanduser() if claude_home else Path.home() / ".claude"
+        projects_dir = claude_dir / "projects"
+        exists = claude_dir.exists()
+        return {
+            "api_test": "passed" if exists else f"failed: {claude_dir} does not exist",
+            "claude_dir": str(claude_dir),
+            "projects_dir": str(projects_dir),
+            "cli_command": self.cli_command,
+            "cli_available": self.is_cli_available(),
+            "cli_version": self.get_cli_version(),
+        }
+
     def save_setting(self, key: str, value: str):
         """Save a setting to the .env file and update environment."""
         set_key(self.env_file_path, key, value)
@@ -77,9 +94,9 @@ class Config(BaseConfig):
 _config: Optional[Config] = None
 
 
-def get_config() -> Config:
+def get_config(profile: Optional[str] = None) -> Config:
     """Get or create the global config instance."""
     global _config
-    if _config is None:
-        _config = Config()
+    if _config is None or profile is not None:
+        _config = Config(profile=profile)
     return _config

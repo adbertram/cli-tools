@@ -6,6 +6,7 @@ from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
+from .session_arg import resolve_session_arg, require_session_arg
 
 app = typer.Typer(help="View unified activity timeline", no_args_is_help=True)
 
@@ -66,8 +67,9 @@ def truncate_value(value: Any, max_length: int = 40) -> str:
 @command
 def list_timeline(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter by session ID"),
-    conversation_id: Optional[int] = typer.Option(None, "--conversation-id", "-C", help="Filter by conversation ID (requires --session-id)"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
+    conversation_id: Optional[int] = typer.Option(None, "--conversation-id", "-C", help="Filter by conversation ID (requires --session-id/--session-name)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     wide: bool = typer.Option(False, "--wide", "-w", help="Show full input/output (no truncation)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum entries"),
@@ -87,11 +89,12 @@ def list_timeline(
         claude-code-sessions timeline list --project ExampleProject --filter "event_type:eq:skill"
     """
     try:
-        # Validate conversation_id requires session_id
-        if conversation_id and not session_id:
-            raise ClientError("--conversation-id requires --session-id")
-
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
+
+        # Validate conversation_id requires a session (id or name)
+        if conversation_id and not session_id:
+            raise ClientError("--conversation-id requires --session-id or --session-name")
 
         # Fetch more if we're filtering (apply limit after filters)
         fetch_limit = limit
@@ -161,8 +164,9 @@ def list_timeline(
 @app.command("consolidated")
 @command
 def consolidated_timeline(
-    session_id: str = typer.Option(..., "--session-id", "-S", help="Session UUID (required)"),
-    project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-derived from session when omitted)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     wide: bool = typer.Option(False, "--wide", "-w", help="Show full input/output (no truncation)"),
     limit: int = typer.Option(500, "--limit", "-l", help="Maximum entries"),
@@ -177,7 +181,8 @@ def consolidated_timeline(
     into one chronological timeline.
 
     Example:
-        claude-code-sessions timeline consolidated --session-id abc123 --project ExampleProject
+        claude-code-sessions timeline consolidated --session-id abc123
+        claude-code-sessions timeline consolidated --session-name "My Session" --table
         claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --table
         claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --hide-agent-tools
         claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --show-thinking
@@ -185,6 +190,7 @@ def consolidated_timeline(
     """
     try:
         client = get_client()
+        session_id = require_session_arg(client, session_id, session_name, project=project)
         timeline = client.get_timeline(session_id=session_id, project=project, limit=limit, show_thinking=show_thinking)
 
         # Convert to dicts
@@ -237,8 +243,9 @@ def consolidated_timeline(
 @app.command("get")
 @command
 def get_timeline(
-    session_id: str = typer.Argument(..., help="Session UUID"),
-    project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
+    session_id: Optional[str] = typer.Argument(None, help="Session ID (UUID or name); omit when using --session-name"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-derived from session when omitted)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     wide: bool = typer.Option(False, "--wide", "-w", help="Show full input/output (no truncation)"),
     limit: int = typer.Option(200, "--limit", "-l", help="Maximum entries"),
@@ -246,11 +253,19 @@ def get_timeline(
     """
     Get timeline for a specific session.
 
+    Provide the session as the positional argument (UUID or name) OR via
+    --session-name, but not both. --project is optional; omit it to auto-derive
+    from the session.
+
     Example:
-        claude-code-sessions timeline get abc123 --project ExampleProject
+        claude-code-sessions timeline get abc123
+        claude-code-sessions timeline get "Course: OpenAI Codex Advanced Features Module 2"
+        claude-code-sessions timeline get --session-name "Course: OpenAI Codex Advanced Features Module 2"
+        claude-code-sessions timeline get abc123 --project CourseCraft
     """
     try:
         client = get_client()
+        session_id = require_session_arg(client, session_id, session_name, project=project)
         timeline = client.get_timeline(session_id=session_id, project=project, limit=limit)
 
         # Convert to dicts

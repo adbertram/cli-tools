@@ -13,8 +13,33 @@ from ..parsers import (
     extract_project_name,
     encode_project_path,
 )
+from .session_arg import require_session_arg
 
 app = typer.Typer(help="List and query sessions", no_args_is_help=True)
+
+
+def _render_session_table(items: List[dict], columns: List[str], headers: List[str]) -> None:
+    """Format session rows (token counts, start time, name) and print as a table.
+
+    Shared by `sessions list` and `sessions search`; the caller supplies the
+    column/header sets so each command keeps its own trailing columns.
+    """
+    for item in items:
+        input_tok = item.get('total_input_tokens', 0)
+        output_tok = item.get('total_output_tokens', 0)
+        cache_read = item.get('total_cache_read_tokens', 0)
+        cache_create = item.get('total_cache_creation_tokens', 0)
+        effective = item.get('effective_tokens', 0)
+        item['in_tok'] = f"{input_tok:,}" if input_tok else ''
+        item['out_tok'] = f"{output_tok:,}" if output_tok else ''
+        item['cache_read'] = f"{cache_read:,}" if cache_read else ''
+        item['cache_create'] = f"{cache_create:,}" if cache_create else ''
+        item['effective'] = f"{effective:,}" if effective else ''
+        # Format start time (created_at) in local timezone
+        item['start_time'] = format_local_time(item.get('created_at', ''))
+        # Session display name; blank when the session has no custom title
+        item['name'] = item.get('custom_title') or ''
+    print_table(items, columns, headers)
 
 
 @app.command("list")
@@ -127,23 +152,9 @@ def list_sessions(
             items = [{k: v for k, v in item.items() if k in prop_list} for item in items]
 
         if table:
-            # Format token counts and start time for display
-            for item in items:
-                input_tok = item.get('total_input_tokens', 0)
-                output_tok = item.get('total_output_tokens', 0)
-                cache_read = item.get('total_cache_read_tokens', 0)
-                cache_create = item.get('total_cache_creation_tokens', 0)
-                effective = item.get('effective_tokens', 0)
-                item['in_tok'] = f"{input_tok:,}" if input_tok else ''
-                item['out_tok'] = f"{output_tok:,}" if output_tok else ''
-                item['cache_read'] = f"{cache_read:,}" if cache_read else ''
-                item['cache_create'] = f"{cache_create:,}" if cache_create else ''
-                item['effective'] = f"{effective:,}" if effective else ''
-                # Format start time (created_at) in local timezone
-                item['start_time'] = format_local_time(item.get('created_at', ''))
-            columns = ["id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective", "has_errors"]
-            headers = ["ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective", "Errors"]
-            print_table(items, columns, headers)
+            columns = ["name", "id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective", "has_errors"]
+            headers = ["Name", "ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective", "Errors"]
+            _render_session_table(items, columns, headers)
         else:
             print_json(items)
 
@@ -154,17 +165,24 @@ def list_sessions(
 @app.command("get")
 @command
 def get_session(
-    session_id: str = typer.Argument(..., help="Session UUID"),
+    session_id: Optional[str] = typer.Argument(None, help="Session ID (UUID or name); omit when using --session-name"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
     Get full session details including messages and tool calls.
 
+    Provide the session as the positional argument (UUID or name) OR via
+    --session-name, but not both.
+
     Example:
         claude-code-sessions sessions get abc123-def456-789
+        claude-code-sessions sessions get "Course: OpenAI Codex Advanced Features Module 2"
+        claude-code-sessions sessions get --session-name "Course: OpenAI Codex Advanced Features Module 2"
     """
     try:
         client = get_client()
+        session_id = require_session_arg(client, session_id, session_name)
         session = client.get_session(session_id)
 
         if table:
@@ -229,23 +247,9 @@ def search_sessions(
             items = [{k: v for k, v in item.items() if k in prop_list} for item in items]
 
         if table:
-            # Format token counts and start time for display
-            for item in items:
-                input_tok = item.get('total_input_tokens', 0)
-                output_tok = item.get('total_output_tokens', 0)
-                cache_read = item.get('total_cache_read_tokens', 0)
-                cache_create = item.get('total_cache_creation_tokens', 0)
-                effective = item.get('effective_tokens', 0)
-                item['in_tok'] = f"{input_tok:,}" if input_tok else ''
-                item['out_tok'] = f"{output_tok:,}" if output_tok else ''
-                item['cache_read'] = f"{cache_read:,}" if cache_read else ''
-                item['cache_create'] = f"{cache_create:,}" if cache_create else ''
-                item['effective'] = f"{effective:,}" if effective else ''
-                # Format start time (created_at) in local timezone
-                item['start_time'] = format_local_time(item.get('created_at', ''))
-            columns = ["id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
-            headers = ["ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
-            print_table(items, columns, headers)
+            columns = ["name", "id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
+            headers = ["Name", "ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
+            _render_session_table(items, columns, headers)
         else:
             print_json(items)
 

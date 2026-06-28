@@ -5,6 +5,7 @@ from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
+from .session_arg import resolve_session_arg
 
 app = typer.Typer(help="Query tool call history", no_args_is_help=True)
 
@@ -13,8 +14,9 @@ app = typer.Typer(help="Query tool call history", no_args_is_help=True)
 @command
 def list_tool_calls(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter to specific session"),
-    conversation_id: Optional[int] = typer.Option(None, "--conversation-id", "-C", help="Filter to specific conversation (requires --session-id)"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
+    conversation_id: Optional[int] = typer.Option(None, "--conversation-id", "-C", help="Filter to specific conversation (requires --session-id/--session-name)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
     since: Optional[str] = typer.Option(None, "--since", "-s", help="Time filter: 5h, 1d, 7d"),
@@ -35,11 +37,12 @@ def list_tool_calls(
         claude-code-sessions tool-calls list --project ExampleProject --subagent-id toolu_01ABC...
     """
     try:
-        # Validate conversation_id requires session_id
-        if conversation_id and not session_id:
-            raise ClientError("--conversation-id requires --session-id")
-
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
+
+        # Validate conversation_id requires a session (id or name)
+        if conversation_id and not session_id:
+            raise ClientError("--conversation-id requires --session-id or --session-name")
 
         # If subagent_id is provided, automatically include subagents
         # and fetch more results since we'll filter after

@@ -43,10 +43,6 @@ def search(
             max_matches_per_session=max_matches,
         )
 
-        if not results:
-            typer.echo(f"No sessions found matching '{query}'")
-            raise typer.Exit(0)
-
         items = [r.model_dump() for r in results]
 
         if table:
