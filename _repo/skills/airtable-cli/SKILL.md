@@ -105,6 +105,6 @@ airtable auth profiles delete <name> --force
 
 **Cause:** Airtable documents public Web/Meta API support for listing, creating, and updating schema fields, but it does not expose a public field-delete endpoint.
 
-**Correct path:** Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`.
+**Correct path:** Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`. Because absence is the expected success state, wrap the probe so `Field not found in table metadata: <field>` or an empty filtered list prints explicit evidence and exits `0`; any auth, base, table, or runtime error remains a failure.
 
 **CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.
