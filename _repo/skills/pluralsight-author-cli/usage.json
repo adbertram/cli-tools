@@ -1,7 +1,7 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-06-28T01:21:34Z",
+  "discovered_at": "2026-06-28T14:24:57Z",
   "total_commands": 20,
   "global_options": [
     {
@@ -25,7 +25,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "help": "Configure authentication credentials.",
           "arguments": [],
           "options": [
             {
@@ -128,7 +128,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "arguments": [],
               "options": [
                 {
@@ -228,7 +228,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "help": "Check authentication status across profiles.",
           "arguments": [],
           "options": [
             {
@@ -282,7 +282,7 @@
       "options": [],
       "commands": {
         "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "help": "Remove all cached responses.",
           "arguments": [],
           "options": []
         }
@@ -419,13 +419,13 @@
           ]
         },
         "search": {
-          "help": "Search icons by name, category, color, or tag.",
+          "help": "Search icons by a single keyword matched (case-insensitively) across id, name, category, color, and tags. The query is matched as a literal substring, not tokenized -- a single keyword like 'branch' or 'lightbulb' matches; a multi-word phrase usually matches nothing. For a multi-word concept, search individual keywords separately and combine the results, or narrow with --filter/--color.",
           "arguments": [
             {
               "name": "query",
               "type": "TEXT",
               "required": true,
-              "help": "Icon search query"
+              "help": "Single keyword to match (substring, case-insensitive). A multi-word phrase rarely matches -- search one keyword at a time"
             }
           ],
           "options": [

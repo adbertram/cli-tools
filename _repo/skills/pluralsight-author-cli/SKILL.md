@@ -22,7 +22,7 @@ pluralsight-author <command-group> <action> [arguments] [options]
 | `pluralsight-author opportunities get <slug>` | Fetch one opportunity by its slug. |
 | `pluralsight-author search query <text>` | Search the opportunity dataset by keyword. |
 | `pluralsight-author icons list` | List Author Kit icon-library records. |
-| `pluralsight-author icons search <query>` | Search icons by name, category, color, or tag. |
+| `pluralsight-author icons search <query>` | Search icons by a single keyword matched as a case-insensitive substring across id, name, category, color, and tags. The query is not tokenized, so a multi-word phrase usually matches nothing -- search one keyword at a time. |
 | `pluralsight-author icons get <icon-id>` | Fetch one icon-library record. |
 | `pluralsight-author icons download <icon-id> --output <path>` | Download one icon asset. |
 | `pluralsight-author auth login` | Create or refresh the saved browser session required for live reads. |
