@@ -1,8 +1,8 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-06-20T19:40:47Z",
-  "total_commands": 19,
+  "discovered_at": "2026-06-27T13:11:51Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -13,6 +13,250 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Check local Claude access",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "conversations": {
       "help": "List conversations within sessions",
       "arguments": [],
@@ -22,19 +266,33 @@
           "help": "Get a specific conversation by ID. The conversation ID format is session_id:conversation_number (e.g., abc123:1). Example: claude-code-sessions conversations get abc123:1 --project MyProject",
           "arguments": [
             {
-              "name": "conversation_id",
+              "name": "[conversation_id]",
               "type": "TEXT",
-              "required": true,
-              "help": "Conversation ID (session_id:conv_number, e.g. abc123:1)"
+              "required": false,
+              "help": "TEXT  Conversation ID (session_or_name:conv_number, e.g. abc123:1); omit when using --session-name"
             }
           ],
           "options": [
             {
               "name": "--project",
               "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
               "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive); requires --conversation-id",
+              "short": "-N"
+            },
+            {
+              "name": "--conversation-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Conversation number (used with --session-name)",
+              "short": "-C"
             },
             {
               "name": "--table",
@@ -60,8 +318,15 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-s"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -241,13 +506,20 @@
           "help": "Get full session details including messages and tool calls. Example: claude-code-sessions sessions get abc123-def456-789",
           "arguments": [
             {
-              "name": "session_id",
+              "name": "[session_id]",
               "type": "TEXT",
-              "required": true,
-              "help": "Session UUID"
+              "required": false,
+              "help": "TEXT  Session ID (UUID or name); omit when using --session-name"
             }
           ],
           "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -464,8 +736,15 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -553,8 +832,15 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -607,15 +893,22 @@
             {
               "name": "--session-id",
               "type": "TEXT",
-              "required": true,
-              "help": "Session UUID (required)",
+              "required": false,
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--project",
               "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
               "short": "-p"
             },
             {
@@ -666,19 +959,26 @@
           "help": "Get timeline for a specific session. Example: claude-code-sessions timeline get abc123 --project Agent-ATABlogger",
           "arguments": [
             {
-              "name": "session_id",
+              "name": "[session_id]",
               "type": "TEXT",
-              "required": true,
-              "help": "Session UUID"
+              "required": false,
+              "help": "TEXT  Session ID (UUID or name); omit when using --session-name"
             }
           ],
           "options": [
             {
               "name": "--project",
               "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
               "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -719,14 +1019,21 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by session ID",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--conversation-id",
               "type": "INTEGER",
               "required": false,
-              "help": "Filter by conversation ID (requires --session-id)",
+              "help": "Filter by conversation ID (requires --session-id/--session-name)",
               "short": "-C"
             },
             {
@@ -823,8 +1130,15 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -912,14 +1226,21 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--conversation-id",
               "type": "INTEGER",
               "required": false,
-              "help": "Filter to specific conversation (requires --session-id)",
+              "help": "Filter to specific conversation (requires --session-id/--session-name)",
               "short": "-C"
             },
             {

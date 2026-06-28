@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-25T15:32:44Z",
+  "discovered_at": "2026-06-27T23:55:01Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -21,13 +21,12 @@
   "commands": {
     "auth": {
       "help": "Manage authentication",
-      "usage_instructions": "Authentication management via Airtable PAT delegation. Use to login, logout, test credentials, or check auth status. CourseCraft delegates auth to the airtable CLI under the hood.",
       "arguments": [],
       "options": [],
+      "usage_instructions": "Authentication management via Airtable PAT delegation. Use to login, logout, test credentials, or check auth status. CourseCraft delegates auth to the airtable CLI under the hood.",
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Configure Airtable authentication. Delegates to 'airtable auth login'. Use --force/-F to clear existing credentials and re-authenticate.",
           "arguments": [],
           "options": [
             {
@@ -44,11 +43,11 @@
               "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
-          ]
+          ],
+          "usage_instructions": "Configure Airtable authentication. Delegates to 'airtable auth login'. Use --force/-F to clear existing credentials and re-authenticate."
         },
         "logout": {
           "help": "Clear stored credentials.",
-          "usage_instructions": "Clear stored Airtable credentials. Delegates to 'airtable auth logout'.",
           "arguments": [],
           "options": [
             {
@@ -58,17 +57,17 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ]
+          ],
+          "usage_instructions": "Clear stored Airtable credentials. Delegates to 'airtable auth logout'."
         },
         "profiles": {
           "help": "Manage authentication profiles",
-          "usage_instructions": "Use `coursecraft auth profiles` for Manage authentication profiles commands. Check nested actions in `usage.json` before executing anything.",
           "arguments": [],
           "options": [],
+          "usage_instructions": "Use `coursecraft auth profiles` for Manage authentication profiles commands. Check nested actions in `usage.json` before executing anything.",
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Use `coursecraft auth profiles create` for Create a new profile from .env.example template.. Check this command's arguments and options in `usage.json` before execution.",
               "arguments": [
                 {
                   "name": "name",
@@ -77,11 +76,11 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "options": []
+              "options": [],
+              "usage_instructions": "Use `coursecraft auth profiles create` for Create a new profile from .env.example template.. Check this command's arguments and options in `usage.json` before execution."
             },
             "delete": {
               "help": "Delete a profile and its data.",
-              "usage_instructions": "Use `coursecraft auth profiles delete` for Delete a profile and its data.. Check this command's arguments and options in `usage.json` before execution.",
               "arguments": [
                 {
                   "name": "name",
@@ -98,11 +97,11 @@
                   "help": "Skip confirmation",
                   "short": "-F"
                 }
-              ]
+              ],
+              "usage_instructions": "Use `coursecraft auth profiles delete` for Delete a profile and its data.. Check this command's arguments and options in `usage.json` before execution."
             },
             "get": {
               "help": "Get details for a specific profile.",
-              "usage_instructions": "Use `coursecraft auth profiles get` for Get details for a specific profile.. Check this command's arguments and options in `usage.json` before execution.",
               "arguments": [
                 {
                   "name": "name",
@@ -119,11 +118,11 @@
                   "help": "Display as table",
                   "short": "-t"
                 }
-              ]
+              ],
+              "usage_instructions": "Use `coursecraft auth profiles get` for Get details for a specific profile.. Check this command's arguments and options in `usage.json` before execution."
             },
             "list": {
               "help": "List all profiles and show which is the default.",
-              "usage_instructions": "Use `coursecraft auth profiles list` for List all profiles and show which is the default.. Check this command's arguments and options in `usage.json` before execution.",
               "arguments": [],
               "options": [
                 {
@@ -154,7 +153,8 @@
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 }
-              ]
+              ],
+              "usage_instructions": "Use `coursecraft auth profiles list` for List all profiles and show which is the default.. Check this command's arguments and options in `usage.json` before execution."
             },
             "remove": {
               "help": "Delete a profile and its data.",
@@ -224,7 +224,6 @@
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "usage_instructions": "Check if authentication is configured and valid without making an API call. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
             {
@@ -241,11 +240,11 @@
               "help": "Display as table",
               "short": "-t"
             }
-          ]
+          ],
+          "usage_instructions": "Check if authentication is configured and valid without making an API call. Use --table/-t for formatted output."
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
-          "usage_instructions": "Verify credentials are valid by making a test API call. Use --verbose/-v for detailed checks. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
             {
@@ -269,27 +268,27 @@
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
             }
-          ]
+          ],
+          "usage_instructions": "Verify credentials are valid by making a test API call. Use --verbose/-v for detailed checks. Use --table/-t for formatted output."
         }
       }
     },
     "cache": {
       "help": "Manage CLI cache",
-      "usage_instructions": "Use `coursecraft cache` for Manage CLI cache commands. Check nested actions in `usage.json` before executing anything.",
       "arguments": [],
       "options": [],
+      "usage_instructions": "Use `coursecraft cache` for Manage CLI cache commands. Check nested actions in `usage.json` before executing anything.",
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use `coursecraft cache clear` for Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.. Check this command's arguments and options in `usage.json` before execution.",
           "arguments": [],
-          "options": []
+          "options": [],
+          "usage_instructions": "Use `coursecraft cache clear` for Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.. Check this command's arguments and options in `usage.json` before execution."
         }
       }
     },
     "clips": {
       "help": "Manage clip records",
-      "usage_instructions": "CRUD operations for clip records within a module. Supports single and batch creation via --json/--file. Use --module/-m to filter by module, or --course to filter by course. The 'show' command displays an ASCII tree of the clip with its demos and slides. Accepts M1C1/M2C3 shorthand patterns or record IDs.",
       "arguments": [],
       "options": [
         {
@@ -299,15 +298,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "CRUD operations for clip records within a module. Supports single and batch creation via --json/--file. Use --module/-m to filter by module, or --course to filter by course. The 'show' command displays an ASCII tree of the clip with its demos and slides. Accepts M1C1/M2C3 shorthand patterns or record IDs.",
       "commands": {
         "create": {
           "help": "Create clip record(s) in Airtable. Supports two modes: 1. Single clip mode: Use --name to create one clip 2. Batch mode: Use --json or --file to create multiple clips",
-          "examples": [
-            "coursecraft clips create --module recXXX --name \"Introduction\" --order 1",
-            "coursecraft clips create --module recXXX --json '[{\"name\":\"Clip 1\"},{\"name\":\"Clip 2\"}]'",
-            "coursecraft clips create --module recXXX --file clips.json"
-          ],
-          "usage_instructions": "Create one or more clip records. Requires --module/-m with module record ID. Single mode: use --name/-n (required), --order/-o, --story/-s, --target-length/-t, --status. Batch mode: use --json (inline JSON array) or --file (JSON file path) for multiple clips.",
           "arguments": [],
           "options": [
             {
@@ -369,17 +363,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips create --module recXXX --name \"Introduction\" --order 1",
+            "coursecraft clips create --module recXXX --json '[{\"name\":\"Clip 1\"},{\"name\":\"Clip 2\"}]'",
+            "coursecraft clips create --module recXXX --file clips.json"
+          ],
+          "usage_instructions": "Create one or more clip records. Requires --module/-m with module record ID. Single mode: use --name/-n (required), --order/-o, --story/-s, --target-length/-t, --status. Batch mode: use --json (inline JSON array) or --file (JSON file path) for multiple clips."
         },
         "delete": {
           "help": "Delete a clip record. By default, only the clip record is deleted. Use --cascade to also delete all child records (demos, slides).",
-          "examples": [
-            "coursecraft clips delete recXXXXXXXXXXXXXXX",
-            "coursecraft clips delete recXXXXXXXXXXXXXXX --cascade",
-            "coursecraft clips delete recXXXXXXXXXXXXXXX --force",
-            "coursecraft clips delete recXXXXXXXXXXXXXXX --cascade --force"
-          ],
-          "usage_instructions": "Delete a clip by record ID (positional argument). Use --cascade to also delete all child records (demos, slides). Use --force/-f to skip confirmation prompts.",
           "arguments": [
             {
               "name": "record_id",
@@ -408,16 +401,17 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips delete recXXXXXXXXXXXXXXX",
+            "coursecraft clips delete recXXXXXXXXXXXXXXX --cascade",
+            "coursecraft clips delete recXXXXXXXXXXXXXXX --force",
+            "coursecraft clips delete recXXXXXXXXXXXXXXX --cascade --force"
+          ],
+          "usage_instructions": "Delete a clip by record ID (positional argument). Use --cascade to also delete all child records (demos, slides). Use --force/-f to skip confirmation prompts."
         },
         "get": {
           "help": "Get a single clip record by ID.",
-          "examples": [
-            "coursecraft clips get recXXXXXXXXXXXXXXX",
-            "coursecraft clips get recXXXXXXXXXXXXXXX --properties \"id,fields.Name\"",
-            "coursecraft clips get recXXXXXXXXXXXXXXX --table"
-          ],
-          "usage_instructions": "Retrieve a single clip by record ID (positional argument). Use --properties/-p to select specific JSON fields and --table/-t for formatted output.",
           "arguments": [
             {
               "name": "record_id",
@@ -447,19 +441,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips get recXXXXXXXXXXXXXXX",
+            "coursecraft clips get recXXXXXXXXXXXXXXX --properties \"id,fields.Name\"",
+            "coursecraft clips get recXXXXXXXXXXXXXXX --table"
+          ],
+          "usage_instructions": "Retrieve a single clip by record ID (positional argument). Use --properties/-p to select specific JSON fields and --table/-t for formatted output."
         },
         "list": {
           "help": "List clip records.",
-          "examples": [
-            "coursecraft clips list",
-            "coursecraft clips list --module recXXX",
-            "coursecraft clips list --filter \"status:eq:Complete\"",
-            "coursecraft clips list --module recXXX --table",
-            "coursecraft clips list --limit 10",
-            "coursecraft clips list --properties \"id,fields.Name,fields.Status\""
-          ],
-          "usage_instructions": "List clip records. Use --module/-m to filter by module record ID. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -503,16 +494,19 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips list",
+            "coursecraft clips list --module recXXX",
+            "coursecraft clips list --filter \"status:eq:Complete\"",
+            "coursecraft clips list --module recXXX --table",
+            "coursecraft clips list --limit 10",
+            "coursecraft clips list --properties \"id,fields.Name,fields.Status\""
+          ],
+          "usage_instructions": "List clip records. Use --module/-m to filter by module record ID. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
         "show": {
           "help": "Display clip hierarchy as an ASCII tree diagram. Shows the clip with all its demos and slides along with their statuses.",
-          "examples": [
-            "coursecraft clips show M1C3",
-            "coursecraft clips show recXXXXXXXXXXXXXXX",
-            "coursecraft clips show M2C1 --course advanced-features-cursor-ai"
-          ],
-          "usage_instructions": "Display a clip's full hierarchy as an ASCII tree. Accepts a record ID, M1C1/M2C3 shorthand pattern, or clip name (positional argument). Use --course/-c to scope the search when using shorthand patterns.",
           "arguments": [
             {
               "name": "clip_identifier",
@@ -535,18 +529,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips show M1C3",
+            "coursecraft clips show recXXXXXXXXXXXXXXX",
+            "coursecraft clips show M2C1 --course advanced-features-cursor-ai"
+          ],
+          "usage_instructions": "Display a clip's full hierarchy as an ASCII tree. Accepts a record ID, M1C1/M2C3 shorthand pattern, or clip name (positional argument). Use --course/-c to scope the search when using shorthand patterns."
         },
         "update": {
           "help": "Update a clip record.",
-          "examples": [
-            "coursecraft clips update recXXX --name \"New Name\"",
-            "coursecraft clips update recXXX --order 2 --status \"Complete\"",
-            "coursecraft clips update recXXX --learning-objectives \"- Objective 1\\n- Objective 2\"",
-            "coursecraft clips update recXXX --brainstorming-outline \"---\"",
-            "coursecraft clips update recXXX --content-done"
-          ],
-          "usage_instructions": "Update an existing clip by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --story/-s, --learning-objectives/-l, --target-length, --status. Supports --brainstorming-outline/-b for outline content. The Clips table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Clips.",
           "arguments": [
             {
               "name": "record_id",
@@ -623,6 +615,12 @@
               "help": "Set or clear the clip recording human-review flag"
             },
             {
+              "name": "--submitted-to-pluralsight",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the clip submitted-to-Pluralsight flag"
+            },
+            {
               "name": "--feedback-requested",
               "type": "bool",
               "required": false,
@@ -635,12 +633,26 @@
               "help": "ISO 8601 timestamp the feedback gate was requested"
             },
             {
+              "name": "--slide-narration-complete",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the slide narration complete flag"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft clips update recXXX --name \"New Name\"",
+            "coursecraft clips update recXXX --order 2 --status \"Complete\"",
+            "coursecraft clips update recXXX --learning-objectives \"- Objective 1\\n- Objective 2\"",
+            "coursecraft clips update recXXX --brainstorming-outline \"---\"",
+            "coursecraft clips update recXXX --content-done"
+          ],
+          "usage_instructions": "Update an existing clip by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --story/-s, --learning-objectives/-l, --target-length, --status. Supports --brainstorming-outline/-b for outline content. The Clips table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Clips."
         }
       }
     },
@@ -697,7 +709,7 @@
               "name": "--type",
               "type": "TEXT",
               "required": true,
-              "help": "Update target(s): google_doc, database, or google_doc,database",
+              "help": "Update target: google_doc",
               "short": "-t"
             },
             {
@@ -706,13 +718,6 @@
               "required": false,
               "help": "Path to file (markdown for parsing or content)",
               "short": "-f"
-            },
-            {
-              "name": "--course-outline-link",
-              "type": "TEXT",
-              "required": false,
-              "help": "Google Doc URL (only for database type - parses doc to markdown)",
-              "short": "-l"
             },
             {
               "name": "--name",
@@ -854,7 +859,6 @@
     },
     "courses": {
       "help": "Manage course records",
-      "usage_instructions": "CRUD operations for course records. Supports nested creation of modules and clips via --json/--file. Use --active/-a on list to get only the active course. Use --include-modules/-m and --include-clips/-c on get to embed child records. Courses are identified by record ID or Course ID slug.",
       "arguments": [],
       "options": [
         {
@@ -864,14 +868,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "CRUD operations for course records. Supports nested creation of modules and clips via --json/--file. Use --active/-a on list to get only the active course. Use --include-modules/-m and --include-clips/-c on get to embed child records. Courses are identified by record ID or Course ID slug.",
       "commands": {
         "create": {
           "help": "Create a course record, optionally with modules and clips.",
-          "examples": [
-            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120",
-            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120 \\"
-          ],
-          "usage_instructions": "Create a new course record. Requires --name/-n, --course-id/-c (slug), and --target-length/-t. Supports nested creation of modules and clips via --json (inline JSON) or --file (JSON file path). Optional fields include --platform, --short-description, --long-description, --content-level, --job-role, --learner-profile, --prerequisites, --storyline, --learning-objectives, --notes, and --active.",
           "arguments": [],
           "options": [
             {
@@ -993,17 +993,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120",
+            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120 \\"
+          ],
+          "usage_instructions": "Create a new course record. Requires --name/-n, --course-id/-c (slug), and --target-length/-t. Supports nested creation of modules and clips via --json (inline JSON) or --file (JSON file path). Optional fields include --platform, --short-description, --long-description, --content-level, --job-role, --learner-profile, --prerequisites, --storyline, --learning-objectives, --notes, and --active."
         },
         "delete": {
           "help": "Delete a course record. By default, only the course record is deleted. Use --cascade to also delete all child records (modules, clips, demos, slides).",
-          "examples": [
-            "coursecraft courses delete --course my-course-id",
-            "coursecraft courses delete --course my-course-id --cascade",
-            "coursecraft courses delete --course my-course-id --force",
-            "coursecraft courses delete --course my-course-id --cascade --force"
-          ],
-          "usage_instructions": "Delete a course record. Requires --course/-c with record ID or slug. Use --cascade to also delete all child records (modules, clips, demos, slides). Use --force/-f to skip confirmation prompts.",
           "arguments": [],
           "options": [
             {
@@ -1032,19 +1030,17 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft courses delete --course my-course-id",
+            "coursecraft courses delete --course my-course-id --cascade",
+            "coursecraft courses delete --course my-course-id --force",
+            "coursecraft courses delete --course my-course-id --cascade --force"
+          ],
+          "usage_instructions": "Delete a course record. Requires --course/-c with record ID or slug. Use --cascade to also delete all child records (modules, clips, demos, slides). Use --force/-f to skip confirmation prompts."
         },
         "get": {
           "help": "Get a single course record by ID or slug. Use --include-modules to embed module records in the JSON output. Use --include-clips to also embed clip records within each module.",
-          "examples": [
-            "coursecraft courses get recXXXXXXXXXXXXXXX",
-            "coursecraft courses get my-course-slug",
-            "coursecraft courses get my-course-slug --properties \"id,fields.Name,fields.Status\"",
-            "coursecraft courses get my-course-slug --table",
-            "coursecraft courses get my-course-slug --include-modules",
-            "coursecraft courses get my-course-slug --include-clips"
-          ],
-          "usage_instructions": "Retrieve a single course by record ID or Course ID slug (positional argument). Use --properties/-p to select specific JSON fields. Use --include-modules/-m to embed module records. Use --include-clips/-c to embed clip records within each module (implies --include-modules). Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "course",
@@ -1088,18 +1084,19 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft courses get recXXXXXXXXXXXXXXX",
+            "coursecraft courses get my-course-slug",
+            "coursecraft courses get my-course-slug --properties \"id,fields.Name,fields.Status\"",
+            "coursecraft courses get my-course-slug --table",
+            "coursecraft courses get my-course-slug --include-modules",
+            "coursecraft courses get my-course-slug --include-clips"
+          ],
+          "usage_instructions": "Retrieve a single course by record ID or Course ID slug (positional argument). Use --properties/-p to select specific JSON fields. Use --include-modules/-m to embed module records. Use --include-clips/-c to embed clip records within each module (implies --include-modules). Use --table/-t for formatted output."
         },
         "list": {
           "help": "List course records.",
-          "examples": [
-            "coursecraft courses list",
-            "coursecraft courses list --active",
-            "coursecraft courses list --table",
-            "coursecraft courses list --limit 10",
-            "coursecraft courses list --properties \"id,fields.Name,fields.Status\""
-          ],
-          "usage_instructions": "List all course records. Use --active/-a to return only the active course. Use --filter/-f with field:op:value format for filtering (e.g., 'active:eq:true'). Use --table/-t for formatted table output. Use --properties/-p for field selection with comma-separated dot notation. Use --limit/-l to cap the number of results.",
           "arguments": [],
           "options": [
             {
@@ -1143,17 +1140,18 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft courses list",
+            "coursecraft courses list --active",
+            "coursecraft courses list --table",
+            "coursecraft courses list --limit 10",
+            "coursecraft courses list --properties \"id,fields.Name,fields.Status\""
+          ],
+          "usage_instructions": "List all course records. Use --active/-a to return only the active course. Use --filter/-f with field:op:value format for filtering (e.g., 'active:eq:true'). Use --table/-t for formatted table output. Use --properties/-p for field selection with comma-separated dot notation. Use --limit/-l to cap the number of results."
         },
         "update": {
           "help": "Update a course record.",
-          "examples": [
-            "coursecraft courses update my-course-slug --name \"New Name\"",
-            "coursecraft courses update recXXX --status \"Complete\" --active true",
-            "coursecraft courses update my-course --target-length 60",
-            "coursecraft courses update my-course --brainstorming-outline-file outline.md"
-          ],
-          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --status/-s, --active, --platform, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --notes, --skill-path, --path-placement. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Supports --course-outline or --course-outline-file for outline content.",
           "arguments": [
             {
               "name": "course",
@@ -1190,18 +1188,6 @@
               "required": false,
               "help": "Google Doc URL for course outline",
               "short": "-l"
-            },
-            {
-              "name": "--course-outline",
-              "type": "TEXT",
-              "required": false,
-              "help": "Course outline content (markdown)"
-            },
-            {
-              "name": "--course-outline-file",
-              "type": "PATH",
-              "required": false,
-              "help": "Path to file containing course outline content"
             },
             {
               "name": "--course-outline-submitted",
@@ -1318,13 +1304,6 @@
               "help": "[Automatic Narration Generation|Manual Instructor      Recording dictation method (Automatic Narration Generation]                                            Generation, Manual Instructor Generation)"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Course status",
-              "short": "-s"
-            },
-            {
               "name": "--active",
               "type": "bool",
               "required": false,
@@ -1367,13 +1346,19 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft courses update my-course-slug --name \"New Name\"",
+            "coursecraft courses update recXXX --active",
+            "coursecraft courses update my-course --target-length 60",
+            "coursecraft courses update my-course --brainstorming-outline-file outline.md"
+          ],
+          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --active, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --research-report, --research-report-file, --notes, --skill-path, --path-placement, --slack-channel-name, --recording-dictation-method, --feedback-requested, --feedback-requested-at. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Course outline content lives in the Google Doc workflow; this command only updates --course-outline-link, --course-outline-submitted, and --course-outline-approved-pluralsight."
         }
       }
     },
     "demos": {
       "help": "Manage demo records",
-      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-overview, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
       "arguments": [],
       "options": [
         {
@@ -1383,15 +1368,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-overview, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
       "commands": {
         "create": {
           "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order.",
-          "examples": [
-            "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\"",
-            "coursecraft demos create --clip recXXX --clip-order 1 --json '[{\"name\":\"Demo 1\",\"clip_order\":1},{\"name\":\"Demo 2\",\"clip_order\":2}]'",
-            "coursecraft demos create --clip recXXX --clip-order 1 --file demos.json"
-          ],
-          "usage_instructions": "Create one or more demo records. Requires --clip/-c (clip record ID) and --clip-order/-o (position within clip). Single mode: optional --name/-n, --target-length/-l (FLOAT, e.g., 2.5), --action-summary/-a, --script/-s. Batch mode: use --json (inline JSON array) or --file (JSON file path). Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
           "arguments": [],
           "options": [
             {
@@ -1466,15 +1446,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\"",
+            "coursecraft demos create --clip recXXX --clip-order 1 --json '[{\"name\":\"Demo 1\",\"clip_order\":1},{\"name\":\"Demo 2\",\"clip_order\":2}]'",
+            "coursecraft demos create --clip recXXX --clip-order 1 --file demos.json"
+          ],
+          "usage_instructions": "Create one or more demo records. Requires --clip/-c (clip record ID) and --clip-order/-o (position within clip). Single mode: optional --name/-n, --target-length/-l (FLOAT, e.g., 2.5), --action-summary/-a, --script/-s. Batch mode: use --json (inline JSON array) or --file (JSON file path). Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records."
         },
         "delete": {
           "help": "Delete a demo record. This action is PERMANENT and cannot be undone.",
-          "examples": [
-            "coursecraft demos delete recXXXXXXXXXXXXXXX",
-            "coursecraft demos delete recXXXXXXXXXXXXXXX --force"
-          ],
-          "usage_instructions": "Delete a demo by record ID (positional argument). This is permanent. Use --force/-f to skip confirmation prompts.",
           "arguments": [
             {
               "name": "record_id",
@@ -1497,16 +1478,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft demos delete recXXXXXXXXXXXXXXX",
+            "coursecraft demos delete recXXXXXXXXXXXXXXX --force"
+          ],
+          "usage_instructions": "Delete a demo by record ID (positional argument). This is permanent. Use --force/-f to skip confirmation prompts."
         },
         "get": {
           "help": "Get a single demo record by ID.",
-          "examples": [
-            "coursecraft demos get recXXXXXXXXXXXXXXX",
-            "coursecraft demos get recXXXXXXXXXXXXXXX --properties \"id,fields.Name\"",
-            "coursecraft demos get recXXXXXXXXXXXXXXX --table"
-          ],
-          "usage_instructions": "Retrieve a single demo by record ID (positional argument). Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "record_id",
@@ -1536,23 +1516,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft demos get recXXXXXXXXXXXXXXX",
+            "coursecraft demos get recXXXXXXXXXXXXXXX --properties \"id,fields.Name\"",
+            "coursecraft demos get recXXXXXXXXXXXXXXX --table"
+          ],
+          "usage_instructions": "Retrieve a single demo by record ID (positional argument). Use --table/-t for formatted output."
         },
         "list": {
           "help": "List demo records.",
-          "examples": [
-            "coursecraft demos list",
-            "coursecraft demos list --clip recXXX",
-            "coursecraft demos list --module recXXX",
-            "coursecraft demos list --course advanced-features-cursor-ai",
-            "coursecraft demos list --filter \"status:eq:Complete\"",
-            "coursecraft demos list --filter \"fields.Name:startswith:M1\"",
-            "coursecraft demos list --filter \"fields.Name:contains:Setup\"",
-            "coursecraft demos list --clip recXXX --table",
-            "coursecraft demos list --limit 5",
-            "coursecraft demos list --properties \"id,fields.Name,fields.Status\""
-          ],
-          "usage_instructions": "List demo records with hierarchical filtering. Use --clip/-c for a specific clip, --module/-m for all demos in a module, or --course for all demos in a course. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete', 'fields.Name:contains:Setup'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -1609,18 +1582,23 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft demos list",
+            "coursecraft demos list --clip recXXX",
+            "coursecraft demos list --module recXXX",
+            "coursecraft demos list --course advanced-features-cursor-ai",
+            "coursecraft demos list --filter \"status:eq:Complete\"",
+            "coursecraft demos list --filter \"fields.Name:startswith:M1\"",
+            "coursecraft demos list --filter \"fields.Name:contains:Setup\"",
+            "coursecraft demos list --clip recXXX --table",
+            "coursecraft demos list --limit 5",
+            "coursecraft demos list --properties \"id,fields.Name,fields.Status\""
+          ],
+          "usage_instructions": "List demo records with hierarchical filtering. Use --clip/-c for a specific clip, --module/-m for all demos in a module, or --course for all demos in a course. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete', 'fields.Name:contains:Setup'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
         "update": {
           "help": "Update a demo record.",
-          "examples": [
-            "coursecraft demos update recXXX --name \"New Name\"",
-            "coursecraft demos update recXXX --clip-order 2",
-            "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
-            "coursecraft demos update recXXX --tested-approved --script-review-human",
-            "coursecraft demos update recXXX --dictation-recorded"
-          ],
-          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --demo-overview, --action-summary/-a, --script/-s, and --recap. Review fields: --demo-overview-review-human, --action-summary-review-ai, --action-summary-review-human, and --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records.",
           "arguments": [
             {
               "name": "record_id",
@@ -1702,12 +1680,6 @@
               "help": "Mark demo as tested and approved"
             },
             {
-              "name": "--recap",
-              "type": "TEXT",
-              "required": false,
-              "help": "Demo recap/summary"
-            },
-            {
               "name": "--script",
               "type": "TEXT",
               "required": false,
@@ -1768,13 +1740,20 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft demos update recXXX --name \"New Name\"",
+            "coursecraft demos update recXXX --clip-order 2",
+            "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
+            "coursecraft demos update recXXX --tested-approved --script-review-human",
+            "coursecraft demos update recXXX --dictation-recorded"
+          ],
+          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --demo-overview, --action-summary/-a, --script/-s, and --recap. Review fields: --demo-overview-review-human, --action-summary-review-ai, --action-summary-review-human, and --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records."
         }
       }
     },
     "descript": {
       "help": "Export videos from Descript",
-      "usage_instructions": "Export video clips from Descript projects to course clip folders on Google Drive. Requires Descript to be running with the project open. Finds the project by name (partial match) and locates the composition matching the module/clip pattern.",
       "arguments": [],
       "options": [
         {
@@ -1784,15 +1763,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "Export video clips from Descript projects to course clip folders on Google Drive. Requires Descript to be running with the project open. Finds the project by name (partial match) and locates the composition matching the module/clip pattern.",
       "commands": {
         "export": {
           "help": "Export a Descript composition to the course clips folder. Finds the Descript project by name, locates the composition matching the module/clip pattern (e.g., \"m2c1\"), and exports the full composition (with slides, edits, etc.) via the Descript app's local export. Requires Descript to be running with the project open.",
-          "examples": [
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1",
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --course advanced-features-cursor-ai",
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --dry-run"
-          ],
-          "usage_instructions": "Export a Descript composition to the course clips folder. Positional argument is the project name (partial match supported). Requires --module/-m (module number) and --clip/-c (clip number). Optional --course to override active course slug. Use --dry-run/-n to preview the export without executing.",
           "arguments": [
             {
               "name": "project",
@@ -1841,7 +1815,13 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1",
+            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --course advanced-features-cursor-ai",
+            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --dry-run"
+          ],
+          "usage_instructions": "Export a Descript composition to the course clips folder. Positional argument is the project name (partial match supported). Requires --module/-m (module number) and --clip/-c (clip number). Optional --course to override active course slug. Use --dry-run/-n to preview the export without executing."
         }
       }
     },
@@ -2210,7 +2190,6 @@
     },
     "modules": {
       "help": "Manage module records",
-      "usage_instructions": "CRUD operations for module records within a course. Supports batch clip creation via --json/--file on create. Use --course/-c to filter by course slug or record ID. The 'show' command displays an ASCII tree of the module hierarchy with statuses. Accepts M1/M2 shorthand patterns or record IDs.",
       "arguments": [],
       "options": [
         {
@@ -2220,14 +2199,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "CRUD operations for module records within a course. Supports batch clip creation via --json/--file on create. Use --course/-c to filter by course slug or record ID. The 'show' command displays an ASCII tree of the module hierarchy with statuses. Accepts M1/M2 shorthand patterns or record IDs.",
       "commands": {
         "create": {
           "help": "Create a module record, optionally with clips.",
-          "examples": [
-            "coursecraft modules create --name \"Getting Started\" --course recXXX --order 1",
-            "coursecraft modules create --name \"Getting Started\" --course my-course --json '[{\"name\":\"Intro\"}]'"
-          ],
-          "usage_instructions": "Create a new module record. Requires --name/-n and --course/-c (record ID or slug). Optional: --order/-o, --description/-d, --learning-objectives/-l, --target-length/-t, --status/-s. Supports batch clip creation via --json (inline JSON array) or --file (JSON file path).",
           "arguments": [],
           "options": [
             {
@@ -2297,17 +2272,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules create --name \"Getting Started\" --course recXXX --order 1",
+            "coursecraft modules create --name \"Getting Started\" --course my-course --json '[{\"name\":\"Intro\"}]'"
+          ],
+          "usage_instructions": "Create a new module record. Requires --name/-n and --course/-c (record ID or slug). Optional: --order/-o, --description/-d, --learning-objectives/-l, --target-length/-t, --status/-s. Supports batch clip creation via --json (inline JSON array) or --file (JSON file path)."
         },
         "delete": {
           "help": "Delete a module record. By default, only the module record is deleted. Use --cascade to also delete all child records (clips, demos, slides).",
-          "examples": [
-            "coursecraft modules delete recXXXXXXXXXXXXXXX",
-            "coursecraft modules delete recXXXXXXXXXXXXXXX --cascade",
-            "coursecraft modules delete recXXXXXXXXXXXXXXX --force",
-            "coursecraft modules delete recXXXXXXXXXXXXXXX --cascade --force"
-          ],
-          "usage_instructions": "Delete a module by record ID (positional argument). Use --cascade to also delete all child records (clips, demos, slides). Use --force/-f to skip confirmation prompts.",
           "arguments": [
             {
               "name": "record_id",
@@ -2336,16 +2309,17 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules delete recXXXXXXXXXXXXXXX",
+            "coursecraft modules delete recXXXXXXXXXXXXXXX --cascade",
+            "coursecraft modules delete recXXXXXXXXXXXXXXX --force",
+            "coursecraft modules delete recXXXXXXXXXXXXXXX --cascade --force"
+          ],
+          "usage_instructions": "Delete a module by record ID (positional argument). Use --cascade to also delete all child records (clips, demos, slides). Use --force/-f to skip confirmation prompts."
         },
         "get": {
           "help": "Get a single module record by ID.",
-          "examples": [
-            "coursecraft modules get recXXXXXXXXXXXXXXX",
-            "coursecraft modules get recXXXXXXXXXXXXXXX --properties \"id,fields.Name,fields.Status\"",
-            "coursecraft modules get recXXXXXXXXXXXXXXX --table"
-          ],
-          "usage_instructions": "Retrieve a single module by record ID (positional argument). Use --properties/-p to select specific JSON fields. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "record_id",
@@ -2375,19 +2349,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules get recXXXXXXXXXXXXXXX",
+            "coursecraft modules get recXXXXXXXXXXXXXXX --properties \"id,fields.Name,fields.Status\"",
+            "coursecraft modules get recXXXXXXXXXXXXXXX --table"
+          ],
+          "usage_instructions": "Retrieve a single module by record ID (positional argument). Use --properties/-p to select specific JSON fields. Use --table/-t for formatted output."
         },
         "list": {
           "help": "List module records.",
-          "examples": [
-            "coursecraft modules list",
-            "coursecraft modules list --course my-course",
-            "coursecraft modules list --filter \"order:gte:3\"",
-            "coursecraft modules list --course recXXX --table",
-            "coursecraft modules list --limit 5",
-            "coursecraft modules list --properties \"id,fields.Name,fields.Order\""
-          ],
-          "usage_instructions": "List module records. Use --course/-c to filter by course record ID or slug. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -2431,16 +2402,19 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules list",
+            "coursecraft modules list --course my-course",
+            "coursecraft modules list --filter \"order:gte:3\"",
+            "coursecraft modules list --course recXXX --table",
+            "coursecraft modules list --limit 5",
+            "coursecraft modules list --properties \"id,fields.Name,fields.Order\""
+          ],
+          "usage_instructions": "List module records. Use --course/-c to filter by course record ID or slug. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
         "show": {
           "help": "Display module hierarchy as an ASCII tree diagram. Shows the module with all its clips, demos, and slides along with their statuses.",
-          "examples": [
-            "coursecraft modules show M1",
-            "coursecraft modules show recXXXXXXXXXXXXXXX",
-            "coursecraft modules show M2 --course advanced-features-cursor-ai"
-          ],
-          "usage_instructions": "Display a module's full hierarchy as an ASCII tree. Accepts a record ID, M1/M2 shorthand pattern, or module name (positional argument). Use --course/-c to scope the search when using shorthand patterns.",
           "arguments": [
             {
               "name": "module_identifier",
@@ -2463,16 +2437,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules show M1",
+            "coursecraft modules show recXXXXXXXXXXXXXXX",
+            "coursecraft modules show M2 --course advanced-features-cursor-ai"
+          ],
+          "usage_instructions": "Display a module's full hierarchy as an ASCII tree. Accepts a record ID, M1/M2 shorthand pattern, or module name (positional argument). Use --course/-c to scope the search when using shorthand patterns."
         },
         "update": {
           "help": "Update a module record.",
-          "examples": [
-            "coursecraft modules update recXXX --name \"New Name\"",
-            "coursecraft modules update recXXX --order 2 --status \"Complete\"",
-            "coursecraft modules update recXXX --brainstorming-outline-file outline.md"
-          ],
-          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length, --status/-s. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content. The Modules table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Modules. Use --slides-submitted for Pluralsight slide deck submission tracking.",
           "arguments": [
             {
               "name": "record_id",
@@ -2555,6 +2529,24 @@
               "help": "Set or clear the Pluralsight slides-approved flag, the gate trigger that releases 'Waiting for Slide Approval' to recording (Pluralsight only)"
             },
             {
+              "name": "--powerpoint-deck-human-verified",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the PowerPoint deck human-verified gate flag"
+            },
+            {
+              "name": "--module-submitted-to-pluralsight",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the module video submitted-for-review flag (Pluralsight only)"
+            },
+            {
+              "name": "--pluralsight-module-video-approved",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the Pluralsight module video approved flag"
+            },
+            {
               "name": "--slide-narration-approved",
               "type": "bool",
               "required": false,
@@ -2584,13 +2576,18 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft modules update recXXX --name \"New Name\"",
+            "coursecraft modules update recXXX --order 2 --status \"Complete\"",
+            "coursecraft modules update recXXX --brainstorming-outline-file outline.md"
+          ],
+          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length, --status/-s. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content. The Modules table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Modules. Use --slides-submitted for Pluralsight slide deck submission tracking."
         }
       }
     },
     "slide-templates": {
       "help": "Manage slide template records",
-      "usage_instructions": "Manage PowerPoint slide template definitions stored in Airtable. Templates define the available slide layouts (e.g., Course Title, Remember This, Demo Intro). Use list with --platform/-P to filter by platform (Pluralsight, Udemy). Templates are referenced by record ID or name when creating/updating slides.",
       "arguments": [],
       "options": [
         {
@@ -2600,14 +2597,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "Manage PowerPoint slide template definitions stored in Airtable. Templates define the available slide layouts (e.g., Course Title, Remember This, Demo Intro). Use list with --platform/-P to filter by platform (Pluralsight, Udemy). Templates are referenced by record ID or name when creating/updating slides.",
       "commands": {
         "create": {
           "help": "Create a slide template record.",
-          "examples": [
-            "coursecraft templates create --name \"Course Title\" --platform Pluralsight",
-            "coursecraft templates create --name \"Remember This\" --platform Pluralsight \\"
-          ],
-          "usage_instructions": "Create a new slide template. Requires --name/-n. Optional: --platform/-P (Pluralsight, Udemy), --description/-d, --use-cases/-u, --deck-number (slide number in the template deck), --animations/-a.",
           "arguments": [],
           "options": [
             {
@@ -2687,7 +2680,12 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft templates create --name \"Course Title\" --platform Pluralsight",
+            "coursecraft templates create --name \"Remember This\" --platform Pluralsight \\"
+          ],
+          "usage_instructions": "Create a new slide template. Requires --name/-n. Optional: --platform/-P (Pluralsight, Udemy), --description/-d, --use-cases/-u, --deck-number (slide number in the template deck), --animations/-a."
         },
         "delete": {
           "help": "Delete a slide template record.",
@@ -2717,12 +2715,6 @@
         },
         "get": {
           "help": "Get a single slide template by ID or name.",
-          "examples": [
-            "coursecraft templates get recXXXXXXXXXXXXXXX",
-            "coursecraft templates get \"Course Title\"",
-            "coursecraft templates get recXXXXXXXXXXXXXXX --table"
-          ],
-          "usage_instructions": "Retrieve a single slide template by record ID or name (positional argument). Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "record_id",
@@ -2745,19 +2737,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft templates get recXXXXXXXXXXXXXXX",
+            "coursecraft templates get \"Course Title\"",
+            "coursecraft templates get recXXXXXXXXXXXXXXX --table"
+          ],
+          "usage_instructions": "Retrieve a single slide template by record ID or name (positional argument). Use --table/-t for formatted output."
         },
         "list": {
           "help": "List slide template records.",
-          "examples": [
-            "coursecraft templates list",
-            "coursecraft templates list --platform Pluralsight",
-            "coursecraft templates list --filter \"name:contains:Title\"",
-            "coursecraft templates list --table",
-            "coursecraft templates list --limit 10",
-            "coursecraft templates list --properties \"id,fields.Name,fields.Platform\""
-          ],
-          "usage_instructions": "List slide template records. Use --platform/-P to filter by platform (e.g., 'Pluralsight', 'Udemy'). Use --filter/-f with field:op:value format (e.g., 'name:contains:Title'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -2801,18 +2790,19 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft templates list",
+            "coursecraft templates list --platform Pluralsight",
+            "coursecraft templates list --filter \"name:contains:Title\"",
+            "coursecraft templates list --table",
+            "coursecraft templates list --limit 10",
+            "coursecraft templates list --properties \"id,fields.Name,fields.Platform\""
+          ],
+          "usage_instructions": "List slide template records. Use --platform/-P to filter by platform (e.g., 'Pluralsight', 'Udemy'). Use --filter/-f with field:op:value format (e.g., 'name:contains:Title'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
         "update": {
           "help": "Update a slide template record.",
-          "examples": [
-            "coursecraft templates update recXXX --name \"New Name\"",
-            "coursecraft templates update recXXX --platform Udemy",
-            "coursecraft templates update recXXX --description \"Updated description\"",
-            "coursecraft templates update recXXX --use-cases \"New use cases\"",
-            "coursecraft templates update recXXX --deck-number 15"
-          ],
-          "usage_instructions": "Update an existing slide template by record ID (positional argument). All fields are optional: --name/-n, --platform/-P, --description/-d, --use-cases/-u, --deck-number, --animations/-a.",
           "arguments": [
             {
               "name": "record_id",
@@ -2899,13 +2889,20 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft templates update recXXX --name \"New Name\"",
+            "coursecraft templates update recXXX --platform Udemy",
+            "coursecraft templates update recXXX --description \"Updated description\"",
+            "coursecraft templates update recXXX --use-cases \"New use cases\"",
+            "coursecraft templates update recXXX --deck-number 15"
+          ],
+          "usage_instructions": "Update an existing slide template by record ID (positional argument). All fields are optional: --name/-n, --platform/-P, --description/-d, --use-cases/-u, --deck-number, --animations/-a."
         }
       }
     },
     "slides": {
       "help": "Manage slide records",
-      "usage_instructions": "CRUD operations for slide records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all slides in a module, --course for all slides in a course. Slide fields include build-instructions, script, template (record ID), clip-order, and demo (record ID for demo intro slides). Use --template/-t on create to set the slide template.",
       "arguments": [],
       "options": [
         {
@@ -2915,15 +2912,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "CRUD operations for slide records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all slides in a module, --course for all slides in a course. Slide fields include build-instructions, script, template (record ID), clip-order, and demo (record ID for demo intro slides). Use --template/-t on create to set the slide template.",
       "commands": {
         "create": {
           "help": "Create slide record(s) in Airtable linked to a clip. Supports two modes: 1. Single slide mode: Use --template to create one slide 2. Batch mode: Use --json or --file to create multiple slides",
-          "examples": [
-            "coursecraft slides create --clip recXXX --template recTEMPLATE",
-            "coursecraft slides create --clip recXXX --json '[{\"template\":\"recT1\"},{\"template\":\"recT2\"}]'",
-            "coursecraft slides create --clip recXXX --file slides.json"
-          ],
-          "usage_instructions": "Create one or more slide records. Requires --clip/-c (clip record ID). Single mode: use --template/-t (template record ID), --target-length/-l (FLOAT, e.g., 0.5). Batch mode: use --json (inline JSON array) or --file (JSON file path).",
           "arguments": [],
           "options": [
             {
@@ -2965,15 +2957,16 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft slides create --clip recXXX --template recTEMPLATE",
+            "coursecraft slides create --clip recXXX --json '[{\"template\":\"recT1\"},{\"template\":\"recT2\"}]'",
+            "coursecraft slides create --clip recXXX --file slides.json"
+          ],
+          "usage_instructions": "Create one or more slide records. Requires --clip/-c (clip record ID). Single mode: use --template/-t (template record ID), --target-length/-l (FLOAT, e.g., 0.5). Batch mode: use --json (inline JSON array) or --file (JSON file path)."
         },
         "delete": {
           "help": "Delete a slide record. This action is PERMANENT and cannot be undone.",
-          "examples": [
-            "coursecraft slides delete recXXXXXXXXXXXXXXX",
-            "coursecraft slides delete recXXXXXXXXXXXXXXX --force"
-          ],
-          "usage_instructions": "Delete a slide by record ID (positional argument). This is permanent. Use --force/-f to skip confirmation prompts.",
           "arguments": [
             {
               "name": "record_id",
@@ -2996,15 +2989,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft slides delete recXXXXXXXXXXXXXXX",
+            "coursecraft slides delete recXXXXXXXXXXXXXXX --force"
+          ],
+          "usage_instructions": "Delete a slide by record ID (positional argument). This is permanent. Use --force/-f to skip confirmation prompts."
         },
         "get": {
           "help": "Get a single slide record by ID.",
-          "examples": [
-            "coursecraft slides get recXXXXXXXXXXXXXXX",
-            "coursecraft slides get recXXXXXXXXXXXXXXX --table"
-          ],
-          "usage_instructions": "Retrieve a single slide by record ID (positional argument). Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "record_id",
@@ -3027,21 +3020,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft slides get recXXXXXXXXXXXXXXX",
+            "coursecraft slides get recXXXXXXXXXXXXXXX --table"
+          ],
+          "usage_instructions": "Retrieve a single slide by record ID (positional argument). Use --table/-t for formatted output."
         },
         "list": {
           "help": "List slide records.",
-          "examples": [
-            "coursecraft slides list",
-            "coursecraft slides list --clip recXXX",
-            "coursecraft slides list --module recXXX",
-            "coursecraft slides list --course advanced-features-cursor-ai",
-            "coursecraft slides list --filter \"name:contains:intro\"",
-            "coursecraft slides list --clip recXXX --table",
-            "coursecraft slides list --limit 10",
-            "coursecraft slides list --properties \"id,fields.Template\""
-          ],
-          "usage_instructions": "List slide records with hierarchical filtering. Use --clip/-c for a specific clip, --module/-m for all slides in a module, or --course for all slides in a course. Use --filter/-f with field:op:value format (e.g., 'name:contains:intro'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -3098,25 +3085,21 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft slides list",
+            "coursecraft slides list --clip recXXX",
+            "coursecraft slides list --module recXXX",
+            "coursecraft slides list --course advanced-features-cursor-ai",
+            "coursecraft slides list --filter \"name:contains:intro\"",
+            "coursecraft slides list --clip recXXX --table",
+            "coursecraft slides list --limit 10",
+            "coursecraft slides list --properties \"id,fields.Template\""
+          ],
+          "usage_instructions": "List slide records with hierarchical filtering. Use --clip/-c for a specific clip, --module/-m for all slides in a module, or --course for all slides in a course. Use --filter/-f with field:op:value format (e.g., 'name:contains:intro'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
         "update": {
           "help": "Update a slide record.",
-          "examples": [
-            "coursecraft slides update recXXX --template recTEMPLATE",
-            "coursecraft slides update recXXX --clip-order 2",
-            "coursecraft slides update recXXX --clip recCLIPID",
-            "coursecraft slides update recXXX --name \"Demo Intro: Setup Demo\"",
-            "coursecraft slides update recXXX --script \"In this demo, we will...\"",
-            "coursecraft slides update recXXX --build-instructions \"Configure the API connection\"",
-            "coursecraft slides update recXXX --built",
-            "coursecraft slides update recXXX --no-built",
-            "coursecraft slides update recXXX --dictation-recorded",
-            "coursecraft slides update recXXX --recorded",
-            "coursecraft slides update recXXX --status \"Complete\"",
-            "coursecraft slides update recXXX --demo recDEMOID"
-          ],
-          "usage_instructions": "Update an existing slide by record ID (positional argument). Key fields: --name/-n, --template/-t (template record ID), --clip-order/-o, --target-length/-l (FLOAT), --script/-s, --build-instructions/-b, --status, --demo/-d (demo record ID for demo intro slides).",
           "arguments": [
             {
               "name": "record_id",
@@ -3176,6 +3159,12 @@
               "short": "-b"
             },
             {
+              "name": "--designed",
+              "type": "bool",
+              "required": false,
+              "help": "Slide designed checkbox"
+            },
+            {
               "name": "--built",
               "type": "bool",
               "required": false,
@@ -3230,13 +3219,27 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "examples": [
+            "coursecraft slides update recXXX --template recTEMPLATE",
+            "coursecraft slides update recXXX --clip-order 2",
+            "coursecraft slides update recXXX --clip recCLIPID",
+            "coursecraft slides update recXXX --name \"Demo Intro: Setup Demo\"",
+            "coursecraft slides update recXXX --script \"In this demo, we will...\"",
+            "coursecraft slides update recXXX --build-instructions \"Configure the API connection\"",
+            "coursecraft slides update recXXX --built",
+            "coursecraft slides update recXXX --no-built",
+            "coursecraft slides update recXXX --dictation-recorded",
+            "coursecraft slides update recXXX --recorded",
+            "coursecraft slides update recXXX --status \"Complete\"",
+            "coursecraft slides update recXXX --demo recDEMOID"
+          ],
+          "usage_instructions": "Update an existing slide by record ID (positional argument). Key fields: --name/-n, --template/-t (template record ID), --clip-order/-o, --target-length/-l (FLOAT), --script/-s, --build-instructions/-b, --status, --demo/-d (demo record ID for demo intro slides)."
         }
       }
     },
     "voice-recordings": {
       "help": "Generate slide and demo voice recordings",
-      "usage_instructions": "Generate narration audio for one slide or demo record using the ElevenLabs CLI. Requires exactly one of --slide or --demo, plus explicit --voice-id, --output-format, and --output-dir. Defaults to model eleven_multilingual_v2 because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs; pass --model-id only when a different compatible model is required. The command sanitizes non-spoken script cues, applies packaged regex pronunciation transforms for dynamic code-shaped text, syncs packaged alias rules to the ElevenLabs pronunciation dictionary named CourseCraft Voice Pronunciations, passes that dictionary locator to speech generation, writes an MP3 under slides/ or demos/ inside the output directory, validates the file, stores recording metadata on the CourseCraft record, and marks Dictation Recorded.",
       "arguments": [],
       "options": [
         {
@@ -3246,10 +3249,10 @@
           "help": "Auth profile name"
         }
       ],
+      "usage_instructions": "Generate narration audio for one slide or demo record using the ElevenLabs CLI. Requires exactly one of --slide or --demo, plus explicit --voice-id, --output-format, and --output-dir. Defaults to model eleven_multilingual_v2 because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs; pass --model-id only when a different compatible model is required. The command sanitizes non-spoken script cues, applies packaged regex pronunciation transforms for dynamic code-shaped text, syncs packaged alias rules to the ElevenLabs pronunciation dictionary named CourseCraft Voice Pronunciations, passes that dictionary locator to speech generation, writes an MP3 under slides/ or demos/ inside the output directory, validates the file, stores recording metadata on the CourseCraft record, and marks Dictation Recorded.",
       "commands": {
         "generate": {
           "help": "Generate a voice recording for one slide or demo script.",
-          "usage_instructions": "Generate a voice recording from the Script field on one slide or demo record. Provide exactly one record option: --slide recXXX or --demo recXXX. Provide the ElevenLabs voice ID, output format, and output directory explicitly; --model-id defaults to eleven_multilingual_v2 because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs. The command strips recording cues, applies regex transforms from coursecraft_cli/voice_pronunciation_patterns.json and coursecraft_cli/voice_pronunciation_tokens.json, syncs alias rules from coursecraft_cli/voice_pronunciations.json to the ElevenLabs dictionary named CourseCraft Voice Pronunciations, sends the normalized text to ElevenLabs with that dictionary locator, and records the normalized source hash.",
           "arguments": [],
           "options": [
             {
@@ -3325,7 +3328,8 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ]
+          ],
+          "usage_instructions": "Generate a voice recording from the Script field on one slide or demo record. Provide exactly one record option: --slide recXXX or --demo recXXX. Provide the ElevenLabs voice ID, output format, and output directory explicitly; --model-id defaults to eleven_multilingual_v2 because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs. The command strips recording cues, applies regex transforms from coursecraft_cli/voice_pronunciation_patterns.json and coursecraft_cli/voice_pronunciation_tokens.json, syncs alias rules from coursecraft_cli/voice_pronunciations.json to the ElevenLabs dictionary named CourseCraft Voice Pronunciations, sends the normalized text to ElevenLabs with that dictionary locator, and records the normalized source hash."
         }
       }
     }

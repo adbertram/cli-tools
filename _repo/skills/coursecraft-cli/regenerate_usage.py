@@ -17,6 +17,8 @@ Usage:
 """
 import argparse
 import json
+import os
+import shutil
 import sys
 import tomllib
 from datetime import datetime, timezone
@@ -45,6 +47,18 @@ def load_config():
 def help_text(cli_executable, path, timeout):
     args = path.split() + ["--help"] if path else ["--help"]
     return run_cli_command(cli_executable, args, timeout=timeout).stdout
+
+
+def resolve_cli_executable(cli_name):
+    """Find uv-tool launchers even when the test helper cleans PATH."""
+    search_path = f"{Path.home() / '.local' / 'bin'}"
+    current_path = os.environ.get("PATH", "")
+    if current_path:
+        search_path = f"{search_path}{os.pathsep}{current_path}"
+    resolved = shutil.which(cli_name, path=search_path)
+    if not resolved:
+        raise FileNotFoundError(f"CLI executable not found: {cli_name}")
+    return resolved
 
 
 def build_tree(cli_name, cli_executable, config):
@@ -141,7 +155,7 @@ def main():
     old_usage = json.loads(usage_path.read_text())
 
     config = load_config()
-    cli_executable = cli_name  # on PATH
+    cli_executable = resolve_cli_executable(cli_name)
 
     live_paths, params, helps = build_tree(cli_name, cli_executable, config)
     old_meta = existing_node_meta(old_usage)
@@ -151,7 +165,8 @@ def main():
     new_usage["commands"] = commands
     # total_commands counts leaf commands only, matching the compliance test.
     new_usage["total_commands"] = len(leaf_command_paths(set(live_paths)))
-    new_usage["discovered_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if not args.check:
+        new_usage["discovered_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
 

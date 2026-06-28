@@ -59,10 +59,12 @@ a page through the `pages export` command.
 When `pages get` uses `--out-file`, the Markdown file is the command output.
 Do not redirect stdout to a `.json` file and do not parse stdout with
 `python3 -m json.tool` or `jq`; stdout/stderr can contain only a human status
-line or be empty. Verify the read by checking that the `--out-file` path exists
-and is non-empty, then inspect or print that Markdown file separately. If JSON
-page metadata is needed, run a separate `notion pages get PAGE_ID` command
-without `--markdown` or `--out-file` and parse that command's stdout.
+line or be empty. Verify the read by checking the command exit status and that
+the `--out-file` path exists. Do not require the file to be non-empty: a blank
+Notion page exports as a valid zero-byte Markdown file. Inspect or print that
+Markdown file separately. If JSON page metadata is needed, run a separate
+`notion pages get PAGE_ID` command without `--markdown` or `--out-file` and
+parse that command's stdout.
 </principle>
 
 <principle name="Database Page Create Options">

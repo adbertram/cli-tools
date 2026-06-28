@@ -102,22 +102,33 @@ is intentionally checking auth state. Wrap the command per the cli-tool
 the unauthenticated evidence before exiting `0`.
 </gotcha>
 
-<gotcha name="Progress profile: preflight Azure CLI identity before file-producing commands">
-The `progress_tenant_psdxautomation` profile sets `AZURE_CLI_EXPECTED_USER` to
-`psdxautomation@progress.com` and the tenant to
+<gotcha name="Progress profile: discover profile, then preflight Azure CLI identity before file-producing commands">
+Copilot auth profile names are local runtime state. Do not infer the Progress
+profile name from the tenant or this skill; first run
+`copilot auth profiles list --table`, then use the discovered profile name for
+the whole command batch. The Progress profile should set
+`AZURE_CLI_EXPECTED_USER` to `psdxautomation@progress.com` and the tenant to
 `db266a67-cbe0-4d26-ae1a-d0581fe03535`. Before redirecting data commands such
-as `copilot agent model list --profile progress_tenant_psdxautomation` or
-`copilot agent list --profile progress_tenant_psdxautomation` into JSON files,
-run a shaped auth preflight and preserve the producer status:
+as `copilot agent model list --profile "$profile"` or
+`copilot agent list --profile "$profile"` into JSON files, run a shaped auth
+preflight and preserve the producer status:
 
 ```bash
-if copilot auth status --profile progress_tenant_psdxautomation >"$auth_out" 2>"$auth_err"; then
+profile="${profile:?set profile from copilot auth profiles list --table}"
+
+if copilot auth status --profile "$profile" >"$auth_out" 2>"$auth_err"; then
   auth_rc=0
 else
   auth_rc=$?
 fi
 
 if [ "$auth_rc" -ne 0 ]; then
+  if [ "$auth_rc" -eq 2 ] && rg -q -F '"authenticated": false' "$auth_out"; then
+    printf 'COPILOT_AUTH_UNAUTHENTICATED profile=%s rc=%s\n' \
+      "$profile" "$auth_rc" >&2
+    cat "$auth_out" >&2
+    exit 0
+  fi
   printf 'COPILOT_AUTH_STATUS_FAILED rc=%s\n' "$auth_rc" >&2
   cat "$auth_err" >&2
   exit "$auth_rc"

@@ -1,8 +1,8 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-06-21T19:58:12Z",
-  "total_commands": 24,
+  "discovered_at": "2026-06-26T21:49:56Z",
+  "total_commands": 25,
   "global_options": [
     {
       "name": "--version",
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -488,7 +520,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=25]  Maximum number of results",
+                  "help": "RANGE [1<=x<=50]  Maximum number of results",
                   "short": "-l",
                   "default": "20"
                 },
