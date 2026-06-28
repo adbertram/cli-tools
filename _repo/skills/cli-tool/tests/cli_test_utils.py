@@ -122,25 +122,63 @@ def parse_help_commands(help_text: str) -> List[str]:
 
     Only parses from the Commands section to avoid false positives
     from option descriptions (e.g., "copy" in --show-completion help text).
+
+    Column-aware so wrapped help does not create phantom commands.
+    Rich/Typer lays each Commands row out as two aligned columns:
+    the command name in a fixed left column and its help text in a deeper
+    column to the right. When a command's help is long enough to wrap, the
+    overflow renders on continuation lines that are indented to the *help*
+    column, e.g.:
+
+        │ search    Search icons by a single keyword ... a single keyword │
+        │           like 'branch' or 'lightbulb' matches; ...             │
+
+    The bare ``^│\\s+([a-z]...)`` pattern matches the first lowercase token on
+    every line, so the continuation line above yields a phantom ``like``
+    command, and the generator then runs e.g. ``icons like --help`` (exit 2)
+    and aborts. To prevent that, lock onto the command-name column from the
+    first real row in a section and accept a token only when it begins at (or
+    before) that column; tokens that begin at the deeper help column are
+    wrapped continuation text and are rejected. The column is the offset of the
+    command-name token from the ``│`` box char (the pattern anchors on ``^│``,
+    but the ``│`` may be preceded by other chars in some terminals, so measure
+    from the ``│`` rather than from column 0).
     """
-    pattern = r'^│\s+([a-z][a-z0-9_-]*)\s+'
+    pattern = r'^│(\s+)([a-z][a-z0-9_-]*)\s+'
     commands = []
     in_commands_section = False
+    # Command-name column for the current Commands section, learned from its
+    # first matched row. None until the first real command row is seen, and
+    # reset whenever a new Commands section begins so a help screen with more
+    # than one Commands box is handled independently.
+    command_column = None
 
     for line in help_text.split('\n'):
         # Detect Commands section header
         if 'Commands' in line and '─' in line:
             in_commands_section = True
+            command_column = None
             continue
         # Detect end of Commands section (next section header)
         if in_commands_section and '─' in line and 'Commands' not in line:
             in_commands_section = False
+            command_column = None
             continue
 
         if in_commands_section:
             match = re.match(pattern, line)
             if match:
-                commands.append(match.group(1))
+                # Offset of the command-name token from the │ box char, i.e.
+                # the width of the leading whitespace captured before the name.
+                token_column = len(match.group(1))
+                if command_column is None:
+                    # First real command row defines the command-name column.
+                    command_column = token_column
+                if token_column <= command_column:
+                    commands.append(match.group(2))
+                # token_column > command_column => the token starts at the
+                # deeper help column, so this is a wrapped continuation line,
+                # not a command. Skip it.
     return commands
 
 
