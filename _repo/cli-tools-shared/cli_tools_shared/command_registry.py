@@ -44,6 +44,7 @@ _CRED_TYPE_MAP = {ct.value: ct for ct in CredentialType}
 
 
 def _get_config_class(get_config_fn):
+    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
     annotations = getattr(get_config_fn, "__annotations__", {}) or {}
     config_cls = annotations.get("return")
     if config_cls is not None:
@@ -305,6 +306,9 @@ def _check_credentials(
     for type_str in cred_type_strings:
         cred_type = _CRED_TYPE_MAP.get(type_str)
         if cred_type is None:
+            profile_auth_settings = get_profile_auth_settings(type(config))
+            if profile_auth_settings is not None and type_str in profile_auth_settings[1]:
+                continue
             logger.warning("Unknown credential type '%s', skipping check", type_str)
             continue
 

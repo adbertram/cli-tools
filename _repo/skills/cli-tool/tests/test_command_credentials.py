@@ -323,6 +323,23 @@ def test_all_commands_have_credential_mapping(
         pytest.skip(f"{cli_name} uv tool venv not found")
     venv_python = str(uv_venv / "bin" / "python")
 
+    result = subprocess.run(
+        [
+            venv_python,
+            "-c",
+            f"import json; "
+            f"from {cli_pkg}.config import Config; "
+            f"profile_types = getattr(Config, 'PROFILE_AUTH_TYPES', {{}}); "
+            f"print(json.dumps(list(profile_types.keys())))",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(cli_dir),
+    )
+    if result.returncode != 0:
+        pytest.skip("Config.PROFILE_AUTH_TYPES not available")
+    valid_credential_types = VALID_CREDENTIAL_TYPES | set(json.loads(result.stdout.strip()))
+
     missing_commands = []
     invalid_values = []
 
@@ -393,10 +410,10 @@ def test_all_commands_have_credential_mapping(
                     )
                 else:
                     for ct in cred_types:
-                        if ct not in VALID_CREDENTIAL_TYPES:
+                        if ct not in valid_credential_types:
                             invalid_values.append(
                                 f"  {module_name} {cmd}: invalid credential type '{ct}' "
-                                f"(valid: {', '.join(sorted(VALID_CREDENTIAL_TYPES))})"
+                                f"(valid: {', '.join(sorted(valid_credential_types))})"
                             )
 
     errors = []

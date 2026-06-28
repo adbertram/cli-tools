@@ -190,6 +190,7 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
 
 
 def _get_config_class(get_config_fn):
+    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
     annotations = getattr(get_config_fn, "__annotations__", {}) or {}
     config_cls = annotations.get("return")
     if config_cls is not None:

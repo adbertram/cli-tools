@@ -73,6 +73,7 @@
 | `paypal` | The `paypal` CLI provides a command-line interface for PayPal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `pinterest` | The `pinterest` CLI lets you manage Pinterest account, boards, and pins via API v5. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `pluralsight-author` | The `pluralsight-author` CLI provides browser-session access to Pluralsight Author opportunities and the Author Kit icon library. Use it to list, search, inspect, apply for opportunities, and download authenticated icon assets. |
 | `podio` | The `podio` CLI provides a command-line interface for Podio API using pypodio2. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `powerpoint-slide-recorder` | The `powerpoint-slide-recorder` CLI lets you record narrated PowerPoint slides. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `progress-servicenow` | Progress ServiceNow CLI automates common Employee Center workflows from the command line. Use it to check authentication, inspect ticket templates, browse catalog entries, and work with ServiceNow tickets through the existing browser-session automation. |

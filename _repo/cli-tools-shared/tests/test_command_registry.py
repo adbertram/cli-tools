@@ -115,6 +115,26 @@ def test_browser_session_gate_does_not_consider_browser_class_attributes():
         _check_credentials(config, ["browser_session"], "tool")
 
 
+def test_profile_auth_label_is_not_checked_as_credential(caplog):
+    class ProfileAuthConfig:
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {"author_kit": []}
+
+        def __init__(self):
+            self.checked_session = False
+
+        def has_saved_session(self):
+            self.checked_session = True
+            return True
+
+    config = ProfileAuthConfig()
+
+    _check_credentials(config, ["author_kit", "browser_session"], "tool")
+
+    assert config.checked_session is True
+    assert "Unknown credential type 'author_kit'" not in caplog.text
+
+
 class MultiProfileConfig(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.API_KEY, CredentialType.BROWSER_SESSION]
     PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"

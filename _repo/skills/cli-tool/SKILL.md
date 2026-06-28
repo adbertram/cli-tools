@@ -41,7 +41,9 @@ For any request that uses an existing CLI tool, read `<cli-tools-root>/_repo/ski
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate the
 available CLI tools from the source tree. The script prints one JSON array of
 records with `name`, `readme`, and `description`, where `description` is
-extracted from each tool README's `## DESCRIPTION` block. The default mode is
+extracted from each tool README's `## DESCRIPTION` block. The `readme` value is
+relative to `<cli-tools-root>` unless it is already absolute; resolve it against
+that root before deriving the tool directory or checking files. The default mode is
 JSON, and `--json` is accepted as an explicit alias for that default. When
 filtering the saved output with `jq`, iterate the array explicitly, for example
 `jq -e '.[] | select(.name == "google")' <file>`. Do not treat the output as
@@ -255,6 +257,11 @@ Python's stdin, so `json.load(sys.stdin)` reads empty input, Python reports
 `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`, and the producer
 can report `Broken pipe`.
 
+Before redirecting CLI JSON into a task-workspace artifact, create or prove the
+artifact's parent directory. For explicit agent workspaces, run
+`mkdir -p "$workspace"` before `>"$workspace/<name>.json"`; a missing parent
+directory is a command-composition failure, not CLI output evidence.
+
 Use this shape instead:
 ```bash
 json_file=$(mktemp -t cli-json)
@@ -407,6 +414,11 @@ use `importlib.util.find_spec()` with the shebang interpreter. Do not assume a
 module named `<pkg>_cli.auth` exists. In scaffolded CLIs, command auth is often
 mounted from `cli_tools_shared.auth_commands`, and client factories commonly
 live in `<pkg>_cli.client`.
+
+When inspecting source-defined mappings, registries, or constants from an
+installed CLI module, enumerate the live keys first and index only those exact
+keys. Do not normalize table, command, or resource names to guessed lowercase,
+snake_case, or singular forms before looking them up.
 
 This interpreter rule is only for ad-hoc imports and direct config probes. Do
 not use the installed CLI interpreter to run a tool's pytest suite. The uv tool
@@ -582,6 +594,12 @@ Usage nodes can omit documentation-only fields such as `examples` even when
 they include `options`. Before reading `node["examples"]`, inspect the node's
 keys and treat examples as optional with `node.get("examples", [])`; reserve
 `MISSING_JSON_PATH` failures for fields required by the usage contract.
+Usage node metadata fields can also use different containers across commands:
+`options` may be a list of option records, not an object. Before calling object
+methods such as `.keys()` or iterating entries, inspect the field type and
+handle the actual container; fail clearly with `JSON_CONTRACT_MISMATCH:
+commands.<path>.options expected object/list got <type>` for unsupported
+shapes.
 </principle>
 
 <principle name="⛔ Zero Test Failures Policy">

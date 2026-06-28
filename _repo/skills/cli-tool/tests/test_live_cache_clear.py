@@ -50,7 +50,7 @@ def test_run_cli_command_removes_harness_python_environment(monkeypatch):
 
     cli_test_utils.run_cli_command("/tmp/example", ["--help"])
 
-    assert captured_env["PATH"] == "/usr/bin"
+    assert captured_env["PATH"] == f"{Path.home() / '.local' / 'bin'}:/usr/bin"
     assert "VIRTUAL_ENV" not in captured_env
     assert "PYTHONPATH" not in captured_env
     assert "PYTHONHOME" not in captured_env

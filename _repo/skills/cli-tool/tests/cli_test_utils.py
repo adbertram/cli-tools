@@ -26,11 +26,14 @@ def _clean_path() -> Dict[str, str]:
     """
     env = os.environ.copy()
     virtual_env = os.environ.get("VIRTUAL_ENV")
+    path_parts = env.get("PATH", "").split(os.pathsep)
     if virtual_env:
         venv_bin = os.path.join(virtual_env, "bin")
-        path_parts = env.get("PATH", "").split(os.pathsep)
         path_parts = [p for p in path_parts if p != venv_bin]
-        env["PATH"] = os.pathsep.join(path_parts)
+    user_bin = str(Path.home() / ".local" / "bin")
+    if user_bin not in path_parts:
+        path_parts.insert(0, user_bin)
+    env["PATH"] = os.pathsep.join(path_parts)
     for key in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "__PYVENV_LAUNCHER__"):
         env.pop(key, None)
     env["COLUMNS"] = "200"

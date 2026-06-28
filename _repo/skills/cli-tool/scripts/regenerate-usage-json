@@ -35,6 +35,7 @@ if sys.version_info < (3, 11):
 
 import argparse  # noqa: E402
 import json  # noqa: E402
+import re  # noqa: E402
 import tomllib  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -44,6 +45,8 @@ SKILL_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SKILL_DIR.parents[2]
 CLI_TOOL_TESTS = SKILL_DIR / "tests"
 TEST_CONFIG = CLI_TOOL_TESTS / "cli_test_config.toml"
+OPTION_TOKEN_RE = re.compile(r"(?<![\w-])--[A-Za-z0-9][A-Za-z0-9-]*")
+ALWAYS_VALID_OPTION_TOKENS = {"--help"}
 
 sys.path.insert(0, str(CLI_TOOL_TESTS))
 
@@ -123,6 +126,30 @@ def existing_node_meta(old_usage: dict) -> dict[str, dict]:
     return meta
 
 
+def live_option_tokens(parameters: dict) -> set[str]:
+    tokens = set(ALWAYS_VALID_OPTION_TOKENS)
+    for option in parameters.get("options", []):
+        name = option.get("name")
+        if not isinstance(name, str) or not name.startswith("--"):
+            continue
+        tokens.add(name)
+        if option.get("type") == "bool":
+            tokens.add(f"--no-{name[2:]}")
+    return tokens
+
+
+def stale_option_tokens(value: object, live_tokens: set[str]) -> set[str]:
+    if isinstance(value, list):
+        text = "\n".join(str(item) for item in value)
+    else:
+        text = str(value)
+    return {
+        token
+        for token in OPTION_TOKEN_RE.findall(text)
+        if token not in live_tokens
+    }
+
+
 def assemble_commands(
     live_paths: list[str],
     parameters_by_path: dict[str, dict],
@@ -142,15 +169,23 @@ def assemble_commands(
             parsed_help = help_by_path.get(current_path, "")
 
             if preserved_help:
-                node["help"] = preserved_help
+                parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
+                if not stale_option_tokens(preserved_help, live_option_tokens(parameters)):
+                    node["help"] = preserved_help
+                elif parsed_help:
+                    node["help"] = parsed_help
+                else:
+                    node.setdefault("help", "")
             elif parsed_help:
                 node["help"] = parsed_help
             else:
                 node.setdefault("help", "")
 
-            if "examples" in meta:
+            parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
+            valid_option_tokens = live_option_tokens(parameters)
+            if "examples" in meta and not stale_option_tokens(meta["examples"], valid_option_tokens):
                 node["examples"] = meta["examples"]
-            if "usage_instructions" in meta:
+            if "usage_instructions" in meta and not stale_option_tokens(meta["usage_instructions"], valid_option_tokens):
                 node["usage_instructions"] = meta["usage_instructions"]
 
             if index == len(parts) - 1:

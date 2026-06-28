@@ -90,6 +90,12 @@ as `tests/test_<tool>.py`, `tests/test_cli.py`, or `tests/test_commands.py`. If
 no tests directory exists, report `SKIP_MISSING` and use the harness script
 below instead of a guessed file path.
 
+For ad-hoc diagnostics that reuse a helper from a tool test file, do not import
+plain pytest directories as package modules such as `tests.test_client`; most
+tool `tests/` directories do not have `__init__.py`. Load the exact proven test
+file with `importlib.util.spec_from_file_location(...)` before accessing the
+helper.
+
 Apply the same rule to shared harness paths. Do not assume root-level paths such
 as `<cli-tools-root>/tests/conftest.py` exist. Discover the harness files under
 `<cli-tools-root>/_repo/skills/cli-tool/tests` or the shared-package files under
@@ -143,6 +149,13 @@ Rich-rendered table stdout. Assert those full values against default JSON
 output instead. For table stdout, assert stable headers, row presence, visible
 labels, and the absence of row truncation; a cell-level ellipsis is acceptable
 when the JSON output preserves the full value.
+
+**Typer/Rich parser-error assertions:** Removed command or option tests should
+assert the stable behavior: exit code `2`, the generic parser-error class such
+as `"No such option"` or `"No such command"`, the removed token, and no mutation
+on the fake client. Do not assert exact formatted strings such as
+`"No such option: --status"`; Typer/Rich may wrap that text in panels or split
+punctuation while preserving the same command contract.
 
 ```bash
 tmp_output="$(mktemp)"
@@ -222,9 +235,21 @@ If `auth_required` is true in the JSON response, complete testing is blocked unt
 
 1. **First, check actual auth status:**
    ```bash
-   $TOOL_NAME auth status 2>/dev/null
+   if output="$($TOOL_NAME auth status 2>&1)"; then
+     printf '%s\n' "$output"
+   else
+     status=$?
+     printf '%s\n' "$output"
+     if [ "$status" -eq 2 ] && printf '%s\n' "$output" | rg -q -e 'authenticated: false' -e '"authenticated"[[:space:]]*:[[:space:]]*false'; then
+       printf 'EXPECTED_STATUS: %s profile is unauthenticated.\n' "$TOOL_NAME"
+     else
+       exit "$status"
+     fi
+   fi
    ```
-   Parse the JSON output to check the `authenticated` field.
+   Parse the JSON output to check the `authenticated` field. The wrapper exits
+   `0` only for authenticated status or the expected unauthenticated-status
+   evidence; other non-zero statuses remain tool failures.
 
 2. **If authenticated (true):** Investigate why the harness still considers auth incomplete. Do not treat the test run as complete until the harness passes.
 

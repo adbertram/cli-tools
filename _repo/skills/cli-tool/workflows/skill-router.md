@@ -64,6 +64,10 @@ sed -n '1,260p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<tool>-cli/u
 
 Follow the selected skill's principles. Use `usage.json` as the command syntax contract. Do not infer flags, argument order, output formats, or auth behavior from memory.
 
+For wrapper CLIs, treat the wrapper's selected skill, `usage.json`, and live
+help as authoritative. Do not assume the upstream tool's raw syntax works
+through the wrapper; prove the wrapper command shape first.
+
 For help probes, derive the exact command group and action from `usage.json`
 before executing `<tool> ... --help`. Do not pluralize service nouns or probe
 nearby guessed groups. For example, BrickLink order commands are under

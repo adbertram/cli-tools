@@ -104,10 +104,12 @@ similar commands.
 
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate available
 CLI tools, match the exact `name` from its JSON output, and derive the source
-directory from the matching record's `readme` parent. Then prove that directory
-exists and contains `pyproject.toml` before navigating. If there is no exact
-record, report `CLI_SOURCE_NOT_FOUND: <name>` and stop or ask which discovered
-CLI name to update.
+directory from the matching record's `readme` parent. If `readme` is relative,
+resolve it against `<cli-tools-root>` first; do not resolve it against the
+current shell working directory. Then prove that directory exists and contains
+`pyproject.toml` before navigating. If there is no exact record, report
+`CLI_SOURCE_NOT_FOUND: <name>` and stop or ask which discovered CLI name to
+update.
 
 Only after the source directory is proven:
 
@@ -351,6 +353,12 @@ After changes, use the install script:
 ```
 
 The script returns JSON with `success`, `install_output`, and `help_works`. Verify `"success": true` before proceeding.
+
+For remote installs such as `adam-server`, verify the remote checkout contains
+the intended changed file content before reinstalling. If Dropbox sync may lag,
+copy the changed source files to the same absolute paths with `scp`, reinstall
+on the remote host, then verify through the installed launcher's Python
+environment that the exact patched symbol or source marker is present.
 
 ## Step 4.5: Wrapper Upstream CLI Provisioning Gate
 

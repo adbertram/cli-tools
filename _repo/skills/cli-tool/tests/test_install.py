@@ -19,6 +19,31 @@ def _find_cli_tools_root(cli_dir: Path) -> Path | None:
     return None
 
 
+def _package_module_names(pkg_dir: Path, cli_dir: Path) -> list[str]:
+    """Return importable package modules, excluding Dropbox conflict copies."""
+    modules = []
+    for py_file in sorted(pkg_dir.rglob("*.py")):
+        if "__pycache__" in py_file.parts or "conflicted copy" in py_file.name:
+            continue
+        rel = py_file.relative_to(cli_dir)
+        mod_path = str(rel).replace("/", ".").removesuffix(".py")
+        if mod_path.endswith(".__init__"):
+            mod_path = mod_path.removesuffix(".__init__")
+        modules.append(mod_path)
+    return modules
+
+
+def test_package_module_names_ignore_dropbox_conflict_copies(tmp_path):
+    cli_dir = tmp_path / "demo"
+    pkg_dir = cli_dir / "demo_cli"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / "recorder.py").write_text("")
+    (pkg_dir / "recorder (Adam's MacBook Pro's conflicted copy 2026-06-27).py").write_text("")
+
+    assert _package_module_names(pkg_dir, cli_dir) == ["demo_cli", "demo_cli.recorder"]
+
+
 def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     """CLI must be registered as a uv tool.
 
@@ -342,15 +367,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     if not venv_python.exists():
         pytest.skip(f"{cli_name} uv tool venv has no python")
 
-    modules = []
-    for py_file in sorted(pkg_dir.rglob("*.py")):
-        if "__pycache__" in str(py_file):
-            continue
-        rel = py_file.relative_to(cli_dir)
-        mod_path = str(rel).replace("/", ".").removesuffix(".py")
-        if mod_path.endswith(".__init__"):
-            mod_path = mod_path.removesuffix(".__init__")
-        modules.append(mod_path)
+    modules = _package_module_names(pkg_dir, cli_dir)
 
     if not modules:
         pytest.skip(f"{cli_name} has no Python modules")

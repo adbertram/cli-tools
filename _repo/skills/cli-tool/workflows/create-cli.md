@@ -590,6 +590,10 @@ Invoke the `debloat` skill on the CLI directory.
 
 After the CLI implementation is created, installed, and testable, complete this
 step before `cli_tools.md`, CLI skill generation, commits, or final completion.
+For new CLI creation, an unauthenticated profile is a required user checkpoint,
+not a completion blocker to report and move past. Prompt Adam to authenticate
+once, save the auth profile through the CLI, and continue only after the saved
+profile is authenticated and live CLI tests pass.
 
 ### 9.7.1 Classify The Auth Boundary
 
@@ -676,9 +680,14 @@ needed:
 
 Feed values retrieved from the CLI-tools secret manager into the CLI's normal
 non-echoing auth flow or first-class auth options without printing them. If the
-CLI cannot create an authenticated profile from the stored credentials, stop with
-`LIVE_AUTH_BLOCKED: <name> auth login/status failed for <profile-name>` and
-preserve the non-secret failure output.
+CLI auth flow requires browser login, MFA, consent, or other one-time user
+action, prompt Adam to complete that authentication once in the opened browser
+or terminal. You are not done until the CLI has saved that authenticated profile
+and `<name> auth status --profile <profile-name>` confirms the shared
+authenticated profile JSON. Stop with `LIVE_AUTH_BLOCKED: <name> auth
+login/status failed for <profile-name>` only when the auth path cannot create a
+saved profile after Adam has had the opportunity to authenticate, and preserve
+the non-secret failure output.
 
 ### 9.7.5 Run Live Read-Only Smoke Commands
 
@@ -696,6 +705,13 @@ as the live smoke.
 The read-only smoke command must complete successfully against the live service.
 If live auth or the smoke command cannot be completed, report the exact
 `LIVE_AUTH_BLOCKED` reason and do not mark CLI creation complete.
+Then run the repo CLI testing tool against the live authenticated profile:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
+```
+
+The live test run must pass with zero failures before CLI creation is complete.
 
 ## Step 10: Update cli_tools.md
 
@@ -754,8 +770,10 @@ CLI creation is complete when:
   - [ ] `lastpass auth status` passed and `lastpass items list` searched the service credential entry without printing secrets
   - [ ] Needed reusable credential values were transferred to `<cli-tools-root>/_repo/_secret-manager/secrets.sh`
   - [ ] CLI auth profile was created or verified through the CLI's own `auth` commands
+  - [ ] Adam completed any required one-time browser/MFA/consent authentication
   - [ ] `<name> auth status --profile <profile-name>` confirmed authenticated profile JSON
   - [ ] At least one live read-only service smoke command succeeded
+  - [ ] `test-cli-tool.sh --cli-name <name>` passed with the saved authenticated profile
 - [ ] Wrapper CLIs explicitly skipped Step 9.7 unless the wrapper owns a separate CLI-tools auth profile
 - [ ] cli_tools.md has been updated with the new CLI
 - [ ] `/create-cli-tool-skill` invoked to generate the CLI's repo-owned skill

@@ -80,6 +80,16 @@ def test_service_skills_reference_adjacent_usage_json_path():
     ) in google_skill
 
 
+def test_service_router_requires_wrapper_contract_before_raw_syntax():
+    text = _read("workflows/skill-router.md")
+    text_words = _words(text)
+
+    assert "For wrapper CLIs" in text
+    assert "wrapper's selected skill, `usage.json`, and live help as authoritative" in text_words
+    assert "Do not assume the upstream tool's raw syntax works through the wrapper" in text_words
+    assert "prove the wrapper command shape first" in text_words
+
+
 def test_notion_pages_get_out_file_is_not_json_stdout():
     notion_skill = (SKILL_ROOT.parent / "notion-cli" / "SKILL.md").read_text()
     notion_words = _words(notion_skill)
@@ -87,7 +97,8 @@ def test_notion_pages_get_out_file_is_not_json_stdout():
     assert "When `pages get` uses `--out-file`, the Markdown file is the command output." in notion_skill
     assert "Do not redirect stdout to a `.json` file" in notion_words
     assert "do not parse stdout with `python3 -m json.tool` or `jq`" in notion_words
-    assert "checking that the `--out-file` path exists and is non-empty" in notion_words
+    assert "that the `--out-file` path exists" in notion_words
+    assert "Do not require the file to be non-empty" in notion_words
     assert "run a separate `notion pages get PAGE_ID` command without `--markdown` or `--out-file`" in notion_words
 
 
@@ -122,7 +133,11 @@ def test_create_workflow_requires_lastpass_profile_live_smoke_for_non_wrappers()
     assert "<cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name>" in text
     assert "<name> auth status --profile <profile-name>" in text
     assert "LIVE_AUTH_BLOCKED: LastPass has no usable" in text
+    assert "Prompt Adam to authenticate" in text
+    assert "save the auth profile through the CLI" in text
+    assert "You are not done until the CLI has saved that authenticated profile" in text
     assert "At least one live read-only service smoke command succeeded" in text
+    assert "test-cli-tool.sh --cli-name <name>` passed with the saved authenticated profile" in text
 
 
 def test_wrapper_workflows_require_upstream_binary_provisioning():
@@ -244,6 +259,16 @@ def test_skill_requires_shaped_expected_auth_status_probes():
     assert "can exit `2` while returning structured JSON" in text
 
 
+def test_test_workflow_shapes_auth_status_probe():
+    text = _read("workflows/test-cli.md")
+
+    forbidden_bare_probe = "$TOOL_NAME auth status " + "2>/dev/null"
+    assert forbidden_bare_probe not in text
+    assert "EXPECTED_STATUS: %s profile is unauthenticated." in text
+    assert "\"authenticated\"[[:space:]]*:[[:space:]]*false" in text
+    assert "other non-zero statuses remain tool failures" in text
+
+
 def test_test_workflow_documents_direct_typer_exit_assertions():
     text = _read("workflows/test-cli.md")
     text_words = _words(text)
@@ -314,6 +339,8 @@ def test_skill_requires_structured_cli_json_parsing_from_files():
     assert "json.load(sys.stdin)" in text
     assert "JSONDecodeError: Expecting value: line 1 column 1 (char 0)" in text
     assert "Broken pipe" in text
+    assert "Before redirecting CLI JSON into a task-workspace artifact" in text
+    assert 'mkdir -p "$workspace"' in text
     assert 'python3 - "$json_file"' in text
     assert "GET /api/providers" in text_words
     assert "MISSING_JSON_PATH: providers[0].config" in text
@@ -452,6 +479,18 @@ def test_test_workflow_documents_table_output_assertion_boundaries():
     assert "Do not assert full untruncated URLs, UUIDs, descriptions" in text_words
     assert "Assert those full values against default JSON output instead" in text_words
     assert "cell-level ellipsis is acceptable" in text_words
+
+
+def test_test_workflow_documents_typer_parser_error_assertion_boundaries():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "Typer/Rich parser-error assertions" in text
+    assert "Removed command or option tests should assert the stable behavior" in text_words
+    assert 'such as `"No such option"` or `"No such command"`' in text_words
+    assert 'Do not assert exact formatted strings such as' in text
+    assert '"No such option: --status"' in text
+    assert "no mutation on the fake client" in text_words
 
 
 def test_test_workflow_warns_about_direct_typer_command_calls():

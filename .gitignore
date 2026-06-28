@@ -6,6 +6,7 @@ scripts/*.log
 *.bak
 *.bak/
 *~
+*conflicted copy*
 
 .env
 .env.*
