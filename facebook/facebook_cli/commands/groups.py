@@ -35,7 +35,7 @@ app.add_typer(posts_app, name="posts")
 def posts_list(
     group_id: str = typer.Argument(..., help="Group ID or name/slug"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    limit: int = typer.Option(20, "--limit", "-l", min=1, max=25, help="Maximum number of results"),
+    limit: int = typer.Option(20, "--limit", "-l", min=1, max=50, help="Maximum number of results"),
     full_threads: bool = typer.Option(False, "--full-threads", help="Fetch full thread metadata for each returned post"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),

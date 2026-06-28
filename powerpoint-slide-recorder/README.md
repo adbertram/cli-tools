@@ -109,5 +109,5 @@ Successful commands emit JSON on stdout:
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
+uv run --project . --with pytest python -m pytest tests
 ```

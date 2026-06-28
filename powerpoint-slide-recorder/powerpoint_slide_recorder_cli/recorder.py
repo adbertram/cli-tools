@@ -102,6 +102,13 @@ DEFAULT_CUE_MARKER = "||"
 # sitting in front of it. Without this subprocess-level timeout the recorder hangs
 # forever at the open/automation step with no diagnostic.
 OSASCRIPT_TIMEOUT_SECONDS = 30
+DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS = 120
+DEMO_ENVIRONMENT_PWSH_PATH = Path("/usr/local/bin/pwsh")
+DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH = Path(
+    "/Users/adam/Dropbox/GitRepos/Agents/CourseCraft/.agents/skills/"
+    "demo-environment-automation/scripts/DemoEnvironmentAutomation/"
+    "DemoEnvironmentAutomation.psd1"
+)
 # Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
 # benign PowerPoint startup dialog cannot block the recording indefinitely.
 OPEN_DECK_DISMISS_ATTEMPTS = 8
@@ -111,6 +118,8 @@ OPEN_DECK_DISMISS_ATTEMPTS = 8
 # state just means the auto-dismiss convenience is skipped, not that recording stops.
 DIALOG_PROBE_ATTEMPTS = 3
 DIALOG_PROBE_RETRY_SECONDS = 0.5
+DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
+POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 INTER_SLIDE_ACTIONS = [{
@@ -183,13 +192,20 @@ def run(command, timeout=None):
 
 
 def capture(command, timeout=None):
-    completed = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE, timeout=timeout)
+    completed = subprocess.run(
+        command,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+    )
     return completed.stdout.strip()
 
 
 def run_macos_display_helper(*args):
     completed = subprocess.run(
-        ["/usr/bin/python3", "-c", MACOS_DISPLAY_HELPER, *[str(arg) for arg in args]],
+        [sys.executable, "-c", MACOS_DISPLAY_HELPER, *[str(arg) for arg in args]],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -478,6 +494,7 @@ def render_ui_action(action):
         "delay": render_delay_action,
         "fullscreen_window": render_fullscreen_window_action,
         "key_code": render_key_code_action,
+        "scoped_key_code": render_scoped_key_code_action,
         "key_stroke": render_key_stroke_action,
         "keystroke_command": render_keystroke_command_action,
         "menu_click": render_menu_click_action,
@@ -527,6 +544,13 @@ def render_assert_window_action(action):
 
 def render_key_code_action(action):
     return [f'tell application "System Events" to key code {action["code"]}']
+
+
+def render_scoped_key_code_action(action):
+    return render_scoped_process_action(action, [
+        "set frontmost to true",
+        f'key code {action["code"]}',
+    ])
 
 
 def render_key_stroke_action(action):
@@ -626,6 +650,34 @@ def require_path(path, description):
     if not resolved_path.is_file():
         raise FileNotFoundError(f"{description} not found: {resolved_path}")
     return resolved_path
+
+
+def powershell_single_quoted(value):
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def run_demo_environment_recording_prep():
+    pwsh_path = require_path(DEMO_ENVIRONMENT_PWSH_PATH, "PowerShell executable for demo environment prep")
+    module_path = require_path(DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH, "Demo environment automation manifest")
+    script = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        "Set-StrictMode -Version Latest",
+        f"Import-Module -DisableNameChecking {powershell_single_quoted(module_path)} -Force",
+        "Set-MacOSDoNotDisturb -SoftPass",
+        "Remove-MacOSNotifications",
+    ])
+    try:
+        run(
+            [str(pwsh_path), "-NoProfile", "-NonInteractive", "-Command", script],
+            timeout=DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS,
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Demo environment prep failed before recording (exit {error.returncode})") from error
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"Demo environment prep timed out before recording after "
+            f"{DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS}s"
+        ) from error
 
 
 def load_items(path):
@@ -981,7 +1033,8 @@ def prepare(config):
 
 def press_space():
     execute_ui_actions([{
-        "action": "key_code",
+        "action": "scoped_key_code",
+        "process": "Microsoft PowerPoint",
         "code": 49,
     }])
 
@@ -1016,6 +1069,17 @@ def force_slideshow_fullscreen():
     ])
 
 
+def assert_slideshow_present():
+    screen_width, screen_height = screen_point_size()
+    execute_ui_actions([{
+        "action": "fullscreen_window",
+        "process": "Microsoft PowerPoint",
+        "contains": "Slide Show",
+        "screen_width": screen_width,
+        "screen_height": screen_height,
+    }])
+
+
 def powerpoint_is_running():
     output = capture_osascript('application "Microsoft PowerPoint" is running')
     if output not in ["true", "false"]:
@@ -1048,12 +1112,39 @@ def presentation_is_open(deck_path):
     return output == "true"
 
 
+def is_applescript_open_poll_failure(error):
+    details = "\n".join(
+        str(value)
+        for value in [getattr(error, "stderr", None), getattr(error, "output", None), error]
+        if value
+    )
+    return (
+        "AppleEvent timed out" in details
+        or "(-1712)" in details
+        or "Connection is invalid" in details
+        or "(-609)" in details
+    )
+
+
+def presentation_is_open_during_open(deck_path):
+    try:
+        return presentation_is_open(deck_path)
+    except subprocess.CalledProcessError as error:
+        if is_applescript_open_poll_failure(error):
+            log_warning(
+                "PowerPoint did not answer the open-state poll; continuing the "
+                "bounded deck-open wait."
+            )
+            return False
+        raise
+
+
 def create_powerpoint_state(config):
     deck_path = Path(config["deck_path"])
     powerpoint_was_running = powerpoint_is_running()
     return {
         "powerpoint_was_running": powerpoint_was_running,
-        "deck_was_open": powerpoint_was_running and presentation_is_open(deck_path),
+        "deck_was_open": powerpoint_was_running and presentation_is_open_during_open(deck_path),
     }
 
 
@@ -1305,7 +1396,7 @@ def open_deck_failure_error(deck_path, last_dialog):
 
 def open_deck(config):
     deck_path = Path(config["deck_path"])
-    if presentation_is_open(deck_path):
+    if presentation_is_open_during_open(deck_path):
         return
 
     run(["open", "-a", "Microsoft PowerPoint", str(deck_path)])
@@ -1320,7 +1411,7 @@ def open_deck(config):
     for _ in range(OPEN_DECK_DISMISS_ATTEMPTS):
         deadline = time.monotonic() + (OSASCRIPT_TIMEOUT_SECONDS / OPEN_DECK_DISMISS_ATTEMPTS)
         while time.monotonic() < deadline:
-            if presentation_is_open(deck_path):
+            if presentation_is_open_during_open(deck_path):
                 return
             time.sleep(0.5)
 
@@ -1328,7 +1419,7 @@ def open_deck(config):
         if last_dialog is None:
             continue
         try_auto_dismiss_startup_dialog()
-        if presentation_is_open(deck_path):
+        if presentation_is_open_during_open(deck_path):
             return
 
     raise open_deck_failure_error(deck_path, last_dialog)
@@ -1448,6 +1539,40 @@ def close_slideshow_and_deck(config, state):
     }])
 
 
+def is_powerpoint_connection_error(error):
+    details = str(error)
+    return any(marker in details for marker in [
+        "Connection is invalid",
+        "(-609)",
+        "AppleEvent timed out",
+        "(-1712)",
+        "osascript controlling Microsoft PowerPoint did not respond",
+    ])
+
+
+def force_kill_powerpoint():
+    subprocess.run(["pkill", "-9", "-x", POWERPOINT_PROCESS_NAME], check=False)
+    completed = subprocess.run(
+        ["pgrep", "-x", POWERPOINT_PROCESS_NAME],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode == 0:
+        raise RuntimeError(f"{POWERPOINT_PROCESS_NAME} still running after force kill: {completed.stdout.strip()}")
+
+
+def cleanup_powerpoint(config, state):
+    try:
+        close_slideshow_and_deck(config, state)
+    except Exception as error:
+        if state["powerpoint_was_running"] or not is_powerpoint_connection_error(error):
+            raise
+        log_warning(f"PowerPoint AppleScript cleanup failed after recorder-launched session; force killing: {error}")
+        force_kill_powerpoint()
+
+
 def stop_audio_process(audio_process):
     if audio_process is None:
         return
@@ -1481,10 +1606,16 @@ def ensure_process_running(process, description):
         raise RuntimeError(f"{description} exited with code {return_code}")
 
 
-def sleep_until(target_time, monitored_processes):
+def sleep_until(target_time, monitored_processes, presence_check=None):
+    next_presence_check = 0
     while True:
         for process, description in monitored_processes:
             ensure_process_running(process, description)
+        if presence_check is not None:
+            now = time.monotonic()
+            if now >= next_presence_check:
+                presence_check()
+                next_presence_check = now + DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS
 
         sleep_seconds = target_time - time.monotonic()
         if sleep_seconds <= 0:
@@ -1492,9 +1623,15 @@ def sleep_until(target_time, monitored_processes):
         time.sleep(min(sleep_seconds, 0.1))
 
 
-def wait_for_audio(audio_process, ffmpeg_process):
+def wait_for_audio(audio_process, ffmpeg_process, presence_check=None):
+    next_presence_check = 0
     while True:
         ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        if presence_check is not None:
+            now = time.monotonic()
+            if now >= next_presence_check:
+                presence_check()
+                next_presence_check = now + DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS
         audio_return_code = audio_process.poll()
         if audio_return_code is not None:
             return audio_return_code
@@ -1545,6 +1682,7 @@ def record(config):
             config["ffmpeg_video_input"],
         )
 
+        run_demo_environment_recording_prep()
         plan = prepare(config)
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
@@ -1582,12 +1720,13 @@ def record(config):
 
         for action in plan["actions"]:
             target_time = started_at + action["at_seconds"]
-            sleep_until(target_time, monitored_processes)
+            sleep_until(target_time, monitored_processes, assert_slideshow_present)
             for process, description in monitored_processes:
                 ensure_process_running(process, description)
+            assert_slideshow_present()
             press_space()
 
-        audio_return_code = wait_for_audio(audio_process, ffmpeg_process)
+        audio_return_code = wait_for_audio(audio_process, ffmpeg_process, assert_slideshow_present)
         if audio_return_code != 0:
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 
@@ -1638,7 +1777,7 @@ def record(config):
         run_cleanup(cleanup_errors, "stop audio playback", lambda: stop_audio_process(audio_process))
         run_cleanup(cleanup_errors, "stop screen recording", lambda: stop_ffmpeg_process(ffmpeg_process))
         if state is not None:
-            run_cleanup(cleanup_errors, "close PowerPoint slideshow and deck", lambda: close_slideshow_and_deck(config, state))
+            run_cleanup(cleanup_errors, "close PowerPoint slideshow and deck", lambda: cleanup_powerpoint(config, state))
         if display_restore_mode is not None:
             run_cleanup(cleanup_errors, "restore display resolution", lambda: set_display_resolution(
                 display_restore_mode["width"],

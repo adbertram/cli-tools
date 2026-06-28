@@ -146,6 +146,7 @@ AGENT_FIELD_ALIASES = {
     "schemaName": "schemaname",
     "logicalName": "schemaname",
     "stateCode": "statecode",
+    "status": "statuscode",
     "statusCode": "statuscode",
     "publishedOn": "publishedon",
     "createdOn": "createdon",
@@ -209,6 +210,7 @@ def format_bot_for_display(bot: dict) -> dict:
         "schemaName": schema_name,
         "logicalName": schema_name,
         "statecode": state_map.get(statecode, str(statecode) if statecode is not None else ""),
+        "status": status_map.get(statuscode, str(statuscode) if statuscode is not None else ""),
         "statuscode": status_map.get(statuscode, str(statuscode) if statuscode is not None else ""),
         "published": publishedon is not None,
         "createdon": bot.get("createdon", ""),
@@ -2056,7 +2058,10 @@ def knowledge_list(
         sources = client.list_knowledge_sources(resolved_agent_id, source_type=source_type)
 
         if not sources:
-            typer.echo("No knowledge sources found for this agent.")
+            if table:
+                typer.echo("No knowledge sources found for this agent.")
+            else:
+                print_json([])
             return
 
         formatted = [format_knowledge_source(s) for s in sources]
@@ -3699,7 +3704,10 @@ def tool_list(
         tools = client.list_tools(agent_id, category=category)
 
         if not tools:
-            typer.echo("No agent tools found for this agent.")
+            if table:
+                typer.echo("No agent tools found for this agent.")
+            else:
+                print_json([])
             return
 
         formatted = [format_tool_for_display(t, truncate=table) for t in tools]

@@ -131,7 +131,39 @@ def write_layout_animation_deck(root, slide_layout_animation_counts):
     return deck
 
 
+class DemoEnvironmentPrepTests(unittest.TestCase):
+    def test_demo_environment_prep_runs_existing_focus_and_notification_helpers(self):
+        with mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
+                mock.patch.object(record, "run") as run_command:
+            record.run_demo_environment_recording_prep()
+
+        command = run_command.call_args.args[0]
+        script = command[-1]
+        self.assertEqual(command[:3], [str(record.DEMO_ENVIRONMENT_PWSH_PATH), "-NoProfile", "-NonInteractive"])
+        self.assertEqual(command[3], "-Command")
+        self.assertIn("Import-Module -DisableNameChecking", script)
+        self.assertIn(str(record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH), script)
+        self.assertLess(script.index("Set-MacOSDoNotDisturb -SoftPass"), script.index("Remove-MacOSNotifications"))
+        self.assertEqual(
+            run_command.call_args.kwargs["timeout"],
+            record.DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS,
+        )
+
+    def test_demo_environment_prep_failure_is_clear(self):
+        with mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
+                mock.patch.object(record, "run", side_effect=subprocess.CalledProcessError(7, ["pwsh"])):
+            with self.assertRaisesRegex(RuntimeError, "Demo environment prep failed before recording \\(exit 7\\)"):
+                record.run_demo_environment_recording_prep()
+
+
 class RecordTests(unittest.TestCase):
+    def setUp(self):
+        self.demo_prep_patcher = mock.patch.object(record, "run_demo_environment_recording_prep")
+        self.demo_environment_prep = self.demo_prep_patcher.start()
+
+    def tearDown(self):
+        self.demo_prep_patcher.stop()
+
     def test_public_cli_uses_default_resolution(self):
         runner = CliRunner()
         fake_result = mock.Mock()
@@ -472,15 +504,16 @@ Input #0, avfoundation, from '3':
 
     def test_run_macos_display_helper_raises_with_stderr(self):
         completed = subprocess.CompletedProcess(
-            args=["/usr/bin/python3"],
+            args=[record.sys.executable],
             returncode=1,
             stdout="",
             stderr="mode not available",
         )
 
-        with mock.patch.object(subprocess, "run", return_value=completed):
+        with mock.patch.object(subprocess, "run", return_value=completed) as run:
             with self.assertRaisesRegex(RuntimeError, "macOS display helper failed: mode not available"):
                 record.run_macos_display_helper("set", "1920", "1080")
+        self.assertEqual(run.call_args.args[0][0], record.sys.executable)
 
     def test_macos_display_helper_uses_configuration_transaction(self):
         self.assertIn("CGBeginDisplayConfiguration", record.MACOS_DISPLAY_HELPER)
@@ -837,6 +870,90 @@ Input #0, avfoundation, from '3':
             script,
         )
 
+    def test_press_space_targets_powerpoint_process(self):
+        with mock.patch.object(record, "execute_ui_actions") as execute_ui_actions:
+            record.press_space()
+
+        execute_ui_actions.assert_called_once_with([{
+            "action": "scoped_key_code",
+            "process": "Microsoft PowerPoint",
+            "code": 49,
+        }])
+
+    def test_sleep_until_checks_slideshow_before_action(self):
+        process = FakeProcess([None], 0)
+        presence_check = mock.Mock()
+
+        record.sleep_until(0, [(process, "ffmpeg")], presence_check)
+
+        presence_check.assert_called_once()
+
+    def test_record_runs_demo_environment_prep_before_capture_starts(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir), work_dir="/tmp/work")
+        ffmpeg_process = FakeProcess([None, None, None], 0)
+        audio_process = FakeProcess([None, 0], 0)
+        events = []
+
+        def fake_prepare(config):
+            events.append("prepare")
+            return {
+                "narration_audio": "/tmp/narration.wav",
+                "actions": [],
+            }
+
+        def fake_state(config):
+            events.append("state")
+            return {
+                "powerpoint_was_running": False,
+                "deck_was_open": False,
+            }
+
+        def fake_start_slideshow(config):
+            events.append("slideshow")
+
+        def fake_popen(command, **kwargs):
+            events.append(command[0])
+            if command[0] == "ffmpeg":
+                return ffmpeg_process
+            if command[0] == "afplay":
+                return audio_process
+            raise AssertionError(command)
+
+        self.demo_environment_prep.side_effect = lambda: events.append("demo_prep")
+
+        with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
+                mock.patch.object(record, "prepare", side_effect=fake_prepare), \
+                mock.patch.object(record, "create_powerpoint_state", side_effect=fake_state), \
+                mock.patch.object(record, "start_slideshow", side_effect=fake_start_slideshow), \
+                mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "run"), \
+                mock.patch.object(subprocess, "Popen", side_effect=fake_popen):
+            record.record(config)
+
+        self.assertEqual(events[:4], ["demo_prep", "prepare", "state", "slideshow"])
+        self.assertEqual(events[4], "ffmpeg")
+
+    def test_record_aborts_clearly_when_demo_environment_prep_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir), work_dir="/tmp/work")
+
+        self.demo_environment_prep.side_effect = RuntimeError("Demo environment prep failed before recording (exit 7)")
+
+        with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
+                mock.patch.object(record, "prepare") as prepare, \
+                mock.patch.object(record, "create_powerpoint_state") as create_powerpoint_state, \
+                mock.patch.object(record, "start_slideshow") as start_slideshow, \
+                mock.patch.object(subprocess, "Popen") as popen:
+            with self.assertRaisesRegex(RuntimeError, "Demo environment prep failed before recording"):
+                record.record(config)
+
+        prepare.assert_not_called()
+        create_powerpoint_state.assert_not_called()
+        start_slideshow.assert_not_called()
+        popen.assert_not_called()
+
     def test_record_aborts_before_actions_when_ffmpeg_exits(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(Path(temp_dir), items=[], work_dir="/tmp/work")
@@ -927,6 +1044,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -987,6 +1105,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1051,6 +1170,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             with contextlib.redirect_stderr(io.StringIO()):
@@ -1140,6 +1260,37 @@ Input #0, avfoundation, from '3':
         self.assertIsInstance(context.exception.__cause__, RuntimeError)
         self.assertEqual(str(context.exception.__cause__), "slideshow failed")
 
+    def test_cleanup_force_kills_recorder_launched_powerpoint_on_connection_error(self):
+        state = {"powerpoint_was_running": False, "deck_was_open": False}
+
+        with mock.patch.object(record, "close_slideshow_and_deck",
+                               side_effect=RuntimeError("Microsoft PowerPoint got an error: Connection is invalid. (-609)")), \
+                mock.patch.object(record, "force_kill_powerpoint") as force_kill:
+            record.cleanup_powerpoint({}, state)
+
+        force_kill.assert_called_once_with()
+
+    def test_cleanup_does_not_force_kill_preexisting_powerpoint(self):
+        state = {"powerpoint_was_running": True, "deck_was_open": False}
+
+        with mock.patch.object(record, "close_slideshow_and_deck",
+                               side_effect=RuntimeError("Microsoft PowerPoint got an error: Connection is invalid. (-609)")), \
+                mock.patch.object(record, "force_kill_powerpoint") as force_kill:
+            with self.assertRaisesRegex(RuntimeError, "Connection is invalid"):
+                record.cleanup_powerpoint({}, state)
+
+        force_kill.assert_not_called()
+
+    def test_force_kill_powerpoint_uses_sigkill_and_verifies_exit(self):
+        with mock.patch.object(subprocess, "run", side_effect=[
+            subprocess.CompletedProcess(["pkill"], 0, stdout="", stderr=""),
+            subprocess.CompletedProcess(["pgrep"], 1, stdout="", stderr=""),
+        ]) as run:
+            record.force_kill_powerpoint()
+
+        self.assertEqual(run.call_args_list[0].args[0], ["pkill", "-9", "-x", "Microsoft PowerPoint"])
+        self.assertEqual(run.call_args_list[1].args[0], ["pgrep", "-x", "Microsoft PowerPoint"])
+
     def test_record_closes_powerpoint_before_final_mux(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(Path(temp_dir), work_dir="/tmp/work")
@@ -1165,6 +1316,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1192,6 +1344,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1223,6 +1376,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "assert_slideshow_present"), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1243,6 +1397,47 @@ Input #0, avfoundation, from '3':
 
         self.assertFalse(result)
         self.assertEqual(capture.call_args.args[0][-1], str(Path(deck_path).expanduser().resolve()))
+
+    def test_open_poll_treats_applescript_timeout_as_not_open_yet(self):
+        error = subprocess.CalledProcessError(
+            1,
+            ["osascript"],
+            stderr="Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)",
+        )
+
+        with mock.patch.object(record, "presentation_is_open", side_effect=error), \
+                mock.patch.object(record, "log_warning") as log_warning:
+            self.assertFalse(record.presentation_is_open_during_open("/tmp/deck.pptx"))
+
+        log_warning.assert_called_once()
+
+    def test_open_poll_treats_connection_invalid_as_not_open_yet(self):
+        error = subprocess.CalledProcessError(
+            1,
+            ["osascript"],
+            stderr="Microsoft PowerPoint got an error: Connection is invalid. (-609)",
+        )
+
+        with mock.patch.object(record, "presentation_is_open", side_effect=error), \
+                mock.patch.object(record, "log_warning") as log_warning:
+            self.assertFalse(record.presentation_is_open_during_open("/tmp/deck.pptx"))
+
+        log_warning.assert_called_once()
+
+    def test_initial_state_tolerates_applescript_timeout_when_powerpoint_is_running(self):
+        with mock.patch.object(record, "powerpoint_is_running", return_value=True), \
+                mock.patch.object(record, "presentation_is_open_during_open", return_value=False) as is_open:
+            state = record.create_powerpoint_state({"deck_path": "/tmp/deck.pptx"})
+
+        self.assertEqual(state, {"powerpoint_was_running": True, "deck_was_open": False})
+        is_open.assert_called_once_with(Path("/tmp/deck.pptx"))
+
+    def test_open_poll_keeps_non_timeout_presentation_failures_loud(self):
+        error = subprocess.CalledProcessError(1, ["osascript"], stderr="syntax error")
+
+        with mock.patch.object(record, "presentation_is_open", side_effect=error):
+            with self.assertRaises(subprocess.CalledProcessError):
+                record.presentation_is_open_during_open("/tmp/deck.pptx")
 
     def test_parse_dialog_payload_treats_malformed_responses_as_no_dialog(self):
         # Regression: the live-process System Events probe can return a bare

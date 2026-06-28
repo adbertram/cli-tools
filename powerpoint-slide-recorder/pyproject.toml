@@ -12,10 +12,16 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     "cli-tools-shared",
+    "pyobjc-framework-Quartz>=12.2.1; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
 powerpoint-slide-recorder = "powerpoint_slide_recorder_cli.main:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

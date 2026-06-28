@@ -87,6 +87,12 @@ class AdobePodcastClient:
             "X-Cookie-Settings": "C0001",
         })
 
+    def _refresh_access_token(self) -> None:
+        """Discard a rejected IMS token and replace it from the saved browser session."""
+        self.config._clear("ACCESS_TOKEN")
+        access_token = self._extract_token_from_browser()
+        self._session.headers["Authorization"] = f"Bearer {access_token}"
+
     def _extract_token_from_browser(self) -> str:
         """Open headless browser against the saved profile, extract IMS token, cache it.
 
@@ -158,11 +164,16 @@ class AdobePodcastClient:
         last_exc: Optional[Exception] = None
         last_resp: Optional[requests.Response] = None
         max_attempts = self.max_retries + 1
+        refreshed_auth = False
 
         for attempt in range(max_attempts):
             try:
                 resp = self._session.request(method, url, **kwargs)
                 last_resp = resp
+                if resp.status_code == 401 and not refreshed_auth:
+                    self._refresh_access_token()
+                    refreshed_auth = True
+                    continue
                 if self._is_retryable(resp, None) and attempt < self.max_retries:
                     time.sleep(self._calculate_retry_delay(attempt, self._get_retry_after(resp)))
                     continue

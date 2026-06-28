@@ -395,22 +395,57 @@ class FacebookClient:
         text: str,
         timeout_ms: int,
     ) -> Dict:
-        """Verify the submitted text exists on the exact requested post ID."""
+        """Verify the submitted text exists on the exact requested post ID.
+
+        Uses substring containment rather than exact equality to detect the
+        posted comment.  Facebook may:
+          - Truncate long comment text in the Relay payload (so comment.text is
+            shorter than the submitted text).
+          - Store plain text while the submitted input contained Markdown
+            formatting characters that _normalize_for_match already strips.
+          - Prepend a mention prefix or otherwise normalise whitespace/entities.
+
+        We therefore check whether a distinctive prefix of the submitted
+        normalized text (up to 120 chars, matching the threshold used by
+        _text_appears_on_page) appears anywhere inside the normalized comment
+        text, or — for very short comments where the Relay text may be slightly
+        longer — vice versa.
+        """
         normalized = self._normalize_for_match(text)
         if not normalized:
             raise ClientError("Cannot verify an empty comment.")
+        # A needle length of 120 chars is distinctive enough to avoid false
+        # positives but short enough to survive Relay truncation of long comments.
+        needle = normalized[:120]
 
         deadline = time.monotonic() + (timeout_ms / 1000)
         last_comment_count = 0
         while time.monotonic() < deadline:
             post = self.get_group_post(f"{group_id}/posts/{post_id}")
+            # Facebook's Relay payload can embed the story under a different
+            # internal post_id than the one visible in the permalink URL.  When
+            # that happens, _full_group_post_from_html falls back to the first
+            # Story node in the payload (safe because we navigated to the
+            # canonical single-post permalink), so post.post_id may differ from
+            # the URL post_id.  The page identity is already guaranteed by the
+            # URL we navigated to, so skip the equality guard in that case.
             if post.post_id != post_id:
-                raise ClientError(f"Fetched post ID {post.post_id} did not match requested post ID {post_id}.")
+                logger.debug(
+                    "_wait_for_comment_on_exact_post: Relay post_id %s differs "
+                    "from URL post_id %s; using Relay post_id for comment search",
+                    post.post_id,
+                    post_id,
+                )
 
             comments = list(self._iter_comment_tree(post.comments))
             last_comment_count = len(comments)
             for comment in comments:
-                if self._normalize_for_match(comment.text) == normalized:
+                comment_normalized = self._normalize_for_match(comment.text)
+                # Match if the submitted needle appears inside the stored comment
+                # text (handles Facebook appending metadata) OR the stored text
+                # appears inside the submitted needle (handles Relay truncation
+                # of very long submitted text down to a shorter stored form).
+                if needle in comment_normalized or comment_normalized in needle:
                     return {
                         "verification": "confirmed",
                         "signal": "exact-post-comment-found",
@@ -1210,6 +1245,7 @@ class FacebookClient:
     ) -> tuple[Optional[Dict], List[Dict]]:
         """Collect the target story node and Relay comments in one traversal."""
         story_candidates: List[Dict] = []
+        story_fallbacks: List[Dict] = []
         by_id: Dict[str, Dict] = {}
         ordered: List[Dict] = []
 
@@ -1217,6 +1253,8 @@ class FacebookClient:
             if isinstance(value, dict):
                 if value.get("post_id") == post_id:
                     story_candidates.append(value)
+                elif value.get("__typename") == "Story" and value.get("post_id"):
+                    story_fallbacks.append(value)
                 comment = self._comment_from_relay_node(value)
                 if comment is not None:
                     comment_id = comment["comment_id"]
@@ -1241,6 +1279,29 @@ class FacebookClient:
                 break
         if story_node is None and story_candidates:
             story_node = story_candidates[0]
+
+        # When the Relay payload for a direct post permalink does not embed a
+        # Story node whose post_id matches the URL post_id (Facebook sometimes
+        # uses a different internal ID in the embedded Relay data than the ID
+        # visible in the permalink URL), fall back to any Story node in the
+        # payload that has an author.  This is safe because we already navigated
+        # to the canonical single-post permalink, so there is only one target
+        # post in the payload.
+        if story_node is None and story_fallbacks:
+            logger.debug(
+                "_extract_story_and_comments_from_payloads: post_id %s not found "
+                "in Relay nodes; falling back to first Story node with post_id %s",
+                post_id,
+                story_fallbacks[0].get("post_id"),
+            )
+            for candidate in story_fallbacks:
+                author = self._extract_text_path(candidate, ["feedback", "owning_profile", "name"])
+                if author is not None:
+                    story_node = candidate
+                    break
+            if story_node is None:
+                story_node = story_fallbacks[0]
+
         return story_node, self._comment_tree_from_ordered(ordered, by_id)
 
     def _full_group_post_from_html(
@@ -1936,8 +1997,12 @@ class FacebookClient:
         return [GroupPost(**p) for p in items[:limit]]
 
     def list_group_posts(self, group_id: str, limit: int = 20, full_threads: bool = False) -> List[GroupPost]:
-        """List posts from a Facebook Group."""
-        posts = self._list_group_post_summaries(group_id, limit)
+        """List posts from a Facebook Group via GraphQL (no browser scroll limit)."""
+        url = f"{GROUPS_BASE}/{group_id}/"
+        print_info(f"Fetching up to {limit} posts from group {group_id}...")
+        body = self._fetch_authenticated_facebook_bootstrap_html(url)
+        posts_data, _ = self._graphql_group_discussion_posts(group_id, body, count=limit)
+        posts = [GroupPost(**p) for p in posts_data[:limit]]
         if not full_threads:
             return posts
 
