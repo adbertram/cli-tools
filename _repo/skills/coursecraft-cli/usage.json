@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-27T23:55:01Z",
+  "discovered_at": "2026-06-29T19:42:02Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -298,7 +298,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "CRUD operations for clip records within a module. Supports single and batch creation via --json/--file. Use --module/-m to filter by module, or --course to filter by course. The 'show' command displays an ASCII tree of the clip with its demos and slides. Accepts M1C1/M2C3 shorthand patterns or record IDs.",
       "commands": {
         "create": {
           "help": "Create clip record(s) in Airtable. Supports two modes: 1. Single clip mode: Use --name to create one clip 2. Batch mode: Use --json or --file to create multiple clips",
@@ -340,12 +339,6 @@
               "short": "-t"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Clip status"
-            },
-            {
               "name": "--json",
               "type": "TEXT",
               "required": false,
@@ -368,8 +361,7 @@
             "coursecraft clips create --module recXXX --name \"Introduction\" --order 1",
             "coursecraft clips create --module recXXX --json '[{\"name\":\"Clip 1\"},{\"name\":\"Clip 2\"}]'",
             "coursecraft clips create --module recXXX --file clips.json"
-          ],
-          "usage_instructions": "Create one or more clip records. Requires --module/-m with module record ID. Single mode: use --name/-n (required), --order/-o, --story/-s, --target-length/-t, --status. Batch mode: use --json (inline JSON array) or --file (JSON file path) for multiple clips."
+          ]
         },
         "delete": {
           "help": "Delete a clip record. By default, only the clip record is deleted. Use --cascade to also delete all child records (demos, slides).",
@@ -590,12 +582,6 @@
               "help": "Target length in minutes"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Clip status"
-            },
-            {
               "name": "--brainstorming-outline",
               "type": "TEXT",
               "required": false,
@@ -644,15 +630,7 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft clips update recXXX --name \"New Name\"",
-            "coursecraft clips update recXXX --order 2 --status \"Complete\"",
-            "coursecraft clips update recXXX --learning-objectives \"- Objective 1\\n- Objective 2\"",
-            "coursecraft clips update recXXX --brainstorming-outline \"---\"",
-            "coursecraft clips update recXXX --content-done"
-          ],
-          "usage_instructions": "Update an existing clip by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --story/-s, --learning-objectives/-l, --target-length, --status. Supports --brainstorming-outline/-b for outline content. The Clips table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Clips."
+          ]
         }
       }
     },
@@ -793,12 +771,6 @@
               "help": "Course storyline narrative"
             },
             {
-              "name": "--learning-objectives",
-              "type": "TEXT",
-              "required": false,
-              "help": "Course learning objectives"
-            },
-            {
               "name": "--notes",
               "type": "TEXT",
               "required": false,
@@ -848,6 +820,12 @@
               "help": "File containing full module content"
             },
             {
+              "name": "--validate-only",
+              "type": "bool",
+              "required": false,
+              "help": "Validate that the outline data fits the Google Doc template without writing"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -868,7 +846,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "CRUD operations for course records. Supports nested creation of modules and clips via --json/--file. Use --active/-a on list to get only the active course. Use --include-modules/-m and --include-clips/-c on get to embed child records. Courses are identified by record ID or Course ID slug.",
       "commands": {
         "create": {
           "help": "Create a course record, optionally with modules and clips.",
@@ -993,10 +970,6 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120",
-            "coursecraft courses create --name \"My Course\" --course-id \"my-course\" --target-length 120 \\"
           ],
           "usage_instructions": "Create a new course record. Requires --name/-n, --course-id/-c (slug), and --target-length/-t. Supports nested creation of modules and clips via --json (inline JSON) or --file (JSON file path). Optional fields include --platform, --short-description, --long-description, --content-level, --job-role, --learner-profile, --prerequisites, --storyline, --learning-objectives, --notes, and --active."
         },
@@ -1368,7 +1341,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "CRUD operations for demo records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all demos in a module, and --course for all demos in a course. Demo fields include demo-overview, action-summary, script, and recap. Use --clip-order/-o to set position within the clip (shared ordering with slides).",
       "commands": {
         "create": {
           "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order.",
@@ -1747,8 +1719,7 @@
             "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
             "coursecraft demos update recXXX --tested-approved --script-review-human",
             "coursecraft demos update recXXX --dictation-recorded"
-          ],
-          "usage_instructions": "Update an existing demo by record ID (positional argument). Key content fields: --name/-n, --clip-order/-o, --target-length/-l (FLOAT), --demo-overview, --action-summary/-a, --script/-s, and --recap. Review fields: --demo-overview-review-human, --action-summary-review-ai, --action-summary-review-human, and --script-review-human. Status fields: --tested-approved, --dictation-recorded, and --recorded. Demo environment facts are owned by the project-level demo-environment skill, not linked Airtable records."
+          ]
         }
       }
     },
@@ -2199,7 +2170,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "CRUD operations for module records within a course. Supports batch clip creation via --json/--file on create. Use --course/-c to filter by course slug or record ID. The 'show' command displays an ASCII tree of the module hierarchy with statuses. Accepts M1/M2 shorthand patterns or record IDs.",
       "commands": {
         "create": {
           "help": "Create a module record, optionally with clips.",
@@ -2248,13 +2218,6 @@
               "short": "-t"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Module status",
-              "short": "-s"
-            },
-            {
               "name": "--json",
               "type": "TEXT",
               "required": false,
@@ -2276,8 +2239,7 @@
           "examples": [
             "coursecraft modules create --name \"Getting Started\" --course recXXX --order 1",
             "coursecraft modules create --name \"Getting Started\" --course my-course --json '[{\"name\":\"Intro\"}]'"
-          ],
-          "usage_instructions": "Create a new module record. Requires --name/-n and --course/-c (record ID or slug). Optional: --order/-o, --description/-d, --learning-objectives/-l, --target-length/-t, --status/-s. Supports batch clip creation via --json (inline JSON array) or --file (JSON file path)."
+          ]
         },
         "delete": {
           "help": "Delete a module record. By default, only the module record is deleted. Use --cascade to also delete all child records (clips, demos, slides).",
@@ -2491,13 +2453,6 @@
               "help": "Target length in minutes"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Module status",
-              "short": "-s"
-            },
-            {
               "name": "--brainstorming-outline",
               "type": "TEXT",
               "required": false,
@@ -2576,13 +2531,7 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft modules update recXXX --name \"New Name\"",
-            "coursecraft modules update recXXX --order 2 --status \"Complete\"",
-            "coursecraft modules update recXXX --brainstorming-outline-file outline.md"
-          ],
-          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length, --status/-s. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content. The Modules table has no fact-check field; brainstorming-outline fact-check state lives on Courses, not Modules. Use --slides-submitted for Pluralsight slide deck submission tracking."
+          ]
         }
       }
     },
@@ -2597,7 +2546,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "Manage PowerPoint slide template definitions stored in Airtable. Templates define the available slide layouts (e.g., Course Title, Remember This, Demo Intro). Use list with --platform/-P to filter by platform (Pluralsight, Udemy). Templates are referenced by record ID or name when creating/updating slides.",
       "commands": {
         "create": {
           "help": "Create a slide template record.",
@@ -2680,12 +2628,7 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft templates create --name \"Course Title\" --platform Pluralsight",
-            "coursecraft templates create --name \"Remember This\" --platform Pluralsight \\"
-          ],
-          "usage_instructions": "Create a new slide template. Requires --name/-n. Optional: --platform/-P (Pluralsight, Udemy), --description/-d, --use-cases/-u, --deck-number (slide number in the template deck), --animations/-a."
+          ]
         },
         "delete": {
           "help": "Delete a slide template record.",
@@ -2738,11 +2681,6 @@
               "help": "Auth profile name"
             }
           ],
-          "examples": [
-            "coursecraft templates get recXXXXXXXXXXXXXXX",
-            "coursecraft templates get \"Course Title\"",
-            "coursecraft templates get recXXXXXXXXXXXXXXX --table"
-          ],
           "usage_instructions": "Retrieve a single slide template by record ID or name (positional argument). Use --table/-t for formatted output."
         },
         "list": {
@@ -2790,14 +2728,6 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft templates list",
-            "coursecraft templates list --platform Pluralsight",
-            "coursecraft templates list --filter \"name:contains:Title\"",
-            "coursecraft templates list --table",
-            "coursecraft templates list --limit 10",
-            "coursecraft templates list --properties \"id,fields.Name,fields.Platform\""
           ],
           "usage_instructions": "List slide template records. Use --platform/-P to filter by platform (e.g., 'Pluralsight', 'Udemy'). Use --filter/-f with field:op:value format (e.g., 'name:contains:Title'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results."
         },
@@ -2889,15 +2819,7 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft templates update recXXX --name \"New Name\"",
-            "coursecraft templates update recXXX --platform Udemy",
-            "coursecraft templates update recXXX --description \"Updated description\"",
-            "coursecraft templates update recXXX --use-cases \"New use cases\"",
-            "coursecraft templates update recXXX --deck-number 15"
-          ],
-          "usage_instructions": "Update an existing slide template by record ID (positional argument). All fields are optional: --name/-n, --platform/-P, --description/-d, --use-cases/-u, --deck-number, --animations/-a."
+          ]
         }
       }
     },
@@ -2912,7 +2834,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "CRUD operations for slide records linked to clips. Supports hierarchical filtering: --clip/-c for a specific clip, --module/-m for all slides in a module, --course for all slides in a course. Slide fields include build-instructions, script, template (record ID), clip-order, and demo (record ID for demo intro slides). Use --template/-t on create to set the slide template.",
       "commands": {
         "create": {
           "help": "Create slide record(s) in Airtable linked to a clip. Supports two modes: 1. Single slide mode: Use --template to create one slide 2. Batch mode: Use --json or --file to create multiple slides",
@@ -3008,6 +2929,13 @@
           ],
           "options": [
             {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include (supports dot notation)",
+              "short": "-p"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -3023,9 +2951,10 @@
           ],
           "examples": [
             "coursecraft slides get recXXXXXXXXXXXXXXX",
+            "coursecraft slides get recXXXXXXXXXXXXXXX --properties \"id,fields.Name\"",
             "coursecraft slides get recXXXXXXXXXXXXXXX --table"
           ],
-          "usage_instructions": "Retrieve a single slide by record ID (positional argument). Use --table/-t for formatted output."
+          "usage_instructions": "Retrieve a single slide by record ID (positional argument). Use --properties/-p for field selection. Use --table/-t for formatted output."
         },
         "list": {
           "help": "List slide records.",
@@ -3189,12 +3118,6 @@
               "help": "Mark slide as recorded"
             },
             {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Slide status (e.g., 'Ready to Build', 'Complete')"
-            },
-            {
               "name": "--demo",
               "type": "TEXT",
               "required": false,
@@ -3219,22 +3142,7 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "coursecraft slides update recXXX --template recTEMPLATE",
-            "coursecraft slides update recXXX --clip-order 2",
-            "coursecraft slides update recXXX --clip recCLIPID",
-            "coursecraft slides update recXXX --name \"Demo Intro: Setup Demo\"",
-            "coursecraft slides update recXXX --script \"In this demo, we will...\"",
-            "coursecraft slides update recXXX --build-instructions \"Configure the API connection\"",
-            "coursecraft slides update recXXX --built",
-            "coursecraft slides update recXXX --no-built",
-            "coursecraft slides update recXXX --dictation-recorded",
-            "coursecraft slides update recXXX --recorded",
-            "coursecraft slides update recXXX --status \"Complete\"",
-            "coursecraft slides update recXXX --demo recDEMOID"
-          ],
-          "usage_instructions": "Update an existing slide by record ID (positional argument). Key fields: --name/-n, --template/-t (template record ID), --clip-order/-o, --target-length/-l (FLOAT), --script/-s, --build-instructions/-b, --status, --demo/-d (demo record ID for demo intro slides)."
+          ]
         }
       }
     },
@@ -3249,7 +3157,6 @@
           "help": "Auth profile name"
         }
       ],
-      "usage_instructions": "Generate narration audio for one slide or demo record using the ElevenLabs CLI. Requires exactly one of --slide or --demo, plus explicit --voice-id, --output-format, and --output-dir. Defaults to model eleven_multilingual_v2 because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs; pass --model-id only when a different compatible model is required. The command sanitizes non-spoken script cues, applies packaged regex pronunciation transforms for dynamic code-shaped text, syncs packaged alias rules to the ElevenLabs pronunciation dictionary named CourseCraft Voice Pronunciations, passes that dictionary locator to speech generation, writes an MP3 under slides/ or demos/ inside the output directory, validates the file, stores recording metadata on the CourseCraft record, and marks Dictation Recorded.",
       "commands": {
         "generate": {
           "help": "Generate a voice recording for one slide or demo script.",
