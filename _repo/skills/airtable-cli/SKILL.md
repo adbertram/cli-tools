@@ -108,3 +108,13 @@ airtable auth profiles delete <name> --force
 **Correct path:** Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`. Because absence is the expected success state, wrap the probe so `Field not found in table metadata: <field>` or an empty filtered list prints explicit evidence and exits `0`; any auth, base, table, or runtime error remains a failure.
 
 **CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.
+
+### 3. Lookup fields returned as multipleLookupValues are not safe field-create input
+
+**Symptom:** `airtable fields create tbl... "Lookup" multipleLookupValues --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`.
+
+**Cause:** Airtable schema reads expose lookup fields as `multipleLookupValues`, but that read-schema type has been rejected by the public create-field API. Do not copy a lookup field's returned `type` from `fields list` into `fields create`.
+
+**Correct path:** Create lookup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`. For rollups, the CLI can forward Airtable's documented write payload when the API supports it for the target base: `airtable fields create <table> "Rollup" rollup --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldValue","formula":"SUM(values)"}'`.
+
+**CLI behavior:** `airtable fields create ... multipleLookupValues ...` is guarded and returns a clear unsupported-operation error before making any API request.

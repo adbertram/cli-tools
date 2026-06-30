@@ -354,9 +354,10 @@
           "help": "Create a field in an Airtable table.",
           "examples": [
             "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
-            "airtable fields create tblXXXXXXXXXXXXXX \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'"
+            "airtable fields create tblXXXXXXXXXXXXXX \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'",
+            "airtable fields create tblXXXXXXXXXXXXXX \"Total Hours\" rollup --options '{\"recordLinkFieldId\":\"fldLinks\",\"fieldIdInLinkedTable\":\"fldHours\",\"formula\":\"SUM(values)\"}'"
           ],
-          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output.",
+          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Do not copy a lookup field's read-schema type `multipleLookupValues` from fields list into fields create; Airtable's public create-field API has returned UNSUPPORTED_FIELD_TYPE_FOR_CREATE for that type, and the CLI guards it before making an API request. Create lookup fields in the Airtable web UI and verify with fields list/get. Rollups use field type `rollup` with options containing recordLinkFieldId, fieldIdInLinkedTable, and formula when Airtable supports that create payload for the target base.",
           "arguments": [
             {
               "name": "table_id",
@@ -374,7 +375,7 @@
               "name": "field_type",
               "type": "TEXT",
               "required": true,
-              "help": "The Airtable field type, such as singleLineText"
+              "help": "The Airtable create-field type, such as singleLineText or rollup. Do not use the lookup read type multipleLookupValues."
             }
           ],
           "options": [

@@ -34,6 +34,21 @@ SELECT_CHOICES_UPDATE_MESSAGE = (
     "the public API exposes no endpoint for this."
 )
 
+LOOKUP_CREATE_TYPE_MESSAGE = (
+    "Airtable returns lookup fields from schema reads as type "
+    "'multipleLookupValues', but the public create-field API rejected that "
+    "type with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE. Do not pass the "
+    "read-schema type from `fields list` back to `fields create`. Create the "
+    "lookup in Airtable's web UI, or use Airtable's documented create-field "
+    "write type after validating it in a disposable base. Rollup creation, "
+    "when supported by the API for your base, uses field type 'rollup' with "
+    "options containing recordLinkFieldId, fieldIdInLinkedTable, and formula."
+)
+
+UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES = {
+    "multipleLookupValues": LOOKUP_CREATE_TYPE_MESSAGE,
+}
+
 
 class AirtableClient:
     """Client for interacting with Airtable API."""
@@ -480,6 +495,9 @@ class AirtableClient:
         options: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """Create a field in an Airtable table."""
+        if field_type in UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES:
+            raise ClientError(UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES[field_type])
+
         endpoint = f"/meta/bases/{base_id}/tables/{table_id}/fields"
         data: Dict[str, Any] = {
             "name": name,

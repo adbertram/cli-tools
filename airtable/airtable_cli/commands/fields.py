@@ -139,7 +139,7 @@ def fields_get(
 def fields_create(
     table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
     name: str = typer.Argument(..., help="The field name"),
-    field_type: str = typer.Argument(..., help="The Airtable field type, such as singleLineText"),
+    field_type: str = typer.Argument(..., help="The Airtable create-field type, such as singleLineText or rollup"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Field description"),
     options: Optional[str] = typer.Option(None, "--options", "-o", help="Field options as a JSON object"),
@@ -151,6 +151,10 @@ def fields_create(
     Examples:
         airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
         airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
+        airtable fields create tblXXXXXXXXXXXXXX "Total Hours" rollup --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldHours","formula":"SUM(values)"}'
+
+    Do not copy lookup field type multipleLookupValues from fields list into
+    fields create; Airtable has rejected that read-schema type for creation.
     """
     parsed_options = parse_options(options)
     resolved_base_id = resolve_base_id(base_id)

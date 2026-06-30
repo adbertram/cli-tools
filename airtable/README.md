@@ -225,7 +225,17 @@ airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox \
 # Create with a description
 airtable fields create tblXXXXXXXXXXXXXX "Notes" multilineText \
   --description "Internal notes for this record"
+
+# Create a rollup field when supported by Airtable for the target base
+airtable fields create tblXXXXXXXXXXXXXX "Total Hours" rollup \
+  --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldHours","formula":"SUM(values)"}'
 ```
+
+Do not use the `multipleLookupValues` type returned by `fields list` as a
+`fields create` type. Airtable's public create-field API has returned
+`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` for that read-schema type; create lookup
+fields in the Airtable web UI, then verify them with `fields list` or
+`fields get`.
 
 #### Update a Field
 
