@@ -823,7 +823,7 @@ scaffolds keep the first resource group in `main.py`.
 import typer
 from typing import List, Optional
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import print_json, print_table, command, print_success
 
 app = typer.Typer(help="Manage items")
 
@@ -853,52 +853,48 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def item_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display (supports dot-notation)"),
 ):
     """List all items."""
-    try:
-        client = get_client()
-        items = client.list_items(limit=limit, filters=filter)
+    client = get_client()
+    items = client.list_items(limit=limit, filters=filter)
 
-        # Apply output field selection with dot-notation support
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            items = extract_fields(items, fields)
+    # Apply output field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        items = extract_fields(items, fields)
 
-        if table:
-            columns = fields if properties else ["id", "name"]
-            print_table(items, columns, columns)
-        else:
-            print_json(items)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        columns = fields if properties else ["id", "name"]
+        print_table(items, columns, columns)
+    else:
+        print_json(items)
 
 
 @app.command("get")
+@command
 def item_get(
     item_id: str = typer.Argument(..., help="Item ID"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display (supports dot-notation)"),
 ):
     """Get a specific item."""
-    try:
-        client = get_client()
-        item = client.get_item(item_id)
+    client = get_client()
+    item = client.get_item(item_id)
 
-        # Apply output field selection with dot-notation support
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            item = extract_fields([item], fields)[0]
+    # Apply output field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        item = extract_fields([item], fields)[0]
 
-        if table:
-            columns = list(item.keys())
-            print_table([item], columns, columns)
-        else:
-            print_json(item)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        columns = list(item.keys())
+        print_table([item], columns, columns)
+    else:
+        print_json(item)
 ```
 
 ---

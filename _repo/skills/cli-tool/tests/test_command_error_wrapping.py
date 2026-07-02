@@ -1,4 +1,4 @@
-"""Guard: every Typer command must handle its own errors.
+"""Guard: every Typer command must use the shared ``@command`` decorator.
 
 A Typer command registered with ``@<app>.command(...)`` leaks a raw Python
 traceback — instead of a clean ``Error: ...`` message and a correct exit code —
@@ -13,27 +13,27 @@ The single source of catch-all handling is the shared
 ``handle_error()``'s ``Error: ...`` message plus the documented exit code
 (2 for ``CredentialError``, 1 otherwise) and re-raises ``typer.Exit`` untouched.
 
-A command is considered SAFE when it has either of:
-
-* the shared ``@command`` decorator (the preferred, body-wide guarantee), or
-* a top-level ``try`` whose handlers include a catch-all
-  (``except Exception`` / ``except BaseException`` / bare ``except:``) wrapping
-  the body — the older convention most command modules still use.
-
-Anything else can leak a traceback and is flagged. Note that a ``try`` which
-catches only specific exceptions (e.g. ``except ClientError``) is NOT a
-catch-all and does not make the command safe — a different exception type still
-escapes.
+**Every Typer command MUST carry the shared ``@command`` decorator.** It is the
+one body-wide guarantee, applies uniformly across the fleet, and keeps command
+bodies free of per-command error boilerplate. A hand-rolled top-level
+``try``/``except Exception`` that routes through ``handle_error`` produces the
+same runtime behavior, but it is NOT accepted here: it duplicates the shared
+logic in every command, drifts over time, and hides the intent. Commands may
+still keep a ``try`` for *specific* exceptions they handle differently
+(``FileNotFoundError``, ``json.JSONDecodeError``, etc.) — but the catch-all
+guarantee must come from ``@command``, layered as the INNER decorator directly
+below ``@<app>.command(...)``.
 
 ``register_commands`` does NOT make a command safe: that path only injects
 credential/profile checks, not exception handling, so commands mounted through
-it still need their own ``@command`` (or catch-all ``try``). The check is
-therefore file-local and applies to every Typer command in the package.
+it still need their own ``@command``. The check is therefore file-local and
+applies to every Typer command in the package.
 
 The reusable scan lives in :func:`find_unwrapped_commands`; the per-tool test
 :func:`test_typer_commands_handle_errors` runs it against the CLI under test,
-and the unit tests at the bottom prove the scan catches an unwrapped command and
-passes a wrapped one.
+and the unit tests at the bottom prove the scan flags a command that lacks the
+decorator (including one that only uses a catch-all ``try``) and passes one that
+carries it.
 """
 
 from __future__ import annotations
@@ -82,60 +82,22 @@ def _has_shared_command_decorator(func: ast.AST) -> bool:
     return False
 
 
-def _is_catchall_handler(handler: ast.ExceptHandler) -> bool:
-    """True for ``except:``, ``except Exception`` or ``except BaseException``.
-
-    Also matches those names inside a tuple (``except (Exception, OSError)``).
-    A handler that only names specific exception types is not a catch-all.
-    """
-    if handler.type is None:  # bare ``except:``
-        return True
-    names: list[str] = []
-    handler_type = handler.type
-    if isinstance(handler_type, ast.Tuple):
-        names = [elt.id for elt in handler_type.elts if isinstance(elt, ast.Name)]
-    elif isinstance(handler_type, ast.Name):
-        names = [handler_type.id]
-    return any(name in ("Exception", "BaseException") for name in names)
-
-
-def _body_without_docstring(func: ast.AST) -> list[ast.stmt]:
-    body = list(func.body)
-    if (
-        body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
-        return body[1:]
-    return body
-
-
-def _has_catchall_try(func: ast.AST) -> bool:
-    """True when a top-level ``try`` in the body has a catch-all handler."""
-    for stmt in _body_without_docstring(func):
-        if isinstance(stmt, ast.Try) and any(
-            _is_catchall_handler(handler) for handler in stmt.handlers
-        ):
-            return True
-    return False
-
-
 def _is_typer_command(func: ast.AST) -> bool:
     return any(_is_typer_command_decorator(d) for d in func.decorator_list)
 
 
 def _command_is_guarded(func: ast.AST) -> bool:
-    return _has_shared_command_decorator(func) or _has_catchall_try(func)
+    """True only when the command carries the shared ``@command`` decorator."""
+    return _has_shared_command_decorator(func)
 
 
 def find_unwrapped_commands(pkg_dir: Path) -> list[str]:
-    """Return ``relpath::function (Lnn)`` for each unguarded Typer command.
+    """Return ``relpath::function (Lnn)`` for each command lacking ``@command``.
 
-    A Typer command (a function decorated with ``@<app>.command(...)``) is
-    unguarded when it has neither the shared ``@command`` decorator nor a
-    top-level catch-all ``try``. Nested commands (defined inside a factory
-    function) are scanned too.
+    A Typer command (a function decorated with ``@<app>.command(...)``) is a
+    violation unless it also carries the shared ``@command`` decorator. A
+    hand-rolled catch-all ``try`` does NOT satisfy the check. Nested commands
+    (defined inside a factory function) are scanned too.
     """
     violations: list[str] = []
     for path in _iter_source_files(pkg_dir):
@@ -156,7 +118,7 @@ def find_unwrapped_commands(pkg_dir: Path) -> list[str]:
 
 
 def test_typer_commands_handle_errors(cli_name, cli_dir, command_filter):
-    """Every Typer command in the CLI package must guard its own errors."""
+    """Every Typer command in the CLI package must use the shared @command."""
     if command_filter:
         pytest.skip("Skipping (command filter active)")
 
@@ -169,9 +131,9 @@ def test_typer_commands_handle_errors(cli_name, cli_dir, command_filter):
         listed = "\n".join(f"  - {violation}" for violation in violations)
         pytest.fail(
             f"{cli_name}: {len(violations)} Typer command(s) registered with "
-            "@<app>.command(...) lack error handling and will leak a raw "
-            "traceback (instead of a clean 'Error: ...' message + exit code) "
-            f"when they raise:\n{listed}\n\n"
+            "@<app>.command(...) do not carry the shared @command decorator and "
+            "will leak a raw traceback (instead of a clean 'Error: ...' message "
+            f"+ exit code) when they raise:\n{listed}\n\n"
             "Fix: add the shared @command decorator immediately below the "
             "@<app>.command(...) line so it is the INNER decorator:\n"
             "    from cli_tools_shared.output import command\n\n"
@@ -179,10 +141,10 @@ def test_typer_commands_handle_errors(cli_name, cli_dir, command_filter):
             "    @command\n"
             "    def whoami_command(...):\n"
             "        ...\n\n"
-            "A whole-body 'try/except Exception' that routes through "
-            "handle_error() and raises typer.Exit() also satisfies the check, "
-            "but @command is preferred. A 'try' that catches only specific "
-            "exception types is NOT sufficient — other exceptions still leak."
+            "A hand-rolled 'try/except Exception' is NOT accepted — the "
+            "catch-all guarantee must come from @command. Commands may still "
+            "keep a 'try' for SPECIFIC exceptions (FileNotFoundError, "
+            "json.JSONDecodeError, ...) alongside the @command decorator."
         )
 
 
@@ -228,7 +190,9 @@ def test_scan_passes_command_with_shared_command_decorator(tmp_path):
     assert find_unwrapped_commands(pkg_dir) == []
 
 
-def test_scan_passes_command_with_catchall_try(tmp_path):
+def test_scan_flags_command_with_only_catchall_try(tmp_path):
+    # A catch-all try produces the same runtime behavior but is NOT accepted:
+    # the guarantee must come from the shared @command decorator.
     pkg_dir = _make_pkg(
         tmp_path,
         "cmd.py",
@@ -244,11 +208,36 @@ def test_scan_passes_command_with_catchall_try(tmp_path):
         "    except Exception as exc:\n"
         "        raise typer.Exit(handle_error(exc))\n",
     )
+    violations = find_unwrapped_commands(pkg_dir)
+    assert [v for v in violations if "list_items" in v], violations
+
+
+def test_scan_passes_command_with_decorator_and_specific_try(tmp_path):
+    # @command supplies the catch-all; a specific-exception try alongside it is
+    # fine and must not be flagged.
+    pkg_dir = _make_pkg(
+        tmp_path,
+        "cmd.py",
+        "import json\n"
+        "import typer\n"
+        "from cli_tools_shared.output import command\n"
+        "app = typer.Typer()\n\n"
+        "@app.command('create')\n"
+        "@command\n"
+        "def create_item(path: str):\n"
+        "    \"\"\"Create item.\"\"\"\n"
+        "    try:\n"
+        "        data = json.loads(path)\n"
+        "    except json.JSONDecodeError as exc:\n"
+        "        raise typer.Exit(1)\n"
+        "    print(data)\n",
+    )
     assert find_unwrapped_commands(pkg_dir) == []
 
 
 def test_scan_flags_partial_handler_command(tmp_path):
-    # A try that catches only a specific exception type is not a catch-all.
+    # A try that catches only a specific exception type is not a catch-all, and
+    # without @command the command is unguarded.
     pkg_dir = _make_pkg(
         tmp_path,
         "cmd.py",
