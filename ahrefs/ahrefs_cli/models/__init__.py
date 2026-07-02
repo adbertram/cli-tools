@@ -12,6 +12,10 @@ Model Architecture:
 - OverviewMetrics: Health score and summary metrics
 """
 from .base import CLIModel
+from .site_explorer import (
+    DomainOverview,
+    TopPage,
+)
 from .item import (
     # Primary models
     SiteAuditReport,
@@ -43,6 +47,9 @@ from .item import (
 __all__ = [
     # Base
     "CLIModel",
+    # Site Explorer models
+    "DomainOverview",
+    "TopPage",
     # Primary models
     "SiteAuditReport",
     "Crawl",

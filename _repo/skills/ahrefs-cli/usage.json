@@ -1,8 +1,8 @@
 {
   "tool": "ahrefs",
   "description": "CLI interface for Ahrefs (browser automation)",
-  "discovered_at": "2026-06-20T19:38:02Z",
-  "total_commands": 14,
+  "discovered_at": "2026-07-02T17:43:48Z",
+  "total_commands": 17,
   "global_options": [
     {
       "name": "--version",
@@ -39,7 +39,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -168,6 +168,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -259,10 +291,10 @@
           "help": "Manage cached site audit reports. Actions: list  - Show all cached project IDs clear - Clear cached reports Example: ahrefs site-audit cache list ahrefs site-audit cache clear ahrefs site-audit cache clear --project 2185593",
           "arguments": [
             {
-              "name": "action",
-              "type": "ACTION",
+              "name": "[action]",
+              "type": "TEXT",
               "required": false,
-              "help": "Action: list, clear",
+              "help": "TEXT  Action: list, clear",
               "default": "list"
             }
           ],
@@ -375,6 +407,115 @@
               "type": "TEXT",
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "site-explorer": {
+      "help": "Site Explorer operations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "overview": {
+          "help": "Get Site Explorer overview metrics for a domain.",
+          "arguments": [
+            {
+              "name": "domain",
+              "type": "TEXT",
+              "required": true,
+              "help": "Target domain (e.g. example.com)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Force fresh fetch, bypass cache",
+              "short": "-r"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "top-pages": {
+          "help": "Get top pages by organic traffic for a domain.",
+          "arguments": [
+            {
+              "name": "domain",
+              "type": "TEXT",
+              "required": true,
+              "help": "Target domain (e.g. example.com)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Force fresh fetch, bypass cache",
+              "short": "-r"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of pages to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., url:contains:blog, traffic:gt:100)",
               "short": "-f"
             },
             {
