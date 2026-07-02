@@ -24,7 +24,7 @@ from cli_tools_shared.filters import validate_filters, apply_filters, FilterVali
 from ..output import (
     print_json,
     print_table,
-    handle_error,
+    command,
     format_page_for_display,
     format_block_for_display,
     build_text_block_update,
@@ -90,6 +90,7 @@ def format_search_result_for_display(result: dict) -> dict:
 
 
 @app.command("search")
+@command
 def page_search(
     query: str = typer.Argument(
         ...,
@@ -121,50 +122,44 @@ def page_search(
         notion pages search "project" --table
         notion pages search "draft" --sort desc --limit 10
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Parse sort direction
-        sort_direction = None
-        if sort:
-            if sort.lower() in ("desc", "descending"):
-                sort_direction = "descending"
-            elif sort.lower() in ("asc", "ascending"):
-                sort_direction = "ascending"
-            else:
-                print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
-                raise typer.Exit(1)
-
-        # Search for pages only
-        results = client.search_all(
-            query=query,
-            filter_type="page",
-            sort_direction=sort_direction,
-            limit=limit,
-        )
-
-        # Format results
-        formatted = [format_search_result_for_display(r) for r in results]
-
-        if table:
-            print_table(
-                formatted,
-                columns=["title", "parent_type", "last_edited"],
-                headers=["Title", "Parent Type", "Last Edited"],
-            )
+    # Parse sort direction
+    sort_direction = None
+    if sort:
+        if sort.lower() in ("desc", "descending"):
+            sort_direction = "descending"
+        elif sort.lower() in ("asc", "ascending"):
+            sort_direction = "ascending"
         else:
-            print_json(formatted)
+            print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
+            raise typer.Exit(1)
 
-        typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
+    # Search for pages only
+    results = client.search_all(
+        query=query,
+        filter_type="page",
+        sort_direction=sort_direction,
+        limit=limit,
+    )
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    # Format results
+    formatted = [format_search_result_for_display(r) for r in results]
+
+    if table:
+        print_table(
+            formatted,
+            columns=["title", "parent_type", "last_edited"],
+            headers=["Title", "Parent Type", "Last Edited"],
+        )
+    else:
+        print_json(formatted)
+
+    typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
 
 @app.command("list")
+@command
 def page_list(
     table: bool = typer.Option(
         False,
@@ -209,72 +204,66 @@ def page_list(
 
     Note: Filtering is performed client-side as the Notion search API has limited filter support.
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Validate filters
-        if filter:
-            try:
-                validate_filters(filter)
-            except FilterValidationError as e:
-                print_warning(str(e))
-                raise typer.Exit(1)
+    # Validate filters
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_warning(str(e))
+            raise typer.Exit(1)
 
-        # Parse sort direction
-        sort_direction = None
-        if sort:
-            if sort.lower() in ("desc", "descending"):
-                sort_direction = "descending"
-            elif sort.lower() in ("asc", "ascending"):
-                sort_direction = "ascending"
-            else:
-                print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
-                raise typer.Exit(1)
-
-        # List all pages (search with no query)
-        results = client.search_all(
-            query=None,
-            filter_type="page",
-            sort_direction=sort_direction,
-            limit=limit,
-        )
-
-        # Format results
-        formatted = [format_search_result_for_display(r) for r in results]
-
-        # Apply client-side filter if provided (Notion search API doesn't support rich filtering)
-        if filter:
-            formatted = apply_filters(formatted, filter)
-
-        # Parse properties option
-        display_columns = None
-        display_headers = None
-        if properties:
-            prop_list = [p.strip() for p in properties.split(",")]
-            display_columns = prop_list
-            # Generate headers by capitalizing and replacing underscores
-            display_headers = [p.replace("_", " ").title() for p in prop_list]
-
-        if table:
-            cols = display_columns or ["title", "parent_type", "last_edited"]
-            hdrs = display_headers or ["Title", "Parent Type", "Last Edited"]
-            print_table(formatted, columns=cols, headers=hdrs)
+    # Parse sort direction
+    sort_direction = None
+    if sort:
+        if sort.lower() in ("desc", "descending"):
+            sort_direction = "descending"
+        elif sort.lower() in ("asc", "ascending"):
+            sort_direction = "ascending"
         else:
-            # Filter properties for JSON output
-            if display_columns:
-                formatted = [{k: v for k, v in r.items() if k in display_columns} for r in formatted]
-            print_json(formatted)
+            print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
+            raise typer.Exit(1)
 
-        typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
+    # List all pages (search with no query)
+    results = client.search_all(
+        query=None,
+        filter_type="page",
+        sort_direction=sort_direction,
+        limit=limit,
+    )
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    # Format results
+    formatted = [format_search_result_for_display(r) for r in results]
+
+    # Apply client-side filter if provided (Notion search API doesn't support rich filtering)
+    if filter:
+        formatted = apply_filters(formatted, filter)
+
+    # Parse properties option
+    display_columns = None
+    display_headers = None
+    if properties:
+        prop_list = [p.strip() for p in properties.split(",")]
+        display_columns = prop_list
+        # Generate headers by capitalizing and replacing underscores
+        display_headers = [p.replace("_", " ").title() for p in prop_list]
+
+    if table:
+        cols = display_columns or ["title", "parent_type", "last_edited"]
+        hdrs = display_headers or ["Title", "Parent Type", "Last Edited"]
+        print_table(formatted, columns=cols, headers=hdrs)
+    else:
+        # Filter properties for JSON output
+        if display_columns:
+            formatted = [{k: v for k, v in r.items() if k in display_columns} for r in formatted]
+        print_json(formatted)
+
+    typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
 
 @app.command("get")
+@command
 def page_get(
     page_id: str = typer.Argument(
         ...,
@@ -315,45 +304,39 @@ def page_get(
         notion pages get abc123-def456 --include-blocks --markdown
         notion pages get abc123-def456 -b -m --out-file content.md
     """
-    try:
-        client = get_client()
-        page = client.get_page(page_id)
+    client = get_client()
+    page = client.get_page(page_id)
 
-        formatted = format_page_for_display(page)
+    formatted = format_page_for_display(page)
 
-        # Fetch and include blocks if requested
-        if include_blocks:
-            blocks = client.get_block_children_all(page_id, recursive=True)
-            if markdown:
-                markdown_content = blocks_to_markdown(blocks)
+    # Fetch and include blocks if requested
+    if include_blocks:
+        blocks = client.get_block_children_all(page_id, recursive=True)
+        if markdown:
+            markdown_content = blocks_to_markdown(blocks)
 
-                # Write to file if requested
-                if out_file:
-                    with open(out_file, 'w', encoding='utf-8') as f:
-                        f.write(markdown_content)
-                    print_success(f"Markdown content written to {out_file}")
-                    return
-
-                # Output raw markdown (not JSON)
-                typer.echo(markdown_content)
+            # Write to file if requested
+            if out_file:
+                with open(out_file, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                print_success(f"Markdown content written to {out_file}")
                 return
-            else:
-                formatted["blocks"] = blocks
 
-        if table:
-            rows = [{"field": k, "value": str(v)} for k, v in formatted.items()]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
+            # Output raw markdown (not JSON)
+            typer.echo(markdown_content)
+            return
         else:
-            print_json(formatted)
+            formatted["blocks"] = blocks
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    if table:
+        rows = [{"field": k, "value": str(v)} for k, v in formatted.items()]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(formatted)
 
 
 @app.command("create")
+@command
 def page_create(
     parent_page_id: str = typer.Argument(
         ...,
@@ -427,11 +410,6 @@ def page_create(
     except FileNotFoundError:
         print_warning(f"File not found: {content_file}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 def docx_to_notion_blocks(docx_path: str) -> list:
@@ -595,6 +573,7 @@ def docx_to_notion_blocks(docx_path: str) -> list:
 
 
 @app.command("import")
+@command
 def page_import(
     file_path: str = typer.Argument(
         ...,
@@ -698,11 +677,6 @@ def page_import(
     except ImportError:
         print_warning("python-docx is required for Word import. Install with: pip install python-docx")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 def markdown_to_styled_html(markdown_content: str, title: str = "Notion Export") -> str:
@@ -854,6 +828,7 @@ def markdown_to_styled_html(markdown_content: str, title: str = "Notion Export")
 
 
 @app.command("export")
+@command
 def page_export(
     page_id: str = typer.Argument(
         ...,
@@ -970,14 +945,10 @@ def page_export(
     except ImportError:
         print_warning("playwright is required for PDF export. Install with: pip install playwright && playwright install chromium")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @app.command("duplicate")
+@command
 def page_duplicate(
     page_id: str = typer.Argument(
         ...,
@@ -1021,56 +992,50 @@ def page_duplicate(
         notion pages duplicate PAGE_ID --to-database TARGET_DB_ID
         notion pages duplicate PAGE_ID --properties '{"Status": {"status": {"name": "Draft"}}}'
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Parse property overrides
-        prop_overrides = None
-        if properties:
-            try:
-                prop_overrides = json.loads(properties)
-            except json.JSONDecodeError as e:
-                print_warning(f"Invalid JSON in --properties: {e}")
+    # Parse property overrides
+    prop_overrides = None
+    if properties:
+        try:
+            prop_overrides = json.loads(properties)
+        except json.JSONDecodeError as e:
+            print_warning(f"Invalid JSON in --properties: {e}")
+            raise typer.Exit(1)
+
+    # Parse replacements
+    replacements = None
+    if replace:
+        replacements = []
+        for r in replace:
+            if ":" not in r:
+                print_warning(f"Invalid --replace format '{r}'. Use 'old:new' format.")
                 raise typer.Exit(1)
+            old, new = r.split(":", 1)
+            replacements.append((old, new))
 
-        # Parse replacements
-        replacements = None
-        if replace:
-            replacements = []
-            for r in replace:
-                if ":" not in r:
-                    print_warning(f"Invalid --replace format '{r}'. Use 'old:new' format.")
-                    raise typer.Exit(1)
-                old, new = r.split(":", 1)
-                replacements.append((old, new))
+    # Progress callback
+    def progress_cb(stage, message):
+        typer.echo(f"  [{stage}] {message}", err=True)
 
-        # Progress callback
-        def progress_cb(stage, message):
-            typer.echo(f"  [{stage}] {message}", err=True)
+    typer.echo("Duplicating page...", err=True)
 
-        typer.echo("Duplicating page...", err=True)
+    new_page = client.duplicate_page(
+        page_id=page_id,
+        title=title,
+        property_overrides=prop_overrides,
+        target_database_id=to_database,
+        replacements=replacements,
+        progress_callback=progress_cb,
+    )
 
-        new_page = client.duplicate_page(
-            page_id=page_id,
-            title=title,
-            property_overrides=prop_overrides,
-            target_database_id=to_database,
-            replacements=replacements,
-            progress_callback=progress_cb,
-        )
-
-        formatted = format_page_for_display(new_page)
-        print_json(formatted)
-        print_success(f"Page duplicated: {new_page.get('url', new_page.get('id'))}")
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    formatted = format_page_for_display(new_page)
+    print_json(formatted)
+    print_success(f"Page duplicated: {new_page.get('url', new_page.get('id'))}")
 
 
 @app.command("update")
+@command
 def page_update(
     page_id: str = typer.Argument(
         ...,
@@ -1102,55 +1067,49 @@ def page_update(
         notion pages update PAGE_ID --archive
         notion pages update PAGE_ID --restore
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        properties = None
-        icon_obj = None
+    properties = None
+    icon_obj = None
 
-        # Build title property if provided
-        if title:
-            properties = {
-                "title": {
-                    "title": [{"type": "text", "text": {"content": title}}]
-                }
+    # Build title property if provided
+    if title:
+        properties = {
+            "title": {
+                "title": [{"type": "text", "text": {"content": title}}]
             }
+        }
 
-        # Parse icon
-        if icon:
-            if icon.startswith("emoji:"):
-                icon_obj = {"type": "emoji", "emoji": icon[6:]}
-            elif icon.startswith("url:"):
-                icon_obj = {"type": "external", "external": {"url": icon[4:]}}
-            else:
-                print_warning("Invalid icon format. Use 'emoji:rocket' or 'url:https://...'")
-                raise typer.Exit(1)
-
-        # Validate we have something to update
-        if properties is None and icon_obj is None and archive is None:
-            print_warning("No updates specified. Use --title, --icon, or --archive/--restore")
+    # Parse icon
+    if icon:
+        if icon.startswith("emoji:"):
+            icon_obj = {"type": "emoji", "emoji": icon[6:]}
+        elif icon.startswith("url:"):
+            icon_obj = {"type": "external", "external": {"url": icon[4:]}}
+        else:
+            print_warning("Invalid icon format. Use 'emoji:rocket' or 'url:https://...'")
             raise typer.Exit(1)
 
-        # Perform update
-        updated_page = client.update_page(
-            page_id=page_id,
-            properties=properties,
-            archived=archive,
-            icon=icon_obj,
-        )
+    # Validate we have something to update
+    if properties is None and icon_obj is None and archive is None:
+        print_warning("No updates specified. Use --title, --icon, or --archive/--restore")
+        raise typer.Exit(1)
 
-        formatted = format_page_for_display(updated_page)
-        print_json(formatted)
-        print_success(f"Page {page_id} updated successfully.")
+    # Perform update
+    updated_page = client.update_page(
+        page_id=page_id,
+        properties=properties,
+        archived=archive,
+        icon=icon_obj,
+    )
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    formatted = format_page_for_display(updated_page)
+    print_json(formatted)
+    print_success(f"Page {page_id} updated successfully.")
 
 
 @app.command("delete")
+@command
 def page_delete(
     page_id: str = typer.Argument(
         ...,
@@ -1173,34 +1132,28 @@ def page_delete(
         notion pages delete abc123-def456
         notion pages delete abc123-def456 --force
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Confirm unless force flag is set
-        if not force:
-            confirm = typer.confirm(f"Archive page {page_id}?")
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
+    # Confirm unless force flag is set
+    if not force:
+        confirm = typer.confirm(f"Archive page {page_id}?")
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-        # Archive the page
-        updated_page = client.update_page(
-            page_id=page_id,
-            archived=True,
-        )
+    # Archive the page
+    updated_page = client.update_page(
+        page_id=page_id,
+        archived=True,
+    )
 
-        formatted = format_page_for_display(updated_page)
-        print_json(formatted)
-        print_success(f"Page {page_id} archived successfully.")
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    formatted = format_page_for_display(updated_page)
+    print_json(formatted)
+    print_success(f"Page {page_id} archived successfully.")
 
 
 @content_app.command("append")
+@command
 def content_append(
     page_id: str = typer.Argument(
         ...,
@@ -1286,14 +1239,10 @@ def content_append(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @content_app.command("set")
+@command
 def content_set(
     page_id: str = typer.Argument(
         ...,
@@ -1430,14 +1379,10 @@ def content_set(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @content_app.command("replace-section")
+@command
 def content_replace_section(
     page_id: str = typer.Argument(
         ...,
@@ -1704,14 +1649,10 @@ def content_replace_section(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @content_app.command("clear")
+@command
 def content_clear(
     page_id: str = typer.Argument(
         ...,
@@ -1731,27 +1672,20 @@ def content_clear(
         notion pages content clear PAGE_ID
         notion pages content clear PAGE_ID --force
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Confirm unless force flag is set
-        if not force:
-            confirm = typer.confirm(f"Clear all content from page {page_id}?")
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
+    # Confirm unless force flag is set
+    if not force:
+        confirm = typer.confirm(f"Clear all content from page {page_id}?")
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-        # Clear content (single API call using erase_content flag)
-        client.clear_page_content(page_id)
+    # Clear content (single API call using erase_content flag)
+    client.clear_page_content(page_id)
 
-        print_success(f"Cleared all content from page {page_id}")
-        print_json({"page_id": page_id, "cleared": True})
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_success(f"Cleared all content from page {page_id}")
+    print_json({"page_id": page_id, "cleared": True})
 
 
 # =============================================================================
@@ -1882,6 +1816,7 @@ def _nest_section_under_heading(client, heading_block_id: str, progress_callback
 
 
 @blocks_app.command("list")
+@command
 def blocks_list(
     page_id: str = typer.Option(
         ...,
@@ -1939,60 +1874,54 @@ def blocks_list(
         notion pages blocks list --page-id PAGE_ID --markdown
         notion pages blocks list --page-id PAGE_ID --limit 50
     """
-    try:
-        client = get_client()
-        # Default (limit=None) fetches the COMPLETE child list via full
-        # has_more/next_cursor pagination. Only an explicit --limit caps the
-        # fetch, and recursive runs always fetch every top-level block.
-        fetch_limit = None if recursive else limit
-        blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
+    client = get_client()
+    # Default (limit=None) fetches the COMPLETE child list via full
+    # has_more/next_cursor pagination. Only an explicit --limit caps the
+    # fetch, and recursive runs always fetch every top-level block.
+    fetch_limit = None if recursive else limit
+    blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
 
-        # Format for display first
-        formatted = [format_block_for_display(b) for b in blocks]
+    # Format for display first
+    formatted = [format_block_for_display(b) for b in blocks]
 
-        # Apply client-side filtering
-        if filter:
-            formatted = apply_filters(formatted, filter)
+    # Apply client-side filtering
+    if filter:
+        formatted = apply_filters(formatted, filter)
 
-        # Apply client-side limit only when the caller asked for one
-        if limit is not None:
-            formatted = formatted[:limit]
+    # Apply client-side limit only when the caller asked for one
+    if limit is not None:
+        formatted = formatted[:limit]
 
-        # Filter to requested properties if specified
-        if properties:
-            props_list = [p.strip() for p in properties.split(",")]
-            filtered_blocks = []
-            for block in formatted:
-                filtered = {prop: block.get(prop) for prop in props_list if prop in block}
-                filtered_blocks.append(filtered)
-            formatted = filtered_blocks
+    # Filter to requested properties if specified
+    if properties:
+        props_list = [p.strip() for p in properties.split(",")]
+        filtered_blocks = []
+        for block in formatted:
+            filtered = {prop: block.get(prop) for prop in props_list if prop in block}
+            filtered_blocks.append(filtered)
+        formatted = filtered_blocks
 
-        if markdown:
-            # For markdown, we need the original blocks structure
-            markdown_blocks = blocks if limit is None else blocks[:limit]
-            markdown_content = blocks_to_markdown(markdown_blocks)
-            typer.echo(markdown_content)
-            return
+    if markdown:
+        # For markdown, we need the original blocks structure
+        markdown_blocks = blocks if limit is None else blocks[:limit]
+        markdown_content = blocks_to_markdown(markdown_blocks)
+        typer.echo(markdown_content)
+        return
 
-        if table:
-            columns = ["id", "type", "text", "has_children", "is_toggleable"] if not properties else props_list
-            print_table(
-                formatted,
-                columns=columns,
-            )
-        else:
-            print_json(formatted)
+    if table:
+        columns = ["id", "type", "text", "has_children", "is_toggleable"] if not properties else props_list
+        print_table(
+            formatted,
+            columns=columns,
+        )
+    else:
+        print_json(formatted)
 
-        typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
 
 
 @blocks_app.command("get")
+@command
 def blocks_get(
     block_id: str = typer.Argument(
         ...,
@@ -2019,33 +1948,27 @@ def blocks_get(
         notion pages blocks get BLOCK_ID --markdown
         notion pages blocks get BLOCK_ID --children
     """
-    try:
-        client = get_client()
-        block = client.get_block(block_id)
+    client = get_client()
+    block = client.get_block(block_id)
 
-        if markdown:
-            markdown_content = block_to_markdown(block)
-            if include_children and block.get("has_children"):
-                children = client.get_block_children_all(block_id, recursive=True)
-                markdown_content += "\n" + blocks_to_markdown(children)
-            typer.echo(markdown_content)
-            return
-
-        result = block
+    if markdown:
+        markdown_content = block_to_markdown(block)
         if include_children and block.get("has_children"):
             children = client.get_block_children_all(block_id, recursive=True)
-            result["children"] = children
+            markdown_content += "\n" + blocks_to_markdown(children)
+        typer.echo(markdown_content)
+        return
 
-        print_json(result)
+    result = block
+    if include_children and block.get("has_children"):
+        children = client.get_block_children_all(block_id, recursive=True)
+        result["children"] = children
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json(result)
 
 
 @blocks_app.command("update")
+@command
 def blocks_update(
     block_id: str = typer.Argument(
         ...,
@@ -2231,14 +2154,10 @@ def blocks_update(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @blocks_app.command("delete")
+@command
 def blocks_delete(
     block_id: str = typer.Argument(
         ...,
@@ -2269,91 +2188,85 @@ def blocks_delete(
     """
     import concurrent.futures
 
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Get block info
-        block = client.get_block(block_id)
-        block_type = block.get("type", "unknown")
-        has_children = block.get("has_children", False)
+    # Get block info
+    block = client.get_block(block_id)
+    block_type = block.get("type", "unknown")
+    has_children = block.get("has_children", False)
 
-        # Count children if recursive
-        children_count = 0
-        children_ids = []
-        if recursive and has_children:
-            children = client.get_block_children_all(block_id, recursive=True)
-            children_ids = [c["id"] for c in children]
-            children_count = len(children_ids)
+    # Count children if recursive
+    children_count = 0
+    children_ids = []
+    if recursive and has_children:
+        children = client.get_block_children_all(block_id, recursive=True)
+        children_ids = [c["id"] for c in children]
+        children_count = len(children_ids)
 
-        # Confirm unless force flag is set
-        if not force:
-            if recursive and children_count > 0:
-                confirm = typer.confirm(
-                    f"Delete {block_type} block {block_id} and {children_count} child block(s)?"
-                )
-            else:
-                confirm = typer.confirm(f"Delete {block_type} block {block_id}?")
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
-
-        deleted_count = 0
-        already_gone_count = 0
-
-        # Delete children in parallel if recursive.
-        #
-        # Use the idempotent delete: archiving a parent block auto-archives its
-        # descendants, so a parallel batch that also targets one of those
-        # descendants would otherwise get a 400 "Can't edit block that is
-        # archived". delete_block_if_present treats that one already-archived
-        # case as already-gone (the desired end state) while still raising on
-        # EVERY other error (auth, not-found, transport, any non-archived 400).
-        # The result iterator is consumed with list(), so any such error
-        # propagates out of the executor and is reported by the outer
-        # `except Exception as e: handle_error(e)` with a non-zero exit -- a
-        # genuine child-delete failure is never silently dropped.
-        if recursive and children_ids:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                results = list(
-                    executor.map(client.delete_block_if_present, children_ids)
-                )
-
-            # results[i] is True if this run archived the child, False if it was
-            # already gone (cascade). Count both truthfully -- the total still
-            # accounts for every requested child, with no hidden failures.
-            deleted_count = sum(1 for archived in results if archived)
-            already_gone_count = len(results) - deleted_count
-
-            if already_gone_count:
-                typer.echo(
-                    f"Deleted {deleted_count} child block(s) "
-                    f"({already_gone_count} already gone).",
-                    err=True,
-                )
-            else:
-                typer.echo(f"Deleted {deleted_count} child block(s).", err=True)
-
-        # Delete the main block
-        deleted_block = client.delete_block(block_id)
-
-        print_json(format_block_for_display(deleted_block))
-        if recursive and children_ids:
-            print_success(
-                f"Block {block_id} and {len(children_ids)} child block(s) deleted "
-                f"successfully ({deleted_count} archived this run, "
-                f"{already_gone_count} already gone)."
+    # Confirm unless force flag is set
+    if not force:
+        if recursive and children_count > 0:
+            confirm = typer.confirm(
+                f"Delete {block_type} block {block_id} and {children_count} child block(s)?"
             )
         else:
-            print_success(f"Block {block_id} deleted successfully.")
+            confirm = typer.confirm(f"Delete {block_type} block {block_id}?")
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    deleted_count = 0
+    already_gone_count = 0
+
+    # Delete children in parallel if recursive.
+    #
+    # Use the idempotent delete: archiving a parent block auto-archives its
+    # descendants, so a parallel batch that also targets one of those
+    # descendants would otherwise get a 400 "Can't edit block that is
+    # archived". delete_block_if_present treats that one already-archived
+    # case as already-gone (the desired end state) while still raising on
+    # EVERY other error (auth, not-found, transport, any non-archived 400).
+    # The result iterator is consumed with list(), so any such error
+    # propagates out of the executor and is reported by the outer
+    # `except Exception as e: handle_error(e)` with a non-zero exit -- a
+    # genuine child-delete failure is never silently dropped.
+    if recursive and children_ids:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(
+                executor.map(client.delete_block_if_present, children_ids)
+            )
+
+        # results[i] is True if this run archived the child, False if it was
+        # already gone (cascade). Count both truthfully -- the total still
+        # accounts for every requested child, with no hidden failures.
+        deleted_count = sum(1 for archived in results if archived)
+        already_gone_count = len(results) - deleted_count
+
+        if already_gone_count:
+            typer.echo(
+                f"Deleted {deleted_count} child block(s) "
+                f"({already_gone_count} already gone).",
+                err=True,
+            )
+        else:
+            typer.echo(f"Deleted {deleted_count} child block(s).", err=True)
+
+    # Delete the main block
+    deleted_block = client.delete_block(block_id)
+
+    print_json(format_block_for_display(deleted_block))
+    if recursive and children_ids:
+        print_success(
+            f"Block {block_id} and {len(children_ids)} child block(s) deleted "
+            f"successfully ({deleted_count} archived this run, "
+            f"{already_gone_count} already gone)."
+        )
+    else:
+        print_success(f"Block {block_id} deleted successfully.")
 
 
 @blocks_app.command("append")
+@command
 def blocks_append(
     block_id: str = typer.Argument(
         ...,
@@ -2508,8 +2421,3 @@ def blocks_append(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)

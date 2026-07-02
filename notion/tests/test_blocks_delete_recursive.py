@@ -12,6 +12,7 @@ while still reporting success. These tests pin the corrected behavior:
 """
 import pytest
 
+from cli_tools_shared import output as shared_output
 from notion_cli import client as client_mod
 from notion_cli.commands import page
 
@@ -103,16 +104,18 @@ def test_recursive_delete_propagates_non_archived_child_error(monkeypatch):
 
     The bug was a bare `except Exception: return False` that turned this exact
     case into a silent smaller count. With the fix, the error propagates out of
-    `list(executor.map(...))` and exits non-zero via the command's handle_error.
+    `list(executor.map(...))` and exits non-zero via the shared @command
+    decorator's handle_error.
     """
     boom = client_mod.ClientError("API request failed: 500 - internal error")
     client = RecursiveDeleteClient(raise_for={"child-2": boom})
     captured_errors = []
 
     monkeypatch.setattr(page, "get_client", lambda: client)
-    # handle_error is what the outer `except Exception` calls; capture the error
-    # it received and return a non-zero exit code so the command exits non-zero.
-    monkeypatch.setattr(page, "handle_error", lambda e: captured_errors.append(e) or 1)
+    # handle_error is what the shared @command decorator calls; capture the
+    # error it received and return a non-zero exit code so the command exits
+    # non-zero. The decorator resolves it from cli_tools_shared.output.
+    monkeypatch.setattr(shared_output, "handle_error", lambda e: captured_errors.append(e) or 1)
     monkeypatch.setattr(page, "print_json", lambda data: None)
     monkeypatch.setattr(page, "print_success", lambda msg: None)
 

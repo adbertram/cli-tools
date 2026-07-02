@@ -20,6 +20,7 @@ from cli_tools_shared.output import (  # noqa: F401
     print_success,
     print_info,
     handle_error,
+    command,
 )
 from typing import Any, Dict, List, Optional
 import re

@@ -4,7 +4,7 @@ import typer
 from typing import Optional, List
 
 from ..client import DEFAULT_MAX_WORKERS, get_client
-from ..output import _chunk_code_content, print_json, print_table, handle_error
+from ..output import _chunk_code_content, print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters
 
 app = typer.Typer(help="Manage comments on pages and blocks")
@@ -60,6 +60,7 @@ def build_comment_rich_text(text: str) -> List[dict]:
 
 
 @app.command("list")
+@command
 def comments_list(
     page_id: Optional[str] = typer.Option(
         None,
@@ -126,71 +127,65 @@ def comments_list(
         # List comments in a discussion thread
         notion comments list --discussion-id ghi789
     """
-    try:
-        # Validate input
-        provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
-        if provided == 0:
-            handle_error("One of --page-id, --block-id, or --discussion-id is required")
-            raise typer.Exit(1)
-        if provided > 1:
-            handle_error("Only one of --page-id, --block-id, or --discussion-id should be provided")
-            raise typer.Exit(1)
+    # Validate input
+    provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
+    if provided == 0:
+        handle_error("One of --page-id, --block-id, or --discussion-id is required")
+        raise typer.Exit(1)
+    if provided > 1:
+        handle_error("Only one of --page-id, --block-id, or --discussion-id should be provided")
+        raise typer.Exit(1)
 
-        if with_context and not page_id:
-            handle_error("--with-context can only be used with --page-id")
-            raise typer.Exit(1)
+    if with_context and not page_id:
+        handle_error("--with-context can only be used with --page-id")
+        raise typer.Exit(1)
 
-        client = get_client()
+    client = get_client()
 
-        api_limit = None if filter else limit
+    api_limit = None if filter else limit
 
-        if page_id:
-            if with_context:
-                comments = client.list_comments_with_context(
-                    page_id,
-                    max_workers=max_workers,
-                    limit=api_limit,
-                )
-            else:
-                comments = client.list_comments_all(block_id=page_id, limit=api_limit)
-                for c in comments:
-                    c["context"] = ""
-        else:
-            target_id = block_id
-            comments = client.list_comments_all(
-                block_id=target_id,
-                discussion_id=discussion_id,
+    if page_id:
+        if with_context:
+            comments = client.list_comments_with_context(
+                page_id,
+                max_workers=max_workers,
                 limit=api_limit,
             )
-
-        # Format for display
-        formatted = [format_comment_for_display(c) for c in comments]
-
-        # Apply client-side filtering
-        if filter:
-            formatted = apply_filters(formatted, filter)
-
-        # Apply client-side limit
-        formatted = formatted[:limit]
-
-        if table:
-            # Select columns based on whether context is included
-            if with_context:
-                columns = ["id", "comment_type", "context", "context_around", "text", "created_time"]
-            else:
-                columns = ["id", "comment_type", "text", "parent_type", "parent_id", "created_time"]
-            print_table(formatted, columns=columns)
         else:
-            print_json(formatted)
+            comments = client.list_comments_all(block_id=page_id, limit=api_limit)
+            for c in comments:
+                c["context"] = ""
+    else:
+        target_id = block_id
+        comments = client.list_comments_all(
+            block_id=target_id,
+            discussion_id=discussion_id,
+            limit=api_limit,
+        )
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        handle_error(str(e))
-        raise typer.Exit(1)
+    # Format for display
+    formatted = [format_comment_for_display(c) for c in comments]
+
+    # Apply client-side filtering
+    if filter:
+        formatted = apply_filters(formatted, filter)
+
+    # Apply client-side limit
+    formatted = formatted[:limit]
+
+    if table:
+        # Select columns based on whether context is included
+        if with_context:
+            columns = ["id", "comment_type", "context", "context_around", "text", "created_time"]
+        else:
+            columns = ["id", "comment_type", "text", "parent_type", "parent_id", "created_time"]
+        print_table(formatted, columns=columns)
+    else:
+        print_json(formatted)
 
 
 @app.command("get")
+@command
 def comment_get(
     comment_id: str = typer.Argument(
         ...,
@@ -210,23 +205,19 @@ def comment_get(
 
         notion comments get abc123-def456
     """
-    try:
-        client = get_client()
-        comment = client.get_comment(comment_id)
+    client = get_client()
+    comment = client.get_comment(comment_id)
 
-        formatted = format_comment_for_display(comment)
+    formatted = format_comment_for_display(comment)
 
-        if table:
-            print_table([formatted])
-        else:
-            print_json(formatted)
-
-    except Exception as e:
-        handle_error(str(e))
-        raise typer.Exit(1)
+    if table:
+        print_table([formatted])
+    else:
+        print_json(formatted)
 
 
 @app.command("create")
+@command
 def comment_create(
     text: str = typer.Argument(
         ...,
@@ -271,36 +262,31 @@ def comment_create(
         # Reply to an existing discussion thread
         notion comments create "My reply" --discussion-id ghi789
     """
-    try:
-        # Validate exactly one target is provided
-        provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
-        if provided == 0:
-            handle_error("One of --page-id, --block-id, or --discussion-id is required")
-            raise typer.Exit(1)
-        if provided > 1:
-            handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
-            raise typer.Exit(1)
-
-        rich_text = build_comment_rich_text(text)
-
-        client = get_client()
-        comment = client.create_comment(
-            rich_text=rich_text,
-            page_id=page_id,
-            block_id=block_id,
-            discussion_id=discussion_id,
-        )
-
-        formatted = format_comment_for_display(comment)
-
-        if table:
-            print_table([formatted])
-        else:
-            print_json(formatted)
-
-    except Exception as e:
-        handle_error(str(e))
+    # Validate exactly one target is provided
+    provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
+    if provided == 0:
+        handle_error("One of --page-id, --block-id, or --discussion-id is required")
         raise typer.Exit(1)
+    if provided > 1:
+        handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
+        raise typer.Exit(1)
+
+    rich_text = build_comment_rich_text(text)
+
+    client = get_client()
+    comment = client.create_comment(
+        rich_text=rich_text,
+        page_id=page_id,
+        block_id=block_id,
+        discussion_id=discussion_id,
+    )
+
+    formatted = format_comment_for_display(comment)
+
+    if table:
+        print_table([formatted])
+    else:
+        print_json(formatted)
 
 
 COMMAND_CREDENTIALS = {

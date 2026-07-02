@@ -7,7 +7,7 @@ from ..client import get_client
 from ..output import (
     print_json,
     print_table,
-    handle_error,
+    command,
     print_success,
     print_warning,
 )
@@ -142,6 +142,7 @@ def build_property_schema(
 
 
 @app.command("list")
+@command
 def field_list(
     database_id: str = typer.Option(
         ...,
@@ -186,96 +187,90 @@ def field_list(
         notion field list --database-id abc123 --filter "type:select"
         notion field list --database-id abc123 --limit 10
     """
-    try:
-        client = get_client()
-        db = client.get_database(database_id)
+    client = get_client()
+    db = client.get_database(database_id)
 
-        fields = []
-        for prop_name, prop_def in db.get("properties", {}).items():
-            prop_type = prop_def.get("type", "")
-            field_info = {
-                "name": prop_name,
-                "type": prop_type,
-                "id": prop_def.get("id", ""),
-            }
+    fields = []
+    for prop_name, prop_def in db.get("properties", {}).items():
+        prop_type = prop_def.get("type", "")
+        field_info = {
+            "name": prop_name,
+            "type": prop_type,
+            "id": prop_def.get("id", ""),
+        }
 
-            # Include options for select/multi_select/status
-            if prop_type == "select":
-                options = prop_def.get("select", {}).get("options", [])
-                field_info["options"] = [o.get("name") for o in options]
-            elif prop_type == "multi_select":
-                options = prop_def.get("multi_select", {}).get("options", [])
-                field_info["options"] = [o.get("name") for o in options]
-            elif prop_type == "status":
-                options = prop_def.get("status", {}).get("options", [])
-                field_info["options"] = [o.get("name") for o in options]
-            elif prop_type == "number":
-                field_info["format"] = prop_def.get("number", {}).get("format", "")
-            elif prop_type == "formula":
-                field_info["expression"] = prop_def.get("formula", {}).get("expression", "")
-            elif prop_type == "relation":
-                field_info["relation_database"] = prop_def.get("relation", {}).get("database_id", "")
+        # Include options for select/multi_select/status
+        if prop_type == "select":
+            options = prop_def.get("select", {}).get("options", [])
+            field_info["options"] = [o.get("name") for o in options]
+        elif prop_type == "multi_select":
+            options = prop_def.get("multi_select", {}).get("options", [])
+            field_info["options"] = [o.get("name") for o in options]
+        elif prop_type == "status":
+            options = prop_def.get("status", {}).get("options", [])
+            field_info["options"] = [o.get("name") for o in options]
+        elif prop_type == "number":
+            field_info["format"] = prop_def.get("number", {}).get("format", "")
+        elif prop_type == "formula":
+            field_info["expression"] = prop_def.get("formula", {}).get("expression", "")
+        elif prop_type == "relation":
+            field_info["relation_database"] = prop_def.get("relation", {}).get("database_id", "")
 
-            fields.append(field_info)
+        fields.append(field_info)
 
-        # Apply client-side filtering
-        if filter:
-            fields = apply_filters(fields, filter)
+    # Apply client-side filtering
+    if filter:
+        fields = apply_filters(fields, filter)
 
-        # Apply client-side limit
-        fields = fields[:limit]
+    # Apply client-side limit
+    fields = fields[:limit]
 
-        # Filter to requested properties if specified
+    # Filter to requested properties if specified
+    if properties:
+        props_list = [p.strip() for p in properties.split(",")]
+        filtered_fields = []
+        for f in fields:
+            filtered = {}
+            for prop in props_list:
+                if "." in prop:
+                    # Dot-notation for nested properties
+                    keys = prop.split(".")
+                    value = f
+                    for key in keys:
+                        if isinstance(value, dict) and key in value:
+                            value = value[key]
+                        else:
+                            value = None
+                            break
+                    if value is not None:
+                        filtered[prop] = value
+                elif prop in f:
+                    filtered[prop] = f[prop]
+            filtered_fields.append(filtered)
+        fields = filtered_fields
+
+    if table:
         if properties:
-            props_list = [p.strip() for p in properties.split(",")]
-            filtered_fields = []
-            for f in fields:
-                filtered = {}
-                for prop in props_list:
-                    if "." in prop:
-                        # Dot-notation for nested properties
-                        keys = prop.split(".")
-                        value = f
-                        for key in keys:
-                            if isinstance(value, dict) and key in value:
-                                value = value[key]
-                            else:
-                                value = None
-                                break
-                        if value is not None:
-                            filtered[prop] = value
-                    elif prop in f:
-                        filtered[prop] = f[prop]
-                filtered_fields.append(filtered)
-            fields = filtered_fields
-
-        if table:
-            if properties:
-                cols = [p.strip() for p in properties.split(",")]
-                print_table(fields, cols, cols)
-            else:
-                rows = []
-                for f in fields:
-                    row = {
-                        "name": f["name"],
-                        "type": f["type"],
-                        "options": ", ".join(f.get("options", [])) if f.get("options") else "",
-                    }
-                    rows.append(row)
-                print_table(rows, ["name", "type", "options"], ["Name", "Type", "Options"])
+            cols = [p.strip() for p in properties.split(",")]
+            print_table(fields, cols, cols)
         else:
-            print_json(fields)
+            rows = []
+            for f in fields:
+                row = {
+                    "name": f["name"],
+                    "type": f["type"],
+                    "options": ", ".join(f.get("options", [])) if f.get("options") else "",
+                }
+                rows.append(row)
+            print_table(rows, ["name", "type", "options"], ["Name", "Type", "Options"])
+    else:
+        print_json(fields)
 
-        typer.echo(f"\n{len(fields)} field(s) found.", err=True)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    typer.echo(f"\n{len(fields)} field(s) found.", err=True)
 
 
 @app.command("get")
+@command
 def field_get(
     database_id: str = typer.Argument(
         ...,
@@ -299,54 +294,48 @@ def field_get(
         notion field get DB_ID "Priority"
         notion field get DB_ID "Status" --table
     """
-    try:
-        client = get_client()
-        db = client.get_database(database_id)
+    client = get_client()
+    db = client.get_database(database_id)
 
-        field_def = db.get("properties", {}).get(name)
+    field_def = db.get("properties", {}).get(name)
 
-        if not field_def:
-            print_warning(f"Field '{name}' not found.")
-            raise typer.Exit(1)
+    if not field_def:
+        print_warning(f"Field '{name}' not found.")
+        raise typer.Exit(1)
 
-        prop_type = field_def.get("type", "")
-        field_info = {
-            "name": name,
-            "type": prop_type,
-            "id": field_def.get("id", ""),
-        }
+    prop_type = field_def.get("type", "")
+    field_info = {
+        "name": name,
+        "type": prop_type,
+        "id": field_def.get("id", ""),
+    }
 
-        # Include type-specific details
-        if prop_type == "select":
-            options = field_def.get("select", {}).get("options", [])
-            field_info["options"] = [o.get("name") for o in options]
-        elif prop_type == "multi_select":
-            options = field_def.get("multi_select", {}).get("options", [])
-            field_info["options"] = [o.get("name") for o in options]
-        elif prop_type == "status":
-            options = field_def.get("status", {}).get("options", [])
-            field_info["options"] = [o.get("name") for o in options]
-        elif prop_type == "number":
-            field_info["format"] = field_def.get("number", {}).get("format", "")
-        elif prop_type == "formula":
-            field_info["expression"] = field_def.get("formula", {}).get("expression", "")
-        elif prop_type == "relation":
-            field_info["relation_database"] = field_def.get("relation", {}).get("database_id", "")
+    # Include type-specific details
+    if prop_type == "select":
+        options = field_def.get("select", {}).get("options", [])
+        field_info["options"] = [o.get("name") for o in options]
+    elif prop_type == "multi_select":
+        options = field_def.get("multi_select", {}).get("options", [])
+        field_info["options"] = [o.get("name") for o in options]
+    elif prop_type == "status":
+        options = field_def.get("status", {}).get("options", [])
+        field_info["options"] = [o.get("name") for o in options]
+    elif prop_type == "number":
+        field_info["format"] = field_def.get("number", {}).get("format", "")
+    elif prop_type == "formula":
+        field_info["expression"] = field_def.get("formula", {}).get("expression", "")
+    elif prop_type == "relation":
+        field_info["relation_database"] = field_def.get("relation", {}).get("database_id", "")
 
-        if table:
-            rows = [{"field": k, "value": str(v)} for k, v in field_info.items()]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(field_info)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    if table:
+        rows = [{"field": k, "value": str(v)} for k, v in field_info.items()]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(field_info)
 
 
 @app.command("add")
+@command
 def field_add(
     database_id: str = typer.Argument(
         ...,
@@ -403,67 +392,61 @@ def field_add(
         notion field add DB_ID "Score" --type number --number-format percent
         notion field add DB_ID "Related Tasks" --type relation --relation-database OTHER_DB_ID
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Validate type
-        if prop_type not in SUPPORTED_TYPES:
-            print_warning(f"Unsupported type: {prop_type}. Supported: {', '.join(SUPPORTED_TYPES)}")
-            raise typer.Exit(1)
+    # Validate type
+    if prop_type not in SUPPORTED_TYPES:
+        print_warning(f"Unsupported type: {prop_type}. Supported: {', '.join(SUPPORTED_TYPES)}")
+        raise typer.Exit(1)
 
-        # Parse options
-        options_list = None
-        if options:
-            options_list = [o.strip() for o in options.split(",")]
+    # Parse options
+    options_list = None
+    if options:
+        options_list = [o.strip() for o in options.split(",")]
 
-        # Resolve the relation target to its data_source ID. The user may pass
-        # either a database container ID or a data_source ID; the API needs the
-        # target's data_source_id.
-        relation_data_source_id = None
-        if prop_type == "relation":
-            if not relation_database:
-                print_warning(
-                    "Relation type requires --relation-database "
-                    "(the target's database container ID or data_source ID)"
-                )
-                raise typer.Exit(1)
-            relation_data_source_id = client.get_data_source_id(relation_database)
-
-        # Build property schema
-        try:
-            schema = build_property_schema(
-                prop_type=prop_type,
-                options=options_list,
-                formula_expression=formula_expression,
-                relation_data_source_id=relation_data_source_id,
-                relation_type=relation_type,
-                number_format=number_format,
+    # Resolve the relation target to its data_source ID. The user may pass
+    # either a database container ID or a data_source ID; the API needs the
+    # target's data_source_id.
+    relation_data_source_id = None
+    if prop_type == "relation":
+        if not relation_database:
+            print_warning(
+                "Relation type requires --relation-database "
+                "(the target's database container ID or data_source ID)"
             )
-        except ValueError as e:
-            print_warning(str(e))
             raise typer.Exit(1)
+        relation_data_source_id = client.get_data_source_id(relation_database)
 
-        # Update database
-        properties = {name: schema}
-        updated_db = client.update_database(database_id, properties=properties)
+    # Build property schema
+    try:
+        schema = build_property_schema(
+            prop_type=prop_type,
+            options=options_list,
+            formula_expression=formula_expression,
+            relation_data_source_id=relation_data_source_id,
+            relation_type=relation_type,
+            number_format=number_format,
+        )
+    except ValueError as e:
+        print_warning(str(e))
+        raise typer.Exit(1)
 
-        # Show the new field
-        new_field = updated_db.get("properties", {}).get(name, {})
-        print_json({
-            "name": name,
-            "type": new_field.get("type", prop_type),
-            "id": new_field.get("id", ""),
-        })
-        print_success(f"Field '{name}' added successfully.")
+    # Update database
+    properties = {name: schema}
+    updated_db = client.update_database(database_id, properties=properties)
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    # Show the new field
+    new_field = updated_db.get("properties", {}).get(name, {})
+    print_json({
+        "name": name,
+        "type": new_field.get("type", prop_type),
+        "id": new_field.get("id", ""),
+    })
+    print_success(f"Field '{name}' added successfully.")
 
 
 @app.command("rename")
+@command
 def field_rename(
     database_id: str = typer.Argument(
         ...,
@@ -484,35 +467,29 @@ def field_rename(
     Examples:
         notion field rename DB_ID "Old Name" "New Name"
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Rename by setting the name property
-        properties = {old_name: {"name": new_name}}
-        updated_db = client.update_database(database_id, properties=properties)
+    # Rename by setting the name property
+    properties = {old_name: {"name": new_name}}
+    updated_db = client.update_database(database_id, properties=properties)
 
-        # Verify the rename
-        new_field = updated_db.get("properties", {}).get(new_name, {})
-        if new_field:
-            print_json({
-                "old_name": old_name,
-                "new_name": new_name,
-                "type": new_field.get("type", ""),
-                "id": new_field.get("id", ""),
-            })
-            print_success(f"Field renamed from '{old_name}' to '{new_name}'.")
-        else:
-            print_warning(f"Field '{old_name}' not found or rename failed.")
-            raise typer.Exit(1)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    # Verify the rename
+    new_field = updated_db.get("properties", {}).get(new_name, {})
+    if new_field:
+        print_json({
+            "old_name": old_name,
+            "new_name": new_name,
+            "type": new_field.get("type", ""),
+            "id": new_field.get("id", ""),
+        })
+        print_success(f"Field renamed from '{old_name}' to '{new_name}'.")
+    else:
+        print_warning(f"Field '{old_name}' not found or rename failed.")
+        raise typer.Exit(1)
 
 
 @app.command("delete")
+@command
 def field_delete(
     database_id: str = typer.Argument(
         ...,
@@ -538,32 +515,26 @@ def field_delete(
         notion field delete DB_ID "Field Name"
         notion field delete DB_ID "Field Name" --force
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Confirm unless force flag is set
-        if not force:
-            confirm = typer.confirm(
-                f"Delete field '{name}'? This will remove all data in this field from all pages!"
-            )
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
+    # Confirm unless force flag is set
+    if not force:
+        confirm = typer.confirm(
+            f"Delete field '{name}'? This will remove all data in this field from all pages!"
+        )
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-        # Delete by setting to None
-        properties = {name: None}
-        client.update_database(database_id, properties=properties)
+    # Delete by setting to None
+    properties = {name: None}
+    client.update_database(database_id, properties=properties)
 
-        print_success(f"Field '{name}' deleted successfully.")
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_success(f"Field '{name}' deleted successfully.")
 
 
 @option_app.command("add")
+@command
 def option_add(
     database_id: str = typer.Argument(
         ...,
@@ -591,61 +562,55 @@ def option_add(
         notion field option add DB_ID "Priority" "Critical"
         notion field option add DB_ID "Status" "Blocked" --color red
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Get current database schema
-        db = client.get_database(database_id)
-        field_def = db.get("properties", {}).get(field_name)
+    # Get current database schema
+    db = client.get_database(database_id)
+    field_def = db.get("properties", {}).get(field_name)
 
-        if not field_def:
-            print_warning(f"Field '{field_name}' not found.")
-            raise typer.Exit(1)
+    if not field_def:
+        print_warning(f"Field '{field_name}' not found.")
+        raise typer.Exit(1)
 
-        field_type = field_def.get("type")
-        if field_type not in ("select", "multi_select", "status"):
-            print_warning(f"Field '{field_name}' is type '{field_type}'. Options only apply to select, multi_select, or status.")
-            raise typer.Exit(1)
+    field_type = field_def.get("type")
+    if field_type not in ("select", "multi_select", "status"):
+        print_warning(f"Field '{field_name}' is type '{field_type}'. Options only apply to select, multi_select, or status.")
+        raise typer.Exit(1)
 
-        # Get existing options
-        existing_options = field_def.get(field_type, {}).get("options", [])
+    # Get existing options
+    existing_options = field_def.get(field_type, {}).get("options", [])
 
-        # Check if option already exists
-        existing_names = [o.get("name") for o in existing_options]
-        if option in existing_names:
-            print_warning(f"Option '{option}' already exists in field '{field_name}'.")
-            raise typer.Exit(1)
+    # Check if option already exists
+    existing_names = [o.get("name") for o in existing_options]
+    if option in existing_names:
+        print_warning(f"Option '{option}' already exists in field '{field_name}'.")
+        raise typer.Exit(1)
 
-        # Build new option
-        new_option = {"name": option}
-        if color:
-            new_option["color"] = color
+    # Build new option
+    new_option = {"name": option}
+    if color:
+        new_option["color"] = color
 
-        # Add to options list
-        updated_options = existing_options + [new_option]
+    # Add to options list
+    updated_options = existing_options + [new_option]
 
-        # Build update
-        properties = {
-            field_name: {
-                field_type: {
-                    "options": updated_options
-                }
+    # Build update
+    properties = {
+        field_name: {
+            field_type: {
+                "options": updated_options
             }
         }
+    }
 
-        client.update_database(database_id, properties=properties)
+    client.update_database(database_id, properties=properties)
 
-        print_json({"field": field_name, "option_added": option, "color": color})
-        print_success(f"Option '{option}' added to field '{field_name}'.")
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json({"field": field_name, "option_added": option, "color": color})
+    print_success(f"Option '{option}' added to field '{field_name}'.")
 
 
 @app.command("update")
+@command
 def field_update(
     database_id: str = typer.Argument(
         ...,
@@ -700,106 +665,99 @@ def field_update(
         notion field update DB_ID "Status" --options "Todo,In Progress,Done"
         notion field update DB_ID "Project" --relation-database TARGET_DB_ID
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Get current field definition
-        db = client.get_database(database_id)
-        field_def = db.get("properties", {}).get(name)
+    # Get current field definition
+    db = client.get_database(database_id)
+    field_def = db.get("properties", {}).get(name)
 
-        if not field_def:
-            print_warning(f"Field '{name}' not found.")
+    if not field_def:
+        print_warning(f"Field '{name}' not found.")
+        raise typer.Exit(1)
+
+    field_type = field_def.get("type")
+
+    # Build update object
+    update: dict = {}
+
+    if new_name:
+        update["name"] = new_name
+
+    if options:
+        if field_type not in ("select", "multi_select", "status"):
+            print_warning(f"--options only applies to select, multi_select, or status fields.")
             raise typer.Exit(1)
+        options_list = [{"name": o.strip()} for o in options.split(",")]
+        update[field_type] = {"options": options_list}
 
-        field_type = field_def.get("type")
+    if number_format:
+        if field_type != "number":
+            print_warning(f"--number-format only applies to number fields.")
+            raise typer.Exit(1)
+        update["number"] = {"format": number_format}
 
-        # Build update object
-        update: dict = {}
+    if formula_expression:
+        if field_type != "formula":
+            print_warning(f"--formula-expression only applies to formula fields.")
+            raise typer.Exit(1)
+        update["formula"] = {"expression": formula_expression}
 
-        if new_name:
-            update["name"] = new_name
-
-        if options:
-            if field_type not in ("select", "multi_select", "status"):
-                print_warning(f"--options only applies to select, multi_select, or status fields.")
-                raise typer.Exit(1)
-            options_list = [{"name": o.strip()} for o in options.split(",")]
-            update[field_type] = {"options": options_list}
-
-        if number_format:
-            if field_type != "number":
-                print_warning(f"--number-format only applies to number fields.")
-                raise typer.Exit(1)
-            update["number"] = {"format": number_format}
-
-        if formula_expression:
-            if field_type != "formula":
-                print_warning(f"--formula-expression only applies to formula fields.")
-                raise typer.Exit(1)
-            update["formula"] = {"expression": formula_expression}
-
-        if relation_database or relation_type:
-            if field_type != "relation":
-                print_warning(
-                    "--relation-database/--relation-type only apply to relation fields."
-                )
-                raise typer.Exit(1)
-            # Default to the existing relation type when only the target changes.
-            resolved_type = relation_type or field_def.get("relation", {}).get(
-                "type", "dual_property"
-            )
-            if resolved_type not in RELATION_TYPES:
-                print_warning(
-                    f"--relation-type must be one of {', '.join(RELATION_TYPES)}"
-                )
-                raise typer.Exit(1)
-            # Default to the existing target when only the type changes.
-            if relation_database:
-                relation_data_source_id = client.get_data_source_id(relation_database)
-            else:
-                relation_data_source_id = field_def.get("relation", {}).get(
-                    "data_source_id"
-                )
-                if not relation_data_source_id:
-                    print_warning(
-                        "Cannot resolve the current relation target. "
-                        "Pass --relation-database to set it explicitly."
-                    )
-                    raise typer.Exit(1)
-            # API 2025-09-03 requires relation.data_source_id (NOT database_id).
-            update["relation"] = {
-                "data_source_id": relation_data_source_id,
-                "type": resolved_type,
-                resolved_type: {},
-            }
-
-        if not update:
+    if relation_database or relation_type:
+        if field_type != "relation":
             print_warning(
-                "No updates specified. Use --name, --options, --number-format, "
-                "--formula-expression, or --relation-database."
+                "--relation-database/--relation-type only apply to relation fields."
             )
             raise typer.Exit(1)
+        # Default to the existing relation type when only the target changes.
+        resolved_type = relation_type or field_def.get("relation", {}).get(
+            "type", "dual_property"
+        )
+        if resolved_type not in RELATION_TYPES:
+            print_warning(
+                f"--relation-type must be one of {', '.join(RELATION_TYPES)}"
+            )
+            raise typer.Exit(1)
+        # Default to the existing target when only the type changes.
+        if relation_database:
+            relation_data_source_id = client.get_data_source_id(relation_database)
+        else:
+            relation_data_source_id = field_def.get("relation", {}).get(
+                "data_source_id"
+            )
+            if not relation_data_source_id:
+                print_warning(
+                    "Cannot resolve the current relation target. "
+                    "Pass --relation-database to set it explicitly."
+                )
+                raise typer.Exit(1)
+        # API 2025-09-03 requires relation.data_source_id (NOT database_id).
+        update["relation"] = {
+            "data_source_id": relation_data_source_id,
+            "type": resolved_type,
+            resolved_type: {},
+        }
 
-        # Apply update
-        properties = {name: update}
-        updated_db = client.update_database(database_id, properties=properties)
+    if not update:
+        print_warning(
+            "No updates specified. Use --name, --options, --number-format, "
+            "--formula-expression, or --relation-database."
+        )
+        raise typer.Exit(1)
 
-        # Get updated field (might have new name)
-        result_name = new_name if new_name else name
-        updated_field = updated_db.get("properties", {}).get(result_name, {})
+    # Apply update
+    properties = {name: update}
+    updated_db = client.update_database(database_id, properties=properties)
 
-        print_json({
-            "name": result_name,
-            "type": updated_field.get("type", field_type),
-            "id": updated_field.get("id", ""),
-        })
-        print_success(f"Field '{name}' updated successfully.")
+    # Get updated field (might have new name)
+    result_name = new_name if new_name else name
+    updated_field = updated_db.get("properties", {}).get(result_name, {})
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json({
+        "name": result_name,
+        "type": updated_field.get("type", field_type),
+        "id": updated_field.get("id", ""),
+    })
+    print_success(f"Field '{name}' updated successfully.")
 
 
 COMMAND_CREDENTIALS = {
