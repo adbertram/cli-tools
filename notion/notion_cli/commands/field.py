@@ -268,6 +268,8 @@ def field_list(
 
         typer.echo(f"\n{len(fields)} field(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -337,6 +339,8 @@ def field_get(
         else:
             print_json(field_info)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -452,6 +456,8 @@ def field_add(
         })
         print_success(f"Field '{name}' added successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -499,6 +505,8 @@ def field_rename(
             print_warning(f"Field '{old_name}' not found or rename failed.")
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -548,6 +556,8 @@ def field_delete(
 
         print_success(f"Field '{name}' deleted successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -628,6 +638,8 @@ def option_add(
         print_json({"field": field_name, "option_added": option, "color": color})
         print_success(f"Option '{option}' added to field '{field_name}'.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -783,6 +795,8 @@ def field_update(
         })
         print_success(f"Field '{name}' updated successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)

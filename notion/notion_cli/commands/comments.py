@@ -183,6 +183,8 @@ def comments_list(
         else:
             print_json(formatted)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         handle_error(str(e))
         raise typer.Exit(1)

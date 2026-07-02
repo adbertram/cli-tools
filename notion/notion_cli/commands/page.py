@@ -143,10 +143,6 @@ def page_search(
             limit=limit,
         )
 
-        if not results:
-            typer.echo("No pages found.")
-            raise typer.Exit(0)
-
         # Format results
         formatted = [format_search_result_for_display(r) for r in results]
 
@@ -161,6 +157,8 @@ def page_search(
 
         typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -269,6 +267,8 @@ def page_list(
 
         typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -346,6 +346,8 @@ def page_get(
         else:
             print_json(formatted)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -425,6 +427,8 @@ def page_create(
     except FileNotFoundError:
         print_warning(f"File not found: {content_file}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -694,6 +698,8 @@ def page_import(
     except ImportError:
         print_warning("python-docx is required for Word import. Install with: pip install python-docx")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -964,6 +970,8 @@ def page_export(
     except ImportError:
         print_warning("playwright is required for PDF export. Install with: pip install playwright && playwright install chromium")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1055,6 +1063,8 @@ def page_duplicate(
         print_json(formatted)
         print_success(f"Page duplicated: {new_page.get('url', new_page.get('id'))}")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1133,6 +1143,8 @@ def page_update(
         print_json(formatted)
         print_success(f"Page {page_id} updated successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1181,6 +1193,8 @@ def page_delete(
         print_json(formatted)
         print_success(f"Page {page_id} archived successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1272,6 +1286,8 @@ def content_append(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1414,6 +1430,8 @@ def content_set(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1686,6 +1704,8 @@ def content_replace_section(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1727,6 +1747,8 @@ def content_clear(
         print_success(f"Cleared all content from page {page_id}")
         print_json({"page_id": page_id, "cleared": True})
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1925,10 +1947,6 @@ def blocks_list(
         fetch_limit = None if recursive else limit
         blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
 
-        if not blocks:
-            typer.echo("No blocks found.")
-            raise typer.Exit(0)
-
         # Format for display first
         formatted = [format_block_for_display(b) for b in blocks]
 
@@ -1967,6 +1985,8 @@ def blocks_list(
 
         typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -2018,6 +2038,8 @@ def blocks_get(
 
         print_json(result)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -2209,6 +2231,8 @@ def blocks_update(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -2322,6 +2346,8 @@ def blocks_delete(
         else:
             print_success(f"Block {block_id} deleted successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -2482,6 +2508,8 @@ def blocks_append(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)

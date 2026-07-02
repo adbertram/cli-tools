@@ -261,6 +261,8 @@ def database_get(
         else:
             print_json(formatted)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -333,6 +335,8 @@ def database_schema(
         else:
             print_json(schema)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -618,6 +622,8 @@ def database_create(
         print_json(result)
         print_success(f"Database '{title}' created: {result['id']}")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -760,6 +766,8 @@ def database_list(
 
         typer.echo(f"\n{len(formatted)} database(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -970,6 +978,8 @@ def page_get(
 
         print_json(formatted)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1149,6 +1159,8 @@ def page_update(
         print_json(formatted)
         print_success(f"Page {page_id} updated successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1347,6 +1359,8 @@ def page_create(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON in blocks file: {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1395,6 +1409,8 @@ def page_delete(
         print_json(formatted)
         print_success(f"Page {page_id} archived successfully.")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1469,6 +1485,8 @@ def _process_markdown_images(
             typer.echo(f"Uploading image: {resolved_path.name}...", err=True)
             file_upload_id = client.upload_file(str(resolved_path))
             image_uploads[image_path] = file_upload_id
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Warning: Failed to upload {resolved_path}: {e}", err=True)
             continue
@@ -1570,6 +1588,8 @@ def content_append(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1688,6 +1708,8 @@ def content_set(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1729,6 +1751,8 @@ def content_clear(
         print_success(f"Cleared all content from page {page_id}")
         print_json({"page_id": page_id, "cleared": True})
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1802,10 +1826,6 @@ def content_list_blocks(
         fetch_limit = None if recursive else limit
         blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
 
-        if not blocks:
-            typer.echo("No blocks found.")
-            raise typer.Exit(0)
-
         formatted = [format_block_for_display(b) for b in blocks]
 
         if filter:
@@ -1830,6 +1850,8 @@ def content_list_blocks(
 
         typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1920,6 +1942,8 @@ def content_update_block(
             "comments on this page were preserved."
         )
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -1998,10 +2022,6 @@ def template_list(
                 filtered_templates.append(filtered)
             templates = filtered_templates
 
-        if not templates:
-            typer.echo("No templates found.")
-            raise typer.Exit(0)
-
         if table:
             columns = ["name", "id", "is_default"] if not properties else props_list
             print_table(
@@ -2013,6 +2033,8 @@ def template_list(
 
         typer.echo(f"\n{len(templates)} template(s) found.", err=True)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -2052,6 +2074,8 @@ def template_get(
 
         print_json(template)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)

@@ -16,6 +16,26 @@ class SearchClient:
         return self.results
 
 
+class BlocksClient:
+    def __init__(self, blocks):
+        self.blocks = blocks
+        self.calls = []
+
+    def get_block_children_all(self, page_id, **kwargs):
+        self.calls.append({"page_id": page_id, **kwargs})
+        return self.blocks
+
+
+class TemplatesClient:
+    def __init__(self, templates):
+        self.templates = templates
+        self.calls = []
+
+    def list_templates_all(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.templates
+
+
 def test_pages_list_filtered_zero_results_exits_success_with_empty_json(monkeypatch):
     client = SearchClient(
         [
@@ -102,3 +122,71 @@ def test_database_list_filtered_zero_results_exits_success_with_empty_json(monke
             "limit": 10,
         }
     ]
+
+
+def test_pages_blocks_list_empty_page_exits_success_with_empty_json(monkeypatch):
+    client = BlocksClient([])
+    monkeypatch.setattr(page_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        page_cmd.app,
+        ["blocks", "list", "--page-id", "3915d9c85b2b81fea4cafd0aec8eedd8"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert "No blocks found." not in result.stdout
+    assert "Error: 0" not in result.stderr
+    assert "0 block(s) found." in result.stderr
+    assert client.calls == [
+        {
+            "page_id": "3915d9c85b2b81fea4cafd0aec8eedd8",
+            "recursive": False,
+            "limit": None,
+        }
+    ]
+
+
+def test_database_content_list_blocks_empty_page_exits_success_with_empty_json(monkeypatch):
+    client = BlocksClient([])
+    monkeypatch.setattr(database_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        database_cmd.app,
+        ["page", "content", "list-blocks", "page-1"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert "No blocks found." not in result.stdout
+    assert "Error: 0" not in result.stderr
+    assert "0 block(s) found." in result.stderr
+
+
+def test_database_template_list_empty_exits_success_with_empty_json(monkeypatch):
+    client = TemplatesClient([])
+    monkeypatch.setattr(database_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        database_cmd.app,
+        ["template", "list", "--database-id", "db-1"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert "No templates found." not in result.stdout
+    assert "Error: 0" not in result.stderr
+    assert "0 template(s) found." in result.stderr
+
+
+def test_pages_search_zero_results_exits_success_with_empty_json(monkeypatch):
+    client = SearchClient([])
+    monkeypatch.setattr(page_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(page_cmd.app, ["search", "nothing matches this"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == []
+    assert "No pages found." not in result.stdout
+    assert "Error: 0" not in result.stderr
+    assert "0 page(s) found." in result.stderr
