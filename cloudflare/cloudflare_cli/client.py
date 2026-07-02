@@ -1,6 +1,8 @@
 """Cloudflare API client with automatic token management and exponential retry."""
+from datetime import date, timedelta
 from typing import Dict, List, Optional
 import random
+import re
 import time
 import requests
 
@@ -19,6 +21,51 @@ DEFAULT_JITTER = 0.1  # 10% jitter
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# Cloudflare zone IDs are 32 lowercase hex characters
+ZONE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+
+# GraphQL Analytics API queries
+ANALYTICS_SUMMARY_QUERY = """
+query AnalyticsSummary($zoneTag: string, $start: string, $end: string) {
+  viewer {
+    zones(filter: { zoneTag: $zoneTag }) {
+      httpRequests1dGroups(
+        limit: 366
+        filter: { date_geq: $start, date_leq: $end }
+        orderBy: [date_ASC]
+      ) {
+        dimensions { date }
+        sum { pageViews requests bytes cachedRequests threats }
+        uniq { uniques }
+      }
+    }
+  }
+}
+"""
+
+TOP_PATHS_QUERY = """
+query TopPaths($zoneTag: string, $start: Time, $end: Time, $limit: uint64!) {
+  viewer {
+    zones(filter: { zoneTag: $zoneTag }) {
+      total: httpRequestsAdaptiveGroups(
+        limit: 1
+        filter: { datetime_geq: $start, datetime_lt: $end, edgeResponseContentTypeName: "html" }
+      ) {
+        count
+      }
+      topPaths: httpRequestsAdaptiveGroups(
+        limit: $limit
+        filter: { datetime_geq: $start, datetime_lt: $end, edgeResponseContentTypeName: "html" }
+        orderBy: [count_DESC]
+      ) {
+        count
+        dimensions { clientRequestPath }
+      }
+    }
+  }
+}
+"""
 
 
 from cli_tools_shared.exceptions import ClientError
@@ -348,6 +395,137 @@ class CloudflareClient:
             data={"value": level}
         )
         return response.get("result", {})
+
+    def resolve_zone_id(self, zone: str) -> str:
+        """
+        Resolve a zone name or zone ID to a zone ID.
+
+        Args:
+            zone: Zone name (e.g. example.com) or 32-character hex zone ID
+
+        Returns:
+            The zone ID
+
+        Raises:
+            ClientError: If no zone matches the given name
+        """
+        if ZONE_ID_PATTERN.match(zone):
+            return zone
+
+        matches = [z for z in self.list_zones(filters=[f"name:eq:{zone}"]) if z.name == zone]
+        if not matches:
+            raise ClientError(f"Zone not found: {zone}")
+        return matches[0].id
+
+    # ==================== Analytics (GraphQL) ====================
+
+    def graphql(self, query: str, variables: Dict) -> Dict:
+        """
+        Execute a query against the Cloudflare GraphQL Analytics API.
+
+        Args:
+            query: GraphQL query string
+            variables: GraphQL variables
+
+        Returns:
+            The GraphQL "data" object
+
+        Raises:
+            ClientError: If the query returns errors or no data
+        """
+        response = self._make_request("POST", "/graphql", data={"query": query, "variables": variables})
+
+        errors = response.get("errors")
+        if errors:
+            raise ClientError(f"GraphQL query failed: {errors[0].get('message', errors[0])}")
+
+        data = response.get("data")
+        if data is None:
+            raise ClientError("GraphQL query returned no data")
+        return data
+
+    def _graphql_zone_data(self, query: str, variables: Dict, zone_id: str) -> Dict:
+        """Run a zone-scoped GraphQL query and return the single zone node."""
+        data = self.graphql(query, variables)
+        zones = data["viewer"]["zones"]
+        if not zones:
+            raise ClientError(f"No analytics data returned for zone {zone_id}")
+        return zones[0]
+
+    def get_analytics_summary(self, zone_id: str, start: str, end: str) -> Dict:
+        """
+        Get zone traffic totals for a date range from httpRequests1dGroups.
+
+        Args:
+            zone_id: The zone ID
+            start: Start date (YYYY-MM-DD, inclusive)
+            end: End date (YYYY-MM-DD, inclusive)
+
+        Returns:
+            dict with totals: page_views, unique_visitors, requests, bytes, etc.
+            unique_visitors is the SUM of per-day uniques (daily rollup dataset),
+            not deduplicated across days.
+        """
+        zone_node = self._graphql_zone_data(
+            ANALYTICS_SUMMARY_QUERY,
+            {"zoneTag": zone_id, "start": start, "end": end},
+            zone_id,
+        )
+        days = zone_node["httpRequests1dGroups"]
+
+        return {
+            "zone_id": zone_id,
+            "start": start,
+            "end": end,
+            "days_with_data": len(days),
+            "page_views": sum(d["sum"]["pageViews"] for d in days),
+            "unique_visitors": sum(d["uniq"]["uniques"] for d in days),
+            "unique_visitors_basis": "sum_of_daily_uniques",
+            "requests": sum(d["sum"]["requests"] for d in days),
+            "bytes": sum(d["sum"]["bytes"] for d in days),
+            "cached_requests": sum(d["sum"]["cachedRequests"] for d in days),
+            "threats": sum(d["sum"]["threats"] for d in days),
+        }
+
+    def get_top_paths(self, zone_id: str, start: str, end: str, limit: int = 20) -> List[Dict]:
+        """
+        Get top request paths by HTML page views from httpRequestsAdaptiveGroups.
+
+        Filtered to edge responses with content type "html" (page views).
+        Data is adaptively sampled by Cloudflare.
+
+        Args:
+            zone_id: The zone ID
+            start: Start date (YYYY-MM-DD, inclusive)
+            end: End date (YYYY-MM-DD, inclusive)
+            limit: Maximum number of paths to return
+
+        Returns:
+            List of dicts with path, page_views, and pct_of_total
+        """
+        end_exclusive = date.fromisoformat(end) + timedelta(days=1)
+        zone_node = self._graphql_zone_data(
+            TOP_PATHS_QUERY,
+            {
+                "zoneTag": zone_id,
+                "start": f"{start}T00:00:00Z",
+                "end": f"{end_exclusive.isoformat()}T00:00:00Z",
+                "limit": limit,
+            },
+            zone_id,
+        )
+
+        total_nodes = zone_node["total"]
+        total = total_nodes[0]["count"] if total_nodes else 0
+
+        return [
+            {
+                "path": node["dimensions"]["clientRequestPath"],
+                "page_views": node["count"],
+                "pct_of_total": round(node["count"] * 100.0 / total, 2) if total else 0.0,
+            }
+            for node in zone_node["topPaths"]
+        ]
 
     # ==================== IP Access Rules ====================
 

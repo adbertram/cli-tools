@@ -11,12 +11,13 @@ app = create_app(
 )
 
 # Register command modules (local auth/profiles with API verification and standard flags)
-from .commands import auth, zones, cache, access_rules, dns
+from .commands import auth, zones, cache, access_rules, dns, analytics
 app.add_typer(auth.app, name="auth", help="Manage authentication")
 register_commands(app, get_config, zones, name="zones", help="Manage Cloudflare zones")
 app.add_typer(cache.app, name="cache", help="Manage Cloudflare cache")
 register_commands(app, get_config, access_rules, name="access-rules", help="Manage IP Access rules (whitelist, block, challenge)")
 register_commands(app, get_config, dns, name="dns", help="Manage DNS records")
+register_commands(app, get_config, analytics, name="analytics", help="Zone traffic analytics (GraphQL Analytics API)")
 def main():
     """Main entry point."""
     run_app(app)

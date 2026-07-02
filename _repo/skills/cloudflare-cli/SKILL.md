@@ -3,8 +3,8 @@ name: cloudflare-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute cloudflare operations using the `cloudflare` CLI tool.
-  CLI interface for Cloudflare API — manage zones, DNS records, cache, and IP access rules.
-  Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare
+  CLI interface for Cloudflare API — manage zones, DNS records, cache, IP access rules, and zone traffic analytics.
+  Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare, cloudflare analytics, zone traffic, page views, top paths
 ---
 
 <objective>
@@ -27,6 +27,8 @@ cloudflare <command-group> <action> [arguments] [options]
 | List access rules | `cloudflare access-rules list ZONE_ID --table` |
 | Block an IP | `cloudflare access-rules create ZONE_ID --target ip --value 1.2.3.4 --mode block` |
 | Set Under Attack mode | `cloudflare zones update ZONE_ID --security-level under_attack` |
+| Traffic totals for a date range | `cloudflare analytics summary example.com --start 2026-06-01 --end 2026-06-30` |
+| Top pages by HTML page views | `cloudflare analytics top-paths example.com --limit 5 --table` |
 </quick_start>
 
 <essential_principles>
@@ -42,6 +44,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **cache** — Manage cache (purge all cached content)
 - **access-rules** — Manage IP access rules (whitelist, block, challenge IPs/ranges/ASNs/countries)
 - **dns** — Manage DNS with sub-groups: `dns zones` (list/get zones) and `dns records` (full CRUD on DNS records)
+- **analytics** — Zone traffic analytics via the GraphQL Analytics API: `analytics summary` (totals for a date range) and `analytics top-paths` (top pages by HTML page views). Zone argument accepts a zone name or zone ID. Requires the `Analytics: Read` zone permission on the API token.
 </principle>
 
 <principle name="Optional Capability Probes">

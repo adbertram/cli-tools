@@ -179,6 +179,36 @@ cloudflare dns records update ZONE_ID RECORD_ID --content 5.6.7.8
 cloudflare dns records delete ZONE_ID RECORD_ID --force
 ```
 
+### Analytics
+
+Zone traffic analytics from the Cloudflare GraphQL Analytics API. The `ZONE`
+argument accepts a zone name (e.g. `adamtheautomator.com`) or a 32-character
+zone ID.
+
+```bash
+# Traffic totals for the last 30 days (page views, unique visitors, requests, bytes)
+cloudflare analytics summary example.com
+
+# Totals for an explicit date range
+cloudflare analytics summary example.com --start 2026-06-01 --end 2026-06-30
+cloudflare analytics summary example.com --table
+
+# Top request paths by HTML page views (adaptive sampled dataset)
+cloudflare analytics top-paths example.com
+cloudflare analytics top-paths example.com --start 2026-06-01 --end 2026-06-30 --limit 5
+cloudflare analytics top-paths example.com --table
+cloudflare analytics top-paths example.com --filter "path:contains:blog"
+cloudflare analytics top-paths example.com --properties "path,page_views"
+```
+
+**Notes:**
+- `summary` uses the `httpRequests1dGroups` daily rollup dataset; `unique_visitors`
+  is the sum of per-day uniques (not deduplicated across days).
+- `top-paths` uses `httpRequestsAdaptiveGroups` filtered to `html` edge responses;
+  `pct_of_total` is each path's share of all HTML page views in the range. Data is
+  adaptively sampled and retention varies by Cloudflare plan.
+- The API token must include the `Analytics: Read` zone permission.
+
 ## Output Formats
 
 All commands support two output formats:
