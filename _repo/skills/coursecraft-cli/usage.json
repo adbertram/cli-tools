@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-06-30T14:26:29Z",
+  "discovered_at": "2026-07-03T18:23:50Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -874,11 +874,23 @@
               "short": "-t"
             },
             {
+              "name": "--deadline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Course deadline (YYYY-MM-DD)"
+            },
+            {
               "name": "--course-outline-link",
               "type": "TEXT",
               "required": false,
               "help": "Google Doc URL for course outline",
               "short": "-l"
+            },
+            {
+              "name": "--feedback-sheet-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Google Sheet ID for Pluralsight recording feedback"
             },
             {
               "name": "--platform",
@@ -1163,11 +1175,23 @@
               "short": "-t"
             },
             {
+              "name": "--deadline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Course deadline (YYYY-MM-DD)"
+            },
+            {
               "name": "--course-outline-link",
               "type": "TEXT",
               "required": false,
               "help": "Google Doc URL for course outline",
               "short": "-l"
+            },
+            {
+              "name": "--feedback-sheet-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Google Sheet ID for Pluralsight recording feedback"
             },
             {
               "name": "--course-outline-submitted",
@@ -1873,6 +1897,12 @@
               "help": "ISO 8601 timestamp; defaults to the current UTC time when omitted"
             },
             {
+              "name": "--feedback-source",
+              "type": "bool",
+              "required": false,
+              "help": "[Pluralsight Feedback Sheet|CourseCraft]  Feedback source: 'Pluralsight Feedback Sheet' or 'CourseCraft'"
+            },
+            {
               "name": "--processing-status",
               "type": "TEXT",
               "required": false,
@@ -2114,6 +2144,12 @@
               "help": "ISO 8601 timestamp"
             },
             {
+              "name": "--feedback-source",
+              "type": "bool",
+              "required": false,
+              "help": "[Pluralsight Feedback Sheet|CourseCraft]  Feedback source: 'Pluralsight Feedback Sheet' or 'CourseCraft'"
+            },
+            {
               "name": "--processing-status",
               "type": "TEXT",
               "required": false,
@@ -2331,11 +2367,12 @@
             "coursecraft modules list",
             "coursecraft modules list --course my-course",
             "coursecraft modules list --filter \"order:gte:3\"",
+            "coursecraft modules list --course my-course --filter \"order:eq:4\"",
             "coursecraft modules list --course recXXX --table",
             "coursecraft modules list --limit 5",
             "coursecraft modules list --properties \"id,fields.Name,fields.Order\""
           ],
-          "usage_instructions": "List module records. Use --course/-c to filter by course record ID or slug. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
+          "usage_instructions": "List module records. Use --course/-c to filter by course record ID or slug. Use --filter/-f with field:op:value format (e.g., 'status:eq:Complete'). --course and --filter may be combined for modules. Use --table/-t for formatted output. Use --properties/-p for field selection. Use --limit/-l to cap results.",
           "arguments": [],
           "options": [
             {
@@ -2472,6 +2509,12 @@
               "help": "Path to file containing brainstorming outline"
             },
             {
+              "name": "--module-plan-complete",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the module plan complete flag"
+            },
+            {
               "name": "--module-review-complete",
               "type": "bool",
               "required": false,
@@ -2496,6 +2539,12 @@
               "help": "Set or clear the PowerPoint deck human-verified gate flag"
             },
             {
+              "name": "--slide-deck-hash",
+              "type": "TEXT",
+              "required": false,
+              "help": "Set the SHA-256 hash for the approved module PowerPoint deck"
+            },
+            {
               "name": "--module-submitted-to-pluralsight",
               "type": "bool",
               "required": false,
@@ -2506,6 +2555,18 @@
               "type": "bool",
               "required": false,
               "help": "Set or clear the Pluralsight module video approved flag"
+            },
+            {
+              "name": "--pluralsight-feedback-review-needed",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the Pluralsight recording-feedback review-needed flag"
+            },
+            {
+              "name": "--post-feedback-ready-to-submit",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the post-feedback-ready-to-submit flag (Pluralsight only)"
             },
             {
               "name": "--slide-narration-approved",
@@ -3098,12 +3159,6 @@
               "required": false,
               "help": "Build instructions for the slide",
               "short": "-b"
-            },
-            {
-              "name": "--designed",
-              "type": "bool",
-              "required": false,
-              "help": "Slide designed checkbox"
             },
             {
               "name": "--built",
