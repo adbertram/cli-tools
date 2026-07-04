@@ -103,16 +103,16 @@ class GlobiflowClient:
         Raises AuthenticationRequired when the shared browser session is not
         available. Login is handled by the common auth commands.
         """
-        if not self.browser.is_authenticated():
+        if not self.config.has_saved_session():
             raise AuthenticationRequired("Run 'globiflow auth login' to authenticate.")
 
         url = f"{self.BASE_URL}{path}" if not path.startswith("http") else path
         page = self.browser.get_page(url)
         page.wait_for_timeout(2000)  # Allow redirects to settle
 
-        current_url = page.url
-        if path != "/" and (current_url == self.BASE_URL or current_url == f"{self.BASE_URL}/"):
-            raise AuthenticationRequired("Globiflow browser session expired. Run 'globiflow auth login --force'.")
+        if not self.browser._check_auth(page):
+            self.close()
+            raise AuthenticationRequired("Run 'globiflow auth login' to authenticate.")
 
     def navigate(self, path: str):
         """Navigate to a path on Globiflow."""

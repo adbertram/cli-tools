@@ -1,6 +1,5 @@
 """Configuration management for Globiflow CLI."""
 
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.http_session import BrowserAuthState
@@ -35,10 +34,6 @@ class Config(BaseConfig):
     def test_connection(self) -> dict:
         BrowserAuthState.from_config(self)
         return {"api_test": "passed"}
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
 
 _configs = {}

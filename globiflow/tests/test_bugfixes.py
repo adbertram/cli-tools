@@ -205,6 +205,55 @@ def _fake_create_step(step_number, action_type, parameters=None, flow_id=None):
     }
 
 
+class _AuthPage:
+    def __init__(self, url):
+        self.url = url
+        self.wait_for_timeout_calls = []
+
+    def wait_for_timeout(self, timeout):
+        self.wait_for_timeout_calls.append(timeout)
+
+
+class _TargetPageAuthBrowser:
+    def __init__(self):
+        self.get_page_calls = []
+        self.checked_pages = []
+        self.page = None
+
+    def is_authenticated(self):
+        raise AssertionError(
+            "ensure_authenticated must not run a separate auth probe before "
+            "opening the command target page."
+        )
+
+    def get_page(self, url=None):
+        self.get_page_calls.append(url)
+        self.page = _AuthPage(url)
+        return self.page
+
+    def _check_auth(self, page):
+        self.checked_pages.append(page)
+        return True
+
+
+def test_ensure_authenticated_validates_target_page_without_separate_probe(monkeypatch):
+    """The command target page must stay under one browser-open lifecycle.
+
+    A separate is_authenticated() call opens and closes the browser before the
+    command navigation, leaving a near-concurrent command window between auth
+    verification and the real operation.
+    """
+    browser = _TargetPageAuthBrowser()
+    client = GlobiflowClient()
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: browser))
+
+    client.ensure_authenticated("/flows.php")
+
+    assert browser.get_page_calls == ["https://workflow-automation.podio.com/flows.php"]
+    assert browser.checked_pages == [browser.page]
+    assert browser.page.wait_for_timeout_calls == [2000]
+
+
 def test_list_flow_steps_anchors_on_flowactions_id(monkeypatch):
     """Steps must be located via the stable ul#flowactions id, not an "Actions"
     heading. The page now renders two h4 headings containing "Actions" (a
