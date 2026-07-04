@@ -6,7 +6,6 @@ All configuration is stored in .env file and browser data directory.
 import re
 import shutil
 import subprocess
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -132,11 +131,6 @@ class Config(BaseConfig):
         return self._get("LOGIN_REDIRECT_PATTERN")
 
     # Legacy compatibility - storage_dir for browser.py profile_path
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile (legacy compatibility)."""
-        return self.get_profile_data_dir()
-
     def clear_session(self):
         """Clear saved session data including legacy directories."""
         # Clear profile-aware session data

@@ -3,7 +3,6 @@
 Extends BaseConfig from cli_tools_shared for profile-aware env loading,
 credential management, and browser session persistence.
 """
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -45,11 +44,6 @@ class Config(BaseConfig):
     def login_redirect_pattern(self) -> Optional[str]:
         """URL pattern that indicates redirect to login page."""
         return self._get("LOGIN_REDIRECT_PATTERN")
-
-    @property
-    def storage_dir(self) -> Path:
-        """Storage directory for cache and profile data."""
-        return self.get_profile_data_dir()
 
     def get_browser(self):
         """Return browser service instance for browser-based authentication."""

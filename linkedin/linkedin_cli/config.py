@@ -1,7 +1,6 @@
 """Configuration management for LinkedIn CLI."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 import requests
 
@@ -39,10 +38,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
     @property
     def OAUTH_SCOPES(self) -> list[str]:

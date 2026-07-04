@@ -1,6 +1,5 @@
 """Configuration management for Jira CLI."""
 
-from pathlib import Path
 from typing import Optional
 
 from dotenv import dotenv_values
@@ -89,11 +88,6 @@ class Config(BaseConfig):
             tool_dir=tool_dir,
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime state."""
-        return self.get_profile_data_dir()
 
     @property
     def auth_type(self) -> Optional[str]:

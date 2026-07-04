@@ -4,7 +4,6 @@ Brick Owl uses a simple API key for REST API auth and
 browser automation (via shared BrowserAutomation module) for
 features not available via API (messages, refunds, coupons).
 """
-from pathlib import Path
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
@@ -29,11 +28,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile (used by @cached decorator)."""
-        return self.get_profile_data_dir()
 
     @property
     def headless(self) -> bool:

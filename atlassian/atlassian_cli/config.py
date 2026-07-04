@@ -39,11 +39,6 @@ class Config(BaseConfig):
         )
         return {"api_test": "passed"}
 
-    @property
-    def storage_dir(self):
-        """Profile-aware storage directory for runtime data."""
-        return self.get_profile_data_dir()
-
 
 _config: Optional[Config] = None
 

@@ -1,6 +1,5 @@
 """Configuration management for Medium CLI."""
 
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -25,11 +24,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware runtime data directory."""
-        return self.get_profile_data_dir()
 
     @property
     def headless(self) -> bool:

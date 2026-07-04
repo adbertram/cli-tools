@@ -78,11 +78,6 @@ class Config(BaseConfig):
             activity.warning("API credentials check failed — one or more OAuth1 fields missing")
         return has_creds
 
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile (used by @cached decorator)."""
-        return self.get_profile_data_dir()
-
 _configs = {}
 
 

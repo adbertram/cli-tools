@@ -1,6 +1,5 @@
 """Configuration management for eBay CLI."""
 import shutil
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -145,11 +144,6 @@ class Config(BaseConfig):
     def login_redirect_pattern(self) -> Optional[str]:
         """URL pattern that indicates redirect to login page."""
         return self._get("LOGIN_REDIRECT_PATTERN")
-
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile."""
-        return self.get_profile_data_dir()
 
     def get_browser(self):
         """Return BrowserService for browser-based authentication."""

@@ -1,7 +1,6 @@
 """Configuration management for Airbnb CLI."""
 
 import json
-from pathlib import Path
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
@@ -29,11 +28,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime state."""
-        return self.get_profile_data_dir()
 
     @property
     def browser_user_agent(self) -> str:

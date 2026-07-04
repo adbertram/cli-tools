@@ -1,7 +1,5 @@
 """Configuration management for WP Engine CLI."""
 
-from pathlib import Path
-
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ClientError
@@ -23,11 +21,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime state."""
-        return self.get_profile_data_dir()
 
     def test_connection(self) -> dict:
         """Validate saved credentials with a live API call."""

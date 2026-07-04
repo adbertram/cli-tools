@@ -1,5 +1,4 @@
 """Configuration management for PayPal CLI."""
-from pathlib import Path
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -22,11 +21,6 @@ class Config(BaseConfig):
     def api_base_url(self) -> str:
         """Get PayPal API base URL."""
         return self.base_url or self.DEFAULT_BASE_URL
-
-    @property
-    def storage_dir(self) -> Path:
-        """Get profile data directory used by shared cache helpers."""
-        return self.get_profile_data_dir()
 
     def has_credentials(self) -> bool:
         """Check if API credentials are configured."""

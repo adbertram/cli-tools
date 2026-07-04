@@ -1,6 +1,5 @@
 """Configuration management for Harmony CLI."""
 
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -27,11 +26,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime state."""
-        return self.get_profile_data_dir()
 
     @property
     def default_hub(self) -> Optional[str]:

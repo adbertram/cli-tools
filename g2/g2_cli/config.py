@@ -1,6 +1,5 @@
 """Configuration management for G2 CLI."""
 
-from pathlib import Path
 from typing import Optional
 
 import requests
@@ -19,11 +18,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware runtime data directory for cache and auth state."""
-        return self.get_profile_data_dir()
 
     def test_connection(self) -> Optional[dict]:
         """Make a lightweight authenticated request against the products endpoint."""

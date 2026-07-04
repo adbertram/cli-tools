@@ -35,11 +35,6 @@ class Config(BaseConfig):
         )
 
     @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime state."""
-        return self.get_profile_data_dir()
-
-    @property
     def install_dir(self) -> Path:
         """Directory holding MacSpeech.app.
 

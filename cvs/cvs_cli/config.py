@@ -50,10 +50,6 @@ class Config(BaseConfig):
         from .browser import CvsBrowser
         return CvsBrowser(self)
 
-    @property
-    def storage_dir(self):
-        return self.get_profile_data_dir()
-
 
 _configs = {}
 

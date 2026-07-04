@@ -1,5 +1,4 @@
 """Configuration management for DoorDash CLI."""
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -36,10 +35,6 @@ class Config(BaseConfig):
             allowed_domains=("doordash.com",),
         )
         return {"api_test": "passed"}
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
 
 _configs = {}

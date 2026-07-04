@@ -1,5 +1,4 @@
 """Configuration management for Awin CLI."""
-from pathlib import Path
 
 import requests
 
@@ -53,10 +52,6 @@ class Config(BaseConfig):
         if response.ok:
             return {"api_test": "passed"}
         return {"api_test": f"failed: HTTP {response.status_code}: {response.text[:500]}"}
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
 
 _configs = {}

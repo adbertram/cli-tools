@@ -42,11 +42,6 @@ class Config(BaseConfig):
             profile=profile,
         )
 
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for wrapper runtime state."""
-        return self.get_profile_data_dir()
-
     # ==================== Binary resolution ====================
 
     @property
