@@ -6,8 +6,10 @@ COMMAND_CREDENTIALS = {
     "search": ["custom"],
     "send": ["custom"],
     "archive": ["custom"],
+    "trash": ["custom"],
     "download-attachment": ["custom"],
     "draft": ["custom"],
+    "draft-get": ["custom"],
     "send-draft": ["custom"],
     "reply": ["custom"],
     "reply-all": ["custom"],
@@ -30,7 +32,7 @@ from typing import Optional, List
 from pathlib import Path
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
+from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info, command
 from cli_tools_shared.filters import apply_filters
 from ..filter_translator import translate_gmail_filters
 
@@ -72,6 +74,8 @@ app.add_typer(labels_app, name="labels")
 filters_app = typer.Typer(help="Manage Gmail filters")
 app.add_typer(filters_app, name="filters")
 
+GMAIL_SEND_APPROVAL_PHRASE = "I have explicit human approval to send this Gmail message"
+
 GMAIL_MESSAGE_PROPERTIES = {
     'id',
     'name',
@@ -83,6 +87,25 @@ GMAIL_MESSAGE_PROPERTIES = {
     'labelIds',
     'attachments',
 }
+
+
+def require_human_gmail_send_approval(action: str) -> None:
+    """Require an interactive human approval gate before Gmail sends."""
+    if not sys.stdin.isatty():
+        print_error(
+            f"Refusing to {action} from a non-interactive session. "
+            "Preview the message first, get explicit human approval, then rerun "
+            "from an interactive terminal with --confirm."
+        )
+        raise typer.Exit(1)
+
+    print_info(f"About to {action}.")
+    print_info("Gmail sends require explicit human approval in this terminal.")
+    print_info(f"Type exactly: {GMAIL_SEND_APPROVAL_PHRASE}")
+    typed = sys.stdin.readline().strip()
+    if typed != GMAIL_SEND_APPROVAL_PHRASE:
+        print_error("Gmail send cancelled: approval phrase did not match.")
+        raise typer.Exit(1)
 
 
 def resolve_output_properties(properties: Optional[List[str]]) -> List[str]:
@@ -546,7 +569,7 @@ def gmail_send(
     """Send an email message with optional attachments.
 
     By default, shows a preview of the message without sending.
-    Use --confirm to actually send the email.
+    Use --confirm from an interactive terminal and type the approval phrase to actually send the email.
     """
     try:
         client = get_client(profile=profile)
@@ -631,10 +654,14 @@ def gmail_send(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this email. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send, rerun from an interactive terminal with --confirm after "
+                "explicit human approval; Gmail sends are refused from automation."
+            )
             return
 
-        # Send the message
+        require_human_gmail_send_approval("send this email")
+
         sent_message = service.users().messages().send(
             userId='me',
             body={'raw': raw_message}
@@ -646,7 +673,7 @@ def gmail_send(
             'to': to,
             'subject': subject,
             'attachments': attachment_info,
-            'status': 'sent'
+            'status': 'sent',
         })
 
     except HttpError as e:
@@ -676,6 +703,34 @@ def gmail_archive(
             archived_count += 1
 
         print_success(f"Archived {archived_count} message(s)")
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("trash")
+def gmail_trash(
+    message_ids: List[str] = typer.Argument(..., help="Message ID(s) to move to trash"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Move messages to trash by adding the TRASH label."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        trashed_count = 0
+        for message_id in message_ids:
+            service.users().messages().modify(
+                userId='me',
+                id=message_id,
+                body={'addLabelIds': ['TRASH']}
+            ).execute()
+            trashed_count += 1
+
+        print_success(f"Moved {trashed_count} message(s) to trash")
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")
@@ -890,6 +945,78 @@ def gmail_draft(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("draft-get")
+@command
+def gmail_draft_get(
+    draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Return raw API response without processing"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded draft body text in the result"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get an existing Gmail draft by draft ID.
+
+    Use the draft ID returned by `gmail draft` (for example, `r123...`). Draft
+    metadata is fetched through Gmail's drafts API so headers such as To and
+    Subject are preserved; `gmail get` is for message IDs and can return
+    incomplete draft headers.
+    """
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        draft = service.users().drafts().get(
+            userId='me',
+            id=draft_id,
+            format='full',
+        ).execute()
+
+        if raw:
+            print_json(draft)
+            return
+
+        message = draft.get('message', {})
+        payload = message.get('payload', {})
+        headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
+        attachments = extract_attachments(payload)
+
+        result = {
+            'draft_id': draft.get('id', draft_id),
+            'message_id': message.get('id', ''),
+            'threadId': message.get('threadId', ''),
+            'labelIds': message.get('labelIds', []),
+            'from': headers.get('from', ''),
+            'to': headers.get('to', ''),
+            'cc': headers.get('cc', ''),
+            'bcc': headers.get('bcc', ''),
+            'subject': headers.get('subject', ''),
+            'date': headers.get('date', ''),
+        }
+        for optional_field in ['cc', 'bcc']:
+            if not result[optional_field]:
+                del result[optional_field]
+        if include_body:
+            result['body'] = decode_body_from_payload(payload)
+        if attachments:
+            result['attachments'] = attachments
+
+        if table:
+            table_cols = ['draft_id', 'to', 'subject', 'date']
+            table_headers = ['Draft ID', 'To', 'Subject', 'Date']
+            if include_body:
+                table_cols.append('body')
+                table_headers.append('Body')
+            print_table([result], table_cols, table_headers)
+        else:
+            print_json(result)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @app.command("send-draft")
 def gmail_send_draft(
     draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
@@ -899,7 +1026,7 @@ def gmail_send_draft(
     """Send an existing Gmail draft.
 
     By default, prints the draft metadata without sending.
-    Use --confirm to actually send the draft.
+    Use --confirm from an interactive terminal and type the approval phrase to actually send the draft.
     """
     try:
         client = get_client(profile=profile)
@@ -925,8 +1052,13 @@ def gmail_send_draft(
             if 'bcc' in headers:
                 preview['bcc'] = headers['bcc']
             print_json(preview)
-            print_info("Use --confirm to actually send this draft. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this draft, rerun from an interactive terminal with --confirm after "
+                "explicit human approval; Gmail sends are refused from automation."
+            )
             return
+
+        require_human_gmail_send_approval("send this draft")
 
         sent = service.users().drafts().send(
             userId='me',
@@ -975,7 +1107,7 @@ def gmail_reply(
     """Reply to a message (sender only).
 
     By default, shows a preview of the reply without sending.
-    Use --confirm to actually send the reply.
+    Use --confirm from an interactive terminal and type the approval phrase to actually send the reply.
     """
     try:
         client = get_client(profile=profile)
@@ -1087,10 +1219,14 @@ def gmail_reply(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this reply. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this reply, rerun from an interactive terminal with --confirm after "
+                "explicit human approval; Gmail sends are refused from automation."
+            )
             return
 
-        # Send the reply in the same thread
+        require_human_gmail_send_approval("send this reply")
+
         sent_message = service.users().messages().send(
             userId='me',
             body={'raw': raw_message, 'threadId': thread_id}
@@ -1103,7 +1239,7 @@ def gmail_reply(
             'subject': reply_subject,
             'thread_id': thread_id,
             'attachments': attachment_info,
-            'status': 'sent'
+            'status': 'sent',
         })
 
     except HttpError as e:
@@ -1126,7 +1262,7 @@ def gmail_reply_all(
     """Reply to all recipients of a message.
 
     By default, shows a preview of the reply without sending.
-    Use --confirm to actually send the reply.
+    Use --confirm from an interactive terminal and type the approval phrase to actually send the reply.
     """
     try:
         client = get_client(profile=profile)
@@ -1271,8 +1407,13 @@ def gmail_reply_all(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this reply. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this reply-all, rerun from an interactive terminal with --confirm after "
+                "explicit human approval; Gmail sends are refused from automation."
+            )
             return
+
+        require_human_gmail_send_approval("send this reply-all")
 
         # Send the reply in the same thread
         sent_message = service.users().messages().send(

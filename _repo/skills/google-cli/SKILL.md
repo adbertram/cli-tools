@@ -20,10 +20,12 @@ google <service> <action> [arguments] [options]
 | Task | Command |
 |------|---------|
 | List Gmail inbox | `google gmail list --table` |
-| Send an email | `google gmail send --to "user@example.com" --subject "Hi" --body "Hello"` |
+| Preview a Gmail email for approval | `google gmail send --to "user@example.com" --subject "Hi" --body "Hello"` |
 | Search Gmail | `google gmail search "from:boss subject:urgent" --table` |
 | Read a Gmail message body | `google gmail read MESSAGE_ID` |
 | Get Gmail metadata with decoded body | `google gmail get MESSAGE_ID --include-body` |
+| Create a Gmail draft | `google gmail draft --to "user@example.com" --subject "Hi" --body "Hello"` |
+| Inspect a Gmail draft | `google gmail draft-get DRAFT_ID --include-body` |
 | List Gmail filters | `google gmail filters list --table` |
 | Create a Gmail filter | `google gmail filters create --from "news@example.com" --remove-label INBOX` |
 | List today's calendar events | `google calendar today --table` |
@@ -73,6 +75,39 @@ message text, use `google gmail read MESSAGE_ID`. Use
 `google gmail get MESSAGE_ID --include-body` only when metadata and decoded body
 are both needed. Do not use `--properties` with `google gmail get`; `get`
 supports `--table`, `--raw`, `--include-body`, and `--profile`.
+</principle>
+
+<principle name="Gmail Draft IDs">
+`google gmail draft` returns `id` as the Gmail draft ID (usually beginning with
+`r...`) and `message_id` as the underlying message ID. Follow-up draft
+inspection and sending must use the draft ID with `google gmail draft-get
+DRAFT_ID` or `google gmail send-draft DRAFT_ID`. Do not use `google gmail get
+MESSAGE_ID` or `google gmail search` to inspect draft headers; the messages API
+can omit draft-only headers such as To and Subject, and deleted/sent drafts can
+return Gmail 404 for the old message ID.
+</principle>
+
+<principle name="Gmail Send Approval Guard">
+`google gmail send` without `--confirm` is the required preview step. In
+non-interactive agent sessions, do not run `google gmail send ... --confirm`;
+the CLI refuses with `Refusing to send this email from a non-interactive
+session`. Workflow: preview without `--confirm`, get explicit human approval,
+then rerun the same command with `--confirm` from an interactive terminal.
+</principle>
+
+<principle name="Google Contacts Filters And Properties">
+`google contacts list --filter` uses normalized Contacts CLI fields. The
+filterable fields are case-sensitive and exact:
+`displayName`, `etag`, `familyName`, `givenName`, `organization`,
+`primaryEmail`, `primaryPhone`, `resourceName`, `title`. Do not filter on
+`name`; use `displayName`, `givenName`, or `familyName`.
+
+`google contacts list --properties` and `google contacts get --properties`
+also project normalized output fields, not People API `personFields` groups. Use
+fields such as `resourceName`, `displayName`, `givenName`, `familyName`,
+`primaryEmail`, `emailAddresses`, `primaryPhone`, `phoneNumbers`,
+`organization`, `title`, `organizations`, `addresses`, and `urls`. Do not
+request `names`; request the normalized name fields instead.
 </principle>
 </essential_principles>
 

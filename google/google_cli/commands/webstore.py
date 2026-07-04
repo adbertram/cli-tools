@@ -26,7 +26,7 @@ import typer
 
 from cli_tools_shared.command_registry import _check_credentials
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..browser import update_webstore_listing
 from ..client import get_client as get_google_client
@@ -197,6 +197,7 @@ def status(
 
 
 @app.command("get")
+@command
 def get(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),

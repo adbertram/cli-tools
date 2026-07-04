@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-06-20T22:42:35Z",
-  "total_commands": 101,
+  "discovered_at": "2026-07-03T16:52:09Z",
+  "total_commands": 104,
   "global_options": [
     {
       "name": "--version",
@@ -137,7 +137,6 @@
         },
         "report": {
           "help": "Run a custom GA4 report with dimensions and metrics.",
-          "usage_instructions": "Run a custom GA4 report. --metrics/-m is required. Use --dimensions/-d, --start/-s, --end/-e, --limit/-l, --order-by, --desc/--asc, --filter/-f, --property, --table/-t, and --profile as needed. If --property is omitted, GOOGLE_ANALYTICS_PROPERTY_ID must be configured.",
           "arguments": [],
           "options": [
             {
@@ -311,7 +310,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Authenticate with Google OAuth2. Use --force/-F to re-authenticate. Optionally provide --oauth-client-id and --oauth-client-secret for custom OAuth apps.",
           "arguments": [],
           "options": [
             {
@@ -467,6 +465,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -561,7 +591,6 @@
       "commands": {
         "get": {
           "help": "Get a specific calendar event.",
-          "usage_instructions": "Get a specific calendar event by EVENT_ID (positional). Use --calendar-id/-c for non-primary calendars. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "event_id",
@@ -588,7 +617,6 @@
         },
         "list": {
           "help": "List upcoming calendar events.",
-          "usage_instructions": "List calendar events. Use --calendar-id/-c for a specific calendar (default: primary). Use --max-results/-l to limit results. Use --time-min and --time-max for date ranges (ISO 8601 format). Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
             {
@@ -638,7 +666,6 @@
         },
         "search": {
           "help": "Search calendar events.",
-          "usage_instructions": "Search calendar events by keyword. QUERY is required (positional). Use --calendar-id/-c, --time-min, --time-max for scoping. Use --table/-t for formatted output.",
           "arguments": [
             {
               "name": "query",
@@ -680,7 +707,6 @@
         },
         "today": {
           "help": "List today's calendar events.",
-          "usage_instructions": "Show today's events. Convenience command equivalent to list with today's date range. Use --calendar-id/-c, --table/-t.",
           "arguments": [],
           "options": [
             {
@@ -1544,7 +1570,6 @@
       "commands": {
         "create": {
           "help": "Create a new document.",
-          "usage_instructions": "Create a new Google Doc. Use --title/-t for the document title. Use --content/-c for initial text content. Use --folder-id to place in a specific Drive folder.",
           "arguments": [],
           "options": [
             {
@@ -1631,7 +1656,6 @@
         },
         "list": {
           "help": "List Google Docs documents.",
-          "usage_instructions": "List Google Docs. Use --folder-id to scope to a Drive folder. Use --limit/-l, --table/-t, --properties/-p.",
           "arguments": [],
           "options": [
             {
@@ -1785,7 +1809,6 @@
             "google docs update DOC_ID --file content.md",
             "google docs update DOC_ID --file content.md --append"
           ],
-          "usage_instructions": "Update a Google Doc. DOCUMENT_ID is required (positional). Use --title for renaming. Use --content/-c to replace body text. Use --append/-a to add text at the end.",
           "arguments": [
             {
               "name": "document_id",
@@ -1896,7 +1919,6 @@
         },
         "list": {
           "help": "List files in Google Drive.",
-          "usage_instructions": "List files in Google Drive. Use --folder-id to scope to a folder. Use --mime-type to filter by type. Use --limit/-l, --table/-t, --properties/-p.",
           "arguments": [],
           "options": [
             {
@@ -1938,7 +1960,6 @@
         },
         "search": {
           "help": "Search for files in Google Drive.",
-          "usage_instructions": "Search Drive files by keyword. QUERY is required (positional). Use --mime-type, --limit/-l, --table/-t.",
           "arguments": [
             {
               "name": "query",
@@ -1998,10 +2019,10 @@
           "usage_instructions": "Archive a message by MESSAGE_ID (positional). Removes INBOX label.",
           "arguments": [
             {
-              "name": "message_ids",
+              "name": "message_ids...",
               "type": "TEXT",
               "required": true,
-              "help": "MESSAGE_IDS...  Message ID(s) to archive"
+              "help": "TEXT  Message ID(s) to archive"
             }
           ],
           "options": [
@@ -2103,6 +2124,45 @@
               "required": false,
               "help": "File(s) to attach (can be used multiple times)",
               "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
+        "draft-get": {
+          "help": "Get an existing Gmail draft by draft ID.",
+          "arguments": [
+            {
+              "name": "draft_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Gmail draft ID (returned by `gmail draft`)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--raw",
+              "type": "bool",
+              "required": false,
+              "help": "Return raw API response without processing",
+              "short": "-r"
+            },
+            {
+              "name": "--include-body",
+              "type": "bool",
+              "required": false,
+              "help": "Include decoded draft body text in the result"
             },
             {
               "name": "--profile",
@@ -2695,8 +2755,8 @@
           ]
         },
         "send": {
-          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Use --confirm to actually send the email.",
-          "usage_instructions": "Send an email. Use --to (required), --subject/-s, --body/-b. Use --cc, --bcc for additional recipients. Use --attachment/-a for file attachments.",
+          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Non-interactive sessions must preview first, get explicit human approval, then rerun with --confirm from an interactive terminal.",
+          "usage_instructions": "Run without --confirm to preview the message. Do not use --confirm from a non-interactive agent session; the CLI refuses with: Refusing to send this email from a non-interactive session. After explicit human approval, rerun the same command with --confirm from an interactive terminal.",
           "arguments": [],
           "options": [
             {
@@ -2777,6 +2837,25 @@
               "help": "Profile name"
             }
           ]
+        },
+        "trash": {
+          "help": "Move messages to trash by adding the TRASH label.",
+          "arguments": [
+            {
+              "name": "message_ids...",
+              "type": "TEXT",
+              "required": true,
+              "help": "TEXT  Message ID(s) to move to trash"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -2801,7 +2880,6 @@
           "commands": {
             "create-link": {
               "help": "Create a Looker Studio Linking API URL for a report.",
-              "usage_instructions": "Generate a Looker Studio Linking API URL from a report ID. Use --data-source alias.key=value for generic parameters or --ga-* options for Google Analytics data sources.",
               "arguments": [],
               "options": [
                 {
@@ -3547,7 +3625,6 @@
         },
         "create": {
           "help": "Create a new spreadsheet.",
-          "usage_instructions": "Create a new spreadsheet. Use --title/-t for the name. Use --sheet-name for the initial sheet tab name.",
           "arguments": [],
           "options": [
             {
@@ -3594,7 +3671,6 @@
         },
         "list": {
           "help": "List Google Sheets spreadsheets.",
-          "usage_instructions": "List Google Sheets. Use --folder-id to scope to a folder. Use --limit/-l, --table/-t, --properties/-p.",
           "arguments": [],
           "options": [
             {
@@ -3901,10 +3977,10 @@
           "usage_instructions": "Create a Chrome Web Store ZIP package for an unpacked extension. Run `google webstore package --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "extension_dir",
-              "type": "EXTENSION_DIR",
+              "name": "[extension_dir]",
+              "type": "TEXT",
               "required": false,
-              "help": "Unpacked extension directory",
+              "help": "DIRECTORY  Unpacked extension directory",
               "default": "."
             }
           ],
@@ -3999,10 +4075,10 @@
           "usage_instructions": "Package, upload, and publish extension. Run `google webstore release --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "extension_dir",
-              "type": "EXTENSION_DIR",
+              "name": "[extension_dir]",
+              "type": "TEXT",
               "required": false,
-              "help": "Unpacked extension directory",
+              "help": "DIRECTORY  Unpacked extension directory",
               "default": "."
             }
           ],
@@ -4186,10 +4262,10 @@
           "usage_instructions": "Package and upload extension. Run `google webstore upload-extension --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "extension_dir",
-              "type": "EXTENSION_DIR",
+              "name": "[extension_dir]",
+              "type": "TEXT",
               "required": false,
-              "help": "Unpacked extension directory",
+              "help": "DIRECTORY  Unpacked extension directory",
               "default": "."
             }
           ],

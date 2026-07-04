@@ -23,14 +23,13 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 
 ## Setup
 
-### 1. Install Dependencies
+### 1. Install CLI Launcher
 
 ```bash
-cd <cli-tools-root>/google
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -e .
+cd <cli-tools-root>
+_repo/skills/cli-tool/scripts/install-cli-tool.sh google
+export PATH="$HOME/.local/bin:$PATH"
+google --version
 ```
 
 ### 2. Get Google OAuth2 Credentials
@@ -55,16 +54,16 @@ pip install -e .
 5. Select **Desktop app** as application type
 6. Copy the Client ID and Client Secret for `google auth login`
 
-### 3. Add Shell Alias
+### 3. Ensure Launcher Is On PATH
 
 **~/.zshrc or ~/.bashrc:**
 ```bash
-alias google="<cli-tools-root>/google/venv/bin/google"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **~/.config/powershell/Microsoft.PowerShell_profile.ps1:**
 ```powershell
-function google { & "<cli-tools-root>/google/venv/bin/google" @args }
+$env:PATH = "$HOME/.local/bin:$env:PATH"
 ```
 
 ### 4. Install Shell Completion
@@ -206,6 +205,7 @@ google gmail search "is:unread" --properties id,from,subject,labelIds
 # Get message metadata (includes attachment metadata if present)
 google gmail get <message-id>
 google gmail get <message-id> --raw  # Full API response
+# Use gmail draft-get with the r... draft ID for drafts; gmail get is for message IDs.
 
 # Read message content
 google gmail read <message-id>
@@ -237,6 +237,10 @@ google gmail reply-all <message-id> --body "Thanks everyone!"
 # Create a draft
 google gmail draft --to "user@example.com" --subject "Draft email" --body "Message body"
 
+# Inspect a draft using the draft ID returned by gmail draft (for example, r123...)
+google gmail draft-get <draft-id>
+google gmail draft-get <draft-id> --include-body
+
 # Create draft with attachments
 google gmail draft --to "user@example.com" --subject "Files attached" --body "See attached files" \
   --attach /path/to/file1.pdf --attach /path/to/file2.docx
@@ -244,6 +248,10 @@ google gmail draft --to "user@example.com" --subject "Files attached" --body "Se
 # Archive messages (remove from inbox)
 google gmail archive <message-id>
 google gmail archive <message-id1> <message-id2>
+
+# Move messages to trash
+google gmail trash <message-id>
+google gmail trash <message-id1> <message-id2>
 
 # Manage labels on messages
 google gmail labels list <message-id>
@@ -269,7 +277,7 @@ google gmail filters create --subject "Daily digest" --size 5000000 --size-compa
 google gmail filters delete <filter-id> --confirm
 ```
 
-**Note:** The `send`, `reply`, and `reply-all` commands show a preview by default. Add `--confirm` to actually send the email.
+**Note:** The `send`, `send-draft`, `reply`, and `reply-all` commands show a preview by default. `--confirm` is only accepted from an interactive terminal after explicit human approval; non-interactive sessions are refused before any Gmail send API call is made.
 
 ### Google Cloud Projects
 

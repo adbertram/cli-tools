@@ -43,11 +43,14 @@ class FakeFiltersResource:
 
 
 class FakeMessagesResource:
-    def __init__(self, list_payload=None, get_payloads=None):
+    def __init__(self, list_payload=None, get_payloads=None, send_payload=None):
         self.list_payload = list_payload
         self.get_payloads = get_payloads or {}
+        self.send_payload = send_payload or {"id": "sent-msg-1"}
         self.list_calls = []
         self.get_calls = []
+        self.modify_calls = []
+        self.send_calls = []
 
     def list(self, **kwargs):
         self.list_calls.append(kwargs)
@@ -56,6 +59,30 @@ class FakeMessagesResource:
     def get(self, **kwargs):
         self.get_calls.append(kwargs)
         return FakeExecute(self.get_payloads[kwargs["id"]])
+
+    def modify(self, **kwargs):
+        self.modify_calls.append(kwargs)
+        return FakeExecute({"id": kwargs["id"]})
+
+    def send(self, **kwargs):
+        self.send_calls.append(kwargs)
+        return FakeExecute(self.send_payload)
+
+
+class FakeDraftsResource:
+    def __init__(self, get_payload=None, send_payload=None):
+        self.get_payload = get_payload
+        self.send_payload = send_payload or {"id": "sent-draft-1", "threadId": "thread-1"}
+        self.get_calls = []
+        self.send_calls = []
+
+    def get(self, **kwargs):
+        self.get_calls.append(kwargs)
+        return FakeExecute(self.get_payload)
+
+    def send(self, **kwargs):
+        self.send_calls.append(kwargs)
+        return FakeExecute(self.send_payload)
 
 
 class FakeLabelsResource:
@@ -74,10 +101,12 @@ class FakeGmailService:
         filters_resource=None,
         messages_resource=None,
         labels_resource=None,
+        drafts_resource=None,
     ):
         self.filters_resource = filters_resource
         self.messages_resource = messages_resource
         self.labels_resource = labels_resource
+        self.drafts_resource = drafts_resource
 
     def users(self):
         return self
@@ -91,8 +120,14 @@ class FakeGmailService:
     def messages(self):
         return self.messages_resource
 
+    def drafts(self):
+        return self.drafts_resource
+
     def labels(self):
         return self.labels_resource
+
+    def getProfile(self, **kwargs):
+        return FakeExecute({"emailAddress": "adam@example.com"})
 
 
 class FakeClient:
@@ -135,6 +170,14 @@ def _patch_labels_client(monkeypatch, messages_resource, labels_resource):
         gmail_commands, "get_client", lambda profile=None: FakeClient(service)
     )
     return messages_resource, labels_resource
+
+
+def _patch_drafts_client(monkeypatch, drafts_resource):
+    service = FakeGmailService(drafts_resource=drafts_resource)
+    monkeypatch.setattr(
+        gmail_commands, "get_client", lambda profile=None: FakeClient(service)
+    )
+    return drafts_resource
 
 
 def _encoded_body(text):
@@ -306,6 +349,26 @@ def test_gmail_filters_delete_with_confirm_flag(monkeypatch):
     assert resource.delete_calls == [{"userId": "me", "id": "ANe1Bmj_filter1"}]
 
 
+def test_gmail_trash_adds_trash_label_to_messages(monkeypatch):
+    resource = _patch_message_client(monkeypatch, FakeMessagesResource())
+
+    result = CliRunner().invoke(app, ["gmail", "trash", "msg-1", "msg-2"])
+
+    assert result.exit_code == 0, result.stderr
+    assert resource.modify_calls == [
+        {
+            "userId": "me",
+            "id": "msg-1",
+            "body": {"addLabelIds": ["TRASH"]},
+        },
+        {
+            "userId": "me",
+            "id": "msg-2",
+            "body": {"addLabelIds": ["TRASH"]},
+        },
+    ]
+
+
 def test_gmail_search_outputs_empty_json_array_for_no_results(monkeypatch):
     resource = _patch_message_client(
         monkeypatch, FakeMessagesResource(list_payload={})
@@ -368,6 +431,149 @@ def test_gmail_search_supports_comma_separated_properties(monkeypatch):
     assert resource.get_calls == [
         {"userId": "me", "id": "msg-1", "format": "full"}
     ]
+
+
+def test_gmail_send_confirm_refuses_non_interactive_send(monkeypatch):
+    resource = _patch_message_client(monkeypatch, FakeMessagesResource())
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "gmail",
+            "send",
+            "--to",
+            "user@example.com",
+            "--subject",
+            "Hello",
+            "--body",
+            "Message body",
+            "--confirm",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Refusing to send this email from a non-interactive session" in result.stderr
+    assert resource.send_calls == []
+
+
+def test_gmail_send_draft_confirm_refuses_non_interactive_send(monkeypatch):
+    draft = {
+        "id": "draft-1",
+        "message": {
+            "id": "msg-1",
+            "payload": {
+                "headers": [
+                    {"name": "To", "value": "user@example.com"},
+                    {"name": "Subject", "value": "Draft subject"},
+                ]
+            },
+        },
+    }
+    resource = _patch_drafts_client(monkeypatch, FakeDraftsResource(get_payload=draft))
+
+    result = CliRunner().invoke(app, ["gmail", "send-draft", "draft-1", "--confirm"])
+
+    assert result.exit_code == 1
+    assert "Refusing to send this draft from a non-interactive session" in result.stderr
+    assert resource.send_calls == []
+
+
+def test_gmail_draft_get_uses_drafts_api_and_decodes_body(monkeypatch):
+    draft = {
+        "id": "draft-1",
+        "message": {
+            "id": "msg-1",
+            "threadId": "thread-1",
+            "labelIds": ["DRAFT"],
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "sender@example.com"},
+                    {"name": "To", "value": "user@example.com"},
+                    {"name": "Subject", "value": "Draft subject"},
+                    {"name": "Date", "value": "Fri, 3 Jul 2026 09:48:33 -0700"},
+                ],
+                "parts": [
+                    {
+                        "mimeType": "text/plain",
+                        "body": {"data": _encoded_body("Draft body")},
+                    }
+                ],
+            },
+        },
+    }
+    resource = _patch_drafts_client(monkeypatch, FakeDraftsResource(get_payload=draft))
+
+    result = CliRunner().invoke(
+        app, ["gmail", "draft-get", "draft-1", "--include-body"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "draft_id": "draft-1",
+        "message_id": "msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["DRAFT"],
+        "from": "sender@example.com",
+        "to": "user@example.com",
+        "subject": "Draft subject",
+        "date": "Fri, 3 Jul 2026 09:48:33 -0700",
+        "body": "Draft body",
+    }
+    assert resource.get_calls == [{"userId": "me", "id": "draft-1", "format": "full"}]
+
+
+def test_gmail_reply_confirm_refuses_non_interactive_send(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "sender@example.com"},
+                {"name": "Subject", "value": "Question"},
+                {"name": "Message-ID", "value": "<msg-1@example.com>"},
+            ]
+        },
+    }
+    resource = _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(get_payloads={"msg-1": message}),
+    )
+
+    result = CliRunner().invoke(
+        app, ["gmail", "reply", "msg-1", "--body", "Reply body", "--confirm"]
+    )
+
+    assert result.exit_code == 1
+    assert "Refusing to send this reply from a non-interactive session" in result.stderr
+    assert resource.send_calls == []
+
+
+def test_gmail_reply_all_confirm_refuses_non_interactive_send(monkeypatch):
+    message = {
+        "id": "msg-1",
+        "threadId": "thread-1",
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "sender@example.com"},
+                {"name": "To", "value": "adam@example.com, teammate@example.com"},
+                {"name": "Cc", "value": "manager@example.com"},
+                {"name": "Subject", "value": "Question"},
+                {"name": "Message-ID", "value": "<msg-1@example.com>"},
+            ]
+        },
+    }
+    resource = _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(get_payloads={"msg-1": message}),
+    )
+
+    result = CliRunner().invoke(
+        app, ["gmail", "reply-all", "msg-1", "--body", "Reply body", "--confirm"]
+    )
+
+    assert result.exit_code == 1
+    assert "Refusing to send this reply-all from a non-interactive session" in result.stderr
+    assert resource.send_calls == []
 
 
 def test_gmail_search_rejects_invalid_properties(monkeypatch):
