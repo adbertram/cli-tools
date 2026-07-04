@@ -28,7 +28,7 @@ import re
 import typer
 from typing import Optional, Dict, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack messages")
@@ -198,6 +198,7 @@ def _resolve_mentions(client, text: str) -> str:
 
 
 @app.command("send")
+@command
 def send_message(
     channel: str = typer.Argument(..., help="Channel ID or name"),
     text: str = typer.Argument(..., help="Message text"),
@@ -239,6 +240,7 @@ def send_message(
 
 
 @app.command("get")
+@command
 def message_get(
     channel: str = typer.Argument(..., help="Channel ID"),
     ts: str = typer.Argument(..., help="Message timestamp"),
@@ -280,6 +282,7 @@ def message_get(
 
 
 @app.command("list")
+@command
 def list_messages(
     channel: str = typer.Argument(..., help="Channel ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -370,6 +373,7 @@ def list_messages(
 
 
 @app.command("search")
+@command
 def search_messages(
     query: str = typer.Argument(..., help="Search query (API filter)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -437,6 +441,7 @@ def search_messages(
 
 
 @app.command("delete")
+@command
 def delete_message(
     channel: str = typer.Argument(..., help="Channel ID"),
     ts: str = typer.Argument(..., help="Message timestamp"),
@@ -457,6 +462,7 @@ def delete_message(
 
 
 @app.command("mentions")
+@command
 def list_mentions(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     count: int = typer.Option(20, "--count", "-c", help="Number of results"),
@@ -520,6 +526,7 @@ def list_mentions(
 
 
 @app.command("threads")
+@command
 def list_thread_replies(
     channel: str = typer.Argument(..., help="Channel ID containing the thread"),
     thread_ts: str = typer.Argument(..., help="Timestamp of the parent message (thread root)"),

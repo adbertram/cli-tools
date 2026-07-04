@@ -8,13 +8,14 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack pinned items")
 
 
 @app.command("list")
+@command
 def list_pins(
     channel_id: str = typer.Argument(..., help="Channel ID to list pinned items for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -105,6 +106,7 @@ def list_pins(
 
 
 @app.command("get")
+@command
 def get_pin(
     channel_id: str = typer.Argument(..., help="Channel ID where pin exists"),
     pin_ts: str = typer.Argument(..., help="Timestamp of the pinned message or file ID"),

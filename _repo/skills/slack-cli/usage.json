@@ -1,8 +1,8 @@
 {
   "tool": "slack",
   "description": "CLI interface for Slack API",
-  "discovered_at": "2026-06-20T19:55:34Z",
-  "total_commands": 49,
+  "discovered_at": "2026-07-03T21:30:59Z",
+  "total_commands": 50,
   "global_options": [
     {
       "name": "--version",
@@ -27,13 +27,11 @@
   "commands": {
     "auth": {
       "help": "Manage Slack API authentication",
-      "usage_instructions": "Manage Slack API authentication. Login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Authenticate with Slack. Uses OAuth flow (opens browser). Use --profile/-p to save to a named profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate only a specific credential type.",
           "arguments": [],
           "options": [
             {
@@ -47,7 +45,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -173,6 +171,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -312,10 +342,10 @@
           "usage_instructions": "List canvases in the workspace or a specific channel. CHANNEL_ID is optional — omit for all canvases. Use --limit/-l (default 100), --filter/-f, --properties/-p. Use --table/-t for formatted output.",
           "arguments": [
             {
-              "name": "channel_id",
-              "type": "CHANNEL_ID",
+              "name": "[channel_id]",
+              "type": "TEXT",
               "required": false,
-              "help": "Channel ID to list canvases for (optional, lists all if not specified)"
+              "help": "TEXT  Channel ID to list canvases for (optional, lists all if not specified)"
             }
           ],
           "options": [
@@ -694,7 +724,7 @@
           ]
         },
         "read": {
-          "help": "Read direct message history with a user or group DM. For 1:1 DMs, specify the user: - User ID (U1234567890) - Email address (user@example.com) - Username (@john.doe or john.doe) For group DMs, specify the channel ID directly: - Channel ID (C01U109E658) - Find channel IDs with: slack dm list --include-group --table Example: slack dm read U1234567890 --table slack dm read user@example.com --limit 20 slack dm read @john.doe --table slack dm read C01U109E658 --table  # group DM by channel ID",
+          "help": "Read direct message history with a user or group DM.",
           "usage_instructions": "Read DM history with a USER (required — user ID, email, or @username). Use --limit/-l (default 50), --oldest/--latest for time range, --filter/-f for client-side filtering, --table/-t.",
           "arguments": [
             {
@@ -748,7 +778,7 @@
           ]
         },
         "send": {
-          "help": "Send a direct message to a user or group DM. For 1:1 DMs, specify the user: - User ID (U1234567890) - Email address (user@example.com) - Username (@john.doe or john.doe) For group DMs, specify the channel ID directly: - Channel ID (C01U109E658) - Find channel IDs with: slack dm list --include-group --table Example: slack dm send U1234567890 \"Hello!\" slack dm send user@example.com \"Hello via email lookup!\" slack dm send @john.doe \"Hello John!\" slack dm send C01U109E658 \"Hello group!\"  # group DM by channel ID",
+          "help": "Send a direct message to a user or group DM.",
           "usage_instructions": "Send a DM to a user. USER (user ID, email, or @username) and TEXT are both required positional args. Use --thread-ts to reply in a thread. Remember: Slack uses mrkdwn, not standard markdown.",
           "arguments": [
             {
