@@ -39,6 +39,9 @@ pickup_app = typer.Typer(
     no_args_is_help=True,
 )
 orders_app = typer.Typer(help="Order history: find and cancel orders", no_args_is_help=True)
+favorites_app = typer.Typer(help="Saved favorites (the heart): list items you saved", no_args_is_help=True)
+
+FAVORITE_COLUMNS = [*COLUMNS, "available"]
 
 
 def _property_fields(properties: Optional[str]) -> Optional[List[str]]:
@@ -70,6 +73,25 @@ def _render(rows: List[dict], table: bool, properties: Optional[str], empty: str
         return
     columns = fields or columns
     print_table(rows, columns, [column.replace("_", " ").title() for column in columns])
+
+
+PAYMENT_COLUMNS = ["name", "brand", "last4", "default", "cvv_stored", "in_wallet"]
+
+
+def _pointer_row(pointer: dict, wallet_last4: set) -> dict:
+    """Safe display shape for a card pointer, shared by 'payment-method' list/get.
+
+    Emits only whether a CVV is stored (``cvv_stored``), NEVER the stored CVV
+    itself, so neither list nor get can leak it in JSON or table output.
+    """
+    return {
+        "name": pointer.get("name"),
+        "brand": pointer.get("brand"),
+        "last4": pointer.get("last4"),
+        "default": pointer.get("default", False),
+        "cvv_stored": bool(pointer.get("cvv")),
+        "in_wallet": pointer.get("last4") in wallet_last4,
+    }
 
 
 @products_app.command("list")
@@ -275,9 +297,10 @@ def payment_method_add(
     the card number or CVV. With --last4, points at a card already in your wallet
     without opening the page. Then 'cart checkout --card <name>' selects it.
     """
+    from cli_tools_shared.output import prompt_text
     from . import cards as card_store
     config = get_config()
-    resolved = name if name is not None else typer.prompt("Name this card pointer (e.g. amex-personal)")
+    resolved = name if name is not None else prompt_text("Name this card pointer (e.g. amex-personal)")
     slug = card_store.normalize_name(resolved)
     if not slug:
         print_error("Card pointer name must contain letters or digits.")
@@ -304,14 +327,14 @@ def payment_method_add(
             captured = client.capture_new_card()
         # Optionally store the CVV (hidden) so checkout is one-shot. Only prompt
         # in an interactive terminal; skip silently when non-interactive.
-        from cli_tools_shared.output import _stdin_is_interactive_tty
+        from cli_tools_shared.output import _stdin_is_interactive_tty, prompt_secret
         cvv = None
         if _stdin_is_interactive_tty():
-            entered = typer.prompt(
+            entered = prompt_secret(
                 "Card security code (CVV) to store for one-shot checkout [Enter to skip]",
-                default="", hide_input=True, show_default=False,
+                allow_empty=True,
             )
-            cvv = entered.strip() or None
+            cvv = entered or None
         pointer = card_store.add_pointer(
             config, slug, captured["last4"], captured.get("brand"),
             default=not no_default, cvv=cvv,
@@ -331,13 +354,14 @@ def payment_method_set_cvv(
     name: str = typer.Argument(..., help="Card pointer name to store a CVV for"),
 ):
     """Store the CVV for a saved card pointer (hidden prompt) for one-shot checkout."""
+    from cli_tools_shared.output import prompt_secret
     from . import cards as card_store
     config = get_config()
     slug = card_store.normalize_name(name)
     if card_store.get_pointer(config, slug) is None:
         print_error(f"No card pointer named '{slug}'.")
         raise typer.Exit(1)
-    cvv = typer.prompt("Card security code (CVV)", hide_input=True)
+    cvv = prompt_secret("Card security code (CVV)")
     card_store.set_cvv(config, slug, cvv)
     print_info(f"Stored CVV for card pointer '{slug}'.")
 
@@ -357,25 +381,55 @@ def payment_method_list(
     finally:
         client.close()
     wallet_last4 = {c["last4"] for c in wallet if c.get("last4")}
-    # Build display rows EXPLICITLY -- never emit the stored CVV (only whether one
-    # is stored), so `list` can't leak it in JSON or table output.
-    rows = [{
-        "name": p.get("name"),
-        "brand": p.get("brand"),
-        "last4": p.get("last4"),
-        "default": p.get("default", False),
-        "cvv_stored": bool(p.get("cvv")),
-        "in_wallet": p.get("last4") in wallet_last4,
-    } for p in pointers]
+    # Rows are built via _pointer_row, which never emits the stored CVV (only
+    # whether one is stored), so `list` can't leak it in JSON or table output.
+    rows = [_pointer_row(p, wallet_last4) for p in pointers]
     _render(
         rows, table, None,
         "No saved card pointers. Add one with 'payment-method add'.",
-        ["name", "brand", "last4", "default", "cvv_stored", "in_wallet"],
+        PAYMENT_COLUMNS,
     )
     pointer_last4 = {p["last4"] for p in pointers}
     orphans = [c for c in wallet if c.get("last4") and c["last4"] not in pointer_last4]
     if orphans:
         print_info(f"{len(orphans)} Target wallet card(s) have no pointer; run 'payment-method add' to name one.")
+
+
+@payment_app.command("get")
+@command
+def payment_method_get(
+    identifier: str = typer.Argument(..., help="Card pointer name, or the card's last 4 digits"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Get one saved card pointer by name or last4 (never prints the stored CVV).
+
+    Cross-checks the pointer against the live Target wallet (like 'list') so
+    'in_wallet' tells you whether it still points at a real saved card.
+    """
+    from . import cards as card_store
+    config = get_config()
+    pointer = card_store.find_pointer(config, identifier)
+    if pointer is None:
+        print_error(
+            f"No saved card pointer matching '{identifier}'. "
+            "List them with 'payment-method list'."
+        )
+        raise typer.Exit(1)
+    client = get_client()
+    try:
+        wallet = client.list_payments()
+    finally:
+        client.close()
+    wallet_last4 = {c["last4"] for c in wallet if c.get("last4")}
+    row = _pointer_row(pointer, wallet_last4)
+    if table:
+        print_table(
+            [{"field": key, "value": str(value)} for key, value in row.items()],
+            ["field", "value"],
+            ["Field", "Value"],
+        )
+    else:
+        print_json(row)
 
 
 @payment_app.command("remove")
@@ -478,6 +532,28 @@ def orders_list(
         client.close()
 
 
+@orders_app.command("get")
+@command
+def orders_get(
+    order_number: str = typer.Argument(..., help="Order number to look up (see 'orders list')"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Get one order's status and total by order number."""
+    client = get_client()
+    try:
+        order = client.get_order(order_number)
+        if table:
+            print_table(
+                [{"field": key, "value": str(value)} for key, value in order.items()],
+                ["field", "value"],
+                ["Field", "Value"],
+            )
+        else:
+            print_json(order)
+    finally:
+        client.close()
+
+
 @orders_app.command("cancel")
 @command
 def orders_cancel(
@@ -547,6 +623,67 @@ def session_status():
     })
 
 
+@favorites_app.command("list")
+@command
+def favorites_list(
+    limit: int = typer.Option(24, "--limit", "-l", help="Maximum number of favorites"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """List the items you saved to your Target favorites (the heart)."""
+    client = get_client()
+    try:
+        _validate(filter)
+        rows = client.list_favorites(limit=limit)
+        if filter:
+            rows = apply_filters(rows, filter)
+        _render(rows, table, properties, "No favorites found.", FAVORITE_COLUMNS)
+    finally:
+        client.close()
+
+
+@favorites_app.command("get")
+@command
+def favorites_get(
+    item_id: str = typer.Argument(..., help="Item TCIN to look up in your favorites"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get one saved favorite by TCIN (errors if it isn't one of your favorites)."""
+    client = get_client()
+    try:
+        row = client.get_favorite(item_id)
+        fields = _property_fields(properties)
+        if fields:
+            _render([row], table, properties, "No favorite found.", FAVORITE_COLUMNS)
+        elif table:
+            print_table(
+                [{"field": key, "value": str(value)} for key, value in row.items()],
+                ["field", "value"],
+                ["Field", "Value"],
+            )
+        else:
+            print_json(row)
+    finally:
+        client.close()
+
+
+@favorites_app.command("remove")
+@command
+def favorites_remove(
+    item_id: str = typer.Argument(..., help="Item TCIN to remove from your favorites"),
+):
+    """Remove an item from your Target favorites by TCIN (errors if not favorited)."""
+    client = get_client()
+    try:
+        result = client.remove_favorite(item_id)
+        print_json(result)
+        print_info(f"Removed {item_id} from favorites ({result['remaining']} remaining).")
+    finally:
+        client.close()
+
+
 app.add_typer(products_app, name="products")
 app.add_typer(cart_app, name="cart")
 app.add_typer(store_app, name="store")
@@ -554,6 +691,7 @@ app.add_typer(session_app, name="session")
 app.add_typer(payment_app, name="payment-method")
 app.add_typer(pickup_app, name="pickup")
 app.add_typer(orders_app, name="orders")
+app.add_typer(favorites_app, name="favorites")
 app.add_typer(create_auth_app(get_config, tool_name="target"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 

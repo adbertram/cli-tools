@@ -124,6 +124,38 @@ def normalize_stores(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [_store_row(store) for store in stores]
 
 
+def normalize_favorites(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return favorite item records from a favorites/v1/list_items body.
+
+    The favorites API stores only membership (TCIN + timestamps + note); it
+    carries no product title or price, so each record here is the raw favorite
+    reference. ``client.list_favorites`` hydrates ``tcin`` into title/price via
+    redsky. ``tcin`` is read directly so a contract break fails loudly; the
+    per-item ``item_note`` is genuinely optional (Target omits it or returns the
+    literal string ``"None"``) and normalizes to ``None``.
+
+    ``list_item_id`` is the per-item membership id (a UUID) that Target's remove
+    endpoint (``DELETE /favorites/v1/list_items/{list_item_id}``) requires, so
+    ``client.remove_favorite`` resolves a TCIN to it. It is an internal key: the
+    `list`/`get` command output does not render it, but it is carried on the
+    normalized record so remove can look it up.
+    """
+    rows: List[Dict[str, Any]] = []
+    for item in raw.get("list_items") or []:
+        note = item.get("item_note")
+        if note == "None":
+            note = None
+        rows.append(
+            {
+                "tcin": item["tcin"],
+                "list_item_id": item.get("list_item_id"),
+                "added": item.get("added_ts"),
+                "note": note,
+            }
+        )
+    return rows
+
+
 def normalize_store(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Return a single store record from a store_location_v1 body."""
     store = _dig(raw, "data", "store") or {}

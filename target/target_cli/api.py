@@ -20,6 +20,27 @@ from .session import RedskySession, load_session
 REDSKY_KEY = "9f36aeafbe60771e321a7cc95a78140772ab3e96"
 REDSKY_BASE = "https://redsky.target.com/redsky_aggregations/v1/web"
 
+# Target's web channel value, sent on every redsky/api.target.com call.
+WEB_CHANNEL = "WEB"
+
+# Favorites (account "lists") live on api.target.com, NOT redsky, so they use a
+# DIFFERENT static public web key than REDSKY_KEY (verified live from target.com's
+# lists bundle). The favorites list_items endpoint is authorized by the logged-in
+# account session cookies plus this key; see client.py::_fetch_favorites_payload,
+# which fetches it through the browser session (redsky's anonymous _tgt_* token
+# does not authorize account reads).
+FAVORITES_KEY = "59449a5c39eedae26b064a7c269c9a158f6d432f"
+FAVORITES_LIST_ITEMS_URL = (
+    f"https://api.target.com/favorites/v1/list_items?key={FAVORITES_KEY}&channel={WEB_CHANNEL}"
+)
+# Remove one favorite: DELETE keyed by the per-item membership id (list_item_id),
+# NOT the raw TCIN (verified live -- a fake id returns 404 "Given list item id not
+# found"). client.remove_favorite resolves the TCIN to its list_item_id first.
+FAVORITES_REMOVE_ITEM_URL_TEMPLATE = (
+    "https://api.target.com/favorites/v1/list_items/{list_item_id}"
+    f"?key={FAVORITES_KEY}&channel={WEB_CHANNEL}"
+)
+
 # A normal Chrome UA; redsky gates on the _tgt_* cookies, not the UA, but a real
 # UA keeps the request indistinguishable from the browser that minted the token.
 _UA = (
@@ -54,7 +75,7 @@ class RedskyAPI:
 
     def _get(self, path: str, params: dict) -> dict:
         params["key"] = REDSKY_KEY
-        params["channel"] = "WEB"
+        params["channel"] = WEB_CHANNEL
         params["visitor_id"] = self._session.visitor_id
         try:
             resp = self._http.get(path, params=params)

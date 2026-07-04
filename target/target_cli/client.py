@@ -13,15 +13,19 @@ import re
 from contextlib import contextmanager
 from typing import List, Optional
 
-import typer
-
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
 
 from . import cards as card_store
-from .api import RedskyAPI, get_redsky_api
+from .api import (
+    FAVORITES_LIST_ITEMS_URL,
+    FAVORITES_REMOVE_ITEM_URL_TEMPLATE,
+    RedskyAPI,
+    get_redsky_api,
+)
 from .config import get_config
 from .parsers import (
+    normalize_favorites,
     normalize_fulfillment,
     normalize_product_detail,
     normalize_search_products,
@@ -733,15 +737,21 @@ class TargetClient:
         return stored_cvv or self._prompt_cvv_reactive()
 
     def _prompt_cvv_reactive(self) -> str:
-        """Securely prompt for a CVV at the moment Target demands one (never stored)."""
-        from cli_tools_shared.output import _stdin_is_interactive_tty
+        """Securely prompt for a CVV at the moment Target demands one (never stored).
 
-        if not _stdin_is_interactive_tty():
-            raise ClientError(
+        Routed through the shared ``prompt_secret`` helper (hidden input, TTY-gated)
+        rather than a raw ``typer.prompt`` so all prompting stays centralized in
+        ``cli_tools_shared``.
+        """
+        from cli_tools_shared.output import prompt_secret
+
+        entered = prompt_secret(
+            "Enter the card's security code (CVV)",
+            non_interactive_message=(
                 "This card needs a CVV at checkout, but there's no interactive terminal "
                 "to prompt for it. Run the checkout in an interactive terminal."
-            )
-        entered = typer.prompt("Enter the card's security code (CVV)", hide_input=True)
+            ),
+        )
         digits = re.sub(r"\D", "", entered or "")
         if not (3 <= len(digits) <= 4):
             raise ClientError("CVV must be 3 or 4 digits.")
@@ -827,6 +837,37 @@ class TargetClient:
           return out;
         }""") or []
         return rows[:limit]
+
+    def get_order(self, order_number: str) -> dict:
+        """Get one order's status and total by order number (read -- headless).
+
+        Opens the order's detail page through the logged-in browser session and
+        reads its status + order total. Returns the same ``order_number/status/
+        total`` shape as a ``list_orders`` row so 'is this order cancelled yet?'
+        has a clear single-order answer. Fails loud if the order can't be opened
+        (wrong number or signed out) rather than returning an empty record.
+        """
+        page = self._get_browser().get_page(f"https://www.target.com/orders/{order_number}")
+        try:
+            page.wait_for_selector('[data-test="order-details-page-cdui-with-items"]', timeout=20000)
+        except Exception:
+            raise ClientError(
+                f"Could not open order {order_number}. Check the order number with "
+                "'orders list' and make sure you're signed in (`target auth login --force`)."
+            )
+        page.wait_for_timeout(1500)  # let the detail + order summary hydrate
+        # Scope the total to the "order total" label so a stray item price can't
+        # be read as the order total; absent -> null (like list_orders' fields).
+        total = page.evaluate(r"""() => {
+          const body = (document.body.innerText || '').replace(/\s+/g, ' ');
+          const m = body.match(/order total\s*\$?(\d[\d,]*\.\d{2})/i);
+          return m ? ('$' + m[1]) : null;
+        }""")
+        return {
+            "order_number": order_number,
+            "status": self._order_status(page),
+            "total": total,
+        }
 
     def _order_status(self, page) -> Optional[str]:
         body = page.evaluate("() => document.body.innerText || ''") or ""
@@ -946,6 +987,194 @@ class TargetClient:
                 f"Submitted the cancellation for order {order_number} but could not confirm it completed. "
                 "Check 'orders list' before retrying."
             )
+
+    # ---------- favorites (account) ----------
+    # Favorites (the heart on target.com) live in Target's account "lists" system.
+    # The favorites page fires GET api.target.com/favorites/v1/list_items (see
+    # api.FAVORITES_LIST_ITEMS_URL), which returns the account's default FAVORITES
+    # list as TCIN references (no title or price). Like list_orders/list_payments
+    # this is an ACCOUNT read, so it runs through the logged-in browser session via
+    # an in-page authenticated fetch (page.context.request.get inherits the session
+    # cookies) -- NOT the redsky httpx client, which only carries the anonymous
+    # _tgt_* read token. Each TCIN is then hydrated into title/price by the existing
+    # redsky product_detail path, keeping favorite records shaped like every other
+    # product record.
+
+    def list_favorites(self, limit: int = 24) -> List[dict]:
+        """List the account's Target favorites (read -- headless browser session).
+
+        Fetches the FAVORITES list from api.target.com through the logged-in
+        browser session, then hydrates each TCIN (up to ``limit``) into a product
+        record via redsky. A favorite whose product is delisted (redsky returns no
+        product) still appears with its TCIN and ``available: False`` so a
+        discontinued favorite never drops the whole list. Fails loud if the
+        favorites API itself is unreachable or the account session is invalid.
+        """
+        favorites = normalize_favorites(self._fetch_favorites_payload())
+        rows: List[dict] = []
+        for favorite in favorites[: max(limit, 0)]:
+            rows.append(self._hydrate_favorite(favorite))
+        return rows
+
+    def get_favorite(self, tcin: str) -> dict:
+        """Get one favorite by TCIN (read -- headless browser session).
+
+        Looks the TCIN up in the account's FAVORITES list, then returns the same
+        enriched record shape as `favorites list`. Fails loud if the TCIN is not
+        one of your favorites, so 'is this saved?' has a clear yes/no answer.
+        """
+        _favorites, match = self._resolve_favorite(tcin)
+        return self._hydrate_favorite(match)
+
+    def remove_favorite(self, tcin: str) -> dict:
+        """Remove one favorite by TCIN (mutation -- headless browser session).
+
+        Resolves the TCIN to its per-item membership id (``list_item_id``) in the
+        FAVORITES list, then issues an in-page authenticated DELETE against
+        api.target.com through the logged-in session (same auth surface as the
+        favorites read). Fails loud if the TCIN is not one of your favorites -- no
+        silent success. Returns a small confirmation record for stdout.
+        """
+        page = self._get_favorites_page()
+        favorites, match = self._resolve_favorite(tcin, page=page)
+        list_item_id = match.get("list_item_id")
+        if not list_item_id:
+            raise ClientError(
+                f"Favorite {tcin} has no list_item_id, so it cannot be removed via the API. "
+                "Remove it from the Target favorites page instead."
+            )
+        url = FAVORITES_REMOVE_ITEM_URL_TEMPLATE.format(list_item_id=list_item_id)
+        response = self._delete_via_session(page, url)
+        if response["status"] in (401, 403):
+            raise ClientError(
+                f"Target rejected the favorites removal (HTTP {response['status']}) -- the "
+                "account session is expired or signed out. Run `target auth login --force`."
+            )
+        if not response["ok"]:
+            raise ClientError(
+                f"Could not remove favorite {tcin} (HTTP {response['status']}): "
+                f"{response['body'][:200]}"
+            )
+        return {
+            "removed": True,
+            "tcin": str(tcin),
+            "list_item_id": list_item_id,
+            "remaining": max(len(favorites) - 1, 0),
+        }
+
+    def _resolve_favorite(self, tcin: str, *, page=None) -> tuple:
+        """Return (all_favorite_records, the_one_matching_tcin); fail loud if absent."""
+        favorites = normalize_favorites(self._fetch_favorites_payload(page=page))
+        match = next((fav for fav in favorites if fav["tcin"] == str(tcin)), None)
+        if match is None:
+            raise ClientError(
+                f"TCIN {tcin} is not in your Target favorites. "
+                "List your favorites with 'target favorites list'."
+            )
+        return favorites, match
+
+    @staticmethod
+    def _delete_via_session(page, url: str) -> dict:
+        """In-page authenticated DELETE (inherits the session cookies like the GET shim).
+
+        Mirrors ``page.context.request.get``, which only does GET; the favorites
+        removal needs DELETE, so this runs the same credentialed in-page ``fetch``
+        pattern and returns ``{ok, status, body}``.
+        """
+        return page.evaluate(
+            r"""async (url) => {
+                const resp = await fetch(url, { method: 'DELETE', credentials: 'include' });
+                let text = '';
+                try { text = await resp.text(); } catch (e) { text = ''; }
+                return { ok: resp.ok, status: resp.status, body: text };
+            }""",
+            url,
+        )
+
+    def _get_favorites_page(self):
+        """Open the favorites page in the logged-in session for an in-page fetch.
+
+        Lands on target.com/lists/favorites so subsequent in-page GET/DELETE calls
+        carry the account session cookies to api.target.com.
+        """
+        page = self._get_browser().get_page("https://www.target.com/lists/favorites")
+        try:
+            page.wait_for_selector(
+                '[data-test="favorites-empty-state"], a[href*="/A-"], [data-test*="list" i]',
+                timeout=15000,
+            )
+        except Exception:
+            # The list may render before that selector on a fast load; the fetch
+            # below is the real gate, so don't fail here.
+            pass
+        return page
+
+    def _fetch_favorites_payload(self, *, page=None) -> dict:
+        """GET the favorites list_items JSON via the authenticated browser session.
+
+        Reuses an already-open favorites ``page`` when the caller has one (so
+        remove opens the page once for both the lookup and the DELETE); otherwise
+        opens one.
+        """
+        if page is None:
+            page = self._get_favorites_page()
+        response = page.context.request.get(FAVORITES_LIST_ITEMS_URL)
+        if response.status == 401 or response.status == 403:
+            raise ClientError(
+                f"Target rejected the favorites request (HTTP {response.status}) -- the "
+                "account session is expired or signed out. Run `target auth login --force`."
+            )
+        if not response.ok:
+            raise ClientError(
+                f"Target favorites API returned HTTP {response.status}. "
+                "Make sure you're signed in (`target auth login --force`)."
+            )
+        body = response.body().decode("utf-8", "replace")
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise ClientError(
+                f"Could not parse the Target favorites response as JSON: {exc}."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ClientError(
+                f"Unexpected Target favorites payload (expected object, got {type(payload).__name__})."
+            )
+        return payload
+
+    def _hydrate_favorite(self, favorite: dict) -> dict:
+        """Enrich one favorite TCIN with redsky title/price; degrade if delisted.
+
+        Reuses the existing product_detail read (cached) so favorite records carry
+        the same id/title/price/brand/url fields as `products list`/`get`. A
+        favorited product that Target has delisted yields no redsky product; that
+        favorite is returned with its identity fields and ``available: False``
+        rather than raising, since a discontinued favorite is real membership data.
+        """
+        tcin = favorite["tcin"]
+        record = {
+            "id": tcin,
+            "title": None,
+            "price": None,
+            "available": False,
+            "added": favorite.get("added"),
+            "note": favorite.get("note"),
+        }
+        try:
+            detail = self.get_item(tcin)
+        except ClientError:
+            return record
+        record.update(
+            {
+                "title": detail.get("title"),
+                "price": detail.get("price"),
+                "available": True,
+                "brand": detail.get("brand"),
+                "url": detail.get("url"),
+                "rating": detail.get("rating"),
+            }
+        )
+        return record
 
 
 _client: Optional[TargetClient] = None

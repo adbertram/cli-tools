@@ -66,6 +66,25 @@ def get_default(config) -> Optional[dict]:
     return None
 
 
+def find_pointer(config, identifier: str) -> Optional[dict]:
+    """Resolve a pointer by its name (slug) or, failing that, its last4.
+
+    Lets ``payment-method get`` accept either the friendly name or the card's
+    last 4 digits. A name (slug) match wins; a 4-digit identifier then matches on
+    ``last4`` (first match). Returns ``None`` when nothing matches.
+    """
+    pointers = load_pointers(config)
+    slug = normalize_name(identifier)
+    if slug:
+        match = next((c for c in pointers if c.get("name") == slug), None)
+        if match is not None:
+            return match
+    digits = re.sub(r"\D", "", identifier or "")
+    if len(digits) == 4:
+        return next((c for c in pointers if c.get("last4") == digits), None)
+    return None
+
+
 def normalize_cvv(cvv: str) -> str:
     """Validate a CVV to 3-4 digits, or raise."""
     digits = re.sub(r"\D", "", cvv or "")

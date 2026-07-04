@@ -349,6 +349,87 @@
         }
       }
     },
+    "favorites": {
+      "help": "Saved favorites (the heart): list items you saved",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one saved favorite by TCIN (errors if it isn't one of your favorites).",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item TCIN to look up in your favorites"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the items you saved to your Target favorites (the heart).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of favorites",
+              "short": "-l",
+              "default": "24"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "remove": {
+          "help": "Remove an item from your Target favorites by TCIN (errors if not favorited).",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item TCIN to remove from your favorites"
+            }
+          ],
+          "options": []
+        }
+      }
+    },
     "orders": {
       "help": "Order history: find and cancel orders",
       "arguments": [],
@@ -379,6 +460,26 @@
               "required": false,
               "help": "Skip confirmation",
               "short": "-y"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one order's status and total by order number.",
+          "arguments": [
+            {
+              "name": "order_number",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order number to look up (see 'orders list')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             }
           ]
         },
@@ -432,6 +533,26 @@
               "type": "bool",
               "required": false,
               "help": "Do not mark this pointer as the default"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one saved card pointer by name or last4 (never prints the stored CVV).",
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Card pointer name, or the card's last 4 digits"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             }
           ]
         },
@@ -730,6 +851,6 @@
       }
     }
   },
-  "total_commands": 33,
-  "discovered_at": "2026-07-04T20:01:26Z"
+  "total_commands": 38,
+  "discovered_at": "2026-07-04T22:01:17Z"
 }

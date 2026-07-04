@@ -107,18 +107,99 @@ target products inventory 88830890 --store 1481 --zip 47715
 ### Cart (`target cart`)
 
 ```bash
-target cart list --table          # view cart contents
-target cart add 88830890          # add item by TCIN
-target cart remove 88830890       # remove item by TCIN
-target cart checkout              # DRY RUN — reviews order, places nothing
-target cart checkout --yes        # places the real order (spends money)
-target cart checkout --delivery shipping --yes
+target cart list --table                     # view cart contents
+target cart add 88830890                     # add item by TCIN (store pickup by default)
+target cart add 88830890 --method shipping   # ...or ship this item instead
+target cart remove 88830890                  # remove item by TCIN
+target cart checkout                         # DRY RUN — reviews order, places nothing
+target cart checkout --yes                   # places the real order (spends money)
 ```
+
+### Payment methods (`target payment-method`)
+
+Name the cards already in your Target wallet so `cart checkout --card <name>`
+can select one. The CLI stores only a **pointer** (name + last4 + brand), never
+the card number — you enter that into Target's own wallet page. A CVV may be
+stored (opt-in) so checkout is one-shot; `list`/`get` only report `cvv_stored`,
+never the CVV itself.
+
+```bash
+target payment-method add --name amex-personal      # opens Target's add-card page; captures a pointer
+target payment-method add --name debit --last4 5636  # point at a card already in your wallet, by last4
+target payment-method list --table                   # saved pointers (cross-checked against the live wallet)
+target payment-method get amex-personal              # one pointer by name...
+target payment-method get 5636 --table               # ...or by the card's last 4 digits
+target payment-method set-default amex-personal      # default used when checkout gets no --card
+target payment-method set-cvv amex-personal          # store a CVV (hidden prompt) for one-shot checkout
+target payment-method remove amex-personal           # delete the pointer (leaves the Target wallet untouched)
+```
+
+The stored CVV (if any) lets checkout confirm a debit/gift card without an
+interactive prompt; when no CVV is stored and Target asks for one, checkout
+prompts securely for it at that moment and never saves it.
+
+### Orders (`target orders`)
+
+```bash
+target orders list --table                # recent orders (find an order number)
+target orders get 123456789               # one order's status + total
+target orders get 123456789 --table
+target orders cancel 123456789            # cancel all items (while still cancellable)
+target orders cancel 123456789 --cancel-reason "Ordered wrong item" --yes
+```
+
+`orders list`/`get` read your purchase history (needs a logged-in account
+session); `cancel` only works while an order is still cancellable (processing,
+not yet picked up or shipped).
 
 ### Stores (`target store`)
 
 ```bash
 target store list 47710 --table   # Target stores near a zip code
+```
+
+### Favorites (`target favorites`)
+
+```bash
+target favorites list             # items you saved with the heart (JSON)
+target favorites list --table     # human-readable table
+target favorites list --limit 10  # cap results
+target favorites list --filter "available:eq:True"   # only in-stock favorites
+target favorites list --properties "id,title,price"  # restrict fields
+
+target favorites get 94962117            # look up one saved favorite by TCIN
+target favorites get 94962117 --table    # errors if the TCIN isn't a favorite
+
+target favorites remove 78790319         # un-favorite an item by TCIN
+```
+
+`favorites list` reads your saved favorites (the heart) from your Target account,
+so it needs a logged-in account session (`target auth login`) just like `cart` and
+`orders`. Target stores favorites as product IDs only, so each item's title and
+price are enriched from the fast-search API. A favorite whose product Target has
+since delisted still appears with `available: false` (its title/price are `null`).
+
+`favorites remove <tcin>` un-favorites an item: it looks up the TCIN in your
+favorites, resolves it to the item's membership id, and deletes it (errors if the
+TCIN isn't one of your favorites). This is handy for clearing out delisted
+favorites that show `available: false`.
+
+Example output:
+
+```json
+[
+  {
+    "id": "94962117",
+    "title": "LoveShackFancy x Target - Yoobi Ribbon Rosa Quilted Tote Bag",
+    "price": "$34.99",
+    "available": true,
+    "added": "2026-07-03T21:10:14Z",
+    "note": null,
+    "brand": "LoveShackFancy x Target",
+    "url": "https://www.target.com/p/-/A-94962117",
+    "rating": 0.0
+  }
+]
 ```
 
 ### Cache (`target cache`)
