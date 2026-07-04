@@ -1,0 +1,591 @@
+{
+  "tool": "ups",
+  "description": "CLI interface for ups",
+  "discovered_at": "2026-07-02T13:15:20Z",
+  "total_commands": 15,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage UPS API authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "pickup": {
+      "help": "Schedule and inspect UPS pickups",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one pending UPS pickup by PRN.",
+          "arguments": [
+            {
+              "name": "prn",
+              "type": "TEXT",
+              "required": true,
+              "help": "UPS pickup request number"
+            }
+          ],
+          "options": [
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS account number (default from config)",
+              "short": "-a"
+            },
+            {
+              "name": "--pickup-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup type: oncall, smart, or both",
+              "default": "oncall"
+            },
+            {
+              "name": "--version",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS Pickup API version (default from config)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List pending UPS pickups for an account.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS account number (default from config)",
+              "short": "-a"
+            },
+            {
+              "name": "--pickup-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup type: oncall, smart, or both",
+              "default": "oncall"
+            },
+            {
+              "name": "--version",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS Pickup API version (default from config)"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of pickups",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "schedule": {
+          "help": "Schedule a UPS pickup.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS account number (default from config)",
+              "short": "-a"
+            },
+            {
+              "name": "--account-country",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS account country code"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup date: YYYY-MM-DD or YYYYMMDD (default today/next business day)",
+              "short": "-d"
+            },
+            {
+              "name": "--ready-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Earliest ready time: HHMM, HH:MM, or HH:MM:SS",
+              "default": "15:30"
+            },
+            {
+              "name": "--close-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Latest close time: HHMM, HH:MM, or HH:MM:SS",
+              "default": "18:00"
+            },
+            {
+              "name": "--company",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup company/name (default from config)"
+            },
+            {
+              "name": "--contact",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup contact name (default from config)"
+            },
+            {
+              "name": "--street",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup street address (default from config)",
+              "short": "-s"
+            },
+            {
+              "name": "--city",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup city (default from config)",
+              "short": "-c"
+            },
+            {
+              "name": "--state",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup state/province (default from config)"
+            },
+            {
+              "name": "--postal",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup postal code (default from config)",
+              "short": "-z"
+            },
+            {
+              "name": "--country",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup country code"
+            },
+            {
+              "name": "--phone",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup phone number (default from config)"
+            },
+            {
+              "name": "--phone-extension",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup phone extension"
+            },
+            {
+              "name": "--residential",
+              "type": "bool",
+              "required": false,
+              "help": "Pickup address is residential"
+            },
+            {
+              "name": "--pickup-point",
+              "type": "TEXT",
+              "required": false,
+              "help": "Package pickup point/location"
+            },
+            {
+              "name": "--packages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of packages",
+              "short": "-n",
+              "default": "1"
+            },
+            {
+              "name": "--weight",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Total shipment weight",
+              "short": "-w"
+            },
+            {
+              "name": "--weight-unit",
+              "type": "TEXT",
+              "required": false,
+              "help": "Weight unit, usually LBS or KGS"
+            },
+            {
+              "name": "--service-code",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS service code (default 003 Ground)"
+            },
+            {
+              "name": "--container-code",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS container code (default 01 package)"
+            },
+            {
+              "name": "--destination-country",
+              "type": "TEXT",
+              "required": false,
+              "help": "Destination country code"
+            },
+            {
+              "name": "--payment-method",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS payment method code (default 01)"
+            },
+            {
+              "name": "--special-instruction",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup instructions"
+            },
+            {
+              "name": "--reference-number",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reference number"
+            },
+            {
+              "name": "--rate",
+              "type": "bool",
+              "required": false,
+              "help": "Ask UPS to rate pickup charges in the response"
+            },
+            {
+              "name": "--version",
+              "type": "TEXT",
+              "required": false,
+              "help": "UPS Pickup API version (default from config)"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the UPS request without scheduling"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display response as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `ups` CLI. Run `ups --help` to discover command groups and `--help` on any subcommand for its options."
+}
