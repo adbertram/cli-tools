@@ -8,8 +8,8 @@ Observed pattern:
 - `things:///add...` opens successfully and Things3 is running.
 - Simple AppleScript such as `tell application id "com.culturedcode.ThingsMac" to get name` may work.
 - AppleScript task-object reads such as `count of to dos` can still fail with AppleEvent timeout `(-1712)`.
-- `things todos list ...` or `things projects search ...` fails with `Timed out while accessing the Things database container` before printing JSON.
-- Sampling the Python process during the original hang showed it stuck in `os.scandir` / `open` while globbing the Things group-container database path.
+- `things todos list ...` or `things projects search ...` fails with `Timed out while accessing the Things database container` or `Permission denied while accessing the Things database container` before printing JSON.
+- Sampling the Python process during the original hang showed it stuck in `os.scandir` / `open` while globbing the Things group-container database path; on other macOS states the same TCC denial returns `Operation not permitted` immediately.
 - macOS unified logs can show TCC denying `kTCCServiceSystemPolicyAllFiles` for the Python binary.
 
 ## Root cause
@@ -18,7 +18,7 @@ The CLI reads Things data from:
 
 `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Things Database.thingsdatabase/main.sqlite`
 
-That container is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable running the CLI, filesystem discovery can hang instead of failing quickly. The CLI now wraps protected-container globbing in a killable child process, so the durable symptom is a fast, actionable `ClientError` naming the Python binary that needs access.
+That container is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable running the CLI, filesystem discovery can hang or raise `Operation not permitted`. The CLI wraps protected-container discovery in a killable child process and explicitly probes the protected root for permission denial, so the durable symptom is a fast, actionable `ClientError` naming the Python binary that needs access.
 
 ## Diagnostic commands
 
@@ -74,6 +74,6 @@ Do not retry Things writes or create duplicate tasks when this readback blocker 
 
 ## CLI hardening pattern
 
-Do not let protected-container globbing hang indefinitely. Wrap database discovery in a killable child process with a short timeout. On timeout, raise a clear `ClientError` that names the exact `sys.executable` needing Full Disk Access.
+Do not let protected-container discovery hang indefinitely or silently collapse permission denial into "database not found." Wrap database discovery in a killable child process with a short timeout, and explicitly report `PermissionError` / `Operation not permitted` as the same Full Disk Access blocker. On timeout or permission denial, raise a clear `ClientError` that names the exact `sys.executable` needing Full Disk Access.
 
-This converts a silent hang into an actionable permissions error.
+This converts a silent hang or misleading no-match into an actionable permissions error.

@@ -251,6 +251,52 @@ def test_database_glob_timeout_reports_full_disk_access_python(monkeypatch):
         raise AssertionError("Expected _glob_database_with_timeout to raise ClientError")
 
 
+def test_database_glob_permission_denied_reports_full_disk_access_python(monkeypatch):
+    """TCC PermissionError must not be misreported as Things not installed."""
+    client = ThingsClient.__new__(ThingsClient)
+
+    class FakeQueue:
+        def empty(self):
+            return False
+
+        def get(self):
+            return ("permission", "[Errno 1] Operation not permitted")
+
+    class FakeProcess:
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return False
+
+    class FakeContext:
+        def Queue(self):
+            return FakeQueue()
+
+        def Process(self, target, args):
+            return FakeProcess()
+
+    monkeypatch.setattr(client_mod.mp, "get_context", lambda name: FakeContext())
+    monkeypatch.setattr(client_mod.sys, "executable", "/tmp/things-cli-python")
+
+    try:
+        client._glob_database_with_timeout(
+            "/protected/ThingsData-*",
+            protected_root="/protected",
+        )
+    except ClientError as exc:
+        message = str(exc)
+        assert "Permission denied while accessing the Things database container" in message
+        assert "Full Disk Access" in message
+        assert "/tmp/things-cli-python" in message
+        assert "Operation not permitted" in message
+    else:
+        raise AssertionError("Expected _glob_database_with_timeout to raise ClientError")
+
+
 def _client_with_db(tmp_path):
     db_path = tmp_path / "things.sqlite"
     with sqlite3.connect(db_path) as conn:

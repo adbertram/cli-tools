@@ -5,6 +5,7 @@ Direct SQLite access to the Things 3 database for read and write operations.
 - Writes: Only when Things.app is not running (to prevent corruption)
 """
 import multiprocessing as mp
+import os
 import secrets
 import sqlite3
 import string
@@ -39,10 +40,21 @@ class AppleScriptTimeoutError(ClientError):
     pass
 
 
-def _glob_database_worker(pattern: str, queue):
+def _glob_database_worker(pattern: str, protected_root: Optional[str], queue):
     """Run protected Things database glob in a killable child process."""
     try:
+        if protected_root:
+            try:
+                with os.scandir(protected_root):
+                    pass
+            except FileNotFoundError:
+                pass
+            except PermissionError as exc:
+                queue.put(("permission", str(exc)))
+                return
         queue.put(("ok", glob(pattern)))
+    except PermissionError as exc:
+        queue.put(("permission", str(exc)))
     except Exception as exc:  # pragma: no cover - defensive for child process failures
         queue.put(("error", repr(exc)))
 
@@ -51,18 +63,31 @@ class ThingsClient:
     """Client for interacting with Things 3 SQLite database."""
 
     # Database path pattern for Things 3
-    DB_PATTERN = "Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Things Database.thingsdatabase/main.sqlite"
+    DB_CONTAINER = "Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac"
+    DB_PATTERN = f"{DB_CONTAINER}/ThingsData-*/Things Database.thingsdatabase/main.sqlite"
 
     def __init__(self):
         """Initialize Things client and discover database."""
         self.db_path = self._discover_database()
         self._validate_database()
 
-    def _glob_database_with_timeout(self, pattern: str, timeout: float = 5.0) -> List[str]:
+    def _things_tcc_message(self) -> str:
+        return (
+            "macOS privacy/TCC is blocking filesystem access to Things data. "
+            f"Grant Full Disk Access to the Python binary running this CLI ({sys.executable}), "
+            "then retry."
+        )
+
+    def _glob_database_with_timeout(
+        self,
+        pattern: str,
+        timeout: float = 5.0,
+        protected_root: Optional[str] = None,
+    ) -> List[str]:
         """Glob the protected Things container without allowing TCC to hang forever."""
         ctx = mp.get_context("fork")
         queue = ctx.Queue()
-        proc = ctx.Process(target=_glob_database_worker, args=(pattern, queue))
+        proc = ctx.Process(target=_glob_database_worker, args=(pattern, protected_root, queue))
         proc.start()
         proc.join(timeout)
 
@@ -71,9 +96,7 @@ class ThingsClient:
             proc.join(1)
             raise ClientError(
                 "Timed out while accessing the Things database container. "
-                "macOS privacy/TCC is blocking filesystem access to Things data. "
-                f"Grant Full Disk Access to the Python binary running this CLI ({sys.executable}), "
-                "then retry."
+                + self._things_tcc_message()
             )
 
         if queue.empty():
@@ -83,6 +106,12 @@ class ThingsClient:
             )
 
         status, payload = queue.get()
+        if status == "permission":
+            raise ClientError(
+                "Permission denied while accessing the Things database container. "
+                + self._things_tcc_message()
+                + f" Underlying error: {payload}"
+            )
         if status == "error":
             raise ClientError(f"Things database discovery failed: {payload}")
         return payload
@@ -96,8 +125,9 @@ class ThingsClient:
         Raises:
             ClientError: If database not found
         """
+        container = Path.home() / self.DB_CONTAINER
         pattern = str(Path.home() / self.DB_PATTERN)
-        matches = self._glob_database_with_timeout(pattern)
+        matches = self._glob_database_with_timeout(pattern, protected_root=str(container))
         if not matches:
             raise ClientError(
                 "Things database not found. "

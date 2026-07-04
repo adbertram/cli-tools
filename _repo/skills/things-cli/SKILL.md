@@ -234,12 +234,16 @@ things todos update <todo-uuid> --project X --area Y  # should exit 2 with "Pass
 ```bash
 things projects search "Progress" --properties uuid,title,notes,tags,area_uuid,status,deadline,start_date
 ```
-exited 1 with:
+can exit 1 with either of these Full Disk Access/TCC errors:
 ```text
 Error: Timed out while accessing the Things database container. macOS privacy/TCC is blocking filesystem access to Things data. Grant Full Disk Access to the Python binary running this CLI (/Users/adam/.local/share/uv/tools/things-cli/bin/python), then retry.
 ```
+```text
+Error: Permission denied while accessing the Things database container. macOS privacy/TCC is blocking filesystem access to Things data. Grant Full Disk Access to the Python binary running this CLI (/Users/adam/.local/share/uv/tools/things-cli/bin/python), then retry. Underlying error: [Errno 1] Operation not permitted: '/Users/adam/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac'
+```
+Older installs could misreport the immediate `Operation not permitted` form as `Things database not found` because glob returned no matches under the protected container.
 
-**Cause:** Things read commands discover and open the SQLite database under `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/...`, which is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable in the `things` launcher shebang, macOS can block filesystem traversal. The CLI hardening in `client.py` converts the old silent hang into the explicit timeout error above.
+**Cause:** Things read commands discover and open the SQLite database under `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/...`, which is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable in the `things` launcher shebang, macOS can block filesystem traversal or return `Operation not permitted`. The CLI hardening in `client.py` converts the old silent hang/misleading no-match into explicit Full Disk Access errors.
 
 **Fix:** This cannot be completed autonomously from an agent shell. A user/admin must grant Full Disk Access to the exact Python named in the error. For the current install, that is:
 ```text
