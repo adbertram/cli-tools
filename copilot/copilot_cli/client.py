@@ -1506,6 +1506,9 @@ beginDialog:
         description: Optional[str] = None,
         orchestration: Optional[bool] = None,
         content_moderation: Optional[str] = None,
+        use_model_knowledge: Optional[bool] = None,
+        file_analysis: Optional[bool] = None,
+        semantic_search: Optional[bool] = None,
     ) -> None:
         """
         Update an existing Copilot Studio agent (bot) metadata.
@@ -1516,6 +1519,9 @@ beginDialog:
             description: New description for the agent
             orchestration: Enable/disable generative AI orchestration
             content_moderation: Content moderation level (Low, Moderate, High)
+            use_model_knowledge: Enable/disable model knowledge
+            file_analysis: Enable/disable file analysis
+            semantic_search: Enable/disable semantic search
 
         Note:
             Instructions must be updated via update_gpt_instructions() which uses
@@ -1548,6 +1554,24 @@ beginDialog:
             if "aISettings" not in current_config:
                 current_config["aISettings"] = {"$kind": "AISettings"}
             current_config["aISettings"]["contentModeration"] = content_moderation
+            config_changed = True
+
+        if use_model_knowledge is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["useModelKnowledge"] = use_model_knowledge
+            config_changed = True
+
+        if file_analysis is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["isFileAnalysisEnabled"] = file_analysis
+            config_changed = True
+
+        if semantic_search is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["isSemanticSearchEnabled"] = semantic_search
             config_changed = True
 
         if config_changed:
@@ -5709,16 +5733,28 @@ schemaName: {schema_name}
         result = self.get(endpoint)
         return result.get("value", [])
 
-    def get_agent_flow(self, workflow_id: str) -> dict:
+    def get_agent_flow(self, workflow_id: str, expand_definition: bool = False) -> dict:
         """
         Get a specific agent flow by ID.
 
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
+            expand_definition: If True, include the flow definition in
+                clientdata and retrieve unpublished/draft flows.
 
         Returns:
             Agent flow (workflow) record
         """
+        if expand_definition:
+            select_fields = (
+                "workflowid,name,description,clientdata,statecode,statuscode,type,"
+                "parentworkflowid,createdon,modifiedon"
+            )
+            return self.get(
+                f"workflows({workflow_id})/Microsoft.Dynamics.CRM.RetrieveUnpublished()"
+                f"?$select={select_fields}"
+            )
+
         return self.get(f"workflows({workflow_id})")
 
     def update_agent_flow(

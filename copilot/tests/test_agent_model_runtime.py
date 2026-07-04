@@ -78,6 +78,92 @@ def test_update_bot_model_patches_runtime_configuration_and_disables_latest(monk
     }
 
 
+def test_update_bot_ai_settings_patches_runtime_configuration(monkeypatch):
+    client = DataverseClient("https://example.crm.dynamics.com", "token")
+    patch_calls = []
+
+    monkeypatch.setattr(
+        client,
+        "get_bot",
+        lambda bot_id: {
+            "configuration": json.dumps(
+                {
+                    "aISettings": {
+                        "$kind": "AISettings",
+                        "useModelKnowledge": True,
+                        "isFileAnalysisEnabled": True,
+                        "isSemanticSearchEnabled": True,
+                    }
+                }
+            )
+        },
+    )
+    monkeypatch.setattr(client, "patch", lambda path, payload: patch_calls.append((path, payload)))
+
+    client.update_bot(
+        "agent-123",
+        use_model_knowledge=True,
+        file_analysis=False,
+        semantic_search=False,
+    )
+
+    assert len(patch_calls) == 1
+    path, payload = patch_calls[0]
+    assert path == "bots(agent-123)"
+
+    configuration = json.loads(payload["configuration"])
+    assert configuration["aISettings"]["useModelKnowledge"] is True
+    assert configuration["aISettings"]["isFileAnalysisEnabled"] is False
+    assert configuration["aISettings"]["isSemanticSearchEnabled"] is False
+
+
+def test_update_agent_passes_ai_settings_to_client(monkeypatch):
+    class FakeClient:
+        def __init__(self):
+            self.update_bot_calls = []
+
+        def get_bot(self, agent_id):
+            return {"name": "Example Agent"}
+
+        def update_bot(self, **kwargs):
+            self.update_bot_calls.append(kwargs)
+
+    fake_client = FakeClient()
+    monkeypatch.setattr(agent_commands, "get_client", lambda: fake_client)
+    monkeypatch.setattr(agent_commands, "print_success", lambda message: None)
+
+    agent_commands.update_agent(
+        "agent-123",
+        name=None,
+        description=None,
+        instructions=None,
+        instructions_file=None,
+        orchestration=None,
+        auth_mode=None,
+        auth_trigger=None,
+        content_moderation=None,
+        model_knowledge=True,
+        file_analysis=False,
+        semantic_search=False,
+        web_search=None,
+        response_format=None,
+        response_format_file=None,
+    )
+
+    assert fake_client.update_bot_calls == [
+        {
+            "bot_id": "agent-123",
+            "name": None,
+            "description": None,
+            "orchestration": None,
+            "content_moderation": None,
+            "use_model_knowledge": True,
+            "file_analysis": False,
+            "semantic_search": False,
+        }
+    ]
+
+
 def test_model_get_prefers_runtime_model_and_reports_mismatch(monkeypatch):
     class FakeClient:
         def get_bot(self, agent_id):

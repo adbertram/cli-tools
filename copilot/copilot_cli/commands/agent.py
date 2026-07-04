@@ -675,6 +675,21 @@ def update_agent(
         "--content-moderation",
         help="Content moderation level: low, moderate, or high",
     ),
+    model_knowledge: Optional[bool] = typer.Option(
+        None,
+        "--model-knowledge/--no-model-knowledge",
+        help="Enable/disable model knowledge",
+    ),
+    file_analysis: Optional[bool] = typer.Option(
+        None,
+        "--file-analysis/--no-file-analysis",
+        help="Enable/disable file analysis",
+    ),
+    semantic_search: Optional[bool] = typer.Option(
+        None,
+        "--semantic-search/--no-semantic-search",
+        help="Enable/disable semantic search",
+    ),
     web_search: Optional[bool] = typer.Option(
         None,
         "--web-search/--no-web-search",
@@ -704,6 +719,7 @@ def update_agent(
         copilot agent update <agent-id> --no-orchestration
         copilot agent update <agent-id> --auth-mode integrated --auth-trigger always
         copilot agent update <agent-id> --content-moderation low
+        copilot agent update <agent-id> --no-file-analysis
         copilot agent update <agent-id> --web-search
         copilot agent update <agent-id> --no-web-search
         copilot agent update <agent-id> --response-format "Always respond in bullet points"
@@ -787,14 +803,25 @@ def update_agent(
         # Track what was updated for success message
         updates_made = []
 
-        # Update bot settings (name, description, orchestration, content moderation - NOT instructions)
-        if name or description or orchestration is not None or content_moderation_value is not None:
+        # Update bot settings (not instructions, auth, web search, or response format)
+        if (
+            name
+            or description
+            or orchestration is not None
+            or content_moderation_value is not None
+            or model_knowledge is not None
+            or file_analysis is not None
+            or semantic_search is not None
+        ):
             client.update_bot(
                 bot_id=agent_id,
                 name=name,
                 description=description,
                 orchestration=orchestration,
                 content_moderation=content_moderation_value,
+                use_model_knowledge=model_knowledge,
+                file_analysis=file_analysis,
+                semantic_search=semantic_search,
             )
             if name:
                 updates_made.append("name")
@@ -804,6 +831,12 @@ def update_agent(
                 updates_made.append("orchestration")
             if content_moderation_value is not None:
                 updates_made.append(f"content-moderation={content_moderation_value}")
+            if model_knowledge is not None:
+                updates_made.append(f"model-knowledge={'enabled' if model_knowledge else 'disabled'}")
+            if file_analysis is not None:
+                updates_made.append(f"file-analysis={'enabled' if file_analysis else 'disabled'}")
+            if semantic_search is not None:
+                updates_made.append(f"semantic-search={'enabled' if semantic_search else 'disabled'}")
 
         # Update instructions via botcomponent API (the correct API)
         if agent_instructions:

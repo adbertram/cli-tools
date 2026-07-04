@@ -1,7 +1,7 @@
 {
   "tool": "copilot",
   "description": "CLI interface for Microsoft Copilot Studio agents via Dataverse API",
-  "discovered_at": "2026-06-23T17:44:20Z",
+  "discovered_at": "2026-07-01T17:22:34Z",
   "total_commands": 180,
   "global_options": [
     {
@@ -670,10 +670,10 @@
               "usage_instructions": "Run `copilot agent knowledge add --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "agent_id",
-                  "type": "AGENT_ID",
+                  "name": "[agent_id]",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "The agent's unique identifier (GUID)"
+                  "help": "TEXT  The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -707,17 +707,13 @@
               "commands": {
                 "add": {
                   "help": "Add an Azure AI Search knowledge source to an agent (EXPERIMENTAL). WARNING: This command creates an agent component record but the knowledge source may not appear in Copilot Studio UI. Copilot Studio requires a Power Platform connection to be properly linked, which involves internal configuration not exposed via public APIs. RECOMMENDED APPROACH: 1. Use 'copilot connection create' to create the Power Platform connection 2. Link the connection to your agent via the Copilot Studio UI",
-                  "examples": [
-                    "copilot agent knowledge azure-ai-search add <agent-id> \\",
-                    "copilot agent knowledge azure-ai-search add --agentId <agent-id> \\"
-                  ],
                   "usage_instructions": "Run `copilot agent knowledge azure-ai-search add --help` for exact arguments and options.",
                   "arguments": [
                     {
-                      "name": "agent_id",
-                      "type": "AGENT_ID",
+                      "name": "[agent_id]",
+                      "type": "TEXT",
                       "required": false,
-                      "help": "The agent's unique identifier (GUID)"
+                      "help": "TEXT  The agent's unique identifier (GUID)"
                     }
                   ],
                   "options": [
@@ -837,10 +833,10 @@
               "usage_instructions": "Run `copilot agent knowledge list --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "agent_id",
-                  "type": "AGENT_ID",
+                  "name": "[agent_id]",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "The agent's unique identifier (GUID)"
+                  "help": "TEXT  The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -943,10 +939,10 @@
               "usage_instructions": "Run `copilot agent knowledge upload --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "agent_id",
-                  "type": "AGENT_ID",
+                  "name": "[agent_id]",
+                  "type": "TEXT",
                   "required": false,
-                  "help": "The agent's unique identifier (GUID)"
+                  "help": "TEXT  The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -1188,12 +1184,6 @@
         },
         "prompt": {
           "help": "Send a prompt to a Copilot Studio agent and get the response. Automatically detects the agent's authentication mode and uses the appropriate method: 1. Direct Line Secret: For agents with \"No authentication\" or \"Authenticate manually\" 2. Entra ID + Direct Line: For manual auth agents using device code flow 3. M365 Agents SDK: For agents with \"Authenticate with Microsoft\" (integrated auth) AUTHENTICATION MODES: The CLI automatically detects the agent's auth mode and handles it appropriately: - No Auth / Manual Auth: Uses Direct Line API with --secret or --entra-id - Integrated Auth (\"Authenticate with Microsoft\"): Uses M365 Agents SDK with --client-id and --tenant-id (requires microsoft-agents-copilotstudio-client package) M365 SDK SETUP (for Integrated Auth agents): 1. Create an app registration in Azure Portal 2. Go to Authentication > Enable \"Allow public client flows\" 3. Go to API permissions > Add permission > APIs my organization uses 4. Search for \"Power Platform API\" (ID: 8578e004-a5c6-46e7-913e-12f58912df43) 5. Add delegated permission: CopilotStudio.Copilots.Invoke 6. Grant admin consent for the permission 7. Set DATAVERSE_ENVIRONMENT_ID, ENTRA_CLIENT_ID, and AZURE_TENANT_ID env vars DIRECT LINE SETUP (for No Auth / Manual Auth agents): Get your Direct Line secret from: Copilot Studio > Settings > Channels > Direct Line For Entra ID authentication with Direct Line, also get the token endpoint from: Copilot Studio > Channels > Mobile app > Token Endpoint",
-          "examples": [
-            "copilot agent prompt <agent-id> -m \"Hello\" --client-id <app-id> --tenant-id <tenant-id>",
-            "copilot agent prompt <agent-id> --message \"Hello\" --secret \"your-secret\"",
-            "copilot agent prompt <agent-id> -m \"Hello\" --entra-id \\",
-            "copilot agent prompt <agent-id> -m \"Review this\" --file ./draft.docx --secret \"xxx\""
-          ],
           "usage_instructions": "Run `copilot agent prompt --help` for exact arguments and options.",
           "arguments": [
             {
@@ -1368,15 +1358,6 @@
           "commands": {
             "add": {
               "help": "Add a tool to an agent. Tool Types: - connector: Power Platform connector operation - prompt: AI Builder prompt - flow: Power Automate flow - http: Direct HTTP request - agent: Connected Copilot Studio agent Tool ID Format (--id): - connector: \"connector_id:operation_id\" (e.g., \"shared_asana:GetTask\") - prompt: Prompt GUID - flow: Flow GUID - http: URL - agent: Target agent GUID Credential Modes (--credential): - maker-provided: Uses the maker's authenticated connection (default) - end-user: Prompts the user to authenticate when using the tool",
-              "examples": [
-                "copilot agent tool add -a <agent-id> --toolType connector \\",
-                "copilot agent tool add -a <agent-id> --toolType connector \\",
-                "copilot agent tool add -a <agent-id> --toolType connector \\",
-                "copilot agent tool add -a <agent-id> --toolType prompt \\",
-                "copilot agent tool add -a <agent-id> --toolType flow \\",
-                "copilot agent tool add -a <agent-id> --toolType http \\",
-                "copilot agent tool add -a <agent-id> --toolType agent \\"
-              ],
               "usage_instructions": "Run `copilot agent tool add --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -1613,20 +1594,7 @@
               ]
             },
             "update": {
-              "help": "Update a tool's attributes. The description field is especially important as it's used by the AI agent to determine when to use this tool. Make it descriptive and explicit about when the tool should be used. Tool Availability: --available      Agent may use this tool at any time (generative orchestration) --not-available  Only use when explicitly referenced by topics or agents User Confirmation: --confirm        Ask end user for approval before running --no-confirm     Run without asking (default) --confirm-message  Custom confirmation prompt text Input Defaults: --inputs         Set default values for tool inputs as JSON Credential Mode (connector tools only): --credential     'maker-provided' (use maker's auth) or 'end-user' (prompt user)",
-              "examples": [
-                "copilot agent tool update <component-id> --name \"New Tool Name\"",
-                "copilot agent tool update <component-id> --description \"Use this tool when...\"",
-                "copilot agent tool update <component-id> --available      # Allow dynamic use",
-                "copilot agent tool update <component-id> --not-available  # Only from topics",
-                "copilot agent tool update <component-id> --confirm        # Enable confirmation",
-                "copilot agent tool update <component-id> --no-confirm     # Disable confirmation",
-                "copilot agent tool update <component-id> --confirm --confirm-message \"Proceed with action?\"",
-                "copilot agent tool update <component-id> --inputs '{\"workspace\": \"123456\", \"projects\": \"789012\"}'",
-                "copilot agent tool update <component-id> --credential maker-provided  # Use maker's credentials",
-                "copilot agent tool update <component-id> --credential end-user        # Prompt user to auth",
-                "copilot agent tool update <component-id> -n \"Name\" -d \"Description\" --available --confirm"
-              ],
+              "help": "Update a tool's attributes.",
               "usage_instructions": "Run `copilot agent tool update --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -1702,10 +1670,6 @@
           "commands": {
             "create": {
               "help": "Create a new topic for an agent. Topics can be created in two ways: 1. From a YAML file with --file 2. Using simple parameters (--triggers and --message) for basic topics",
-              "examples": [
-                "copilot agent topic create --agentId <agent-id> --name \"My Topic\" --file topic.yaml",
-                "copilot agent topic create --agentId <agent-id> --name \"Greeting\" \\"
-              ],
               "usage_instructions": "Run `copilot agent topic create --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -1954,10 +1918,6 @@
             },
             "remove": {
               "help": "Delete a topic. Permanently removes the topic from the agent. This action cannot be undone.",
-              "examples": [
-                "copilot agent topic delete <topic-id>",
-                "copilot agent topic delete <topic-id> --force"
-              ],
               "usage_instructions": "Run `copilot agent topic remove --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -2316,11 +2276,6 @@
             },
             "remove": {
               "help": "Delete a trigger. Permanently removes the trigger from the agent. By default, also deletes the underlying Power Automate flow.",
-              "examples": [
-                "copilot agent trigger delete <trigger-id>",
-                "copilot agent trigger delete <trigger-id> --force",
-                "copilot agent trigger delete <trigger-id> --keep-workflow"
-              ],
               "usage_instructions": "Run `copilot agent trigger remove --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -2429,6 +2384,24 @@
               "type": "TEXT",
               "required": false,
               "help": "Content moderation level: low, moderate, or high"
+            },
+            {
+              "name": "--model-knowledge",
+              "type": "bool",
+              "required": false,
+              "help": "Enable/disable model knowledge"
+            },
+            {
+              "name": "--file-analysis",
+              "type": "bool",
+              "required": false,
+              "help": "Enable/disable file analysis"
+            },
+            {
+              "name": "--semantic-search",
+              "type": "bool",
+              "required": false,
+              "help": "Enable/disable semantic search"
             },
             {
               "name": "--web-search",
@@ -2725,7 +2698,7 @@
           ]
         },
         "import": {
-          "help": "Import/update an agent flow's definition from a YAML or JSON file. Reads a flow definition from a file and updates the specified agent flow. The file can be in either YAML or JSON format (auto-detected). VALIDATION: By default, the YAML is validated before import to catch common errors: - Invalid parameters (e.g., 'fields' parameter that doesn't exist in the API) - Connection reference format issues (connectionName vs connectionReferenceName) - Missing required fields - Expression syntax errors Use --skip-validation to bypass validation (not recommended). Use --warnings-as-errors to treat warnings as errors. Use --dry-run to validate without making changes. Accepts two input formats: 1. Full export format (from 'agent-flow export'): Contains name, workflowid, definition, and connectionReferences fields 2. Definition-only format (from 'agent-flow export --definition-only'): Contains just the flow definition By default, only the flow definition is updated and existing connection references are preserved. Use --include-connections to also update connection references from the file.",
+          "help": "Import/update an agent flow's definition from a YAML or JSON file.",
           "examples": [
             "copilot agent-flow import <flow-id> --file flow.yaml",
             "copilot agent-flow import <flow-id> -f flow.json",
@@ -3051,7 +3024,7 @@
               ]
             },
             "list": {
-              "help": "List available scaffold templates. Shows all scaffold templates that can be used with 'agent-flow create --scaffold'.",
+              "help": "List available scaffold templates.",
               "examples": [
                 "copilot agent-flow scaffold list",
                 "copilot agent-flow scaffold list --table"
@@ -3230,10 +3203,10 @@
           "usage_instructions": "Run `copilot agent-flow validate --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "file",
-              "type": "FILE",
+              "name": "[file]",
+              "type": "TEXT",
               "required": false,
-              "help": "Path to YAML or JSON file containing the flow definition"
+              "help": "TEXT  Path to YAML or JSON file containing the flow definition"
             }
           ],
           "options": [
@@ -3603,11 +3576,6 @@
       "commands": {
         "create": {
           "help": "Create a new connection reference in the environment. Connection references are solution-aware pointers to connections. They allow flows and agents to reference a connection without being directly tied to it, making solutions portable across environments. You must have an authenticated connection before creating a connection reference. Use 'copilot connections list' to find available connections. The connector is automatically derived from the connection.",
-          "examples": [
-            "copilot connections list --table",
-            "copilot connection-references create \\",
-            "copilot connection-references create \\"
-          ],
           "usage_instructions": "Run `copilot connection-references create --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -3821,12 +3789,6 @@
       "commands": {
         "auth": {
           "help": "Re-authenticate an existing OAuth connection. This command initiates the OAuth consent flow for an existing connection that has expired or is in an error state. It opens a browser window for the user to complete authentication. The command will: 1. Verify the connection exists and is an OAuth-based connection 2. Open the OAuth consent page in your browser 3. Wait for authentication to complete (unless --force is used)",
-          "examples": [
-            "copilot connections auth 12345678-1234-1234-1234-123456789abc",
-            "copilot connections auth 12345678-1234-1234-1234-123456789abc \\",
-            "copilot connections auth 12345678-1234-1234-1234-123456789abc \\",
-            "copilot connections auth 12345678-1234-1234-1234-123456789abc --force"
-          ],
           "usage_instructions": "Run `copilot connections auth --help` for exact arguments and options.",
           "arguments": [
             {
@@ -3873,11 +3835,6 @@
         },
         "bind": {
           "help": "Bind a connection to a Copilot Studio agent. This command associates a connection with a bot, enabling the bot to use the connection's credentials when executing connector tools. This is the same operation performed by clicking \"Connect\" in the Copilot Studio UI. The binding is stored at the bot level and allows the agent's connector tools to authenticate with the external service. IMPORTANT - API Permissions: This command uses the Power Platform user-connections API, which requires elevated permissions not available through standard Azure CLI authentication. If you receive a 403 \"not authorized\" error, you may need to: 1. Use an Azure App Registration with the \"Power Platform API\" permissions: - CopilotStudio.Copilots.Invoke (delegated permission) - Or use interactive browser authentication via Copilot Studio UI 2. Alternatively, bind connections through the Copilot Studio web interface: Settings > Connection Settings > Select connection > Manage Requirements: - The bot must exist and have at least one connector tool configured - The connection must exist and be in a \"Connected\" (authenticated) state - The connector ID must match the connector used by the tool - Appropriate Power Platform API permissions (see above)",
-          "examples": [
-            "copilot connections bind abc123-bot-id \\",
-            "copilot connections bind abc123-bot-id \\",
-            "copilot connections bind abc123-bot-id -c shared_asana \\"
-          ],
           "usage_instructions": "Run `copilot connections bind --help` for exact arguments and options.",
           "arguments": [
             {
@@ -3917,13 +3874,6 @@
         },
         "create": {
           "help": "Create a new connection for a connector. Connections authenticate access to external services. The authentication type and required parameters depend on the connector. Multi-Auth Connectors (--auth-type required): Some connectors like Dataverse support multiple auth types. Use --auth-type to specify which one: - Oauth: Interactive browser-based login - ServicePrincipalOauth: Service principal with client ID/secret - CertOauth: Certificate-based authentication To see available auth types for a connector: copilot managed-connector get <connector-id> Single-Auth Connectors: Connectors with only one auth type don't require --auth-type. OAuth connectors will automatically initiate browser-based auth. Custom OAuth Connectors: Custom connectors using OAuth require --client-id and --client-secret. These are the Azure AD app registration credentials the connector uses for the OAuth token exchange.",
-          "examples": [
-            "copilot connections create -c shared_commondataserviceforapps -n \"Dataverse SP\" \\",
-            "copilot connections create -c shared_commondataserviceforapps -n \"Dataverse OAuth\" \\",
-            "copilot connections create -c shared_asana -n \"My Asana\"",
-            "copilot connections create -c shared_mycustomconnector-xxx -n \"My Custom Connector\" \\",
-            "copilot connections create -c shared_azureaisearch -n \"My Search\" \\"
-          ],
           "usage_instructions": "Run `copilot connections create --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -3989,13 +3939,6 @@
         },
         "delete": {
           "help": "Delete a connector connection. Permanently removes a connection from the Power Platform environment. This may break flows or agents that depend on this connection. By default, checks for dependent resources (connection references, agent connector tools) and refuses to delete if any exist. Use --cascade to also delete dependents, or --no-cascade to delete the connection and leave orphaned resources.",
-          "examples": [
-            "copilot connections delete <guid> -c shared_asana",
-            "copilot connections delete <guid> -c shared_office365 --force",
-            "copilot connections delete <guid> -c shared_azureaisearch --env Default-xxx",
-            "copilot connections delete <guid> -c shared_asana --cascade",
-            "copilot connections delete <guid> -c shared_asana --no-cascade"
-          ],
           "usage_instructions": "Run `copilot connections delete --help` for exact arguments and options.",
           "arguments": [
             {
@@ -4042,11 +3985,6 @@
         },
         "get": {
           "help": "Get details for a specific connection by ID. Returns the full connection object including connector ID, display name, authentication status, and creation time.",
-          "examples": [
-            "copilot connections get 12345678-1234-1234-1234-123456789abc",
-            "copilot connections get abc123 --env Default-xxx",
-            "copilot connections get abc123 --table"
-          ],
           "usage_instructions": "Run `copilot connections get --help` for exact arguments and options.",
           "arguments": [
             {
@@ -4205,9 +4143,6 @@
           "commands": {
             "get": {
               "help": "Show details for a specific operation including parameters.",
-              "examples": [
-                "copilot connections dc84384a-... operations get ListAccountSummaries"
-              ],
               "usage_instructions": "Run `copilot connections operations get --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -4228,10 +4163,6 @@
             },
             "invoke": {
               "help": "Invoke a connector operation through the APIM gateway. Builds the APIM URL from the connector's swagger definition, classifies parameters based on the swagger spec, and makes the HTTP call with a Bearer token for https://apihub.azure.com.",
-              "examples": [
-                "copilot connections dc84384a-... operations invoke ListAccountSummaries",
-                "copilot connections dc84384a-... operations invoke GetReport -p reportId=12345"
-              ],
               "usage_instructions": "Run `copilot connections operations invoke --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -4259,10 +4190,6 @@
             },
             "list": {
               "help": "List operations available on the connection's connector. Resolves the connection to its connector, then lists all available operations from the connector's OpenAPI/Swagger definition.",
-              "examples": [
-                "copilot connections 12345678-1234-1234-1234-123456789abc operations list",
-                "copilot connections 12345678-1234-1234-1234-123456789abc operations list --table"
-              ],
               "usage_instructions": "Run `copilot connections operations list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -4326,13 +4253,6 @@
         },
         "remove": {
           "help": "Delete a connector connection. Permanently removes a connection from the Power Platform environment. This may break flows or agents that depend on this connection. By default, checks for dependent resources (connection references, agent connector tools) and refuses to delete if any exist. Use --cascade to also delete dependents, or --no-cascade to delete the connection and leave orphaned resources.",
-          "examples": [
-            "copilot connections delete <guid> -c shared_asana",
-            "copilot connections delete <guid> -c shared_office365 --force",
-            "copilot connections delete <guid> -c shared_azureaisearch --env Default-xxx",
-            "copilot connections delete <guid> -c shared_asana --cascade",
-            "copilot connections delete <guid> -c shared_asana --no-cascade"
-          ],
           "usage_instructions": "Run `copilot connections remove --help` for exact arguments and options.",
           "arguments": [
             {
@@ -4446,14 +4366,6 @@
       "commands": {
         "create": {
           "help": "Create a new custom connector from an OpenAPI 2.0 (Swagger) definition. The OpenAPI definition must be in OpenAPI 2.0 format (not 3.0). For MCP (Model Context Protocol) servers, use --type mcp with --url to auto-generate the OpenAPI spec. The generated spec includes the required x-ms-agentic-protocol extension for Copilot Studio MCP integration. For OAuth connectors, provide --oauth-client-id and --oauth-client-secret. Without these, the connector will be created but connections cannot authenticate. For custom code (request/response transformations), use --script to specify a C# script file (.csx). The script can modify requests before they're sent to the API and responses before they're returned. After creating the connector, use 'copilot connections create' to create a connection and authenticate.",
-          "examples": [
-            "copilot custom-connector create --name \"My MCP Server\" --type mcp \\",
-            "copilot custom-connector create --name \"My MCP Server\" --type mcp \\",
-            "copilot custom-connector create --name \"My MCP Server\" --type mcp \\",
-            "copilot custom-connector create --name \"My API\" --swagger-file ./api.json",
-            "copilot custom-connector create --name \"My API\" --swagger-file ./api.json \\",
-            "copilot connections create --connector-id <connector-id> --name \"My Connection\" --oauth"
-          ],
           "usage_instructions": "Run `copilot custom-connector create --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -4564,14 +4476,6 @@
         },
         "delete": {
           "help": "Delete a custom connector by ID or name. This permanently removes a custom connector from the Power Platform environment. You can specify either the connector ID (shared_...) or the display name. If multiple connectors match the name, all matches are shown and each is deleted. Warning: Deleting a connector may break flows or agents that depend on it. Use --cascade to recursively delete everything associated with this connector: 1. Agent connector tools using connections for this connector 2. Connection references pointing to connections for this connector 3. Connections created for this connector 4. The connector itself",
-          "examples": [
-            "copilot custom-connector delete shared_asana-20test-5fd251d00ef0afcb57-5fe2f45645c919b585",
-            "copilot custom-connector delete \"My Custom Connector\"",
-            "copilot custom-connector delete \"My Connector\" --cascade",
-            "copilot custom-connector delete <connector-id> --force",
-            "copilot custom-connector delete <connector-id> --env Default-xxx",
-            "copilot custom-connector delete <connector-id> --cascade"
-          ],
           "usage_instructions": "Run `copilot custom-connector delete --help` for exact arguments and options.",
           "arguments": [
             {
@@ -4778,14 +4682,6 @@
         },
         "remove": {
           "help": "Delete a custom connector by ID or name. This permanently removes a custom connector from the Power Platform environment. You can specify either the connector ID (shared_...) or the display name. If multiple connectors match the name, all matches are shown and each is deleted. Warning: Deleting a connector may break flows or agents that depend on it. Use --cascade to recursively delete everything associated with this connector: 1. Agent connector tools using connections for this connector 2. Connection references pointing to connections for this connector 3. Connections created for this connector 4. The connector itself",
-          "examples": [
-            "copilot custom-connector delete shared_asana-20test-5fd251d00ef0afcb57-5fe2f45645c919b585",
-            "copilot custom-connector delete \"My Custom Connector\"",
-            "copilot custom-connector delete \"My Connector\" --cascade",
-            "copilot custom-connector delete <connector-id> --force",
-            "copilot custom-connector delete <connector-id> --env Default-xxx",
-            "copilot custom-connector delete <connector-id> --cascade"
-          ],
           "usage_instructions": "Run `copilot custom-connector remove --help` for exact arguments and options.",
           "arguments": [
             {
@@ -6403,11 +6299,6 @@
           "commands": {
             "add": {
               "help": "Add a Copilot agent (and optionally its connection reference) to a solution. This command adds the specified agent to an unmanaged solution. By default, it also adds the agent's connection reference for knowledge sources.",
-              "examples": [
-                "copilot solution agent add --solution MySolution --agent <agent-id>",
-                "copilot solution agent add -s MySolution -a <agent-id> --no-connection",
-                "copilot solution agent add -s MySolution -a <agent-id> --no-required"
-              ],
               "usage_instructions": "Run `copilot solution agent add --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -6495,14 +6386,6 @@
           "commands": {
             "add": {
               "help": "Add any component type to a solution. This is a generic command that can add any component type (workflows, prompts, bots, connectors, etc.) to an unmanaged solution. For commonly-used types, you can use aliases instead of numeric codes. Component type can be specified as: - A numeric type code (e.g., 29 for workflow, 401 for AI prompt) - An alias: workflow/flow/cloudflow (29), prompt/aiplugin/aiproject (401), bot/agent, connector, connectionreference, envvardef, envvarval, canvasapp - An entity logical name (e.g., \"environmentvariabledefinition\") Use 'copilot solution component types' to see all available type codes.",
-              "examples": [
-                "copilot solution component add -s MySolution -t workflow -c <flow-guid>",
-                "copilot solution component add -s MySolution -t prompt -c <prompt-guid>",
-                "copilot solution component add -s MySolution -t aiplugin -c <prompt-guid>",
-                "copilot solution component add -s MySolution -t 29 -c <flow-guid>",
-                "copilot solution component add --solution-id <guid> -t workflow -c <flow-guid>",
-                "copilot solution component add -s MySolution -t workflow -c <flow-guid> --no-required"
-              ],
               "usage_instructions": "Run `copilot solution component add --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -6581,13 +6464,6 @@
             },
             "list": {
               "help": "List all components in a solution. Shows all components (agents, flows, connectors, etc.) that are part of the specified solution.",
-              "examples": [
-                "copilot solution component list MySolution",
-                "copilot solution component list MySolution --summary",
-                "copilot solution component list MySolution --type 10001  # Bots only",
-                "copilot solution component list MySolution --table",
-                "copilot solution component list MySolution --env Default-12345678-1234-1234-1234-123456789012"
-              ],
               "usage_instructions": "Run `copilot solution component list --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -6708,12 +6584,7 @@
               ]
             },
             "types": {
-              "help": "List all available solution component types. Shows the component type codes and names that can be used with the --type filter in other commands.",
-              "examples": [
-                "copilot solution component types",
-                "copilot solution component types --table",
-                "copilot solution component types --env Default-12345678-1234-1234-1234-123456789012"
-              ],
+              "help": "List all available solution component types.",
               "usage_instructions": "Run `copilot solution component types --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -6933,7 +6804,7 @@
           "options": [],
           "commands": {
             "add": {
-              "help": "Add a custom connector to a solution. IMPORTANT: Custom connectors cannot be in the same solution as cloud flows and connection references that use them. You need separate solutions: - Solution 1: Custom connector(s) - Solution 2: Cloud flows + connection references The connector solution must be imported to the target environment before importing the flows solution. To find the connector's Dataverse entity ID, use: copilot custom-connector list --raw Look for the 'connectorid' field in the '_dataverse' section.",
+              "help": "Add a custom connector to a solution.",
               "examples": [
                 "copilot solution custom-connector add --solution MyConnectorsSolution --connector <connector-id>",
                 "copilot solution custom-connector add --solution-id <solution-guid> --connector <connector-id>",
@@ -7437,10 +7308,6 @@
             },
             "remove": {
               "help": "Delete a publisher. Publishers cannot be deleted if they have solutions associated with them. You must delete all solutions using the publisher first.",
-              "examples": [
-                "copilot solution publisher delete MyPublisher",
-                "copilot solution publisher delete MyPublisher --force"
-              ],
               "usage_instructions": "Run `copilot solution publisher remove --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -7470,10 +7337,6 @@
         },
         "remove": {
           "help": "Delete an unmanaged solution. This deletes the solution container but does NOT delete the components within it. Components will remain in the environment.",
-          "examples": [
-            "copilot solution delete MySolution",
-            "copilot solution delete MySolution --force"
-          ],
           "usage_instructions": "Run `copilot solution remove --help` for exact arguments and options.",
           "arguments": [
             {
@@ -7789,11 +7652,6 @@
             },
             "get": {
               "help": "Get details for a specific MCP server.",
-              "examples": [
-                "copilot mcp get shared_microsoftlearndocsmcpserver",
-                "copilot mcp get shared_boxmcpserver",
-                "copilot mcp get shared_boxmcpserver --table"
-              ],
               "usage_instructions": "Run `copilot tool mcp get --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -7828,12 +7686,6 @@
             },
             "list": {
               "help": "List all MCP (Model Context Protocol) servers available for agents. MCP servers are connectors that implement the Model Context Protocol, allowing Copilot Studio agents to connect to external data sources and tools. They provide structured access to resources, tools, and prompts.",
-              "examples": [
-                "copilot mcp list",
-                "copilot mcp list --table",
-                "copilot mcp list --filter \"name:ilike:%microsoft%\" --table",
-                "copilot mcp list --limit 50"
-              ],
               "usage_instructions": "Run `copilot tool mcp list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -8117,10 +7969,6 @@
           "commands": {
             "get": {
               "help": "Get details for a specific REST API tool.",
-              "examples": [
-                "copilot restapi get abcdef01-2345-6789-abcd-ef0123456789",
-                "copilot restapi get abcdef01-2345-6789-abcd-ef0123456789 --table"
-              ],
               "usage_instructions": "Run `copilot tool restapi get --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -8155,12 +8003,6 @@
             },
             "list": {
               "help": "List all REST API tools (custom connectors) available for agents. REST API tools are custom connectors defined with OpenAPI specifications that can be attached to Copilot Studio agents as tools. They allow agents to call external REST APIs.",
-              "examples": [
-                "copilot restapi list",
-                "copilot restapi list --table",
-                "copilot restapi list --filter \"name:ilike:%podio%\" --table",
-                "copilot restapi list --limit 50"
-              ],
               "usage_instructions": "Run `copilot tool restapi list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
