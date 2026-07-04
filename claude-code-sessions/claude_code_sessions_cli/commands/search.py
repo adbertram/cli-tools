@@ -1,4 +1,8 @@
 """Cross-project search command for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "run": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError

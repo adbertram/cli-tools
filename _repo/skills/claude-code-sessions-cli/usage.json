@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-06-27T13:11:51Z",
+  "discovered_at": "2026-07-01T22:28:55Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -260,7 +260,14 @@
     "conversations": {
       "help": "List conversations within sessions",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get a specific conversation by ID. The conversation ID format is session_id:conversation_number (e.g., abc123:1). Example: claude-code-sessions conversations get abc123:1 --project MyProject",
@@ -300,6 +307,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -361,6 +374,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -369,7 +388,14 @@
     "projects": {
       "help": "List and query projects",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get details for a specific project. Example: claude-code-sessions projects get Agent-ATABlogger",
@@ -388,6 +414,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -423,6 +455,12 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -431,7 +469,14 @@
     "search": {
       "help": "Search keywords across all session transcripts",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "run": {
           "help": "Search keywords across all session transcripts. Searches all projects by default. Use --project to restrict to one. Example: claude-code-sessions search run \"onedrive provisioned\" claude-code-sessions search run \"onedrive\" --since 30d --table claude-code-sessions search run \"connection error\" --project ProgressAutomationProject claude-code-sessions search run \"deploy\" --snippets --table",
@@ -492,6 +537,12 @@
               "type": "bool",
               "required": false,
               "help": "Show matching text snippets (table mode)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -500,7 +551,14 @@
     "sessions": {
       "help": "List and query sessions",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get full session details including messages and tool calls. Example: claude-code-sessions sessions get abc123-def456-789",
@@ -526,6 +584,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -623,11 +687,17 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
         "search": {
-          "help": "Search for sessions containing a query string. Example: claude-code-sessions sessions search \"authentication\" --project Agent-ATABlogger claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
+          "help": "Search for sessions containing a query string across all projects by default. Use --project or --project-path to restrict scope. Example: claude-code-sessions sessions search \"authentication\" claude-code-sessions sessions search \"authentication\" --project Agent-ATABlogger claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
           "arguments": [
             {
               "name": "query",
@@ -684,6 +754,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -692,7 +768,14 @@
     "skills": {
       "help": "Query skill/command invocations",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get details for a specific skill/command invocation. Example: claude-code-sessions skills get <skill-id> --project Agent-ATABlogger",
@@ -718,6 +801,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -780,6 +869,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -788,7 +883,14 @@
     "subagent-activity": {
       "help": "Query subagent invocations",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get full details for a subagent invocation. Example: claude-code-sessions subagent-activity get tool-123 --project Agent-ATABlogger",
@@ -814,6 +916,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -876,6 +984,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -884,10 +998,17 @@
     "timeline": {
       "help": "View unified activity timeline",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "consolidated": {
-          "help": "Show ALL activity for a session in a single consolidated view. Combines user prompts, main agent tool calls, subagent launches, and subagent tool calls into one chronological timeline. Example: claude-code-sessions timeline consolidated --session-id abc123 --project Agent-ATABlogger claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --table claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --hide-agent-tools claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --show-thinking claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --filter \"status:eq:error\" --wide",
+          "help": "Show ALL activity for a session in a single consolidated view.",
           "arguments": [],
           "options": [
             {
@@ -952,6 +1073,12 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
               "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -1001,6 +1128,12 @@
               "help": "Maximum entries",
               "short": "-l",
               "default": "200"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -1078,6 +1211,12 @@
               "required": false,
               "help": "Show only errors",
               "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -1086,7 +1225,14 @@
     "todos": {
       "help": "Query todo items from sessions",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get a specific todo by ID. Example: claude-code-sessions todos get <todo-id> --project Agent-ATABlogger",
@@ -1112,6 +1258,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -1174,6 +1326,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -1182,7 +1340,14 @@
     "tool-calls": {
       "help": "Query tool call history",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Get details for a specific tool call. Example: claude-code-sessions tool-calls get toolu_123 --project Agent-ATABlogger",
@@ -1208,6 +1373,12 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -1290,6 +1461,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Filter to tool calls from a specific subagent (Task tool call ID)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }

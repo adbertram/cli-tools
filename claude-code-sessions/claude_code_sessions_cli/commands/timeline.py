@@ -1,4 +1,10 @@
 """Timeline commands for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "consolidated": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import json
 import typer
 from typing import Optional, List, Any

@@ -1,4 +1,10 @@
 """Session commands for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+    "search": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
@@ -222,13 +228,14 @@ def search_sessions(
     """
     Search for sessions containing a query string.
 
+    With no --project / --project-path, searches sessions across all projects.
+
     Example:
+        claude-code-sessions sessions search "authentication"
         claude-code-sessions sessions search "authentication" --project ExampleProject
         claude-code-sessions sessions search "error" --project-path /path/to/project --since 1d
     """
     resolved = project_path or project
-    if not resolved:
-        raise typer.BadParameter("Either --project or --project-path is required")
 
     try:
         client = get_client()

@@ -1,4 +1,9 @@
 """Conversations commands for claude-code-sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 

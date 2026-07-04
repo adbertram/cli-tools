@@ -510,7 +510,7 @@ class ClaudeCodeSessionsClient:
     def search_sessions(
         self,
         query: str,
-        project: str,
+        project: Optional[str] = None,
         limit: int = 100,
         since: Optional[str] = None,
     ) -> List[SessionSummary]:
@@ -519,7 +519,7 @@ class ClaudeCodeSessionsClient:
 
         Args:
             query: Search query
-            project: Project name (required)
+            project: Project name. When None, searches across all projects.
             limit: Maximum results
             since: Relative time filter
 
