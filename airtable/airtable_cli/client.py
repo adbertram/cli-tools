@@ -35,18 +35,22 @@ SELECT_CHOICES_UPDATE_MESSAGE = (
 )
 
 LOOKUP_CREATE_TYPE_MESSAGE = (
-    "Airtable returns lookup fields from schema reads as type "
-    "'multipleLookupValues', but the public create-field API rejected that "
-    "type with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE. Do not pass the "
-    "read-schema type from `fields list` back to `fields create`. Create the "
-    "lookup in Airtable's web UI, or use Airtable's documented create-field "
-    "write type after validating it in a disposable base. Rollup creation, "
-    "when supported by the API for your base, uses field type 'rollup' with "
-    "options containing recordLinkFieldId, fieldIdInLinkedTable, and formula."
+    "Airtable lookup field creation is not a reliable production schema path "
+    "through `fields create`. Airtable returns lookup fields from schema reads "
+    "as type 'multipleLookupValues', and its documented create-field write "
+    "type 'lookup' was rejected for the live CourseCraft base with HTTP 422: "
+    "Creating lookup fields is not supported at this time. Do not pass "
+    "'multipleLookupValues' or 'lookup' to `fields create`; recordLinkFieldId "
+    "and fieldIdInLinkedTable options do not make lookup creation reliable. "
+    "Create lookup fields in Airtable's web UI, then verify with "
+    "`airtable fields list` or `airtable fields get`. Rollup creation is also "
+    "not a reliable production schema path; rollup options include "
+    "recordLinkFieldId, fieldIdInLinkedTable, and formula."
 )
 
 UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES = {
     "multipleLookupValues": LOOKUP_CREATE_TYPE_MESSAGE,
+    "lookup": LOOKUP_CREATE_TYPE_MESSAGE,
 }
 
 
@@ -498,7 +502,8 @@ class AirtableClient:
         if field_type in UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES:
             raise ClientError(UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES[field_type])
 
-        endpoint = f"/meta/bases/{base_id}/tables/{table_id}/fields"
+        resolved_table_id = self._resolve_table_id(base_id, table_id)
+        endpoint = f"/meta/bases/{base_id}/tables/{resolved_table_id}/fields"
         data: Dict[str, Any] = {
             "name": name,
             "type": field_type,
@@ -525,7 +530,6 @@ class AirtableClient:
         field's ``choices``. A ``choices`` payload is blocked before the request
         with a clear message; see ``SELECT_CHOICES_UPDATE_MESSAGE``.
         """
-        endpoint = f"/meta/bases/{base_id}/tables/{table_id}/fields/{field_id}"
         data: Dict[str, Any] = {}
         if name is not None:
             data["name"] = name
@@ -537,16 +541,21 @@ class AirtableClient:
             data["options"] = options
         if not data:
             raise ClientError("At least one of --name, --description, or --options must be specified")
+        resolved_table_id = self._resolve_table_id(base_id, table_id)
+        endpoint = f"/meta/bases/{base_id}/tables/{resolved_table_id}/fields/{field_id}"
         return self._make_request("PATCH", endpoint, data=data)
+
+    def _resolve_table_id(self, base_id: str, table_id: str) -> str:
+        """Resolve a table ID or table name to the ID required by schema writes."""
+        table = self.get_table(base_id=base_id, table_id=table_id)
+        resolved_table_id = table.get("id")
+        if not resolved_table_id:
+            raise ClientError(f"Table metadata did not include an id: {table_id}")
+        return resolved_table_id
 
     def list_fields(self, base_id: str, table_id: str) -> List[Dict[str, Any]]:
         """List fields for a table in an Airtable base."""
-        endpoint = f"/meta/bases/{base_id}/tables"
-        result = self._make_request("GET", endpoint)
-        for table in result.get("tables", []):
-            if table.get("id") == table_id or table.get("name") == table_id:
-                return table.get("fields", [])
-        raise ClientError(f"Table not found in base metadata: {table_id}")
+        return self.get_table(base_id=base_id, table_id=table_id).get("fields", [])
 
     def get_field(self, base_id: str, table_id: str, field_id: str) -> Dict[str, Any]:
         """Get one field by ID or name from a table schema."""

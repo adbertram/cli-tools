@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
-  "discovered_at": "2026-06-17T15:44:25Z",
-  "total_commands": 28,
+  "discovered_at": "2026-06-30T17:06:28Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -28,7 +28,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Configure Airtable credentials for the current or named profile. Use --credential-type/-c to re-enter only one credential type, --profile/-p to write to a specific profile, and --force/-F to clear stored credentials before reauthenticating.",
           "arguments": [],
           "options": [
             {
@@ -42,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -168,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -353,17 +384,17 @@
         "create": {
           "help": "Create a field in an Airtable table.",
           "examples": [
+            "airtable fields create \"Tasks\" \"Status\" singleLineText",
             "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
-            "airtable fields create tblXXXXXXXXXXXXXX \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'",
-            "airtable fields create tblXXXXXXXXXXXXXX \"Total Hours\" rollup --options '{\"recordLinkFieldId\":\"fldLinks\",\"fieldIdInLinkedTable\":\"fldHours\",\"formula\":\"SUM(values)\"}'"
+            "airtable fields create \"Tasks\" \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'"
           ],
-          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Do not copy a lookup field's read-schema type `multipleLookupValues` from fields list into fields create; Airtable's public create-field API has returned UNSUPPORTED_FIELD_TYPE_FOR_CREATE for that type, and the CLI guards it before making an API request. Create lookup fields in the Airtable web UI and verify with fields list/get. Rollups use field type `rollup` with options containing recordLinkFieldId, fieldIdInLinkedTable, and formula when Airtable supports that create payload for the target base.",
+          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Do not create lookup fields through fields create: Airtable has rejected both the fields-list read type `multipleLookupValues` and the documented create-field type `lookup`; the live CourseCraft base returned HTTP 422 `Creating lookup fields is not supported at this time`, and the CLI guards both types before making an API request. Create lookup fields in the Airtable web UI and verify with fields list/get. Rollup field creation is not a reliable production schema path through this CLI: Airtable's public create-field API returned UNSUPPORTED_FIELD_TYPE_FOR_CREATE for a live CourseCraft rollup create request, even with recordLinkFieldId, fieldIdInLinkedTable, and formula options. Create rollup fields in Airtable's web UI, then verify with fields list/get; use fields create ... rollup only in a disposable base when specifically testing Airtable API support.",
           "arguments": [
             {
               "name": "table_id",
               "type": "TEXT",
               "required": true,
-              "help": "The table ID, beginning with tbl"
+              "help": "The table ID or table name"
             },
             {
               "name": "name",
@@ -375,7 +406,7 @@
               "name": "field_type",
               "type": "TEXT",
               "required": true,
-              "help": "The Airtable create-field type, such as singleLineText or rollup. Do not use the lookup read type multipleLookupValues."
+              "help": "The Airtable create-field type, such as singleLineText or checkbox"
             }
           ],
           "options": [
@@ -421,13 +452,12 @@
             "airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX",
             "airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --yes"
           ],
-          "usage_instructions": "This command is guarded because Airtable's public Web/Meta API does not support deleting fields. It returns an unsupported-operation error before making any API request. Delete the field in Airtable's web UI, then verify removal with `airtable fields get <table> <field>` or `airtable fields list <table> --filter 'name:eq:<field name>'`.",
           "arguments": [
             {
               "name": "table_id",
               "type": "TEXT",
               "required": true,
-              "help": "The table ID, beginning with tbl"
+              "help": "The table ID or table name"
             },
             {
               "name": "field_id",
@@ -571,7 +601,7 @@
               "name": "table_id",
               "type": "TEXT",
               "required": true,
-              "help": "The table ID, beginning with tbl"
+              "help": "The table ID or table name"
             },
             {
               "name": "field_id",
@@ -628,7 +658,6 @@
     },
     "records": {
       "help": "Manage Airtable records",
-      "usage_instructions": "CRUD operations on Airtable records. All record commands require TABLE_ID (name or ID) as first positional argument. Base ID defaults to .env but can be overridden with --base/-b. Field values for create/update use 'FieldName=value' pairs.",
       "arguments": [],
       "options": [
         {
@@ -655,10 +684,10 @@
               "help": "The table ID or name"
             },
             {
-              "name": "field_values",
+              "name": "field_values...",
               "type": "TEXT",
               "required": true,
-              "help": "FIELD_VALUES...  Field values as 'FieldName=value' pairs"
+              "help": "TEXT  Field values as 'FieldName=value' pairs"
             }
           ],
           "options": [
@@ -891,10 +920,10 @@
               "help": "The record ID"
             },
             {
-              "name": "field_values",
+              "name": "field_values...",
               "type": "TEXT",
               "required": true,
-              "help": "FIELD_VALUES...  Field updates as 'FieldName=value' pairs"
+              "help": "TEXT  Field updates as 'FieldName=value' pairs"
             }
           ],
           "options": [
@@ -973,7 +1002,6 @@
     },
     "tables": {
       "help": "Manage Airtable tables",
-      "usage_instructions": "Table-level schema operations for an Airtable base. Use `tables list` to enumerate all tables in a base, `tables get` to inspect one table schema, `tables create` to create a new table, and `tables update` to rename a table or change its description. The Meta API requires at least one field on create; if --fields is omitted, a single primary singleLineText field named \"Name\" is added automatically. Base ID defaults to AIRTABLE_BASE_ID but can be overridden with --base/-b. Airtable does not expose a public delete-table endpoint, so this command group has no `delete` action.",
       "arguments": [],
       "options": [
         {

@@ -30,8 +30,11 @@ class _Response:
     ok = True
     headers: dict = {}
 
+    def __init__(self, payload=None):
+        self._payload = payload or {"id": "fldVersion", "type": "formula"}
+
     def json(self):
-        return {"id": "fldVersion", "type": "formula"}
+        return self._payload
 
 
 def _no_api(**kwargs):
@@ -56,24 +59,30 @@ def test_update_field_rejects_select_choices_without_api_call(monkeypatch):
 
 
 def test_update_field_allows_non_choices_options(monkeypatch):
-    captured = {}
+    calls = []
 
     def fake_request(**kwargs):
-        captured.update(kwargs)
-        return _Response()
+        calls.append(kwargs)
+        if kwargs["method"] == "GET":
+            assert kwargs["url"] == "https://api.airtable.test/v0/meta/bases/appBase/tables"
+            return _Response({"tables": [{"id": "tblSlides", "name": "Slides"}]})
+        if kwargs["method"] == "PATCH":
+            assert kwargs["url"] == "https://api.airtable.test/v0/meta/bases/appBase/tables/tblSlides/fields/fldVersion"
+            return _Response()
+        raise AssertionError(f"unexpected request method: {kwargs['method']}")
 
     monkeypatch.setattr(requests, "request", fake_request)
 
     result = _client().update_field(
         base_id="appBase",
-        table_id="tblSlides",
+        table_id="Slides",
         field_id="fldVersion",
         options={"formula": "{Hours} * {Rate}"},
     )
 
     assert result == {"id": "fldVersion", "type": "formula"}
-    assert captured["method"] == "PATCH"
-    assert captured["json"] == {"options": {"formula": "{Hours} * {Rate}"}}
+    assert [call["method"] for call in calls] == ["GET", "PATCH"]
+    assert calls[1]["json"] == {"options": {"formula": "{Hours} * {Rate}"}}
 
 
 def test_fields_update_command_rejects_choices_on_stderr(monkeypatch):

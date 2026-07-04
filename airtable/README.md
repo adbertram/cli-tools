@@ -69,7 +69,7 @@ airtable records update "Tasks" recXXX "Status=Complete"
 airtable records create "Tasks" "Name=New Task" "Status=Todo"
 
 # Create a new field
-airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
+airtable fields create "Tasks" "Status" singleLineText
 
 # Use a different base with --base
 airtable records list "Tasks" --base appOTHERBASE
@@ -210,45 +210,52 @@ airtable records delete "Tasks" recXXX --yes
 
 ### Fields
 
-Field schema commands use Airtable table IDs beginning with `tbl`. Table names are not accepted by Airtable's schema endpoints.
+Field schema write endpoints require Airtable table IDs beginning with `tbl`, and the CLI resolves table names to IDs before calling those endpoints.
 
 #### Create a Field
 
 ```bash
 # Create a single line text field
+airtable fields create "Tasks" "Status" singleLineText
+
+# Create a single line text field by table ID
 airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
 
 # Create a checkbox field with options
-airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox \
+airtable fields create "Tasks" "Done" checkbox \
   --options '{"icon":"check","color":"greenBright"}'
 
 # Create with a description
-airtable fields create tblXXXXXXXXXXXXXX "Notes" multilineText \
+airtable fields create "Tasks" "Notes" multilineText \
   --description "Internal notes for this record"
 
-# Create a rollup field when supported by Airtable for the target base
-airtable fields create tblXXXXXXXXXXXXXX "Total Hours" rollup \
-  --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldHours","formula":"SUM(values)"}'
 ```
 
-Do not use the `multipleLookupValues` type returned by `fields list` as a
-`fields create` type. Airtable's public create-field API has returned
-`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` for that read-schema type; create lookup
-fields in the Airtable web UI, then verify them with `fields list` or
-`fields get`.
+Do not create lookup fields through `fields create`. Airtable has rejected both
+the `multipleLookupValues` type returned by `fields list` and the documented
+create-field type `lookup`; the live CourseCraft base returned
+`Creating lookup fields is not supported at this time`. Create lookup fields in
+the Airtable web UI, then verify them with `fields list` or `fields get`.
+
+Do not treat rollup field creation as a reliable production schema path through
+`fields create`. Airtable's public create-field API has returned
+`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` for a live rollup create request even when
+the request included `recordLinkFieldId`, `fieldIdInLinkedTable`, and `formula`
+options. Create rollup fields in the Airtable web UI, then verify them with
+`fields list` or `fields get`.
 
 #### Update a Field
 
 ```bash
 # Rename a field
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name "Current Status"
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX --name "Current Status"
 
 # Update a field description
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX \
   --description "The current workflow status"
 
 # Update field options
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX \
   --options '{"formula":"{Hours} * {Rate}"}'
 ```
 
@@ -322,7 +329,7 @@ You can use either:
 - **Table Name**: The human-readable name (e.g., "Tasks", "Contacts")
 - **Table ID**: The ID starting with `tbl` (found in the table URL)
 
-Field schema commands require the table ID.
+Field schema commands can accept the table ID or table name; schema writes resolve names to IDs before calling Airtable.
 
 ### Record ID
 Record IDs start with `rec` and can be found:

@@ -29,9 +29,9 @@ airtable <command-group> <action> [arguments] [options]
 | List tables in a base | `airtable tables list --base appXXX` |
 | Create a table | `airtable tables create "Table Name" --base appXXX` |
 | Update a table | `airtable tables update tblXXX --name "New Name"` |
-| List fields in a table | `airtable fields list tblXXX` |
-| Create a field | `airtable fields create tblXXX "Field Name" singleLineText` |
-| Update a field | `airtable fields update tblXXX fldXXX --name "New Name"` |
+| List fields in a table | `airtable fields list "Table Name"` |
+| Create a field | `airtable fields create "Table Name" "Field Name" singleLineText` |
+| Update a field | `airtable fields update "Table Name" fldXXX --name "New Name"` |
 | Check auth status | `airtable auth status` |
 | List profiles | `airtable auth profiles list` |
 | Clear cache | `airtable cache clear` |
@@ -45,6 +45,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Base And Table Names">
 `records`, `tables`, and `fields` commands operate against one Airtable base at a time. If the target base matters, resolve it with `airtable bases get <base-name>` and pass the returned `app...` ID with `--base`; do not rely on the default base. Table-name arguments are Airtable table names inside that selected base, not project CLI resource names such as CourseCraft `modules`.
+
+For named-base work, resolve the base ID in the same sequential shell flow that runs the dependent commands: capture the `id` returned by `airtable --no-cache bases get <base-name>`, verify it is non-empty, then reuse that captured value for every `--base` option. Do not hardcode, paste, or reuse remembered `app...` IDs, including CourseCraft base IDs, and do not launch schema or record commands in parallel with the base-resolution command they depend on.
 </principle>
 
 <principle name="Command Groups">
@@ -109,12 +111,22 @@ airtable auth profiles delete <name> --force
 
 **CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.
 
-### 3. Lookup fields returned as multipleLookupValues are not safe field-create input
+### 3. Lookup field creation is not a reliable production schema path through fields create
 
-**Symptom:** `airtable fields create tbl... "Lookup" multipleLookupValues --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`.
+**Symptom:** `airtable fields create tbl... "Lookup" multipleLookupValues --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`. `airtable fields create Clips "Module Status" lookup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): Invalid options for Clips.Module Status: Creating lookup fields is not supported at this time`.
 
-**Cause:** Airtable schema reads expose lookup fields as `multipleLookupValues`, but that read-schema type has been rejected by the public create-field API. Do not copy a lookup field's returned `type` from `fields list` into `fields create`.
+**Cause:** Airtable schema reads expose lookup fields as `multipleLookupValues`, while current Airtable docs list create-field variant type `lookup`; both have been rejected by the public create-field API for live CourseCraft-style schema work. Do not copy a lookup field's returned `type` from `fields list` into `fields create`, and do not treat documented `lookup` create examples as a reliable production schema-migration path.
 
-**Correct path:** Create lookup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`. For rollups, the CLI can forward Airtable's documented write payload when the API supports it for the target base: `airtable fields create <table> "Rollup" rollup --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldValue","formula":"SUM(values)"}'`.
+**Correct path:** Create lookup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`.
 
-**CLI behavior:** `airtable fields create ... multipleLookupValues ...` is guarded and returns a clear unsupported-operation error before making any API request.
+**CLI behavior:** `airtable fields create ... multipleLookupValues ...` and `airtable fields create ... lookup ...` are guarded and return a clear unsupported-operation error before making any API request.
+
+### 4. Rollup field creation is not reliable through fields create
+
+**Symptom:** `airtable fields create Clips "Module Status" rollup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld...","formula":"ARRAYJOIN(values)"}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`.
+
+**Cause:** Airtable documents a rollup create payload, and the CLI can forward it, but Airtable's public create-field API has rejected rollup creation for a live CourseCraft base. Do not treat a rollup create example or schema-read field type as a reliable production schema-migration path.
+
+**Correct path:** Create or change rollup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`. Use `airtable fields create ... rollup` only in a disposable base when the task is specifically to test Airtable API support.
+
+**CLI behavior:** `airtable fields create ... rollup ...` is not guarded today; it forwards the request and can return Airtable's 422 unsupported-field-type response.

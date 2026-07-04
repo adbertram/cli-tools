@@ -137,9 +137,9 @@ def fields_get(
 @app.command("create")
 @command
 def fields_create(
-    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
     name: str = typer.Argument(..., help="The field name"),
-    field_type: str = typer.Argument(..., help="The Airtable create-field type, such as singleLineText or rollup"),
+    field_type: str = typer.Argument(..., help="The Airtable create-field type, such as singleLineText or checkbox"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Field description"),
     options: Optional[str] = typer.Option(None, "--options", "-o", help="Field options as a JSON object"),
@@ -149,12 +149,17 @@ def fields_create(
     Create a field in an Airtable table.
 
     Examples:
+        airtable fields create "Tasks" "Status" singleLineText
         airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
-        airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
-        airtable fields create tblXXXXXXXXXXXXXX "Total Hours" rollup --options '{"recordLinkFieldId":"fldLinks","fieldIdInLinkedTable":"fldHours","formula":"SUM(values)"}'
+        airtable fields create "Tasks" "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
 
-    Do not copy lookup field type multipleLookupValues from fields list into
-    fields create; Airtable has rejected that read-schema type for creation.
+    Do not create lookup fields through this command. Airtable has rejected
+    both the fields-list read type multipleLookupValues and the documented
+    create-field type lookup for lookup creation; create lookup fields in
+    Airtable's web UI, then verify them with fields list/get.
+    Do not treat rollup creation as a reliable production schema path through
+    this command; create rollups in Airtable's web UI, then verify them with
+    fields list/get.
     """
     parsed_options = parse_options(options)
     resolved_base_id = resolve_base_id(base_id)
@@ -174,7 +179,7 @@ def fields_create(
 @app.command("update")
 @command
 def fields_update(
-    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
     field_id: str = typer.Argument(..., help="The field ID, beginning with fld"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="New field name"),
@@ -190,8 +195,9 @@ def fields_update(
     remove or rename choices in the Airtable web UI.
 
     Examples:
+        airtable fields update "Tasks" fldXXXXXXXXXXXXXX --name "New Status"
         airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name "New Status"
-        airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --options '{"formula":"{Hours} * {Rate}"}'
+        airtable fields update "Tasks" fldXXXXXXXXXXXXXX --options '{"formula":"{Hours} * {Rate}"}'
     """
     parsed_options = parse_options(options)
     if name is None and description is None and parsed_options is None:
@@ -213,7 +219,7 @@ def fields_update(
 @app.command("delete")
 @command
 def fields_delete(
-    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
     field_id: str = typer.Argument(..., help="The field ID, beginning with fld"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
