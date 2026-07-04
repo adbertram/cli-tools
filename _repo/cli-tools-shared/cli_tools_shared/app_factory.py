@@ -8,6 +8,9 @@ from typing import Optional
 import typer
 
 
+HELP_OUTPUT_MIN_WIDTH = 200
+
+
 def _reconfigure_stream(stream, stream_name: str):
     """Reconfigure a single stream to UTF-8, replacing it if reconfigure fails.
 
@@ -102,6 +105,41 @@ def _normalize_help_alias() -> None:
         sys.argv = [sys.argv[0], "--help"]
 
 
+def _argv_requests_help() -> bool:
+    """Return True when the current invocation is asking Click/Typer for help."""
+    return "--help" in sys.argv[1:]
+
+
+def _stdout_is_interactive() -> bool:
+    isatty = getattr(sys.stdout, "isatty", None)
+    return bool(isatty and isatty())
+
+
+def _ensure_piped_help_width() -> None:
+    """Keep piped Rich help wide enough for long option names.
+
+    Rich/Typer truncates option columns at the detected console width. When help
+    is captured by a pipe or file, the default width can be 80 columns, which
+    turns long flags into ellipsized labels and breaks exact help/usage probes.
+    """
+    if not _argv_requests_help() or _stdout_is_interactive():
+        return
+
+    current_columns = os.environ.get("COLUMNS")
+    try:
+        columns = int(current_columns) if current_columns else 0
+    except ValueError:
+        columns = 0
+    if columns < HELP_OUTPUT_MIN_WIDTH:
+        os.environ["COLUMNS"] = str(HELP_OUTPUT_MIN_WIDTH)
+
+    import typer.rich_utils as typer_rich_utils
+
+    max_width = getattr(typer_rich_utils, "MAX_WIDTH", None)
+    if max_width is None or max_width < HELP_OUTPUT_MIN_WIDTH:
+        typer_rich_utils.MAX_WIDTH = HELP_OUTPUT_MIN_WIDTH
+
+
 def create_app(
     name: str,
     help: str,
@@ -148,6 +186,7 @@ def create_app(
     # parses sys.argv — so this is the one chokepoint shared by every entry
     # style. Idempotent: run_app calls these again for the ``main:main`` path.
     _normalize_help_alias()
+    _ensure_piped_help_width()
     _hoist_no_cache_flag()
 
     return app
@@ -164,6 +203,7 @@ def run_app(app: typer.Typer, *, error_types=None) -> None:
     """
     _ensure_utf8_streams()
     _normalize_help_alias()
+    _ensure_piped_help_width()
     _hoist_no_cache_flag()
 
     if error_types is None:

@@ -86,6 +86,71 @@ def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
             config.clear_session()
 
 
+def _load_config_for_login(get_config_fn, effective_profile, tool_name: str):
+    """Create the login config, converting missing-secret errors into guidance.
+
+    When a profile field is sourced from a ``secret://`` placeholder and the
+    referenced CLI-tools secret is missing, ``BaseConfig`` raises a generic
+    ``Missing secret '<name>' referenced by <path>`` error during init. Interactive
+    ``auth login`` cannot re-prompt a secret-managed field, so a bare re-prompt is
+    the wrong remediation. Re-raise with the exact secret-manager command so the
+    user knows how to set or rotate the secret.
+    """
+    from .config import secret_manager_set_command
+
+    try:
+        return get_config_fn(profile=effective_profile)
+    except ConfigError as exc:
+        message = str(exc)
+        marker = "Missing secret '"
+        if not message.startswith(marker):
+            raise
+        secret_name = message[len(marker):].split("'", 1)[0]
+        raise ConfigError(
+            f"{message}\n"
+            f"This value is sourced from CLI-tools secret '{secret_name}'. "
+            "It cannot be entered interactively.\n"
+            f"Set or rotate it with: {secret_manager_set_command(secret_name)}"
+        ) from exc
+
+
+def _secret_managed_field_names(config, active_types) -> dict:
+    """Return ``{field_name: secret_name}`` for required fields backed by secrets.
+
+    Only required credential fields for the active credential types that are
+    stored as ``secret://`` placeholders in the active profile ``.env`` are
+    returned. These fields live in the CLI-tools secret manager and cannot be
+    re-prompted interactively during ``auth login``.
+    """
+    from .config import profile_secret_field_map
+
+    env_path = getattr(config, "env_file_path", None)
+    if env_path is None:
+        return {}
+    placeholders = profile_secret_field_map(env_path)
+    if not placeholders:
+        return {}
+    required = set(config._required_fields_for(active_types))
+    return {
+        field: secret_name
+        for field, secret_name in placeholders.items()
+        if field in required
+    }
+
+
+def _notify_secret_managed_fields(config, active_types, tool_name: str) -> None:
+    """Print actionable guidance for required fields sourced from secrets."""
+    from .config import secret_manager_set_command
+
+    secret_fields = _secret_managed_field_names(config, active_types)
+    for field, secret_name in secret_fields.items():
+        print_info(
+            f"{field} is sourced from CLI-tools secret '{secret_name}' and cannot "
+            f"be entered interactively.\n"
+            f"To change or rotate it, run: {secret_manager_set_command(secret_name)}"
+        )
+
+
 def _handle_browser_login(config, tool_name: str, force: bool):
     """Handle browser session login if config.get_browser() is configured.
 
@@ -558,7 +623,7 @@ def create_auth_app(
         # registered profile that ``auth profiles list`` / ``auth status``
         # can discover.
         effective_profile = _bootstrap_profile_if_missing(get_config_fn, profile, tool_name)
-        config = get_config_fn(profile=effective_profile)
+        config = _load_config_for_login(get_config_fn, effective_profile, tool_name)
 
         # Resolve scoped credential type if specified
         resolved_type = None
@@ -567,6 +632,12 @@ def create_auth_app(
 
         # Determine which credential types to process
         active_types = [resolved_type] if resolved_type else config.CREDENTIAL_TYPES
+
+        # Required credential fields sourced from ``secret://`` placeholders live
+        # in the CLI-tools secret manager and cannot be entered interactively.
+        # Tell the user how to set/rotate them so ``auth login`` is actionable
+        # instead of a silent no-op.
+        _notify_secret_managed_fields(config, active_types, tool_name)
 
         # Resolve effective handler (3-way)
         effective_handler = login_handler

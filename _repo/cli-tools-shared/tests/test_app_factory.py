@@ -124,6 +124,39 @@ def test_create_app_normalizes_root_help_alias_at_build_time(monkeypatch):
     assert sys.argv == ["demo", "--help"]
 
 
+def test_create_app_widens_piped_help_at_build_time(monkeypatch):
+    """Captured Rich help must keep long option names searchable."""
+    import typer.rich_utils as typer_rich_utils
+
+    monkeypatch.setattr(sys, "argv", ["demo", "items", "--help"])
+    monkeypatch.delenv("COLUMNS", raising=False)
+    monkeypatch.setattr(typer_rich_utils, "MAX_WIDTH", None)
+
+    create_app(name="demo", help="x", version="1.0.0")
+
+    assert os.environ["COLUMNS"] == "200"
+    assert typer_rich_utils.MAX_WIDTH == 200
+
+
+def test_create_app_keeps_interactive_help_width(monkeypatch):
+    """Interactive terminal help should keep the user's terminal width."""
+    import typer.rich_utils as typer_rich_utils
+
+    class InteractiveStdout:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(sys, "argv", ["demo", "items", "--help"])
+    monkeypatch.delenv("COLUMNS", raising=False)
+    monkeypatch.setattr(sys, "stdout", InteractiveStdout())
+    monkeypatch.setattr(typer_rich_utils, "MAX_WIDTH", None)
+
+    create_app(name="demo", help="x", version="1.0.0")
+
+    assert "COLUMNS" not in os.environ
+    assert typer_rich_utils.MAX_WIDTH is None
+
+
 def test_create_app_does_not_rewrite_help_option_values(monkeypatch):
     """Only the root help alias is rewritten."""
     monkeypatch.setattr(sys, "argv", ["demo", "create", "--name", "help"])

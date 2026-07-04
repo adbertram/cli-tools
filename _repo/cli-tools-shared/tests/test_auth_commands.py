@@ -651,6 +651,91 @@ def test_login_does_not_recreate_existing_profile(tmp_path, monkeypatch):
     assert "API_KEY='secret://tool-api-key'" in content
 
 
+def test_login_notifies_secret_managed_field_and_is_actionable(tmp_path, monkeypatch):
+    """auth login/--force for an API key sourced from a secret:// placeholder must
+    tell the user how to rotate it via the secret manager, not silently no-op."""
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    # Seed the referenced secret so config resolution succeeds (the "present" case).
+    config_module._run_secret_manager("set", "tool-api-key", secret_value="live-key")
+
+    default_dir = base_profiles_dir / "default"
+    default_dir.mkdir(parents=True)
+    (default_dir / ".env").write_text(
+        "ACTIVE=true\nAPI_KEY=secret://tool-api-key\n"
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["login", "--force"], input="")
+
+    assert result.exit_code == 0, result.output
+    assert "sourced from CLI-tools secret 'tool-api-key'" in result.output
+    assert "secrets.sh set tool-api-key" in result.output
+    # The profile placeholder must be left untouched.
+    assert "API_KEY=secret://tool-api-key" in (default_dir / ".env").read_text()
+
+
+def test_login_missing_secret_reports_secret_manager_command(tmp_path, monkeypatch):
+    """When the referenced secret is missing, auth login must fail with an
+    actionable message that names the secret manager set command."""
+    from cli_tools_shared.config import BaseConfig
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text("API_KEY=\nACTIVE=true\n")
+
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+
+    default_dir = base_profiles_dir / "default"
+    default_dir.mkdir(parents=True)
+    # Reference a secret that was never stored in the in-memory secret manager.
+    (default_dir / ".env").write_text(
+        "ACTIVE=true\nAPI_KEY=secret://tool-missing-api-key\n"
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["login", "--force"], input="")
+
+    assert result.exit_code != 0, result.output
+    assert "Missing secret 'tool-missing-api-key'" in result.output
+    assert "cannot be entered interactively" in result.output
+    assert "secrets.sh set tool-missing-api-key" in result.output
+
+
 def test_login_requires_profile_when_multiple_profile_auth_types_exist(tmp_path, monkeypatch):
     from cli_tools_shared.config import BaseConfig
 

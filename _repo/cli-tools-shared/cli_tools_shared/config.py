@@ -330,6 +330,40 @@ def auth_profile_secret_placeholders(tool_name: str) -> list[tuple[Path, str, st
     return references
 
 
+def profile_secret_field_map(env_path: Path) -> dict[str, str]:
+    """Return ``{field_name: secret_name}`` for ``secret://`` placeholders in a profile.
+
+    Reads a single profile ``.env`` directly and maps each field whose value is
+    a ``secret://<name>`` placeholder to the referenced CLI-tools secret name.
+    Fields with plain values or empty values are omitted. This is a lightweight
+    read that does NOT resolve secret values, so it is safe to call before full
+    config initialization (which raises when a referenced secret is missing).
+    """
+    field_map: dict[str, str] = {}
+    if not env_path.exists():
+        return field_map
+    for field_name, value in _read_env_values(env_path).items():
+        if not value:
+            continue
+        try:
+            secret_name = _secret_name_from_placeholder(value)
+        except ConfigError as exc:
+            raise ConfigError(
+                f"{env_path} field '{field_name}' has invalid secret placeholder: {exc}"
+            ) from exc
+        if secret_name is None:
+            continue
+        field_map[field_name] = secret_name
+    return field_map
+
+
+def secret_manager_set_command(secret_name: str) -> str:
+    """Return the exact CLI-tools secret-manager command to set/rotate a secret."""
+    from .repo_paths import secret_manager_script
+
+    return f"{secret_manager_script()} set {secret_name}"
+
+
 def _optional_secret_fields_for_tool(tool_name: str) -> set[str]:
     """Return optional secret-managed auth fields declared by the tool config."""
     try:
