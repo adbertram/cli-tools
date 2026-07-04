@@ -423,3 +423,95 @@ def confirm_destructive_action(
     if not typer.confirm(prompt):
         print_info("Cancelled")
         raise typer.Exit(0)
+
+
+def prompt_secret(
+    label: str,
+    *,
+    allow_empty: bool = False,
+    non_interactive_message: Optional[str] = None,
+) -> str:
+    """Read a secret value with hidden input from an interactive terminal.
+
+    The single shared entry point for *reactive* secret prompts -- a secret a
+    command must request in the middle of a flow, at the moment it is needed
+    (e.g. a payment card CVV that a checkout page demands). CLIs must route such
+    prompts here instead of calling ``typer.prompt()`` / ``input()`` directly, so
+    prompting stays centralized and consistently TTY-gated. (Login credentials
+    belong on ``Config.CUSTOM_LOGIN_PROMPTS`` / ``AUTH_EXTRA_PROMPTS`` instead;
+    this helper is for non-login, in-flow secrets.)
+
+    Input is hidden (never echoed). When stdin is not an interactive terminal
+    (agent Bash tool, pipe, CI) the prompt is unanswerable, so this fails fast
+    with a clear ``ClientError`` instead of blocking on EOF. The caller decides
+    whether an in-flow secret is optional by gating the call on
+    ``_stdin_is_interactive_tty()`` first; a bare call treats the secret as
+    required.
+
+    Args:
+        label: The prompt text shown to the user.
+        allow_empty: When True, an empty response is accepted and returned as
+            ``""`` (e.g. an optional "press Enter to skip" secret). When False,
+            the user is re-prompted until a non-empty value is entered.
+        non_interactive_message: Optional override for the non-interactive
+            failure message.
+
+    Returns:
+        The entered secret, stripped of surrounding whitespace (``""`` only when
+        ``allow_empty`` and the user skips).
+
+    Raises:
+        ClientError: When stdin is not an interactive terminal.
+    """
+    import typer
+
+    if not _stdin_is_interactive_tty():
+        raise ClientError(
+            non_interactive_message
+            or f"{label}: a secret value is required but there is no interactive "
+            "terminal to read it. Re-run in an interactive terminal."
+        )
+    if allow_empty:
+        value = typer.prompt(label, default="", hide_input=True, show_default=False)
+    else:
+        value = typer.prompt(label, hide_input=True)
+    return (value or "").strip()
+
+
+def prompt_text(
+    label: str,
+    *,
+    default: Optional[str] = None,
+    non_interactive_message: Optional[str] = None,
+) -> str:
+    """Read a visible (non-secret) value from an interactive terminal.
+
+    Shared entry point for non-secret interactive prompts (e.g. naming a saved
+    item) so CLIs never call ``typer.prompt()`` / ``input()`` directly. TTY-gated
+    like :func:`prompt_secret`: fails fast when stdin is not interactive rather
+    than blocking on an unanswerable prompt.
+
+    Args:
+        label: The prompt text shown to the user.
+        default: Optional default returned when the user submits an empty
+            response. When None, the user is re-prompted until non-empty.
+        non_interactive_message: Optional override for the non-interactive
+            failure message.
+
+    Returns:
+        The entered text, stripped of surrounding whitespace.
+
+    Raises:
+        ClientError: When stdin is not an interactive terminal.
+    """
+    import typer
+
+    if not _stdin_is_interactive_tty():
+        raise ClientError(
+            non_interactive_message
+            or f"{label}: a value is required but there is no interactive terminal "
+            "to read it. Pass it as a command option/argument instead."
+        )
+    if default is not None:
+        return (typer.prompt(label, default=default) or "").strip()
+    return (typer.prompt(label) or "").strip()

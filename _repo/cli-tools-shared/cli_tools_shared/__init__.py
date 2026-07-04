@@ -62,6 +62,8 @@ from .output import (
     print_info,
     handle_error,
     confirm_destructive_action,
+    prompt_secret,
+    prompt_text,
     print_ai_instruction,
     safe_symbol,
 )
@@ -180,6 +182,8 @@ __all__ = [
     "print_info",
     "handle_error",
     "confirm_destructive_action",
+    "prompt_secret",
+    "prompt_text",
     "print_ai_instruction",
     "safe_symbol",
 ]
