@@ -1,4 +1,9 @@
-"""Browser automation for Target."""
+"""Declarative browser hooks for Target.
+
+Auth lifecycle lives in ``cli_tools_shared`` (account login) and in ``prime.py``
+(the redsky read-session capture). This class only declares the shared hook
+constants -- no methods.
+"""
 
 from cli_tools_shared.auth import BrowserAutomation
 

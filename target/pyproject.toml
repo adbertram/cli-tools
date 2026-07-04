@@ -11,6 +11,7 @@ dependencies = [
     "typer>=0.9.0",
     "python-dotenv>=1.0.0",
     "cli-tools-shared",
+    "httpx>=0.27.0",
     "playwright>=1.0.0",
 ]
 

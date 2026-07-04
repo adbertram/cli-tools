@@ -151,6 +151,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -238,21 +270,48 @@
               "name": "item_id",
               "type": "TEXT",
               "required": true,
-              "help": "Item TCIN or URL"
+              "help": "Item TCIN"
             }
           ],
-          "options": []
+          "options": [
+            {
+              "name": "--method",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fulfillment: pickup, shipping, or delivery",
+              "short": "-m",
+              "default": "pickup"
+            }
+          ]
         },
         "checkout": {
-          "help": "Proceed through checkout and place order.",
+          "help": "Review checkout (dry run) or place the order with --yes; --card selects a saved card pointer.",
           "arguments": [],
           "options": [
             {
-              "name": "--delivery",
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Actually place the order (spends money). Omit for a dry run",
+              "short": "-y"
+            },
+            {
+              "name": "--card",
               "type": "TEXT",
               "required": false,
-              "help": "Delivery method (pickup, shipping)",
-              "default": "pickup"
+              "help": "Name of a saved card pointer ('payment-method add') to charge; defaults to the default pointer"
+            },
+            {
+              "name": "--pickup-email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup contact email (required the first time an account places a pickup order)"
+            },
+            {
+              "name": "--pickup-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Pickup person name 'First Last' (defaults to the account holder Target prefills)"
             }
           ]
         },
@@ -290,6 +349,196 @@
         }
       }
     },
+    "orders": {
+      "help": "Order history: find and cancel orders",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "cancel": {
+          "help": "Cancel all items of an order (only works while it's still cancellable).",
+          "arguments": [
+            {
+              "name": "order_number",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order number to cancel (see 'orders list')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--cancel-reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cancellation reason. One of: Chose wrong store | Used wrong payment method | Ordered it somewhere else | Needed it sooner | Ordered wrong item | Purchased it at another Target store | Wanted the item shipped | No longer want the item | Couldn’t pick up in time | Store requested I cancel it | Other - Please describe",
+              "short": "-r",
+              "default": "No longer want the item"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ]
+        },
+        "list": {
+          "help": "List recent orders (find an order number to cancel).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of orders",
+              "short": "-l",
+              "default": "10"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        }
+      }
+    },
+    "payment-method": {
+      "help": "Saved card pointers: name your Target wallet cards so checkout can select them",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "add": {
+          "help": "Save a selectable pointer to a Target wallet card.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Friendly name for this card pointer (e.g. amex-personal)",
+              "short": "-n"
+            },
+            {
+              "name": "--last4",
+              "type": "TEXT",
+              "required": false,
+              "help": "Point at a card ALREADY in your Target wallet by its last 4 digits (skips the add-card page)"
+            },
+            {
+              "name": "--no-default",
+              "type": "bool",
+              "required": false,
+              "help": "Do not mark this pointer as the default"
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved card pointers for the active profile (cross-checked against the live wallet).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "remove": {
+          "help": "Remove a saved card pointer (does NOT touch your Target wallet).",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Card pointer name to remove"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ]
+        },
+        "set-cvv": {
+          "help": "Store the CVV for a saved card pointer (hidden prompt) for one-shot checkout.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Card pointer name to store a CVV for"
+            }
+          ],
+          "options": []
+        },
+        "set-default": {
+          "help": "Mark a card pointer as the default used when 'cart checkout' gets no --card.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Card pointer name to make the default"
+            }
+          ],
+          "options": []
+        }
+      }
+    },
+    "pickup": {
+      "help": "Default pickup contact (name + email) used by checkout for this profile",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove this profile's stored default pickup contact.",
+          "arguments": [],
+          "options": []
+        },
+        "set": {
+          "help": "Store the default pickup email and/or name for this profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default pickup contact email",
+              "short": "-e"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default pickup person name 'First Last'",
+              "short": "-n"
+            }
+          ]
+        },
+        "show": {
+          "help": "Show this profile's stored default pickup contact.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        }
+      }
+    },
     "products": {
       "help": "Products management",
       "arguments": [],
@@ -302,10 +551,16 @@
               "name": "item_id",
               "type": "TEXT",
               "required": true,
-              "help": "Item ID"
+              "help": "Item TCIN"
             }
           ],
           "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Store id (defaults to config STORE_ID)"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -319,6 +574,38 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            }
+          ]
+        },
+        "inventory": {
+          "help": "Show pickup + shipping availability for an item.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item TCIN"
+            }
+          ],
+          "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Store id (defaults to config STORE_ID)"
+            },
+            {
+              "name": "--zip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Zip for pickup stores (defaults to config ZIP)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             }
           ]
         },
@@ -339,7 +626,19 @@
               "required": false,
               "help": "Maximum number of results",
               "short": "-l",
-              "default": "100"
+              "default": "24"
+            },
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Store id (defaults to config STORE_ID)"
+            },
+            {
+              "name": "--zip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Zip for geo context (defaults to config ZIP)"
             },
             {
               "name": "--filter",
@@ -366,26 +665,71 @@
         }
       }
     },
+    "session": {
+      "help": "Fast-search (redsky) session management",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "refresh": {
+          "help": "Re-capture the fast-search (redsky) session via a headed browser.",
+          "arguments": [],
+          "options": []
+        },
+        "status": {
+          "help": "Show the cached fast-search (redsky) session state.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
     "store": {
       "help": "Store location management",
       "arguments": [],
       "options": [],
       "commands": {
-        "set": {
-          "help": "Set the home store for pickup/inventory.",
+        "get": {
+          "help": "Get a single Target store by id.",
+          "arguments": [
+            {
+              "name": "store_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Store id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Target stores near a zip code.",
           "arguments": [
             {
               "name": "zip_code",
               "type": "TEXT",
               "required": true,
-              "help": "Zip code or city/state to search for"
+              "help": "Zip code to search near"
             }
           ],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
         }
       }
     }
   },
-  "total_commands": 18,
-  "discovered_at": "2026-06-21T20:04:49Z"
+  "total_commands": 33,
+  "discovered_at": "2026-07-04T20:01:26Z"
 }

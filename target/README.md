@@ -2,7 +2,11 @@
 
 ## DESCRIPTION
 
-A command-line interface for Target using browser automation. Use this CLI when you need repeatable access to Target workflows for searching products, adding to cart, and checking out through the website.
+A command-line interface for Target. Reads (product search, detail, and store
+inventory) run over Target's internal JSON API (redsky) for sub-second responses;
+cart and checkout run through a logged-in browser session. Use this CLI for fast,
+repeatable Target workflows: search products, check availability, manage the cart,
+and place orders.
 
 ## Installation
 
@@ -11,23 +15,54 @@ cd <cli-tools-root>/target
 uv tool install -e . --force --refresh
 ```
 
-Browser automation is driven by `browser-harness` (CDP), a transitive
-dependency of `cli-tools-shared`. No separate "install browsers" step is
-required — the harness manages its own browser binary.
+Browser automation is driven by `browser-harness` (a transitive dependency of
+`cli-tools-shared`); no separate browser install step is required.
 
-After installation, the `target` command will be available in your terminal.
+After installation, the `target` command is available in your terminal.
+
+## Architecture
+
+Reads and writes use two different paths on purpose:
+
+- **Reads (fast):** `products list`, `products get`, `products inventory`, and
+  `store list` call Target's redsky JSON API directly over `httpx` — no browser,
+  ~200–600 ms per call.
+- **Writes (browser):** `cart` and `checkout` drive a logged-in browser session,
+  because they require your Target account.
+
+Redsky's bot layer (PerimeterX) only issues its authorizing cookies
+(`_tgt_token` / `_tgt_session`) to a **real, visible browser**, and rejects
+headless requests. So `target session refresh` opens a real browser, mints and
+captures those cookies, and verifies them with a live search before saving. The
+captured session is cached under the active profile and reused for all reads. It
+lasts ~24h; when it expires, reads fail loudly and you re-run `target session
+refresh`. There is no silent DOM fallback.
+
+`target auth login` is separate: it logs into your Target **account**, which is
+only needed for `cart` and `checkout`. For search/browse you only need
+`session refresh`.
 
 ## Quick Start
 
 ```bash
-# Authenticate with Target
+# One-time (and ~daily): capture the fast-search session (opens a browser briefly)
+target session refresh
+
+# For cart/checkout only: log into your Target account (opens a browser)
 target auth login
 
-# Search for items
-target search query "search terms" --limit 10 --table
+# Search (fast, no browser)
+target products list "aa batteries" --limit 10 --table
 
-# Get item details
-target search item ITEM_ID --table
+# Product detail + live availability
+target products get 88830890
+target products inventory 88830890 --table
+
+# Cart + checkout
+target cart add 88830890
+target cart list --table
+target cart checkout            # dry run — reviews the order, places nothing
+target cart checkout --yes      # places the real order (spends money)
 ```
 
 ## Commands
@@ -35,78 +70,74 @@ target search item ITEM_ID --table
 ### Authentication (`target auth`)
 
 ```bash
-# Interactive login
-target auth login
-
-# Force re-authentication
-target auth login --force
-
-# Check authentication status
-target auth status
-
-# Run the configured live auth test
-target auth test
-
-# Clear saved credentials/session
-target auth logout
+target auth login            # log into your Target account (for cart/checkout)
+target auth login --force    # re-authenticate from scratch
+target auth status           # show auth status across profiles
+target auth logout           # clear stored credentials/session
+target auth profiles list    # manage profiles (list/get/create/select/rename/delete)
 ```
 
-### Profiles (`target auth profiles`)
+### Fast-search session (`target session`)
 
 ```bash
-# List all profiles
-target auth profiles list
-
-# Show a profile
-target auth profiles get default
-
-# Select the active profile for its auth type
-target auth profiles select PROFILE_NAME
-
-# Create a profile
-target auth profiles create PROFILE_NAME
-
-# Delete a profile
-target auth profiles delete PROFILE_NAME
+target session refresh   # re-capture the redsky read session via a headed browser
+target session status    # show cached session age / expiry
 ```
 
+`session refresh` re-mints the read session without a full account re-login. Use
+it when reads report the session is expired but you're still logged in.
 
-
-### Search (`target search`)
+### Products (`target products`)
 
 ```bash
-# Search for items (JSON output)
-target search query "search terms"
+target products list "search terms"                 # search (JSON)
+target products list "search terms" --table         # search (table)
+target products list "search terms" --limit 10      # cap results (max 96)
+target products list "search terms" --store 1481 --zip 47715
+target products list "search terms" --filter "price:contains:$4"
+target products list "search terms" --properties "id,title,price"
 
-# Search with table format
-target search query "search terms" --table
+target products get 88830890                         # product detail
+target products get 88830890 --table
 
-# Limit results
-target search query "search terms" --limit 10
-
-# Filter results
-target search list --filter "status:eq:active"
-
-# Restrict output fields
-target search list --properties "id,name"
-
-# Get item details
-target search item ITEM_ID
-
-# List all items
-target search list --table
+target products inventory 88830890 --table           # pickup + shipping availability
+target products inventory 88830890 --store 1481 --zip 47715
 ```
+
+### Cart (`target cart`)
+
+```bash
+target cart list --table          # view cart contents
+target cart add 88830890          # add item by TCIN
+target cart remove 88830890       # remove item by TCIN
+target cart checkout              # DRY RUN — reviews order, places nothing
+target cart checkout --yes        # places the real order (spends money)
+target cart checkout --delivery shipping --yes
+```
+
+### Stores (`target store`)
+
+```bash
+target store list 47710 --table   # Target stores near a zip code
+```
+
+### Cache (`target cache`)
+
+```bash
+target cache clear                # clear cached read responses
+target --no-cache products list "test"   # bypass the cache for one call
+```
+
+## Purchase Safety
+
+`cart checkout` never spends money unless you pass `--yes`. Without it, the
+command drives to the Place Order screen, prints the order summary (items,
+subtotal, total), and stops. Add `--yes` to actually click Place Order and
+capture the order confirmation.
 
 ## Output Formats
 
-- JSON is the default output format.
-- Add `--table` / `-t` for human-readable table output.
-
-## AI Instruction Results
-
-Commands that reach a non-deterministic boundary may return an AI instruction result instead of normal resource data. This is JSON on stdout with `type: "ai_instruction"` and tells the calling AI agent what objective to complete, what context is available, what tools are allowed, and what success means.
-
-The CLI must not call an LLM or include required pre-action command lists. Optional `verification_commands` and `follow_up_commands` may appear only for actions to run after the agent completes the instruction.
+- JSON is the default. Add `--table` / `-t` for human-readable tables.
 
 ## Options Reference
 
@@ -116,111 +147,53 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 | `--limit` | `-l` | Maximum number of results |
 | `--filter` | `-f` | Filter results using `field:op:value` syntax |
 | `--properties` | `-p` | Restrict output to selected fields |
+| `--store` |  | Override the store id for pricing/inventory |
+| `--zip` |  | Override the zip for geo context |
+| `--yes` | `-y` | Place the real order at checkout (spends money) |
 | `--version` | `-v` | Show version and exit |
 | `--no-cache` |  | Bypass cached read responses for this execution |
 
 ## Configuration
 
-Non-authentication configuration is stored in `~/.local/share/cli-tools/target/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/target/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
-
-Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
-
-Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
+Non-authentication configuration lives in
+`~/.local/share/cli-tools/target/.env`. The captured redsky session and browser
+data are runtime auth state under the active profile
+(`~/.local/share/cli-tools/target/authentication_profiles/<profile>/`). The
+source repo only carries `.env.example`.
 
 Root config variables:
 
 ```bash
-# Optional: override the default site URL
-BASE_URL=https://www.target.com
+# Default store / geo context for reads (overridable per-command with --store/--zip)
+STORE_ID=108
+ZIP=47710
 
-# Browser settings (true = invisible, false = visible browser)
+# Browser: true = headless (default). Reads never launch a browser; this affects
+# cart/checkout. The redsky prime always forces a visible browser regardless.
 HEADLESS=true
 
-# Optional browser-harness runtime settings
-# BROWSER_USER_AGENT=
-# BROWSER_WINDOW_SIZE=1440,900
-
-# Response cache settings
+# Response cache
 CACHE_ENABLED=true
 CACHE_TTL=3600
 ```
 
-Browser-auth selectors, login URLs, and other authenticated-page signals are defined in `browser.py` as `BrowserAutomation` class constants. Validate them against a real page snapshot before shipping.
-
-## Cache
-
-```bash
-# Clear cached read responses
-target cache clear
-
-# Bypass the cache for one execution
-target --no-cache search list --limit 10
-```
-
-Browser session data is stored in the profile data directory for persistence between commands.
+Reusable credentials must go through the CLI-tools secret manager, never a `.env`
+file. `.env` holds only non-secret config and CLI-managed runtime state.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error |
+| 1 | General error (includes an expired/missing redsky session) |
 | 2 | Authentication/credential error |
 | 130 | User interrupted (Ctrl+C) |
-
-## Architecture
-
-This CLI uses `cli_tools_shared.auth.BrowserAutomation` with browser-harness-backed Chrome automation:
-
-- **Session Persistence**: Browser context persists between commands (cookies, localStorage)
-- **Interactive Login**: Opens browser for manual login, saves session automatically
-- **Form Automation**: Fill forms, click buttons, select dropdowns
-- **Data Extraction**: Extract tables, lists, and custom data from pages
-- **Pagination**: Handle "Load More" buttons and multi-page results
-- **Retry Logic**: Automatic retries with exponential backoff
-
-### Customizing for Your Site
-
-1. Update `browser.py` with the real login/authenticated selectors and URLs.
-2. Implement the placeholder methods in `client.py`.
-3. Normalize extracted page data in `parsers.py` to the documented command output.
-
-## Browser Automation Notes
-
-- **First run**: Run `target auth login` to launch the persistent browser session and complete login
-- **Headless mode**: Set `HEADLESS=false` to watch the browser during debugging
-- **Session persistence**: Login sessions are saved under the active profile's browser-data directory
-- **Rate limiting**: Be respectful of the site's terms of service
-
-## Debugging
-
-To debug browser automation issues:
-
-```bash
-# Run with visible browser
-export HEADLESS=false
-target search query "test"
-```
-
-## Output Contract
-
-Commands return plain JSON records. The default item record shape is:
-
-| Field | Description |
-|-------|-------------|
-| `id` | Stable item identifier from the page |
-| `name` | Item display name |
-| `status` | Item status |
-
-Capture real DOM data first, then update `normalize_items()` and `normalize_item_detail()` in `parsers.py` to map page data into the documented command output. Add local models only when validation, polymorphism, or serialization removes real complexity.
 
 ## Requirements
 
 - Python 3.11+
-- Dependencies (installed automatically):
-  - typer
-  - python-dotenv
-  - cli-tools-shared (transitively pulls in browser-harness)
+- Dependencies (installed automatically): typer, python-dotenv, httpx,
+  cli-tools-shared (which pulls in browser-harness).
 
 ## License
 
