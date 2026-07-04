@@ -1,5 +1,4 @@
 """Configuration management for Manus CLI."""
-from pathlib import Path
 
 import requests
 
@@ -26,11 +25,6 @@ class Config(BaseConfig):
         saved_base_url = self._get("BASE_URL")
         if saved_base_url and saved_base_url.rstrip("/") == self.LEGACY_BASE_URL:
             self._set("BASE_URL", self.DEFAULT_BASE_URL)
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for cache/state helpers."""
-        return self.get_profile_data_dir()
 
     def test_connection(self) -> dict:
         """Validate API-key authentication with a lightweight v2 list call."""

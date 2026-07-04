@@ -30,6 +30,11 @@ def make_client(monkeypatch):
     return client_module.ManusClient()
 
 
+def isolate_config(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data-home"))
+    monkeypatch.setattr(config_module, "resolve_tool_dir", lambda _: tmp_path / "manus")
+
+
 def test_v2_methods_use_documented_endpoints_and_header(monkeypatch):
     client = make_client(monkeypatch)
     calls = []
@@ -345,7 +350,7 @@ def test_config_test_connection_uses_v2_auth_header(monkeypatch, tmp_path):
         return Response()
 
     monkeypatch.setattr(requests, "get", fake_get)
-    monkeypatch.setattr(config_module, "resolve_tool_dir", lambda _: tmp_path)
+    isolate_config(monkeypatch, tmp_path)
 
     config = config_module.Config()
     config._set("API_KEY", "test-key")
@@ -365,7 +370,7 @@ def test_config_test_connection_uses_v2_auth_header(monkeypatch, tmp_path):
 
 
 def test_config_migrates_legacy_v1_base_url(monkeypatch, tmp_path):
-    monkeypatch.setattr(config_module, "resolve_tool_dir", lambda _: tmp_path)
+    isolate_config(monkeypatch, tmp_path)
 
     config = config_module.Config()
     config._set("BASE_URL", "https://api.manus.ai/v1")
@@ -376,7 +381,7 @@ def test_config_migrates_legacy_v1_base_url(monkeypatch, tmp_path):
 
 
 def test_config_storage_dir_uses_profile_data_dir(monkeypatch, tmp_path):
-    monkeypatch.setattr(config_module, "resolve_tool_dir", lambda _: tmp_path)
+    isolate_config(monkeypatch, tmp_path)
 
     config = config_module.Config()
 
