@@ -1,4 +1,5 @@
 from adobe_podcast_cli.client import AdobePodcastClient
+from adobe_podcast_cli.config import Config
 
 
 class FakeConfig:
@@ -60,3 +61,27 @@ def test_request_refreshes_cached_access_token_once_after_401(monkeypatch):
     assert response.status_code == 200
     assert config.cleared == ["ACCESS_TOKEN"]
     assert session.auth_headers == ["Bearer old-token", "Bearer fresh-token"]
+
+
+def test_browser_session_status_requires_api_test():
+    assert Config.BROWSER_SESSION_REQUIRES_API_TEST is True
+
+
+def test_client_extracts_ims_token_when_cached_token_missing(monkeypatch):
+    session = FakeSession()
+    session.responses = [FakeResponse(200, {"ok": True})]
+    monkeypatch.setattr("adobe_podcast_cli.client.requests.Session", lambda: session)
+    monkeypatch.setattr(
+        AdobePodcastClient,
+        "_extract_token_from_browser",
+        lambda self: "fresh-token",
+    )
+
+    config = FakeConfig()
+    config.access_token = None
+    client = AdobePodcastClient(config=config)
+
+    response = client._request("GET", "https://example.test/api/v1/enhance_speech_tracks")
+
+    assert response.status_code == 200
+    assert session.auth_headers == ["Bearer fresh-token"]
