@@ -63,6 +63,10 @@ TASK_LIST_SECURITY_SCOPE_PARAMS = (
     "org", "space", "app", "responsible", "reference", "created_by",
 )
 TASK_LIST_DEFAULT_SCOPE_PARAM = "responsible"
+TASK_LIST_COMPLETED_VALUES = {
+    "true": True,
+    "false": False,
+}
 
 
 @app.command("list")
@@ -70,7 +74,7 @@ def list_tasks(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum tasks to return"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
-    completed: Optional[bool] = typer.Option(None, "--completed", help="Filter by completion status"),
+    completed: Optional[str] = typer.Option(None, "--completed", help="Filter by completion status: true or false"),
     grouping: Optional[str] = typer.Option(None, "--grouping", "-g", help="Group by: due_date, created_by, responsible, app, space, org"),
     sort: Optional[str] = typer.Option(None, "--sort", "-s", help="Sort by: created_on, completed_on, rank"),
     responsible: Optional[int] = typer.Option(None, "--responsible", help="Filter by responsible user ID"),
@@ -120,13 +124,20 @@ def list_tasks(
                 )
                 raise typer.Exit(2)
 
+        completed_filter = None
+        if completed is not None:
+            if completed not in TASK_LIST_COMPLETED_VALUES:
+                print_error("Invalid --completed value. Expected true or false.")
+                raise typer.Exit(2)
+            completed_filter = TASK_LIST_COMPLETED_VALUES[completed]
+
         client = get_client()
 
         # Data-driven assembly: a single mapping of exact Podio API query-string
         # parameter names to their CLI values. Only non-None values are sent, so
         # adding a future server-side filter means adding one entry here.
         api_params = {
-            "completed": completed,
+            "completed": completed_filter,
             "grouping": grouping,
             "sort_by": sort,
             "responsible": responsible,

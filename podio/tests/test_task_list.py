@@ -76,6 +76,28 @@ def test_responsible_flag_overrides_default(monkeypatch):
     assert kwargs["responsible"] == 77109340
 
 
+def test_completed_false_value_reaches_query(monkeypatch):
+    client = _make_client()
+    monkeypatch.setattr(task, "get_client", lambda: client)
+
+    result = runner.invoke(task.app, ["list", "--completed", "false"])
+
+    assert result.exit_code == 0
+    kwargs = _get_kwargs(client)
+    assert kwargs["completed"] is False
+
+
+def test_invalid_completed_value_exits_2_without_network_call(monkeypatch):
+    client = _make_client()
+    monkeypatch.setattr(task, "get_client", lambda: client)
+
+    result = runner.invoke(task.app, ["list", "--completed", "no"])
+
+    assert result.exit_code == 2
+    assert "Invalid --completed value. Expected true or false." in result.stderr
+    assert not client.transport.GET.called
+
+
 def test_invalid_reference_exits_2_without_network_call(monkeypatch):
     client = _make_client()
     monkeypatch.setattr(task, "get_client", lambda: client)

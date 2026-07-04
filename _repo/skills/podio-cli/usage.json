@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-06-24T13:50:56Z",
+  "discovered_at": "2026-07-02T18:14:58Z",
   "total_commands": 93,
   "global_options": [
     {
@@ -21,7 +21,6 @@
   "commands": {
     "app": {
       "help": "Manage Podio applications",
-      "usage_instructions": "Application management -- get app details and field schemas, list apps in a space, create/update apps, get app items, activate/deactivate, and export app data. Use `app get APP_ID --fields` to see field schema.",
       "arguments": [],
       "options": [
         {
@@ -2073,7 +2072,6 @@
     },
     "item": {
       "help": "Manage Podio items",
-      "usage_instructions": "Item CRUD operations -- get, list, create, update, delete items in Podio apps. Use `item list APP_ID` with --filter for querying. Use `item values ITEM_ID` to see field values and `item field-value ITEM_ID FIELD` for a specific field.",
       "arguments": [],
       "options": [
         {
@@ -2685,7 +2683,6 @@
             "podio task create --text \"Follow up\" --ref-type item --ref-id 12345",
             "podio task create --text \"Follow up\" --table"
           ],
-          "usage_instructions": "Use to create a task. TEXT is required. Use --responsible/-r for assignee, --due-date/-d for deadline, --description for details.",
           "arguments": [],
           "options": [
             {
@@ -3006,7 +3003,6 @@
             "podio task list --filter \"status:active\" --properties \"task_id,text,due_date\"",
             "podio task list --table"
           ],
-          "usage_instructions": "Use to list tasks. Supports --responsible/-r, --status/-s (active/completed), --label/-l, --reference for filtering.",
           "arguments": [],
           "options": [
             {
@@ -3033,9 +3029,9 @@
             },
             {
               "name": "--completed",
-              "type": "bool",
+              "type": "TEXT",
               "required": false,
-              "help": "Filter by completion status"
+              "help": "Filter by completion status: true or false"
             },
             {
               "name": "--grouping",
@@ -3115,7 +3111,6 @@
             "podio task update 12345 --text \"Updated description\"",
             "podio task update 12345 --text \"Updated\" --table"
           ],
-          "usage_instructions": "Use to update a task. TASK_ID is required. Update fields with options like --text, --due-date, --responsible, --description.",
           "arguments": [
             {
               "name": "task_id",
