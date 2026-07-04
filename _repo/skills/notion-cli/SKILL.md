@@ -30,6 +30,7 @@ notion <command-group> <action> [arguments] [options]
 | Add a relation field | `notion field add DB_ID "Imports" --type relation --relation-database TARGET_ID` |
 | Create a database | `notion database create PARENT_PAGE_ID -t "Tasks" --status "Phase:Todo\|Done" --date "Due"` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
+| Add shell-sensitive comment text | `notion comments create --text-file comment.md --discussion-id DISCUSSION_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
 | List page/block children | `notion pages blocks list --page-id PAGE_ID` |
 | List blocks with IDs (database page) | `notion database page content list-blocks PAGE_ID --table` |
@@ -65,6 +66,36 @@ Notion page exports as a valid zero-byte Markdown file. Inspect or print that
 Markdown file separately. If JSON page metadata is needed, run a separate
 `notion pages get PAGE_ID` command without `--markdown` or `--out-file` and
 parse that command's stdout.
+</principle>
+
+<principle name="Full ID Extraction">
+Use default JSON output when a Notion ID will be copied into a follow-up
+command. Do not copy page, block, database, data_source, comment, or discussion
+IDs from table output that contains an ellipsis (`...` or `…`). Rich table
+rendering can shorten UUID cells when several columns are shown. For follow-up
+commands, first run a JSON command with `--properties id,<needed fields>` when
+the command supports it, copy the full UUID from JSON, then call commands such
+as `notion pages get PAGE_ID`, `notion database page update PAGE_ID`, or
+`notion comments create --discussion-id DISCUSSION_ID`.
+</principle>
+
+<principle name="Comment Text With Shell Metacharacters">
+For comment bodies containing backticks, `$()`, shell variables, angle-bracket
+placeholders, quotes, or newlines, write the exact body to a file with a quoted
+heredoc and pass it with `--text-file`:
+
+```bash
+comment_file=$(mktemp -t notion-comment.XXXXXX)
+cat >"$comment_file" <<'EOF'
+Processed this correction for target `deploy/instructions/developmental-reviewer.md`.
+The email includes `ATA-TOPIC-<topic_id>`.
+EOF
+notion comments create --text-file "$comment_file" --discussion-id DISCUSSION_ID
+```
+
+Do not put shell-sensitive comment text inside a double-quoted command argument;
+Bash evaluates backticks and command substitutions before the CLI receives the
+text.
 </principle>
 
 <principle name="Database Page Create Options">
@@ -399,6 +430,17 @@ There are three ways to put content inside a toggle:
 **Verification:** After the fix on page `3825d9c85b2b8074bbe3ed8aa65c9f91` (read-only), `notion pages blocks list --page-id 3825d9c85b2b8074bbe3ed8aa65c9f91` returns 117 blocks / 16 `heading_2`, and `... -m` emits 16 `## ` headings — matching `notion pages get 3825d9c85b2b8074bbe3ed8aa65c9f91 -b -m`. `--limit 50` correctly caps at 50. On a scratch 111-block page, inserting 3 blocks with `--after` a block at index 105 reported `blocks_created: 3`, grew the page to 114, and lost 0 original blocks. Regression tests in `tests/test_blocks_list_pagination.py` cover multi-page `has_more`/`next_cursor` fetches, the uncapped default, the explicit-limit cap, the recursive path, and the `--after` count.
 
 **Recurrence Prevention:** Any command that lists Notion children must paginate the full `has_more`/`next_cursor` sequence by default and must not impose a hidden default cap on `list` output. `--limit` is an explicit opt-in cap only. Never count `len(results)` from an `--after` append as "created" — Notion returns the full repositioned tail there; the inserted count is `len(input_blocks)`.
+
+### 5. `pages duplicate` Failed on Column Layouts
+**Symptom:** `notion pages duplicate PAGE_ID --title "..."` on a page containing a `column_list` failed with exit 1: `400 - body.children[N].column_list.children[0].column.children should be defined, instead was undefined`. Progress reached "[5] Uploading N blocks..." then the API rejected the payload.
+
+**Cause:** `_upload_blocks_with_nesting` in `notion_cli/client.py` treated every direct child of a child-required block the same way — it popped each child's children to re-attach them after creation. But a `column` inside a `column_list` is itself a child-required type: Notion refuses to create a childless column, so popping the column's content sent `column: {}` and the 400 rejected the whole request. Separately, `_apply_text_replacements` only recursed block-level `children`, so `--replace` never reached content nested inside cleaned container blocks (columns, toggles, callouts) whose children live at `block[type]["children"]`.
+
+**Fix:** New `_pop_optional_descendants` helper keeps the required descendant chain (`column_list` → `column` → content) inline in the creation payload and pops children only from descendants that can be created childless, recording each pop as an index path. The inline re-attachment loop resolves those paths against the created blocks by fetching server children level by level and raises `ClientError` on any path mismatch instead of silently dropping content. `_apply_text_replacements` now recurses via `_get_children`, covering both block-level and type-nested children. Dead code superseded by this path (`_prepare_blocks_for_upload`, `_get_block_children_key`) was removed.
+
+**Verification:** Duplicating page `9cb674489a004afd83df94b9dfc26756` (5-column `column_list` + callout with children) succeeded; the new page's `column_list` contained all 5 columns, each with its heading, divider, and list items, and the callout kept its 8 children. Regression tests in `tests/test_page_duplicate_columns.py` cover inline column payload shape, nested sub-bullet re-attachment by index path, callout append-after-creation, and `--replace` reaching type-nested children. Full suite: 107 passed; `test-cli-tool.sh --cli-name notion`: 288 passed, 0 failed.
+
+**Recurrence Prevention:** When uploading blocks, never pop the children of a block whose type is in `_CHILD_REQUIRED_TYPES` (`column_list`, `column`, `table`, `synced_block`) — the required chain must stay inline in the creation payload. Any new recursive block walker must use `_get_children`/`_pop_children` so both block-level and API-2025-09-03 type-nested children locations are handled.
 
 <success_criteria>
 - Command executes without error

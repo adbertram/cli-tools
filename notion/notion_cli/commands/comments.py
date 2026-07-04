@@ -1,5 +1,6 @@
 """Comments commands for Notion CLI - manage page and block comments."""
 import json
+from pathlib import Path
 import typer
 from typing import Optional, List
 
@@ -219,9 +220,15 @@ def comment_get(
 @app.command("create")
 @command
 def comment_create(
-    text: str = typer.Argument(
-        ...,
+    text: Optional[str] = typer.Argument(
+        None,
         help="Comment text content",
+    ),
+    text_file: Optional[Path] = typer.Option(
+        None,
+        "--text-file",
+        "-f",
+        help="File containing comment text content",
     ),
     page_id: Optional[str] = typer.Option(
         None,
@@ -261,7 +268,19 @@ def comment_create(
 
         # Reply to an existing discussion thread
         notion comments create "My reply" --discussion-id ghi789
+
+        # Reply with shell-sensitive text from a file
+        notion comments create --text-file reply.md --discussion-id ghi789
     """
+    # Validate exactly one content source is provided
+    content_sources = sum([text is not None, text_file is not None])
+    if content_sources == 0:
+        handle_error("Either TEXT or --text-file is required")
+        raise typer.Exit(1)
+    if content_sources > 1:
+        handle_error("Only one of TEXT or --text-file can be provided")
+        raise typer.Exit(1)
+
     # Validate exactly one target is provided
     provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
     if provided == 0:
@@ -271,7 +290,13 @@ def comment_create(
         handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
         raise typer.Exit(1)
 
-    rich_text = build_comment_rich_text(text)
+    if text_file is not None:
+        comment_text = text_file.read_text(encoding="utf-8")
+    else:
+        assert text is not None
+        comment_text = text
+
+    rich_text = build_comment_rich_text(comment_text)
 
     client = get_client()
     comment = client.create_comment(

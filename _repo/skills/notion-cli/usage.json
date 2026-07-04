@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-06-22T22:18:07Z",
-  "total_commands": 55,
+  "discovered_at": "2026-06-30T20:25:35Z",
+  "total_commands": 56,
   "global_options": [
     {
       "name": "--version",
@@ -176,6 +176,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -278,13 +310,20 @@
           "usage_instructions": "Run `notion comments create --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "text",
+              "name": "[text]",
               "type": "TEXT",
-              "required": true,
-              "help": "Comment text content"
+              "required": false,
+              "help": "TEXT  Comment text content"
             }
           ],
           "options": [
+            {
+              "name": "--text-file",
+              "type": "PATH",
+              "required": false,
+              "help": "File containing comment text content",
+              "short": "-f"
+            },
             {
               "name": "--page-id",
               "type": "TEXT",
@@ -812,7 +851,7 @@
                   ]
                 },
                 "set": {
-                  "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
+                  "help": "Replace all page content with new content.",
                   "examples": [
                     "notion database page content set PAGE_ID --text \"New content\"",
                     "notion database page content set PAGE_ID --file content.md",
@@ -973,7 +1012,7 @@
               ]
             },
             "delete": {
-              "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion database page update PAGE_ID --restore'.",
+              "help": "Delete (archive) a page.",
               "examples": [
                 "notion database page delete abc123-def456",
                 "notion database page delete abc123-def456 --force"
@@ -1052,7 +1091,7 @@
             },
             "list": {
               "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"Title,Status,Due Date\" notion database page list DB_ID --limit 10",
-              "usage_instructions": "Run `notion database page list --help` for exact arguments and options.",
+              "usage_instructions": "Run `notion database page list --help` for exact arguments and options. Use default JSON output with `--properties id,<needed fields>` when a page ID will be copied into a follow-up command. Do not copy UUIDs from `--table` output that contains an ellipsis (`...` or `…`).",
               "arguments": [],
               "options": [
                 {
@@ -1112,7 +1151,7 @@
               ]
             },
             "update": {
-              "help": "Update a page's properties. Property Examples: notion database page update PAGE_ID --status \"Done\" notion database page update PAGE_ID --status \"Status:In progress\" notion database page update PAGE_ID --select \"Priority:High\" notion database page update PAGE_ID --select \"Client:Acme\" --select \"Contact:Jane Doe\" notion database page update PAGE_ID --text \"Notes:Updated content\" notion database page update PAGE_ID --checkbox \"Complete:true\" notion database page update PAGE_ID --number \"Score:95\" Archive/Restore: notion database page update PAGE_ID --archive notion database page update PAGE_ID --restore Raw JSON (for complex updates): notion database page update PAGE_ID --properties '{\"Status\": {\"status\": {\"name\": \"Done\"}}}'",
+              "help": "Update a page's properties.",
               "usage_instructions": "Run `notion database page update --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -2164,7 +2203,7 @@
               ]
             },
             "set": {
-              "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
+              "help": "Replace all page content with new content.",
               "examples": [
                 "notion pages content set PAGE_ID --text \"New content\"",
                 "notion pages content set PAGE_ID --file content.md",
@@ -2270,7 +2309,7 @@
           ]
         },
         "delete": {
-          "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion pages update PAGE_ID --restore'.",
+          "help": "Delete (archive) a page.",
           "examples": [
             "notion pages delete abc123-def456",
             "notion pages delete abc123-def456 --force"
@@ -2355,7 +2394,7 @@
           ]
         },
         "export": {
-          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
+          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON.",
           "examples": [
             "notion pages export PAGE_ID --output document.pdf",
             "notion pages export PAGE_ID -o report.pdf",
@@ -2600,12 +2639,6 @@
         },
         "update": {
           "help": "Update a page's title, icon, or archive status.",
-          "examples": [
-            "notion pages update PAGE_ID --title \"New Title\"",
-            "notion pages update PAGE_ID --icon \"emoji:star\"",
-            "notion pages update PAGE_ID --archive",
-            "notion pages update PAGE_ID --restore"
-          ],
           "usage_instructions": "Run `notion pages update --help` for exact arguments and options.",
           "arguments": [
             {

@@ -622,14 +622,19 @@ notion comments get <comment-id>
 notion comments create "This is my comment" --page-id <page-id>
 notion comments create "Comment on this block" --block-id <block-id>
 notion comments create "My reply" --discussion-id <discussion-id>
+notion comments create --text-file reply.md --discussion-id <discussion-id>
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `-f, --text-file` | File containing comment text content |
 | `-p, --page-id` | Page ID to add comment to |
 | `-b, --block-id` | Block ID to add comment to |
 | `-d, --discussion-id` | Discussion thread ID to reply to |
+
+Use `--text-file` for comment bodies that contain shell-sensitive text such as
+backticks, `$()`, angle-bracket placeholders, quotes, or newlines.
 
 **Note:** Exactly one of --page-id, --block-id, or --discussion-id must be provided.
 

@@ -1812,57 +1812,6 @@ class NotionClient:
         Filters out blocks that cannot be created (child_page, etc.)."""
         return [b for b in (self._clean_block_for_creation(b) for b in blocks) if b is not None]
 
-    def _prepare_blocks_for_upload(
-        self,
-        blocks: List[Dict],
-        max_depth: int = 2,
-        _current_depth: int = 1,
-    ) -> Tuple[List[Dict], List[Tuple[int, List[Dict]]]]:
-        """
-        Split blocks into uploadable chunks respecting Notion's nesting limit.
-
-        Notion only allows 2 levels of nesting per append_block_children call.
-        This strips children beyond max_depth and returns them separately.
-
-        Args:
-            blocks: List of cleaned blocks to prepare
-            max_depth: Maximum nesting depth allowed (default 2)
-            _current_depth: Internal tracker for recursion depth
-
-        Returns:
-            Tuple of (blocks_for_upload, deferred_children)
-            where deferred_children is list of (block_index, children) pairs
-        """
-        deferred: List[Tuple[int, List[Dict]]] = []
-
-        for i, block in enumerate(blocks):
-            if "children" not in block:
-                continue
-
-            if _current_depth >= max_depth:
-                # Strip children at this level — they need a separate upload
-                deferred.append((i, block.pop("children")))
-            else:
-                # Recurse into children to check deeper levels
-                child_deferred = []
-                for ci, child in enumerate(block["children"]):
-                    if "children" in child:
-                        if _current_depth + 1 >= max_depth:
-                            child_deferred.append((ci, child.pop("children")))
-                        else:
-                            sub_blocks = [child]
-                            _, sub_deferred = self._prepare_blocks_for_upload(
-                                sub_blocks, max_depth, _current_depth + 1
-                            )
-                            # sub_deferred indices are relative to sub_blocks
-                            for si, sc in sub_deferred:
-                                child_deferred.append((ci, sc))
-                # Store child deferred items tagged with parent index
-                for ci, children in child_deferred:
-                    deferred.append((i, [(ci, children)]))
-
-        return (blocks, deferred)
-
     # Block types that REQUIRE direct children at creation time per the Notion API.
     # column_list needs >=2 columns; column needs >=1 child block; table needs
     # table_row children. Original synced_block content is not updatable later,
@@ -1887,9 +1836,11 @@ class NotionClient:
         deeper subtrees, re-attaching grandchildren to the wrong block).
 
         Block types that require direct children at creation (column_list,
-        column, table, synced_block) keep their direct children inline; only
-        their grandchildren are recursed (we look up the created child IDs via
-        a follow-up children fetch).
+        column, table, synced_block) keep their required descendant chain
+        inline — a column inside a column_list must itself carry its children,
+        since Notion rejects childless columns. Only children of descendants
+        that can be created childless are recursed (we look up the created
+        block IDs via follow-up children fetches along the index path).
 
         Args:
             parent_id: Page or block ID to append children under
@@ -1922,23 +1873,19 @@ class NotionClient:
         # For each block, decide what to send up now and what to recurse later.
         # mode is one of:
         #   ("simple", saved_children_list)            -- normal block, children stripped before send
-        #   ("inline", [(child_index, grandchildren)]) -- child-required type, direct children
-        #                                                 sent inline, grandchildren recursed
+        #   ("inline", [(index_path, descendants)])    -- child-required type, required
+        #                                                 descendants sent inline, deeper
+        #                                                 children recursed
         upload_payloads: List[Dict] = []
         deferred: List[Tuple[str, object]] = []
 
         for block in blocks:
             block_type = block.get("type", "")
             if block_type in self._CHILD_REQUIRED_TYPES:
-                # Keep direct children in the payload but pop their grandchildren
-                # so we can attach them after the API call returns.
-                grandchildren_by_child_idx: List[Tuple[int, List[Dict]]] = []
-                for ci, child in enumerate(self._get_children(block)):
-                    grandkids = self._pop_children(child)
-                    if grandkids:
-                        grandchildren_by_child_idx.append((ci, grandkids))
+                # Keep the required descendant chain in the payload but pop the
+                # deeper children so we can attach them after the API call returns.
                 upload_payloads.append(block)
-                deferred.append(("inline", grandchildren_by_child_idx))
+                deferred.append(("inline", self._pop_optional_descendants(block)))
             else:
                 kids = self._pop_children(block)
                 upload_payloads.append(block)
@@ -1968,16 +1915,27 @@ class NotionClient:
                     _depth=_depth + 1,
                 )
                 total_created += sub_count
-            else:  # inline (column_list / column / table)
-                # Direct children went up with the parent; we need their server IDs
-                # to attach grandchildren. Fetch them and index by position.
-                immediate = self._fetch_block_children_flat(created_id)
-                for child_index, grandkids in payload:
-                    if child_index >= len(immediate):
-                        continue
+            else:  # inline (column_list / column / table / synced_block)
+                # The required descendant chain went up with the parent; resolve
+                # each index path to its server-side block ID by fetching created
+                # children level by level (cached per parent within this block).
+                children_cache: Dict[str, List[Dict]] = {}
+                for index_path, descendants in payload:
+                    target_id = created_id
+                    for idx in index_path:
+                        if target_id not in children_cache:
+                            children_cache[target_id] = self._fetch_block_children_flat(target_id)
+                        siblings = children_cache[target_id]
+                        if idx >= len(siblings):
+                            raise ClientError(
+                                f"Created block {created_id} returned {len(siblings)} children "
+                                f"at path {index_path}; expected index {idx}. "
+                                "Nested content could not be re-attached."
+                            )
+                        target_id = siblings[idx]["id"]
                     sub_count, _sub_ids = self._upload_blocks_with_nesting(
-                        immediate[child_index]["id"],
-                        grandkids,
+                        target_id,
+                        descendants,
                         progress_callback=progress_callback,
                         _depth=_depth + 1,
                     )
@@ -1985,28 +1943,36 @@ class NotionClient:
 
         return (total_created, all_ids)
 
-    @staticmethod
-    def _get_block_children_key(block: Dict) -> Optional[str]:
+    def _pop_optional_descendants(self, block: Dict) -> List[Tuple[List[int], List[Dict]]]:
         """
-        Find where children are stored in a block.
+        Pop children from a child-required block's optional descendants.
 
-        In API 2025-09-03+, children are inside the type-specific object
-        (e.g., block["heading_2"]["children"]). In older formats, they may
-        be at the block level (block["children"]).
+        Child-required blocks (column_list, column, table, synced_block) must be
+        created with their direct children inline. When a direct child is itself
+        child-required — a column inside a column_list — its own children must
+        also stay inline: popping them would send `column: {}` and Notion rejects
+        the payload with "column.children should be defined". This walks the
+        required chain, keeps required children in place, and pops children only
+        from descendants that can be created childless.
 
-        Returns the key path as a string: "children" or the block type name
-        if children are inside the type object. Returns None if no children.
+        Args:
+            block: A child-required block (modified in place)
+
+        Returns:
+            List of (index_path, popped_children) pairs, where index_path holds
+            child indexes from `block` down to the block whose children were
+            popped (e.g., [2, 0] = third child's first child).
         """
-        block_type = block.get("type", "")
-        # Check inside type-specific object first (API 2025-09-03+)
-        if block_type and block_type in block:
-            type_data = block[block_type]
-            if isinstance(type_data, dict) and "children" in type_data:
-                return block_type
-        # Fall back to block-level children
-        if "children" in block:
-            return "children"
-        return None
+        deferred: List[Tuple[List[int], List[Dict]]] = []
+        for ci, child in enumerate(self._get_children(block)):
+            if child.get("type", "") in self._CHILD_REQUIRED_TYPES:
+                for sub_path, sub_blocks in self._pop_optional_descendants(child):
+                    deferred.append(([ci, *sub_path], sub_blocks))
+            else:
+                grandkids = self._pop_children(child)
+                if grandkids:
+                    deferred.append(([ci], grandkids))
+        return deferred
 
     @staticmethod
     def _get_children(block: Dict) -> List[Dict]:
@@ -2162,9 +2128,10 @@ class NotionClient:
                             if "plain_text" in rt:
                                 rt["plain_text"] = rt["plain_text"].replace(old, new)
 
-            # Recurse into children
-            if "children" in block and isinstance(block["children"], list):
-                self._apply_text_replacements(block["children"], replacements)
+            # Recurse into children (block-level or type-nested per API 2025-09-03+)
+            children = self._get_children(block)
+            if children:
+                self._apply_text_replacements(children, replacements)
 
     def get_blocks_as_notion_json(self, page_id: str) -> List[Dict]:
         """

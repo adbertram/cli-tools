@@ -49,6 +49,7 @@ def test_comment_create_sends_chunked_rich_text_for_long_comments(monkeypatch):
 
     comments_cmd.comment_create(
         text=long_text,
+        text_file=None,
         page_id="page-1",
         block_id=None,
         discussion_id=None,
@@ -62,3 +63,33 @@ def test_comment_create_sends_chunked_rich_text_for_long_comments(monkeypatch):
     assert len(sent_rich_text) == 2
     assert "".join(part["text"]["content"] for part in sent_rich_text) == long_text
     assert printed_json[0]["text"] == long_text
+
+
+def test_comment_create_reads_text_file_without_shell_interpretation(monkeypatch, tmp_path):
+    client = FakeCreateCommentClient()
+    printed_json = []
+    comment_text = (
+        "Processed this correction for target `deploy/instructions/developmental-reviewer.md`, "
+        "not `deploy/instructions/security-reviewer-editor.md`.\n"
+        "The email includes `ATA-TOPIC-<topic_id>`."
+    )
+    text_file = tmp_path / "reply.md"
+    text_file.write_text(comment_text, encoding="utf-8")
+
+    monkeypatch.setattr(comments_cmd, "get_client", lambda: client)
+    monkeypatch.setattr(comments_cmd, "print_json", printed_json.append)
+
+    comments_cmd.comment_create(
+        text=None,
+        text_file=text_file,
+        page_id=None,
+        block_id=None,
+        discussion_id="discussion-1",
+        table=False,
+    )
+
+    assert len(client.calls) == 1
+    sent_rich_text = client.calls[0]["rich_text"]
+    assert client.calls[0]["discussion_id"] == "discussion-1"
+    assert "".join(part["text"]["content"] for part in sent_rich_text) == comment_text
+    assert printed_json[0]["text"] == comment_text
