@@ -104,10 +104,8 @@ DEFAULT_CUE_MARKER = "||"
 OSASCRIPT_TIMEOUT_SECONDS = 30
 DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS = 120
 DEMO_ENVIRONMENT_PWSH_PATH = Path("/usr/local/bin/pwsh")
-DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH = Path(
-    "/Users/adam/Dropbox/GitRepos/Agents/CourseCraft/.agents/skills/"
-    "demo-environment-automation/scripts/DemoEnvironmentAutomation/"
-    "DemoEnvironmentAutomation.psd1"
+DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH = Path(
+    ".agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1"
 )
 # Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
 # benign PowerPoint startup dialog cannot block the recording indefinitely.
@@ -652,13 +650,31 @@ def require_path(path, description):
     return resolved_path
 
 
+def resolve_coursecraft_repo_root(start_path=None):
+    path = Path.cwd() if start_path is None else Path(start_path).expanduser()
+    if path.is_file():
+        path = path.parent
+    path = path.resolve()
+    for candidate in [path, *path.parents]:
+        if (candidate / "course-pipeline.json").is_file():
+            return candidate
+    raise FileNotFoundError(f"CourseCraft repo root not found from: {path}")
+
+
+def resolve_demo_environment_automation_module_path():
+    return resolve_coursecraft_repo_root() / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+
+
 def powershell_single_quoted(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
 def run_demo_environment_recording_prep():
     pwsh_path = require_path(DEMO_ENVIRONMENT_PWSH_PATH, "PowerShell executable for demo environment prep")
-    module_path = require_path(DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH, "Demo environment automation manifest")
+    module_path = require_path(
+        resolve_demo_environment_automation_module_path(),
+        "Demo environment automation manifest",
+    )
     script = "\n".join([
         "$ErrorActionPreference = 'Stop'",
         "Set-StrictMode -Version Latest",

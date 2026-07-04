@@ -132,8 +132,28 @@ def write_layout_animation_deck(root, slide_layout_animation_counts):
 
 
 class DemoEnvironmentPrepTests(unittest.TestCase):
+    def test_demo_environment_manifest_resolves_from_coursecraft_projection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text("@{}", encoding="utf-8")
+            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+
+            with mock.patch.object(record.Path, "cwd", return_value=root / "nested"):
+                self.assertEqual(record.resolve_demo_environment_automation_module_path(), manifest.resolve())
+
+    def test_demo_environment_manifest_requires_coursecraft_projection_root(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "CourseCraft repo root not found"):
+                    record.resolve_demo_environment_automation_module_path()
+
     def test_demo_environment_prep_runs_existing_focus_and_notification_helpers(self):
-        with mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
+        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+
+        with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
+                mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
                 mock.patch.object(record, "run") as run_command:
             record.run_demo_environment_recording_prep()
 
@@ -142,7 +162,7 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         self.assertEqual(command[:3], [str(record.DEMO_ENVIRONMENT_PWSH_PATH), "-NoProfile", "-NonInteractive"])
         self.assertEqual(command[3], "-Command")
         self.assertIn("Import-Module -DisableNameChecking", script)
-        self.assertIn(str(record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_PATH), script)
+        self.assertIn(str(module_path), script)
         self.assertLess(script.index("Set-MacOSDoNotDisturb -SoftPass"), script.index("Remove-MacOSNotifications"))
         self.assertEqual(
             run_command.call_args.kwargs["timeout"],
@@ -150,7 +170,10 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         )
 
     def test_demo_environment_prep_failure_is_clear(self):
-        with mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
+        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+
+        with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
+                mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
                 mock.patch.object(record, "run", side_effect=subprocess.CalledProcessError(7, ["pwsh"])):
             with self.assertRaisesRegex(RuntimeError, "Demo environment prep failed before recording \\(exit 7\\)"):
                 record.run_demo_environment_recording_prep()
