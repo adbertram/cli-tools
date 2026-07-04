@@ -593,7 +593,7 @@ main() {
         esac
     done
 
-    set -- "${argv[@]}"
+    set -- ${argv[@]+"${argv[@]}"}
     local sub="${1:-}"
     local status=0
 
@@ -617,6 +617,35 @@ main() {
     fi
 
     shift || true
+
+    # No subcommand: print usage to stderr and exit non-zero so callers and
+    # `set -u` scripts get a clean, actionable failure instead of a crash.
+    if [[ -z "$sub" ]]; then
+        usage >&2
+        log_info "done $(basename "$0") command=help"
+        return 1
+    fi
+
+    # Global and per-subcommand help: `secrets.sh --help`, `secrets.sh help`,
+    # and `secrets.sh <command> --help` all print usage and exit 0.
+    case "$sub" in
+        -h|--help|help)
+            usage
+            log_info "done $(basename "$0") command=help"
+            return 0
+            ;;
+    esac
+    for arg in "$@"; do
+        if [[ "$arg" == "--" ]]; then
+            break
+        fi
+        if [[ "$arg" == "-h" || "$arg" == "--help" ]]; then
+            usage
+            log_info "done $(basename "$0") command=$sub help"
+            return 0
+        fi
+    done
+
     case "$sub" in
         set) if cmd_set "$@"; then status=0; else status=$?; fi ;;
         rename) if cmd_rename "$@"; then status=0; else status=$?; fi ;;
@@ -624,7 +653,6 @@ main() {
         delete) if cmd_delete "$@"; then status=0; else status=$?; fi ;;
         has) if cmd_has "$@"; then status=0; else status=$?; fi ;;
         list) if cmd_list; then status=0; else status=$?; fi ;;
-        ""|-h|--help|help) usage ;;
         *) die "unknown command: $sub (try --help)" ;;
     esac
 

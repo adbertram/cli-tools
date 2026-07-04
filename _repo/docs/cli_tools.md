@@ -92,6 +92,8 @@
 | `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `twelvelabs` | The `twelvelabs` CLI provides a command-line interface for Twelvelabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `udemy` | The `udemy` CLI provides a command-line interface for Udemy API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `ups` | UPS Pickup API - schedule package pickups |
+| `upwork` | Upwork CLI: search marketplace job postings via the official GraphQL API (`upwork jobs`, OAuth2) and read/update freelancer profile attributes (browser session). |
 | `usps` | The `usps` CLI provides a command-line interface for Usps API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `venmo` | The `venmo` CLI provides a command-line interface for Venmo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

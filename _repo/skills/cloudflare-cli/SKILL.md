@@ -52,6 +52,32 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 </essential_principles>
 
+<known_issues>
+<issue name="API key is sourced from a CLI-tools secret (auth login cannot re-prompt it)">
+The `cloudflare` credential type is `api_key`, and the active profile stores it as a
+`secret://cloudflare-legacy-api-key` placeholder resolved from the CLI-tools secret
+manager. Because the API key lives in the secret manager, `cloudflare auth login`
+and `cloudflare auth login --force` cannot prompt for it interactively — they now
+print an actionable notice naming the secret and the exact command to set/rotate it,
+then re-validate the existing credential. This is expected, not an error.
+
+To change or rotate the API key, update the secret directly (never edit the profile
+`.env` or paste the key into a prompt):
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-legacy-api-key
+```
+
+If `auth login` reports `Missing secret 'cloudflare-legacy-api-key'`, the referenced
+secret is absent from the secret manager. Set it with the command above; do not
+attempt to re-enter the key through `auth login`.
+
+This pattern applies to any api_key/PAT/username_password CLI whose sensitive fields
+are stored as `secret://<name>` placeholders: rotate the value with
+`secrets.sh set <secret-name>`, not through interactive `auth login`.
+</issue>
+</known_issues>
+
 <reference_index>
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>

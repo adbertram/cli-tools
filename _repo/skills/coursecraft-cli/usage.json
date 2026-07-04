@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-03T18:23:50Z",
+  "discovered_at": "2026-07-03T21:34:15Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -587,6 +587,12 @@
               "required": false,
               "help": "Brainstorming outline content",
               "short": "-b"
+            },
+            {
+              "name": "--brainstorming-outline-fact-checked",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the brainstorming outline fact-checked flag"
             },
             {
               "name": "--content-done",
@@ -2507,6 +2513,12 @@
               "type": "PATH",
               "required": false,
               "help": "Path to file containing brainstorming outline"
+            },
+            {
+              "name": "--brainstorming-outline-fact-checked",
+              "type": "bool",
+              "required": false,
+              "help": "Set or clear the brainstorming outline fact-checked flag"
             },
             {
               "name": "--module-plan-complete",

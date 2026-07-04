@@ -50,6 +50,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 </reference_index>
 
 <gotchas>
+**LegoSellerAssistant BrickFreedom state changes must use the repo wrapper script.** When working from `/Users/adam/Dropbox/GitRepos/Agents/LegoSellerAssistant`, create/list/complete/delete BrickFreedom tasks through `./scripts/invoke-brickfreedom.sh ...` so the action runner records the operation. Do not create customer replacement tasks manually as free-text dashboard tasks. Structured replacements must use `task create --type customer-replacement-part --platform ... --customer-name ... --order-id ... --item-no ... --item-name ... --color ... --qty ... --location ...`.
+
 **`task list` — `-t` is `--table`, NOT `--type`.** The `-t` short flag toggles table output (boolean). To filter by task type, you MUST spell out `--type`. Valid `--type` values: `customer-replacement-part`, `missing-part`. Passing `-t customer-replacement-part` fails with `Got unexpected extra argument (customer-replacement-part)` because `customer-replacement-part` gets parsed as a positional arg after the boolean `-t` consumes nothing.
 
 ```bash

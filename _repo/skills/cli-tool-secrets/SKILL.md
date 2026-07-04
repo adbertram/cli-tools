@@ -39,7 +39,7 @@ tools under `<cli-tools-root>` and must survive sessions:
 API keys, usernames, passwords, client secrets, personal access tokens, and
 other long-lived raw credentials.
 
-Do not use it for Cody, CourseCraft, generic project automation, non-CLI
+Do not use it for CourseCraft, generic project automation, non-CLI
 workflows, or service runtime state owned by a CLI's auth system.
 </scope>
 

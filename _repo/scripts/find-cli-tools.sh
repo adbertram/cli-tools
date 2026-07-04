@@ -9,17 +9,19 @@ REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--json|--markdown]
+Usage: $(basename "$0") [--json|--markdown] [tool-name ...]
 
 Print the available CLI tools with their README DESCRIPTION text.
 
   (default), --json
                JSON array of {name, readme, description}
   --markdown   Compact markdown list "- name: <first sentence>" for context injection
+  tool-name    Optional exact tool name filter. May be passed more than once.
 EOF
 }
 
 MODE="json"
+FILTER_NAMES=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
@@ -34,24 +36,30 @@ while [[ $# -gt 0 ]]; do
             MODE="markdown"
             shift
             ;;
-        *)
+        -*)
             log_error "unknown argument: $1"
             printf 'unknown argument: %s\n' "$1" >&2
             usage >&2
             exit 2
             ;;
+        *)
+            FILTER_NAMES+=("$1")
+            shift
+            ;;
     esac
 done
 
 log_info "starting $(basename "$0")"
-log_info "extracting CLI README DESCRIPTION blocks from $REPO_ROOT (mode=$MODE)"
-REPO_ROOT="$REPO_ROOT" MODE="$MODE" python3 - <<'PY'
+log_info "extracting CLI README DESCRIPTION blocks from $REPO_ROOT (mode=$MODE filters=${FILTER_NAMES[*]:-all})"
+FILTER_NAMES_JOINED="$(IFS=$'\n'; printf '%s' "${FILTER_NAMES[*]:-}")"
+REPO_ROOT="$REPO_ROOT" MODE="$MODE" FILTER_NAMES="$FILTER_NAMES_JOINED" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
 
 repo_root = Path(os.environ["REPO_ROOT"])
 mode = os.environ.get("MODE", "json")
+filter_names = {name for name in os.environ.get("FILTER_NAMES", "").splitlines() if name}
 records = []
 
 pyproject_paths = list(repo_root.glob("*/pyproject.toml"))
@@ -85,6 +93,9 @@ for pyproject_path in sorted(pyproject_paths):
             "description": description,
         }
     )
+
+if filter_names:
+    records = [record for record in records if record["name"] in filter_names]
 
 if mode == "markdown":
     out = ["Available CLI tools. Before running one, load the `cli-tool` skill to learn its command structure — do not guess syntax:"]

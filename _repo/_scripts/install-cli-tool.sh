@@ -2,8 +2,14 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: %s <tool-name-or-folder>\n' "$(basename "$0")" >&2
+    printf 'Usage: %s [--force-refresh] <tool-name-or-folder>\n' "$(basename "$0")" >&2
 }
+
+FORCE_REFRESH=false
+if [[ "${1:-}" == "--force-refresh" ]]; then
+    FORCE_REFRESH=true
+    shift
+fi
 
 if [[ $# -ne 1 ]]; then
     usage
@@ -27,9 +33,15 @@ if [[ ! -f "$TOOL_DIR/pyproject.toml" ]]; then
     exit 1
 fi
 
+LAUNCHER="$HOME/.local/bin/$CLI_NAME"
+if [[ "$FORCE_REFRESH" == false && -x "$LAUNCHER" ]]; then
+    "$LAUNCHER" --help >/dev/null
+    printf 'Existing launcher is healthy; skipped uv tool force refresh: %s\n' "$LAUNCHER"
+    exit 0
+fi
+
 uv tool install --force --editable "$TOOL_DIR"
 
-LAUNCHER="$HOME/.local/bin/$CLI_NAME"
 if [[ ! -x "$LAUNCHER" ]]; then
     printf 'uv tool install completed but did not create expected launcher: %s\n' "$LAUNCHER" >&2
     exit 1

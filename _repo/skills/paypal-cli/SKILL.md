@@ -47,22 +47,18 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
 
-<principle name="Browser-Session Auth Uses PTY-Backed CLI Login">
+<principle name="Browser-Session Auth Uses Computer Use CLI Login">
 When PayPal browser auth is missing, expired, CAPTCHA-blocked, or needed for
-unified transactions/refunds, run `paypal auth login -c browser_session --force`
-from Codex `exec_command` with `tty: true` so the CLI can read its final
-confirmation from `/dev/tty`. Let the CLI open a normal Chrome window with no
-automation attached. Adam completes PayPal login/CAPTCHA in that window; after
-the CLI is waiting for confirmation, send Enter with `write_stdin`.
+unified transactions/refunds, follow the shared browser-session auth rule: use
+Computer Use to open a visible terminal and run
+`bash -lc 'paypal auth login -c browser_session --force'`. Let the CLI open its
+normal Chrome login window and complete the login through that flow; retrieve
+credentials and MFA through the approved CLI-tools paths before asking Adam.
 
-Do not route this through Computer Use or Terminal.app. Computer Use is not
-authorized to control `com.apple.Terminal`, and Terminal control is unnecessary
-when Codex can launch a PTY-backed command directly. If PTY allocation fails
-before the shell starts, preserve the exact `openpty` error and switch to
-another authorized execution surface that can provide an interactive TTY; do not
-continue with a non-TTY launch for this browser-session confirmation. Do not
-script PayPal credential entry, CAPTCHA navigation, or browser-session capture
-with Playwright, browser-harness, or custom Chrome automation outside this auth
+If Computer Use or local GUI control is unavailable under the current host
+policy, stop and report that blocker. Do not script PayPal credential entry,
+CAPTCHA navigation, or browser-session capture with Playwright, browser-harness,
+manual session-file edits, or custom Chrome automation outside this auth
 command.
 </principle>
 
