@@ -1,8 +1,8 @@
 {
   "tool": "shopsalvationarmy",
   "description": "CLI interface for Shop Salvation Army",
-  "discovered_at": "2026-06-20T19:55:13Z",
-  "total_commands": 14,
+  "discovered_at": "2026-06-30T22:32:30Z",
+  "total_commands": 15,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -176,6 +176,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -283,7 +315,7 @@
         },
         "get": {
           "help": "Get details for a specific item.",
-          "usage_instructions": "Use `shopsalvationarmy search get` to fetch details for a specific listing. JSON output includes `available` (bool: true if the item is still purchasable — computed from auction_status and buy_it_now_price), `auction_status` (active or ended), `buy_it_now_price` (float or null; 0.0 means no BIN), and `current_price`. Always check `available` before recording a listing; skip if false.",
+          "usage_instructions": "Use `shopsalvationarmy search get` to fetch details for a specific listing. JSON output includes `available` (bool: true if the item is still purchasable — computed from auction_status and buy_it_now_price), `auction_status` (active or ended), `buy_it_now_price` (float or null; 0.0 means no BIN), `current_price`, `shipping_price`, and `total_price`. Shipping is quoted to ZIP 47725 when the listing exposes shipping parameters; inspect `shipping_quote_status` for `quoted`, `destination_required`, or `unavailable`. Always check `available` before recording a listing; skip if false.",
           "arguments": [
             {
               "name": "item_id",
@@ -313,10 +345,10 @@
           "usage_instructions": "Use `shopsalvationarmy search query` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "query",
-              "type": "QUERY",
+              "name": "[query]",
+              "type": "TEXT",
               "required": false,
-              "help": "Search keywords (leave empty for all items)"
+              "help": "TEXT  Search keywords (leave empty for all items)"
             }
           ],
           "options": [

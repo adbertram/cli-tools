@@ -1,10 +1,22 @@
 """Search commands for ShopSalvationArmy CLI."""
-from typing import Optional
+from typing import Dict, List, Optional
 import typer
 from ..client import ShopSalvationArmyClient, ClientError, get_client
 from ..output import print_json, print_table, print_error, print_status, handle_error
 
 app = typer.Typer(help="Search Shop The Salvation Army listings")
+DEFAULT_SHIPPING_ZIP = "47725"
+DEFAULT_SHIPPING_STATE = "IN"
+DEFAULT_SHIPPING_CITY = "Evansville"
+DEFAULT_SHIPPING_COUNTRY = "US"
+DEFAULT_SHIPPING_CARRIER = "usps"
+
+
+def _get_lowest_shipping_rate(shipping_rates: List[Dict]) -> Optional[Dict]:
+    """Extract the lowest shipping rate from rate list."""
+    if not shipping_rates:
+        return None
+    return min(shipping_rates, key=lambda rate: rate.get("shipmentCost", 0) + rate.get("otherCost", 0))
 
 
 @app.command("query")
@@ -126,6 +138,31 @@ def search_get(
         item = client.get_item(item_id)
         has_bin = item.get("buy_it_now_price") is not None and item.get("buy_it_now_price") > 0
         item["available"] = item.get("auction_status", "active") != "ended" or has_bin
+        if item.get("shipping_params"):
+            shipping_rates = client.calculate_shipping(
+                item_id=item_id,
+                zip_code=DEFAULT_SHIPPING_ZIP,
+                state=DEFAULT_SHIPPING_STATE,
+                city=DEFAULT_SHIPPING_CITY,
+                country=DEFAULT_SHIPPING_COUNTRY,
+                carrier=DEFAULT_SHIPPING_CARRIER,
+                shipping_params=item["shipping_params"],
+            )
+            lowest = _get_lowest_shipping_rate(shipping_rates)
+            if lowest:
+                shipping_cost = lowest.get("shipmentCost", 0)
+                handling_cost = lowest.get("otherCost", 0)
+                shipping_total = shipping_cost + handling_cost
+                item["shipping_quote_status"] = "quoted"
+                item["shipping_cost"] = shipping_cost
+                item["handling_cost"] = handling_cost
+                item["shipping_total"] = shipping_total
+                item["shipping_price"] = shipping_total
+                item["shipping_service"] = lowest.get("serviceName")
+                item["shipping_carrier"] = lowest.get("carrierCode", DEFAULT_SHIPPING_CARRIER.upper())
+                item_price = item.get("buy_it_now_price") if has_bin else item.get("current_price")
+                if item_price is not None:
+                    item["total_price"] = round(item_price + shipping_total, 2)
 
         if table:
             # Format key details for table
@@ -173,12 +210,12 @@ def _truncate(text: str, max_length: int) -> str:
 
 COMMAND_CREDENTIALS = {
     "categories": [
-        "custom"
+        "no_auth"
     ],
     "get": [
-        "custom"
+        "no_auth"
     ],
     "query": [
-        "custom"
+        "no_auth"
     ]
 }

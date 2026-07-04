@@ -1,4 +1,5 @@
 """ShopSalvationArmy service client."""
+import json
 import re
 import urllib.parse
 from typing import Dict, List, Optional
@@ -213,6 +214,54 @@ class ShopSalvationArmyClient:
 
         return item_data
 
+    def calculate_shipping(
+        self,
+        item_id: str,
+        zip_code: str,
+        state: str,
+        city: str,
+        country: str = "US",
+        carrier: str = "usps",
+        shipping_params: Optional[Dict] = None,
+    ) -> List[Dict]:
+        """Calculate live shipping rates for an item."""
+        if not shipping_params:
+            raise ClientError(f"Item {item_id} does not expose shipping parameters")
+
+        payload = {
+            "carrier": carrier,
+            "weight": shipping_params["weight"],
+            "length": shipping_params["length"],
+            "width": shipping_params["width"],
+            "height": shipping_params["height"],
+            "fromPostalCode": shipping_params["from_postal_code"],
+            "toState": state,
+            "toCountry": country,
+            "toPostalCode": zip_code,
+            "toCity": city,
+            "listingId": shipping_params.get("listing_id", item_id),
+        }
+        try:
+            response = self.session.post(
+                f"{self.BASE_URL}/RealTime/GetLiveRates",
+                json=payload,
+                timeout=30,
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise ClientError(f"Failed to calculate shipping for item {item_id}: {e}")
+
+        raw = response.text
+        try:
+            data = json.loads(raw)
+            if isinstance(data, str):
+                data = json.loads(data)
+        except json.JSONDecodeError as e:
+            raise ClientError(f"Shipping response was not valid JSON for item {item_id}: {e}")
+        if not isinstance(data, list):
+            raise ClientError(f"Shipping response had unexpected shape for item {item_id}")
+        return data
+
     def list_categories(self) -> List[Dict]:
         """
         List all available categories.
@@ -345,6 +394,20 @@ class ShopSalvationArmyClient:
 
         return items
 
+    @staticmethod
+    def _is_hidden(element) -> bool:
+        """Return True when a server-rendered status element is hidden."""
+        classes = element.get("class", [])
+        return "awe-hidden" in classes or "hidden" in classes
+
+    @staticmethod
+    def _parse_money(text: str) -> Optional[float]:
+        """Parse the first dollar amount from text."""
+        match = re.search(r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)", text)
+        if not match:
+            return None
+        return float(match.group(1).replace(",", ""))
+
     def _parse_item_page(self, soup: BeautifulSoup, item_id: str) -> Dict:
         """Parse Shop The Salvation Army item detail page."""
         try:
@@ -358,10 +421,13 @@ class ShopSalvationArmyClient:
             if title_elem:
                 title = title_elem.get_text(strip=True)
 
-            # Detect auction status from closed banner or "Ended" label
+            # Detect auction status from the visible detail status, not hidden templates.
+            status_label = soup.select_one(".detail__status-label")
+            status_text = status_label.get_text(" ", strip=True).lower() if status_label else ""
             closed_msg = soup.find(class_="awe-rt-ListingClosedMessage")
-            ended_label = soup.find(class_="label-default")
-            if closed_msg or (ended_label and "ended" in ended_label.get_text(strip=True).lower()):
+            visible_closed_msg = closed_msg is not None and not self._is_hidden(closed_msg)
+            ended_statuses = ("ended", "closed", "successful", "unsuccessful")
+            if visible_closed_msg or any(status in status_text for status in ended_statuses):
                 auction_status = "ended"
             else:
                 auction_status = "active"
@@ -383,22 +449,23 @@ class ShopSalvationArmyClient:
             for li in soup.find_all("li", class_="list-group-item"):
                 text = li.get_text(strip=True)
                 if "Winning Bid:" in text:
-                    m = re.search(r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)", text)
-                    if m:
-                        winning_bid = float(m.group(1).replace(",", ""))
+                    parsed = self._parse_money(text)
+                    if parsed is not None:
+                        winning_bid = parsed
                         current_price = winning_bid
                     break
 
             if current_price is None:
-                price_elem = soup.find(string=re.compile(r"Current Bid|Buy Now|Price"))
-                if price_elem:
-                    parent = price_elem.find_parent()
-                    if parent:
-                        price_text = parent.find(string=re.compile(r"\$[\d,]+\.?\d*"))
-                        if price_text:
-                            m = re.search(r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)", price_text.strip())
-                            if m:
-                                current_price = float(m.group(1).replace(",", ""))
+                price_container = soup.select_one(".awe-rt-CurrentPrice, .Bidding_Current_Price, .detail__price--current")
+                if price_container:
+                    current_price = self._parse_money(price_container.get_text("", strip=True))
+            if current_price is None:
+                for label in soup.find_all(string=re.compile(r"Current Bid|Buy Now|Price")):
+                    parent = label.find_parent()
+                    parsed = self._parse_money(parent.get_text(" ", strip=True) if parent else "")
+                    if parsed is not None:
+                        current_price = parsed
+                        break
 
             # Extract buy-it-now price from JS variable
             buy_it_now_price = None
@@ -437,6 +504,46 @@ class ShopSalvationArmyClient:
             if desc_elem:
                 description = desc_elem.get_text(strip=True)[:500]
 
+            local_pickup_price = None
+            for item in soup.find_all("li", class_="list-group-item"):
+                text = item.get_text(" ", strip=True)
+                if "Local Pick Up:" in text:
+                    local_pickup_price = self._parse_money(text)
+                    break
+
+            shipping_additional_charge = None
+            for script in soup.find_all("script"):
+                charge_match = re.search(r"\bac\s*=\s*parseFloat\(['\"]([^'\"]+)['\"]\)", script.get_text())
+                if charge_match:
+                    shipping_additional_charge = float(charge_match.group(1).replace(",", ""))
+                    break
+
+            shipping_params = None
+            shipping_buttons = soup.select("a.ct[data-carrier]")
+            carriers = [
+                button.get("data-carrier", "").strip().lower()
+                for button in shipping_buttons
+                if button.get("data-carrier")
+            ]
+            required_shipping_fields = {
+                "from_postal_code": "fromPostalCode",
+                "weight": "weight",
+                "length": "length",
+                "width": "width",
+                "height": "height",
+                "listing_id": "listingId",
+            }
+            extracted_shipping_fields = {}
+            for output_key, input_id in required_shipping_fields.items():
+                field = soup.find("input", {"id": input_id})
+                if field and field.get("value"):
+                    extracted_shipping_fields[output_key] = field["value"]
+            if carriers and set(required_shipping_fields) <= set(extracted_shipping_fields):
+                shipping_params = {
+                    **extracted_shipping_fields,
+                    "carriers": carriers,
+                }
+
             return {
                 "id": item_id,
                 "title": title,
@@ -448,6 +555,15 @@ class ShopSalvationArmyClient:
                 "bids": bids,
                 "time_left": time_left,
                 "description": description,
+                "local_pickup_price": local_pickup_price,
+                "shipping_additional_charge": shipping_additional_charge,
+                "shipping_quote_status": "destination_required" if shipping_params else "unavailable",
+                "shipping_cost": None,
+                "handling_cost": None,
+                "shipping_total": None,
+                "shipping_price": None,
+                "total_price": None,
+                "shipping_params": shipping_params,
                 "url": f"{self.BASE_URL}/Listing/Details/{item_id}",
             }
 
