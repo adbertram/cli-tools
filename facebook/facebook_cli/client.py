@@ -62,6 +62,8 @@ GROUP_POST_THREAD_STOP_MARKERS = [
 class FacebookClient:
     """Client that uses BrowserAutomation to automate Facebook."""
 
+    COMMENT_COMPOSER_SELECTOR = '[role="textbox"][contenteditable="true"]'
+
     def __init__(self):
         t0 = time.monotonic()
         self.config = get_config()
@@ -103,6 +105,123 @@ class FacebookClient:
             return result
         except Exception as e:
             raise ClientError(f"Failed to capture page snapshot: {e}")
+
+    @staticmethod
+    def _visible_comment_composer_js() -> str:
+        """Return JS that finds the active visible Facebook comment composer.
+
+        Facebook changes the group post composer between Lexical builds. The
+        visible contenteditable comment box can lack the old
+        ``data-lexical-editor=\"true\"`` marker, so public writes locate the
+        composer by the stable accessibility contract first: visible textbox +
+        contenteditable, excluding obvious non-comment textboxes such as Search.
+        Lexical-marked boxes are still preferred when present, but they are not
+        required.
+        """
+        return r'''
+            () => {
+                const isVisible = (el) => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                };
+                const describe = (el) => {
+                    const label = el.getAttribute("aria-label") || "";
+                    const placeholder = el.getAttribute("aria-placeholder") || "";
+                    const text = (el.innerText || el.textContent || "").trim();
+                    const combined = (label + " " + placeholder + " " + text).toLowerCase();
+                    return {
+                        label,
+                        placeholder,
+                        text: text.slice(0, 80),
+                        hasLexical: el.getAttribute("data-lexical-editor") === "true",
+                        isCommentish: /comment|reply|answer|write/.test(combined),
+                        isSearch: /search/.test(combined),
+                    };
+                };
+                const all = Array.from(document.querySelectorAll('[role="textbox"][contenteditable="true"]'))
+                    .filter(isVisible)
+                    .map((el) => ({el, info: describe(el)}))
+                    .filter((item) => !item.info.isSearch);
+                const lexical = all.filter((item) => item.info.hasLexical);
+                const commentish = all.filter((item) => item.info.isCommentish);
+                const candidates = lexical.length ? lexical : (commentish.length ? commentish : all);
+                return {
+                    count: candidates.length,
+                    totalVisibleTextboxes: all.length,
+                    usedFilter: lexical.length ? "lexical" : (commentish.length ? "commentish" : "visible-contenteditable-textbox"),
+                    candidates: candidates.map((item) => item.info),
+                };
+            }
+        '''
+
+    def _comment_composer_state(self, page) -> Dict:
+        state = page.evaluate(self._visible_comment_composer_js())
+        if isinstance(state, dict):
+            return state
+        return {"count": 0, "error": "comment composer probe returned non-dict state"}
+
+    def _wait_for_visible_comment_composer(self, page, timeout_ms: int = 10000) -> Dict:
+        deadline = time.monotonic() + (timeout_ms / 1000)
+        last_state: Dict = {"count": 0}
+        while time.monotonic() < deadline:
+            last_state = self._comment_composer_state(page)
+            if last_state.get("count") == 1:
+                return last_state
+            page.wait_for_timeout(250)
+        raise ClientError(
+            "Timed out waiting for exactly one visible Facebook comment textbox. "
+            f"Last composer state: {last_state}"
+        )
+
+    def _insert_text_into_visible_comment_composer(self, page, text: str) -> Dict:
+        js = (
+            '(text) => {'
+            ' const isVisible = (el) => {'
+            '   const r = el.getBoundingClientRect();'
+            '   return r.width > 0 && r.height > 0;'
+            ' };'
+            ' const describe = (el) => {'
+            '   const label = el.getAttribute("aria-label") || "";'
+            '   const placeholder = el.getAttribute("aria-placeholder") || "";'
+            '   const body = (label + " " + placeholder + " " + (el.innerText || el.textContent || "")).toLowerCase();'
+            '   return {'
+            '     label,'
+            '     placeholder,'
+            '     hasLexical: el.getAttribute("data-lexical-editor") === "true",'
+            '     isCommentish: /comment|reply|answer|write/.test(body),'
+            '     isSearch: /search/.test(body),'
+            '   };'
+            ' };'
+            ' const all = Array.from(document.querySelectorAll(\'[role="textbox"][contenteditable="true"]\'))'
+            '   .filter(isVisible)'
+            '   .map((el) => ({el, info: describe(el)}))'
+            '   .filter((item) => !item.info.isSearch);'
+            ' const lexical = all.filter((item) => item.info.hasLexical);'
+            ' const commentish = all.filter((item) => item.info.isCommentish);'
+            ' const candidates = lexical.length ? lexical : (commentish.length ? commentish : all);'
+            ' if (candidates.length !== 1) {'
+            '   return {'
+            '     success: false,'
+            '     error: "Expected exactly one visible comment textbox, found " + candidates.length,'
+            '     count: candidates.length,'
+            '     candidates: candidates.map((item) => item.info),'
+            '   };'
+            ' }'
+            ' const commentBox = candidates[0].el;'
+            ' commentBox.focus();'
+            ' document.execCommand("insertText", false, text);'
+            ' return {'
+            '   success: true,'
+            '   placeholder: commentBox.getAttribute("aria-placeholder") || commentBox.getAttribute("aria-label") || "",'
+            '   usedFilter: lexical.length ? "lexical" : (commentish.length ? "commentish" : "visible-contenteditable-textbox"),'
+            '   hasLexical: candidates[0].info.hasLexical,'
+            ' };'
+            ' }'
+        )
+        typed = page.evaluate(js, text)
+        if isinstance(typed, dict):
+            return typed
+        return {"success": False, "error": "comment composer insert returned non-dict result"}
 
     def _assert_authenticated_page(self, page, requested_url: str, surface: str) -> None:
         """Fail fast when Facebook serves a login or challenge page."""
@@ -202,10 +321,11 @@ class FacebookClient:
         js = (
             '() => {'
             ' const boxes = Array.from(document.querySelectorAll('
-            '   \'[role="textbox"][contenteditable="true"][data-lexical-editor="true"]\''
+            '   \'[role="textbox"][contenteditable="true"]\''
             ' )).filter(el => {'
             '   const r = el.getBoundingClientRect();'
-            '   return r.width > 0 && r.height > 0;'
+            '   const label = ((el.getAttribute("aria-label") || "") + " " + (el.getAttribute("aria-placeholder") || "")).toLowerCase();'
+            '   return r.width > 0 && r.height > 0 && !label.includes("search");'
             ' });'
             ' if (boxes.length === 0) {'
             # Composer disappeared entirely — that also counts as cleared
@@ -1476,8 +1596,9 @@ class FacebookClient:
         group_id: str,
         body: str,
         count: int,
-    ) -> tuple[List[Dict], bool]:
-        """Fetch group feed stories through Facebook's discussion Relay query."""
+        after: Optional[str] = None,
+    ) -> tuple[List[Dict], bool, Optional[str]]:
+        """Fetch one group feed page through Facebook's discussion Relay query."""
         current_user = self._facebook_server_define(body, "CurrentUserInitialData")
         dtsg = self._facebook_server_define(body, "DTSGInitialData")
         lsd = self._facebook_server_define(body, "LSD")
@@ -1493,6 +1614,8 @@ class FacebookClient:
         variables, document_id = self._extract_group_discussion_request(body, group_id)
         variables["regular_stories_count"] = count
         variables["regular_stories_stream_initial_count"] = count
+        if after is not None:
+            variables["cursor"] = after
         headers = {
             "Origin": FACEBOOK_BASE_URL,
             "Referer": f"{GROUPS_BASE}/{group_id}/",
@@ -1539,11 +1662,25 @@ class FacebookClient:
         *,
         document_id: Optional[str] = None,
         variable_keys: Optional[List[str]] = None,
-    ) -> tuple[List[Dict], bool]:
-        """Extract Story edges and next-page status from discussion Relay payloads."""
+    ) -> tuple[List[Dict], bool, Optional[str]]:
+        """Extract Story edges and next-page cursor from discussion Relay payloads."""
         posts: List[Dict] = []
         has_next_page = False
+        next_cursor: Optional[str] = None
         graph_errors = []
+
+        def update_page_info(page_info: Dict) -> None:
+            nonlocal has_next_page, next_cursor
+            has_next_page_value = page_info.get("has_next_page")
+            if not isinstance(has_next_page_value, bool):
+                raise ClientError("Facebook group feed page_info has_next_page is not boolean.")
+            cursor_value = page_info.get("end_cursor")
+            if cursor_value is not None and not isinstance(cursor_value, str):
+                raise ClientError("Facebook group feed page_info end_cursor is not a string.")
+            has_next_page = has_next_page or has_next_page_value
+            if cursor_value:
+                next_cursor = cursor_value
+
         for payload in payloads:
             errors = payload.get("errors")
             if errors:
@@ -1551,6 +1688,15 @@ class FacebookClient:
 
             data = payload.get("data")
             if isinstance(data, dict):
+                streamed_node = data.get("node")
+                if isinstance(streamed_node, dict) and streamed_node.get("__typename") == "Story":
+                    post = self._group_post_from_story_node(group_id, streamed_node)
+                    comments = self._extract_comments_from_relay_payloads((streamed_node,))
+                    post["comments"] = comments
+                    post["comment_count"] = self._count_comments(comments)
+                    post["image_urls"] = self._extract_story_image_urls(streamed_node)
+                    posts.append(post)
+
                 group = data.get("group")
                 if isinstance(group, dict):
                     group_feed = group.get("group_feed")
@@ -1571,17 +1717,11 @@ class FacebookClient:
                                 posts.append(post)
                         page_info = group_feed.get("page_info")
                         if isinstance(page_info, dict):
-                            has_next_page_value = page_info.get("has_next_page")
-                            if not isinstance(has_next_page_value, bool):
-                                raise ClientError("Facebook group feed page_info has_next_page is not boolean.")
-                            has_next_page = has_next_page or has_next_page_value
+                            update_page_info(page_info)
 
                 page_info = data.get("page_info")
                 if isinstance(page_info, dict):
-                    has_next_page_value = page_info.get("has_next_page")
-                    if not isinstance(has_next_page_value, bool):
-                        raise ClientError("Facebook group feed page_info has_next_page is not boolean.")
-                    has_next_page = has_next_page or has_next_page_value
+                    update_page_info(page_info)
 
             label = payload.get("label")
             if isinstance(label, str) and label.endswith("$page_info"):
@@ -1598,6 +1738,8 @@ class FacebookClient:
                 if not isinstance(has_next_page_value, bool):
                     raise ClientError("Facebook streamed group feed has_next_page is not boolean.")
                 has_next_page = has_next_page or has_next_page_value
+                if next_cursor_value:
+                    next_cursor = next_cursor_value
 
         if graph_errors and not posts:
             raise ClientError(
@@ -1605,7 +1747,7 @@ class FacebookClient:
                 f"{graph_errors}. document_id={document_id!r} variable_keys={variable_keys!r}"
             )
 
-        return posts, has_next_page
+        return posts, has_next_page, next_cursor
 
     @staticmethod
     def _parse_aria_label(aria: str) -> Optional[Dict[str, Optional[str]]]:
@@ -2001,7 +2143,33 @@ class FacebookClient:
         url = f"{GROUPS_BASE}/{group_id}/"
         print_info(f"Fetching up to {limit} posts from group {group_id}...")
         body = self._fetch_authenticated_facebook_bootstrap_html(url)
-        posts_data, _ = self._graphql_group_discussion_posts(group_id, body, count=limit)
+        posts_data: List[Dict] = []
+        seen_post_ids: set[str] = set()
+        next_cursor: Optional[str] = None
+        has_next_page = True
+        page_count = 0
+        max_pages = 5
+        while len(posts_data) < limit and has_next_page and page_count < max_pages:
+            requested_count = limit - len(posts_data)
+            page_posts, has_next_page, next_cursor = self._graphql_group_discussion_posts(
+                group_id,
+                body,
+                count=requested_count,
+                after=next_cursor,
+            )
+            page_count += 1
+            added_this_page = 0
+            for post in page_posts:
+                post_id = post.get("post_id")
+                if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
+                    continue
+                seen_post_ids.add(post_id)
+                posts_data.append(post)
+                added_this_page += 1
+                if len(posts_data) >= limit:
+                    break
+            if not next_cursor or added_this_page == 0:
+                break
         posts = [GroupPost(**p) for p in posts_data[:limit]]
         if not full_threads:
             return posts
@@ -2153,6 +2321,7 @@ class FacebookClient:
         print_info("Commenting on post...")
         page = self._get_page(url, settle_ms=0)
         page.wait_for_selector('[role="main"]', timeout=15000)
+        self._assert_authenticated_page(page, url, "group post comment")
 
         # Activate the post's comment control if the composer is not already
         # visible. On current Facebook post pages the Lexical textbox is often
@@ -2184,16 +2353,18 @@ class FacebookClient:
             ' const main = document.querySelector(\'[role="main"]\');'
             ' if (!main) return {success: false, error: "Main region not found"};'
             ' const composerSelector ='
-            '   \'[role="textbox"][contenteditable="true"][data-lexical-editor="true"]\';'
+            '   \'[role="textbox"][contenteditable="true"]\';'
             # The comment composer is rendered in a React portal OUTSIDE
-            # [role="main"] (verified against the live DOM: the single visible
-            # Lexical composer has inMain === false). So detect the
-            # already-visible composer DOCUMENT-WIDE, not under [role="main"].
-            # On this single-post permalink page there is exactly one target
-            # post, so a single visible Lexical composer is unambiguous. This
-            # mirrors how js_comment below locates the box to type into.
+            # [role="main"], and current Facebook builds no longer always set
+            # data-lexical-editor="true" on the visible comment box. Detect an
+            # already-visible composer document-wide by the accessibility
+            # textbox/contenteditable contract and exclude Search-like boxes.
             ' const visibleComposers = Array.from(document.querySelectorAll(composerSelector))'
-            '   .filter(isVisible);'
+            '   .filter(el => {'
+            '     if (!isVisible(el)) return false;'
+            '     const label = ((el.getAttribute("aria-label") || "") + " " + (el.getAttribute("aria-placeholder") || "")).toLowerCase();'
+            '     return !label.includes("search");'
+            '   });'
             ' if (visibleComposers.length === 1) {'
             '   return {success: true, alreadyVisible: true};'
             ' }'
@@ -2234,46 +2405,14 @@ class FacebookClient:
         activated = page.evaluate(js_activate, {"groupId": group_id, "postId": post_id})
         if not isinstance(activated, dict) or not activated.get("success"):
             raise ClientError(f"Failed to activate comment composer: {(activated or {}).get('error', 'unknown')}")
-        if not activated.get("alreadyVisible"):
-            page.wait_for_selector(
-                '[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
-                timeout=10000,
-            )
+        self._assert_authenticated_page(page, url, "group post comment composer")
+        self._wait_for_visible_comment_composer(page, timeout_ms=10000)
 
-        # Find and focus the comment box.
-        # Facebook personalizes the aria-placeholder/aria-label (e.g. "Answer as ...",
-        # "Write a comment…", "Comment as …"), so we cannot rely on placeholder text
-        # matching. The comment-dialog composer is also rendered in a React portal
-        # outside [role="main"], so we scope to the full document and pick the unique
-        # visible [role="textbox"][contenteditable="true"][data-lexical-editor="true"].
-        # Fail loudly if that invariant ever breaks — no fallbacks.
-        js_comment = (
-            '(text) => {'
-            ' const candidates = Array.from(document.querySelectorAll('
-            '   \'[role="textbox"][contenteditable="true"][data-lexical-editor="true"]\''
-            ' )).filter(el => {'
-            '   const r = el.getBoundingClientRect();'
-            '   return r.width > 0 && r.height > 0;'
-            ' });'
-            ' if (candidates.length === 0) {'
-            '   return {success: false, error: "Comment composer not found (no visible Lexical textbox on page)"};'
-            ' }'
-            ' if (candidates.length > 1) {'
-            '   const descs = candidates.map(el => ('
-            '     (el.getAttribute("aria-placeholder") || el.getAttribute("aria-label") || "?")'
-            '   )).join(" | ");'
-            '   return {success: false, error: "Multiple Lexical composers found (ambiguous): " + descs};'
-            ' }'
-            ' const commentBox = candidates[0];'
-            ' commentBox.focus();'
-            ' document.execCommand("insertText", false, text);'
-            ' return {'
-            '   success: true,'
-            '   placeholder: commentBox.getAttribute("aria-placeholder") || commentBox.getAttribute("aria-label") || ""'
-            ' };'
-            ' }'
-        )
-        typed = page.evaluate(js_comment, text)
+        # Find and focus the comment box. Facebook personalizes the
+        # aria-placeholder/aria-label and no longer guarantees the old Lexical
+        # data attribute, so use the same visible contenteditable textbox probe
+        # that the dry selector test uses.
+        typed = self._insert_text_into_visible_comment_composer(page, text)
         if not isinstance(typed, dict) or not typed.get("success"):
             raise ClientError(f"Failed to type comment: {(typed or {}).get('error', 'unknown')}")
 

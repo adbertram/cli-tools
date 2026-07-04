@@ -1,3 +1,5 @@
+import json
+
 from facebook_cli import client as client_mod
 from facebook_cli import main as main_mod
 from facebook_cli import _helpers as helpers_mod
@@ -51,6 +53,31 @@ def test_group_post_ref_parts_returns_stable_exact_ids(monkeypatch):
         "group_id": "2318028917",
         "post_id": "10163442043723918",
     }
+
+
+def test_comment_on_post_fails_fast_when_browser_page_is_logged_out(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+
+    class LoggedOutPage:
+        url = "https://www.facebook.com/groups/2318028917/posts/10163561273178918/"
+
+        def wait_for_selector(self, selector, timeout):
+            assert selector == '[role="main"]'
+
+        def evaluate(self, script, *args):
+            return {"loginForm": True, "recaptcha": False}
+
+    monkeypatch.setattr(client, "_get_page", lambda url, settle_ms=0: LoggedOutPage())
+
+    try:
+        client.comment_on_post("2318028917/posts/10163561273178918", "No public write")
+    except ClientError as exc:
+        message = str(exc)
+        assert "Facebook served a login form for group post comment" in message
+        assert "facebook auth login --force" in message
+    else:
+        raise AssertionError("Expected logged-out page to fail before comment activation")
 
 
 def test_wait_for_comment_on_exact_post_requires_exact_post_id(monkeypatch):
@@ -328,7 +355,7 @@ def test_group_discussion_graphql_allows_empty_dtsg_for_read_only_query(monkeypa
                                         }
                                     }
                                 ],
-                                "page_info": {"has_next_page": False},
+                                "page_info": {"has_next_page": False, "end_cursor": "cursor-1"},
                             }
                         }
                     }
@@ -341,10 +368,11 @@ def test_group_discussion_graphql_allows_empty_dtsg_for_read_only_query(monkeypa
     monkeypatch.setattr(client, "_facebook_http_client", lambda: "http-client")
     monkeypatch.setattr(client_mod, "RelayGraphQLClient", FakeRelayGraphQLClient)
 
-    posts, has_next = client._graphql_group_discussion_posts("2318028917", "bootstrap", 5)
+    posts, has_next, next_cursor = client._graphql_group_discussion_posts("2318028917", "bootstrap", 5)
 
     assert [post["post_id"] for post in posts] == ["1001"]
     assert has_next is False
+    assert next_cursor == "cursor-1"
     assert "fb_dtsg" not in captured["fields"]
     assert "jazoest" not in captured["fields"]
     assert captured["fields"]["lsd"] == "lsd-token"
@@ -373,17 +401,132 @@ def test_extract_group_discussion_posts_uses_data_when_graphql_has_field_errors(
                                 }
                             }
                         ],
-                        "page_info": {"has_next_page": True},
+                        "page_info": {"has_next_page": True, "end_cursor": "next-cursor"},
                     }
                 }
             },
         },
     )
 
-    posts, has_next = client._extract_group_discussion_posts("2318028917", payloads)
+    posts, has_next, next_cursor = client._extract_group_discussion_posts("2318028917", payloads)
 
     assert [post["post_id"] for post in posts] == ["1002"]
     assert has_next is True
+    assert next_cursor == "next-cursor"
+
+
+def test_list_group_posts_fills_underfilled_first_page_with_cursor(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    calls = []
+
+    def fake_server_define(body, name):
+        assert body == "bootstrap"
+        return {
+            "CurrentUserInitialData": {"USER_ID": "user-1"},
+            "DTSGInitialData": {},
+            "LSD": {"token": "lsd-token"},
+        }[name]
+
+    def story(post_id):
+        return {
+            "node": {
+                "__typename": "Story",
+                "post_id": post_id,
+                "comet_sections": {
+                    "message": {
+                        "__typename": "CometFeedStoryDefaultMessageRenderingStrategy",
+                        "story": {"message": {"text": f"Body {post_id}"}},
+                    },
+                    "timestamp": {"story": {"url": f"https://example.com/{post_id}"}},
+                },
+            }
+        }
+
+    class FakeRelayGraphQLClient:
+        def __init__(self, http):
+            assert http == "http-client"
+
+        def execute(self, request, headers=None):
+            fields = request.form_fields()
+            variables = json.loads(fields["variables"])
+            calls.append(variables)
+            cursor = variables.get("cursor")
+            if cursor is None:
+                edges = [story(str(1000 + index)) for index in range(9)]
+                page_info = {"has_next_page": True, "end_cursor": "cursor-1"}
+            else:
+                assert cursor == "cursor-1"
+                edges = [story("1009")]
+                page_info = {"has_next_page": False, "end_cursor": "cursor-2"}
+            return ({"data": {"group": {"group_feed": {"edges": edges, "page_info": page_info}}}},)
+
+    client = client_mod.FacebookClient()
+    monkeypatch.setattr(client, "_fetch_authenticated_facebook_bootstrap_html", lambda url: "bootstrap")
+    monkeypatch.setattr(client, "_facebook_server_define", fake_server_define)
+    monkeypatch.setattr(client, "_extract_group_discussion_request", lambda body, group_id: ({"groupID": group_id}, "doc-1"))
+    monkeypatch.setattr(client, "_facebook_http_client", lambda: "http-client")
+    monkeypatch.setattr(client_mod, "RelayGraphQLClient", FakeRelayGraphQLClient)
+
+    posts = client.list_group_posts("2318028917", limit=10)
+
+    assert [post.post_id for post in posts] == [str(1000 + index) for index in range(10)]
+    assert len(calls) == 2
+    assert calls[0]["regular_stories_count"] == 10
+    assert calls[1]["regular_stories_count"] == 1
+    assert calls[1]["cursor"] == "cursor-1"
+
+
+def test_extract_group_discussion_posts_uses_streamed_story_nodes_when_graphql_has_field_errors(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+    payloads = (
+        {
+            "errors": [
+                {
+                    "message": "A server error field_exception occured. Check server logs for details.",
+                    "path": [
+                        "node",
+                        "comet_sections",
+                        "feedback",
+                        "story",
+                        "story_ufi_container",
+                        "story",
+                        "feedback_context",
+                        "feedback_target_with_context",
+                        "associated_group",
+                        "feature_intervention",
+                    ],
+                }
+            ],
+            "data": {
+                "node": {
+                    "__typename": "Story",
+                    "post_id": "1003",
+                    "comet_sections": {
+                        "content": {
+                            "story": {
+                                "comet_sections": {
+                                    "message": {
+                                        "__typename": "CometFeedStoryDefaultMessageRenderingStrategy",
+                                        "story": {"message": {"text": "Streamed node body"}},
+                                    }
+                                }
+                            }
+                        },
+                        "timestamp": {"story": {"url": "https://example.com/1003"}},
+                    },
+                }
+            },
+        },
+        {"label": "GroupsCometFeedRegularStories_paginationGroup$page_info", "data": {"page_info": {"has_next_page": False, "end_cursor": "cursor-3"}}},
+    )
+
+    posts, has_next, next_cursor = client._extract_group_discussion_posts("2318028917", payloads)
+
+    assert [post["post_id"] for post in posts] == ["1003"]
+    assert posts[0]["text"] == "Streamed node body"
+    assert has_next is False
+    assert next_cursor == "cursor-3"
 
 
 def test_extract_group_discussion_posts_still_fails_errors_without_posts(monkeypatch):
