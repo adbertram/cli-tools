@@ -1,7 +1,6 @@
 """Configuration management for {{Name}} CLI wrapper."""
 
 import shutil
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -20,11 +19,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for wrapper runtime state."""
-        return self.get_profile_data_dir()
 
     @property
     def cli_command(self) -> str:

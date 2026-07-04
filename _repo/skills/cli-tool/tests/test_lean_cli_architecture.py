@@ -112,6 +112,38 @@ def _is_browser_automation_base(base: ast.expr) -> bool:
     return False
 
 
+def _is_base_config_base(base: ast.expr) -> bool:
+    if isinstance(base, ast.Name):
+        return base.id == "BaseConfig"
+    if isinstance(base, ast.Attribute):
+        return base.attr == "BaseConfig"
+    return False
+
+
+def _defines_storage_dir(class_node: ast.ClassDef) -> bool:
+    """Return True if the class body defines ``storage_dir`` directly.
+
+    Covers a property/method (``def storage_dir``, sync or async) as well as a
+    plain class-level ``storage_dir = ...`` assignment. Inherited definitions on
+    BaseConfig do not appear in the subclass body and are correctly ignored.
+    """
+    for stmt in class_node.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == "storage_dir":
+            return True
+        if isinstance(stmt, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "storage_dir"
+            for target in stmt.targets
+        ):
+            return True
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == "storage_dir"
+        ):
+            return True
+    return False
+
+
 def test_no_unused_direct_pydantic_dependency(cli_name, cli_dir, command_filter):
     """A CLI should not depend on pydantic unless its runtime code imports it."""
     if command_filter:
@@ -240,4 +272,38 @@ def test_browser_automation_subclasses_are_declarative(cli_name, cli_dir, comman
                 "methods or nested code on top of BrowserAutomation.\n"
                 "Fix: leave auth lifecycle behavior in cli_tools_shared and keep "
                 "the subclass to declarative hook constants only."
+            )
+
+
+def test_config_does_not_override_storage_dir(cli_name, cli_dir, command_filter):
+    """A tool's Config subclass must not override ``storage_dir``.
+
+    ``BaseConfig.storage_dir`` already returns ``self.get_profile_data_dir()``,
+    the per-profile data directory. A per-tool override that merely re-returns
+    ``get_profile_data_dir()`` is dead redundancy, and a variant that returns
+    anything else (e.g. ``self.tool_dir``) reintroduces the slack cross-profile
+    cache bleed-through bug. Either way, tools must inherit the base definition.
+    """
+    if command_filter:
+        pytest.skip("Skipping (command filter active)")
+
+    config_file = _pkg_dir(cli_dir, cli_name) / "config.py"
+    if not config_file.exists():
+        pytest.skip("No config.py")
+
+    tree = ast.parse(config_file.read_text())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not any(_is_base_config_base(base) for base in node.bases):
+            continue
+        if _defines_storage_dir(node):
+            pytest.fail(
+                f"{config_file.relative_to(cli_dir)} class {node.name} overrides "
+                "storage_dir.\n"
+                "Fix: delete the storage_dir override. BaseConfig.storage_dir "
+                "already returns the per-profile data dir "
+                "(self.get_profile_data_dir()). A redundant override invites "
+                "drift, and a tool_dir-style variant causes cross-profile cache "
+                "bleed-through (the slack bug)."
             )

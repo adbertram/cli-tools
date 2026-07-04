@@ -10,7 +10,7 @@ Use it for any token, API key, username, password, or other secret that:
 - must survive sessions; and
 - must be readable by CLI-tool agents, scripts, or service-specific CLI workflows.
 
-Do not use it for Cody, CourseCraft, generic agent workflows, project-specific automation outside `cli-tools`, or non-CLI secrets.
+Do not use it for CourseCraft, generic agent workflows, project-specific automation outside `cli-tools`, or non-CLI secrets.
 
 For CLI-tool work, reusable human-supplied secrets must be stored and retrieved through the CLI-tools secret manager. Do not tell users or agents to place those secrets in any `.env` file.
 

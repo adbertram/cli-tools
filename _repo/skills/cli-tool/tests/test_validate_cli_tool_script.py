@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -61,7 +62,8 @@ def test_test_script_reports_missing_launcher_as_structured_failure():
 
     assert "json_test_failure()" in script_text
     assert "test_cli_executable_linked" in script_text
-    assert "CLI executable link missing or not executable: $CANONICAL_UV_LAUNCHER" in script_text
+    assert '[[ ! -f "$CANONICAL_UV_LAUNCHER" || ! -x "$CANONICAL_UV_LAUNCHER" ]]' in script_text
+    assert "CLI executable link missing, not a regular file, or not executable: $CANONICAL_UV_LAUNCHER" in script_text
     assert 'CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"' in script_text
 
 
@@ -85,6 +87,14 @@ def test_install_script_resolves_personal_cli_dirs():
 def test_install_script_requires_launcher_symlink_for_success():
     script_text = (SKILL_ROOT / "scripts/install-cli-tool.sh").read_text()
 
+    assert 'FORCE_REFRESH="false"' in script_text
+    assert 'metadata_refresh_needed="false"' in script_text
+    assert 'PYTHON_REQUEST="$(python3 "$SCRIPT_DIR/resolve_uv_python.py" "$TOOL_DIR/pyproject.toml")"' in script_text
+    assert 'existing_python_matches_request="false"' in script_text
+    assert '[ "$existing_python_matches_request" = "true" ]' in script_text
+    assert '[ "$metadata_file" -nt "$LAUNCHER" ]' in script_text
+    assert 'Existing editable install is healthy; skipped uv tool force refresh.' in script_text
+    assert 'uv tool install -e "$TOOL_DIR" --force --refresh' in script_text
     assert 'SYMLINK_EXISTS="false"' in script_text
     assert 'SYMLINK_EXISTS="true"' in script_text
     assert "did not create expected launcher" in script_text
@@ -96,6 +106,8 @@ def test_install_script_requires_launcher_symlink_for_success():
 def test_repo_install_script_requires_uv_managed_global_launcher():
     script_text = (REPO_ROOT / "_repo/_scripts/install-cli-tool.sh").read_text()
 
+    assert "FORCE_REFRESH=false" in script_text
+    assert "Existing launcher is healthy; skipped uv tool force refresh:" in script_text
     assert 'PERSONAL_TOOL_DIR="$REPO_ROOT/_personal/$REQUESTED_TOOL"' in script_text
     assert 'TOOL_DIR="$PERSONAL_TOOL_DIR"' in script_text
     assert 'LAUNCHER="$HOME/.local/bin/$CLI_NAME"' in script_text
@@ -149,6 +161,53 @@ chmod +x "$HOME/.local/bin/ata-blog"
     assert "/_personal/ata-blog" in uv_args_file.read_text()
 
 
+def test_create_cli_tool_skill_help_does_not_create_option_named_skill():
+    script = SKILL_ROOT / "scripts/create-cli-tool-skill"
+    accidental_skill_dir = REPO_ROOT / "_repo/skills/--help-cli"
+
+    assert not accidental_skill_dir.exists(), "pre-existing --help-cli scaffold must be removed first"
+
+    try:
+        result = subprocess.run(
+            [str(script), "--help"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "Usage: create-cli-tool-skill <tool-name>" in result.stdout
+        assert result.stderr == ""
+        assert not accidental_skill_dir.exists()
+    finally:
+        shutil.rmtree(accidental_skill_dir, ignore_errors=True)
+
+
+def test_create_cli_tool_skill_rejects_option_like_tool_name_without_scaffold():
+    script = SKILL_ROOT / "scripts/create-cli-tool-skill"
+    accidental_skill_dir = REPO_ROOT / "_repo/skills/--not-a-tool-cli"
+
+    assert not accidental_skill_dir.exists(), "pre-existing --not-a-tool-cli scaffold must be removed first"
+
+    try:
+        result = subprocess.run(
+            [str(script), "--not-a-tool"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "Error: tool name must not start with '-': --not-a-tool" in result.stderr
+        assert "Usage: create-cli-tool-skill <tool-name>" in result.stderr
+        assert result.stdout == ""
+        assert not accidental_skill_dir.exists()
+    finally:
+        shutil.rmtree(accidental_skill_dir, ignore_errors=True)
+
+
 def test_validate_script_resolves_personal_cli_dirs():
     script_text = (SKILL_ROOT / "scripts/validate-cli-tool.sh").read_text()
 
@@ -180,3 +239,35 @@ def test_find_cli_tools_accepts_explicit_json_mode():
     assert isinstance(records, list)
     assert records
     assert {"name", "readme", "description"} <= set(records[0])
+
+
+def test_find_cli_tools_accepts_exact_tool_name_filter():
+    script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
+
+    result = subprocess.run(
+        [str(script), "--json", "upwork"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    records = json.loads(result.stdout)
+    assert [record["name"] for record in records] == ["upwork"]
+
+
+def test_find_cli_tools_compatibility_wrapper_for_old_tools_path():
+    script = REPO_ROOT / "_repo/tools/find-cli-tools.sh"
+
+    result = subprocess.run(
+        [str(script), "--json", "upwork"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    records = json.loads(result.stdout)
+    assert [record["name"] for record in records] == ["upwork"]

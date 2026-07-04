@@ -254,6 +254,7 @@ def test_repo_root_is_only_source_visible_gitignore(cli_tools_root, command_filt
         pytest.skip("Skipping general setup tests (command filter active)")
 
     generated_dirs = {
+        ".claude",
         ".git",
         ".mypy_cache",
         ".pytest_cache",

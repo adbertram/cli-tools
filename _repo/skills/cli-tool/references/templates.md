@@ -204,7 +204,6 @@ Reusable human-supplied secrets do not belong in any `.env` file shown here. Sto
 
 **config.py — BaseConfig subclass:**
 ```python
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -227,10 +226,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
     def get_browser(self):
         """Return the BrowserAutomation subclass for this CLI."""

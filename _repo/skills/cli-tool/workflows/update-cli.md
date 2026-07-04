@@ -104,12 +104,14 @@ similar commands.
 
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate available
 CLI tools, match the exact `name` from its JSON output, and derive the source
-directory from the matching record's `readme` parent. If `readme` is relative,
-resolve it against `<cli-tools-root>` first; do not resolve it against the
-current shell working directory. Then prove that directory exists and contains
-`pyproject.toml` before navigating. If there is no exact record, report
-`CLI_SOURCE_NOT_FOUND: <name>` and stop or ask which discovered CLI name to
-update.
+directory from the matching record's `readme` parent. You may pass the exact
+tool name as a positional filter, for example
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+still a JSON array. If `readme` is relative, resolve it against
+`<cli-tools-root>` first; do not resolve it against the current shell working
+directory. Then prove that directory exists and contains `pyproject.toml` before
+navigating. If there is no exact record, report `CLI_SOURCE_NOT_FOUND: <name>`
+and stop or ask which discovered CLI name to update.
 
 Only after the source directory is proven:
 
@@ -346,13 +348,24 @@ Invoke the `debloat` skill on the CLI directory.
 
 ## Step 4: Reinstall the CLI
 
-After changes, use the install script:
+After changes, use the install script as a health check:
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh <name>
 ```
 
-The script returns JSON with `success`, `install_output`, and `help_works`. Verify `"success": true` before proceeding.
+The script returns JSON with `success`, `install_output`, and `help_works`.
+When the existing editable install is healthy and dependency metadata is older
+than the launcher, it skips `uv tool install` to avoid replacing the active
+`~/.local/bin/<name>` launcher during unrelated CLI use. Verify `"success":
+true` before proceeding.
+
+Use the explicit refresh path when you changed dependency metadata, entry
+points, Python requirements, overrides, or a broken install must be rebuilt:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh <name>
+```
 
 For remote installs such as `adam-server`, verify the remote checkout contains
 the intended changed file content before reinstalling. If Dropbox sync may lag,

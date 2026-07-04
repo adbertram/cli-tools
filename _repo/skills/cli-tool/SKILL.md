@@ -44,10 +44,12 @@ records with `name`, `readme`, and `description`, where `description` is
 extracted from each tool README's `## DESCRIPTION` block. The `readme` value is
 relative to `<cli-tools-root>` unless it is already absolute; resolve it against
 that root before deriving the tool directory or checking files. The default mode is
-JSON, and `--json` is accepted as an explicit alias for that default. When
-filtering the saved output with `jq`, iterate the array explicitly, for example
-`jq -e '.[] | select(.name == "google")' <file>`. Do not treat the output as
-JSONL records. When parsing the saved JSON with Python, do not wrap a quoted
+JSON, and `--json` is accepted as an explicit alias for that default. To inspect
+one CLI, pass the exact tool name as a positional filter, for example
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+still a JSON array. When filtering the saved output with `jq`, iterate the array
+explicitly, for example `jq -e '.[] | select(.name == "google")' <file>`. Do not
+treat the output as JSONL records. When parsing the saved JSON with Python, do not wrap a quoted
 heredoc parser inside a single-quoted `bash -lc '...'` command; that quote layer
 can strip Python string literals such as `Path('/tmp/cli-tools.json')` before
 Python starts. Instead invoke the parser as a standalone multiline command and
@@ -330,6 +332,50 @@ Continue only after explicit approval. See `references/templates.md` for type
 details.
 </principle>
 
+<principle name="Browser-Session Auth Through Computer Use">
+When a CLI operation requires browser automation and `auth status` shows the
+needed `browser_session` profile is unauthenticated, do not run browser login in
+a headless shell. Use Computer Use to open a visible terminal, run the CLI's
+documented Bash login command (usually `bash -lc '<tool> auth login ...'`), and
+complete the browser login interactively. Use `--credential-type
+browser_session` for multi-credential CLIs and `--force` for stale or expired
+sessions. Follow `references/secrets.md` for credentials and MFA; ask Adam only
+when the required credential, code, approval, or local-GUI control is genuinely
+unavailable. If Computer Use is unavailable or the current host policy blocks
+local GUI control, stop and report that blocker instead of substituting raw
+Playwright, session-file edits, or another auth path.
+</principle>
+
+<principle name="Cloudflare And Bot Walls In Browser CLIs">
+When a browser-backed CLI hits Cloudflare, Akamai, DataDome, PerimeterX, or a
+similar bot wall, load and follow the `browser-automation` skill's
+`cdp-and-stealth.md`, `authentication/cloudflare.md`, and `captcha.md`
+references before changing code or retrying live commands.
+
+The default `cli_tools_shared.BrowserAutomation` backend already uses the shared
+CDP/browser-harness path, stealth launch flags, a persistent profile, and
+`navigator.webdriver` masking. Do not add per-tool subprocess launches of
+Chrome, raw Playwright auth flows, session-file edits, or one-off browser
+workarounds. If the shared backend is insufficient, fix or extend the shared
+engine instead.
+
+Real system Chrome over CDP is a legitimate avoidance surface for managed
+Cloudflare-style challenges because it presents a normal browser fingerprint,
+but launching local real Chrome is a local GUI action. If Adam says not to use a
+headed browser, not to interrupt him, or the host policy blocks local GUI
+control, do not set `HEADLESS=false`, do not invoke Computer Use, and do not
+start or foreground a local Chrome/CDP window. Use only non-interrupting paths:
+an already-authenticated saved browser profile, an internal/API or in-page fetch
+path using the saved session, an already-running approved CDP endpoint, or a
+remote/non-watched browser host. If those paths cannot clear the work, report
+the Cloudflare blocker and the exact browser surface that would need approval.
+
+Never solve, click through, refresh around, or pay a service to solve an
+interactive CAPTCHA, Turnstile, or human-verification challenge. A transient
+managed/JS interstitial may be checked once after a short wait; a persistent
+human challenge is a hard stop.
+</principle>
+
 <principle name="CLI-Tools Secret Manager">
 **Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
 </principle>
@@ -390,10 +436,18 @@ installed CLI launcher uses.
 
 ```bash
 launcher="$(command -v <cli>)"
+if [ ! -f "$launcher" ] || [ ! -x "$launcher" ]; then
+  printf 'CLI_LAUNCHER_INVALID: %s\n' "$launcher" >&2
+  exit 1
+fi
 interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 "$interpreter" -c "import <pkg>_cli.main"
 "$interpreter" path/to/task_script_that_imports_cli.py
 ```
+
+An executable command path is valid only after proving it is both a regular file
+and executable (`-f` plus `-x`). Directories can satisfy `-x` and must never be
+treated as command launchers.
 
 For heredoc probes, the heredoc target must be the same shebang interpreter;
 never write the probe as a bare `python3 - <<'PY'` from inside a CLI source
@@ -401,6 +455,10 @@ directory:
 
 ```bash
 launcher="$(command -v <cli>)"
+if [ ! -f "$launcher" ] || [ ! -x "$launcher" ]; then
+  printf 'CLI_LAUNCHER_INVALID: %s\n' "$launcher" >&2
+  exit 1
+fi
 interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
 "$interpreter" - <<'PY'
 import <pkg>_cli.main
@@ -661,7 +719,7 @@ All domain knowledge in `references/`:
 
 **Output:** output-standards.md (streams, format rules, truncation, field selection, list requirements)
 **Secrets:** secrets.md (CLI-tools secret manager, naming, storage/retrieval rules, prohibited stores)
-**Auth:** auth-standards.md (credential types, multi-auth, OAuth, force flag, wrapper auth)
+**Auth:** auth-standards.md (credential types, multi-auth, OAuth, force flag, wrapper auth, browser-session Computer Use login)
 **Config:** config-standards.md (.env, path resolution, token refresh)
 **Commands:** command-standards.md (naming, options, CRUD patterns, list/get, search, exit codes)
 **Data Shapes:** model-standards.md (when to use local models, plain records, AIInstruction, SerializeAsAny)

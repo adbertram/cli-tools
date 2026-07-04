@@ -107,6 +107,8 @@ def test_skill_documents_find_cli_tools_json_array_contract():
     text_words = _words(text)
 
     assert "one JSON array of records" in text_words
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
+    assert "the output is still a JSON array" in text_words
     assert 'jq -e \'.[] | select(.name == "google")\' <file>' in text
     assert "Do not treat the output as JSONL records" in text_words
 
@@ -118,6 +120,7 @@ def test_update_workflow_discovers_source_directory_before_reads():
     assert "Resolve and Navigate to CLI Source Directory" in text
     assert "Do not assume `<cli-tools-root>/<name>` exists" in text
     assert "Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh`" in text
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
     assert "derive the source directory from the matching record's `readme` parent" in text_words
     assert "Only after the source directory is proven" in text_words
 
@@ -259,6 +262,22 @@ def test_skill_requires_shaped_expected_auth_status_probes():
     assert "can exit `2` while returning structured JSON" in text
 
 
+def test_skill_documents_non_interrupting_cloudflare_browser_escalation():
+    text = _read("SKILL.md")
+    router_text = _read("workflows/skill-router.md")
+    text_words = _words(text)
+    router_words = _words(router_text)
+
+    assert "Cloudflare And Bot Walls In Browser CLIs" in text
+    assert "browser-automation" in text
+    assert "CDP/browser-harness" in text
+    assert "If Adam says not to use a headed browser" in text_words
+    assert "do not set `HEADLESS=false`" in text
+    assert "remote/non-watched browser host" in text_words
+    assert "Never solve, click through, refresh around" in text
+    assert "not to interrupt him in the current turn" in router_words
+
+
 def test_test_workflow_shapes_auth_status_probe():
     text = _read("workflows/test-cli.md")
 
@@ -396,6 +415,9 @@ def test_test_workflow_documents_safe_harness_collection_command():
     assert "Targeted harness execution" in text
     assert "pass `--cli-name \"$TOOL_NAME\"`" in text_words
     assert "Use `--force` only for batch or collect-only harness" in text_words
+    assert "tests/test_command_error_wrapping.py::test_typer_commands_handle_errors" in text
+    assert "Do not use `<cli-tools-root>/_repo/cli-tool-tests` as the uv project path" in text
+    assert "pytest will not load the harness `conftest.py` that defines `--cli-name`" in text
 
 
 def test_test_workflow_documents_safe_harness_batch_command():

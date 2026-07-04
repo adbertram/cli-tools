@@ -61,6 +61,16 @@ against harness tests and the selection includes any CLI-dependent test, pass
 `--cli-name "$TOOL_NAME"`. Use `--force` only for batch or collect-only harness
 checks where CLI-dependent tests are allowed to skip.
 
+Run focused shared harness tests through the harness project directory:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests/test_command_error_wrapping.py::test_typer_commands_handle_errors --cli-name "$TOOL_NAME" -q
+```
+
+Do not use `<cli-tools-root>/_repo/cli-tool-tests` as the uv project path. That
+is the harness package name in `pyproject.toml`, not a source directory, and
+pytest will not load the harness `conftest.py` that defines `--cli-name`.
+
 **Direct per-tool pytest execution:** First resolve the actual tool directory
 that contains the target CLI's `pyproject.toml`; do not derive it from the CLI
 command name. Some tools live below `_personal/`, for example `ata-blog` lives at

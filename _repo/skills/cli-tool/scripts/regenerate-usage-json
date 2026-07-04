@@ -36,6 +36,7 @@ if sys.version_info < (3, 11):
 import argparse  # noqa: E402
 import json  # noqa: E402
 import re  # noqa: E402
+import shlex  # noqa: E402
 import tomllib  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -150,6 +151,21 @@ def stale_option_tokens(value: object, live_tokens: set[str]) -> set[str]:
     }
 
 
+def stale_example_commands(value: object, command_path: str) -> list[str]:
+    examples = value if isinstance(value, list) else [value]
+    expected_parts = command_path.split()
+    stale: list[str] = []
+    for example in examples:
+        try:
+            parts = shlex.split(str(example))
+        except ValueError:
+            stale.append(str(example))
+            continue
+        if parts[1 : 1 + len(expected_parts)] != expected_parts:
+            stale.append(str(example))
+    return stale
+
+
 def assemble_commands(
     live_paths: list[str],
     parameters_by_path: dict[str, dict],
@@ -183,7 +199,11 @@ def assemble_commands(
 
             parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
             valid_option_tokens = live_option_tokens(parameters)
-            if "examples" in meta and not stale_option_tokens(meta["examples"], valid_option_tokens):
+            if (
+                "examples" in meta
+                and not stale_option_tokens(meta["examples"], valid_option_tokens)
+                and not stale_example_commands(meta["examples"], current_path)
+            ):
                 node["examples"] = meta["examples"]
             if "usage_instructions" in meta and not stale_option_tokens(meta["usage_instructions"], valid_option_tokens):
                 node["usage_instructions"] = meta["usage_instructions"]

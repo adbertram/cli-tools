@@ -73,11 +73,31 @@ before executing `<tool> ... --help`. Do not pluralize service nouns or probe
 nearby guessed groups. For example, BrickLink order commands are under
 `bricklink order ...`, not `bricklink orders ...`.
 
-## Step 5: Execute Through Bash
+## Step 5: Browser-Session Auth Gate
+
+If the selected service skill, `usage.json`, or command credentials show the
+requested command requires browser automation / `browser_session`, check auth
+status with the shaped unauthenticated-status wrapper from `SKILL.md` before the
+service command. If the active browser-session profile is unauthenticated, use
+Computer Use to open a visible terminal and run the documented Bash login
+command, usually `bash -lc '<tool> auth login ...'`. For multi-credential CLIs,
+scope the login with `--credential-type browser_session`; use `--force` only
+when the session is stale, expired, or explicitly being refreshed. After login,
+rerun `auth status` and proceed only when it reports authenticated.
+
+Do not replace this with headless Playwright, ad hoc browser scripts, manual
+session-file edits, or a different auth path. If Computer Use or local GUI
+control is unavailable under the current host policy, or Adam has said not to
+use a headed browser / not to interrupt him in the current turn, stop and report
+that exact blocker. For Cloudflare or similar bot walls, apply the
+`Cloudflare And Bot Walls In Browser CLIs` principle in `SKILL.md` before
+retrying or escalating browser surfaces.
+
+## Step 6: Execute Through Bash
 
 Run the actual CLI command through Bash using the syntax from `usage.json`. Inspect stdout after every command. If stdout is an AI instruction object, follow the selected service skill's AI-instruction rule instead of summarizing it as normal output.
 
-## Step 6: Report Minimal Proof
+## Step 7: Report Minimal Proof
 
 Report the selected service skill path, the command run, and the outcome. If blocked, report the exact missing skill path, missing auth state, missing executable, or failing command output.
 </process>

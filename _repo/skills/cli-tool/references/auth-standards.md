@@ -31,6 +31,23 @@ Authentication commands (`auth login`, `auth status`) are **not required for all
 
 Before asking Adam for CLI credentials, or storing any new reusable CLI credential, follow `references/secrets.md`.
 
+## Browser-Session Auth Login Runtime
+
+For `browser_session` and browser CLI authentication, future agents must use
+Computer Use when a needed browser session is unauthenticated. First check
+`auth status` using the shaped unauthenticated-status wrapper from the router.
+If the active browser-session profile is unauthenticated, open a visible
+terminal with Computer Use, run the CLI's documented Bash login command, and
+complete the browser login interactively.
+
+Use `--credential-type browser_session` for multi-credential CLIs and `--force`
+only when refreshing a stale or expired session. Retrieve credentials and MFA
+through the available service CLIs and the CLI-tools secret manager per
+`references/secrets.md`; ask Adam only when the required credential, code,
+approval, or local-GUI control is genuinely unavailable. Do not substitute
+headless Playwright, raw browser scripts, direct session-file edits, or another
+auth path for browser-session login.
+
 ## Pre-Auth Setup And Non-Secret Config Prompts
 
 If `auth login` needs non-secret setup such as `BASE_URL`, workspace IDs, tenant URLs, or account IDs, declare `AUTH_CONFIG_PROMPTS` on the `Config` subclass. `create_auth_app()` prompts for these fields before credential prompts and saves them through the shared config router, so root config such as `BASE_URL` lands in `~/.local/share/cli-tools/<tool>/.env`.

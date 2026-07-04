@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from cli_test_utils import get_python_version_from_venv, get_uv_tool_venv_dir
+from cli_test_utils import _clean_path, get_python_version_from_venv, get_uv_tool_venv_dir
 
 
 def test_cli_uses_system_python(cli_name, cli_dir, command_filter):
@@ -24,7 +24,7 @@ def test_cli_uses_system_python(cli_name, cli_dir, command_filter):
     # Get system python3 version
     result = subprocess.run(
         ["python3", "--version"],
-        capture_output=True, text=True
+        capture_output=True, text=True, env=_clean_path()
     )
     if result.returncode != 0:
         pytest.skip("python3 not available on system")

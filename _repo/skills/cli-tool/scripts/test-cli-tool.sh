@@ -300,11 +300,11 @@ PY
 fi
 
 CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
-if [[ ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
+if [[ ! -f "$CANONICAL_UV_LAUNCHER" || ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
     json_test_failure \
         "test_cli_executable_linked" \
         "test-cli-tool.sh" \
-        "CLI executable link missing or not executable: $CANONICAL_UV_LAUNCHER"
+        "CLI executable link missing, not a regular file, or not executable: $CANONICAL_UV_LAUNCHER"
     exit 1
 fi
 CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"

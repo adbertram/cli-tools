@@ -8,11 +8,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 SKILLS_DIR="${CLI_TOOLS_DIR}/_repo/skills"
 
+usage() {
+    echo "Usage: create-cli-tool-skill <tool-name>"
+    echo "Example: create-cli-tool-skill stripe"
+}
+
 NAME="${1:-}"
+if [[ "${NAME}" == "-h" || "${NAME}" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
 if [[ -z "${NAME}" ]]; then
-    echo "Usage: create-cli-tool-skill <tool-name>" >&2
-    echo "Example: create-cli-tool-skill stripe" >&2
+    usage >&2
     exit 1
+fi
+
+if [[ "${NAME}" == -* ]]; then
+    echo "Error: tool name must not start with '-': ${NAME}" >&2
+    usage >&2
+    exit 2
 fi
 
 # Normalize: lowercase, strip trailing -cli if provided
@@ -86,12 +101,12 @@ echo "Created ${SKILL_DIR}/SKILL.md"
 
 # Generate usage.json from the installed CLI
 REGEN="${SCRIPT_DIR}/regenerate-usage-json"
-if [[ -x "${REGEN}" ]]; then
+if [[ -f "${REGEN}" && -x "${REGEN}" ]]; then
     echo "Generating usage.json from installed '${NAME}' CLI..."
     "${REGEN}" "${NAME}" --usage-json "${SKILL_DIR}/usage.json"
     echo "Created ${SKILL_DIR}/usage.json"
 else
-    echo "Warning: regenerate-usage-json not found at ${REGEN} — skipping usage.json" >&2
+    echo "Warning: regenerate-usage-json executable file not found at ${REGEN} — skipping usage.json" >&2
     echo "Run it manually: regenerate-usage-json ${NAME} ${SKILL_DIR}/usage.json"
 fi
 
