@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-03T21:34:15Z",
+  "discovered_at": "2026-07-05T13:42:07Z",
   "total_commands": 53,
   "global_options": [
     {
@@ -330,6 +330,13 @@
               "short": "-o"
             },
             {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Clip description from the course outline",
+              "short": "-d"
+            },
+            {
               "name": "--story",
               "type": "TEXT",
               "required": false,
@@ -560,6 +567,13 @@
               "required": false,
               "help": "Clip sequence order",
               "short": "-o"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Clip description from the course outline",
+              "short": "-d"
             },
             {
               "name": "--story",
@@ -1149,7 +1163,7 @@
             "coursecraft courses update my-course --target-length 60",
             "coursecraft courses update my-course --brainstorming-outline-file outline.md"
           ],
-          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --active, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --research-report, --research-report-file, --notes, --skill-path, --path-placement, --slack-channel-name, --recording-dictation-method, --feedback-requested, --feedback-requested-at. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content, and --brainstorming-outline-fact-checked to mark as reviewed. Course outline content lives in the Google Doc workflow; this command only updates --course-outline-link, --course-outline-submitted, and --course-outline-approved-pluralsight.",
+          "usage_instructions": "Update an existing course by record ID or slug (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --course-id/-c, --target-length/-t, --active, --short-description, --long-description, --content-level, --content-tags, --job-role, --learner-profile, --prerequisites, --platform-versions, --storyline, --learning-objectives, --research-report, --research-report-file, --notes, --skill-path, --path-placement, --slack-channel-name, --recording-dictation-method, --feedback-requested, --feedback-requested-at. Supports --brainstorming-outline/-B or --brainstorming-outline-file for outline content. Course outline content lives in the Google Doc workflow; this command only updates --course-outline-link, --course-outline-submitted, and --course-outline-approved-pluralsight.",
           "arguments": [
             {
               "name": "course",
@@ -1995,6 +2009,13 @@
             }
           ],
           "options": [
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include (supports dot notation)",
+              "short": "-p"
+            },
             {
               "name": "--table",
               "type": "bool",
