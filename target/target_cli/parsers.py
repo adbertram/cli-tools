@@ -80,14 +80,58 @@ def normalize_product_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
         "url": _dig(item, "enrichment", "buy_url"),
         "variant_count": len(children),
         "variant_tcins": [c.get("tcin") for c in children if c.get("tcin")],
+        # Pre-launch ("coming soon") listings carry a future release date here even
+        # though the PDP itself is already live; genuinely optional -- most items
+        # have no street date at all. Verified live for TCIN 94962117 (LoveShackFancy
+        # x Target x Yoobi, street_date "2026-07-05").
+        "street_date": _dig(item, "mmbv_content", "street_date"),
     }
+
+
+# Fulfillment channel values observed live from product_fulfillment_v1 that mean
+# "a guest can actually order this right now." Verified against two real TCINs:
+# an in-stock item (87450164, Bounty paper towels) returned "IN_STOCK" for both
+# pickup.order_pickup.availability_status and shipping.availability_status; a
+# pre-launch item (94962117, street_date 2026-07-05) returned "UNAVAILABLE" for
+# pickup and "OUT_OF_STOCK" for shipping. Treated as an allowlist (not a denylist)
+# so an unrecognized future status defaults to "not orderable" rather than being
+# silently treated as purchasable.
+_ORDERABLE_STATUSES = {"IN_STOCK"}
+
+
+def is_orderable(fulfillment: Dict[str, Any]) -> bool:
+    """True when at least one fulfillment channel (shipping or any pickup store)
+    is in an orderable status, per ``_ORDERABLE_STATUSES``."""
+    if fulfillment.get("shipping") in _ORDERABLE_STATUSES:
+        return True
+    return any(p.get("pickup") in _ORDERABLE_STATUSES for p in fulfillment.get("pickup") or [])
+
+
+def _pre_order_quantity(store_options: List[Dict[str, Any]]) -> Optional[float]:
+    """Return the pre-order-to-promise signal across stores, or None if absent.
+
+    ``pre_order_location_available_to_promise_quantity`` is a per-store field
+    (sibling of the existing ``location_available_to_promise_quantity`` used for
+    ``quantity``) that only appears on pre-launch items. Taken as the max across
+    stores -- like ``is_orderable``'s any-store-counts semantics -- so a single
+    store with allocated pre-order stock surfaces the signal even when other
+    stores report zero. Absent on every store (a normal in-stock item) normalizes
+    to None rather than 0, since 0 is itself meaningful (allocated but depleted).
+    """
+    values = [
+        opt.get("pre_order_location_available_to_promise_quantity")
+        for opt in store_options
+        if opt.get("pre_order_location_available_to_promise_quantity") is not None
+    ]
+    return max(values) if values else None
 
 
 def normalize_fulfillment(raw: Dict[str, Any], tcin: str) -> Dict[str, Any]:
     """Return stock/pickup/shipping summary from a product_fulfillment_v1 body."""
     ful = _dig(raw, "data", "product", "fulfillment") or {}
+    store_options = ful.get("store_options") or []
     pickup = []
-    for opt in ful.get("store_options") or []:
+    for opt in store_options:
         pickup.append(
             {
                 "store_id": opt.get("location_id"),
@@ -97,14 +141,26 @@ def normalize_fulfillment(raw: Dict[str, Any], tcin: str) -> Dict[str, Any]:
             }
         )
     shipping = ful.get("shipping_options") or {}
-    return {
+    record = {
         "id": tcin,
         "sold_out": ful.get("sold_out"),
         "out_of_stock_all_stores": ful.get("is_out_of_stock_in_all_store_locations"),
         "shipping": shipping.get("availability_status"),
         "shipping_quantity": shipping.get("available_to_promise_quantity"),
         "pickup": pickup,
+        # Pre-launch ("coming soon") signals. ``notify_me_eligible`` is a SIBLING
+        # of ``fulfillment`` under data.product, not inside it. ``future_selling_intent``
+        # is present only for future/pre-launch items -- a normal in-stock item has
+        # neither key at all, so both dates normalize to None via _dig rather than
+        # raising. Verified live for TCIN 94962117 (LoveShackFancy x Target x Yoobi,
+        # street-dated 2026-07-05): notify_me_eligible=true, both dates populated.
+        "notify_me_eligible": _dig(raw, "data", "product", "notify_me_eligible"),
+        "available_online_date": _dig(ful, "future_selling_intent", "event_online_date_and_time"),
+        "available_instore_date": _dig(ful, "future_selling_intent", "event_in_store_date_and_time"),
+        "pre_order_quantity": _pre_order_quantity(store_options),
     }
+    record["orderable"] = is_orderable(record)
+    return record
 
 
 def _store_row(store: Dict[str, Any]) -> Dict[str, Any]:

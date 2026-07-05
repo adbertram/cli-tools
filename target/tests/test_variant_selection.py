@@ -48,9 +48,15 @@ class FakePage:
         self.attrs = {
             ('button[data-test="fulfillment-cell-pickup"]', "aria-label"): cell_aria,
         }
+        # Selectors that must behave as "never appears" (real wait_for_selector
+        # timeout), e.g. a stale/renamed button attribute -- distinct from
+        # `counts`, which only affects an already-resolved locator's .count().
+        self.missing_selectors = set()
 
     def wait_for_selector(self, selector, timeout=None):
         self.waits.append(selector)
+        if selector in self.missing_selectors:
+            raise TimeoutError(f"selector never appeared: {selector}")
         return object()
 
     def evaluate(self, js, arg=None):
@@ -197,3 +203,52 @@ def test_add_to_cart_rejects_unknown_method():
     client = TargetClient.__new__(TargetClient)
     with pytest.raises(ClientError):
         client.add_to_cart("83489325", method="teleport")
+
+
+# --- add_to_cart: shipping fulfillment button selector ---------------------
+# Regression coverage for a live selector-drift bug: cart add -m shipping
+# rejected every item (16951588, 17079144, 92209126, 87450164 -- all verified
+# shipping IN_STOCK via `products inventory`) with "No active shipping 'Add to
+# cart' button", even for a freshly-confirmed shippable positive control
+# (89003156, a Hanes t-shirt). A live DOM snapshot via the target CLI's own
+# authenticated browser session (see client._headed_browser) showed the
+# shipping fulfillment CELL renders and selects correctly, but NO element with
+# data-test="shipItButton" exists anywhere on the page before or after
+# selecting shipping -- Target's real attribute is "shippingButton" (matching
+# the "<Method>Button" pattern already used for pickup/delivery:
+# orderPickupButton, scheduledDeliveryButton). client._FULFILLMENT["shipping"]
+# was fixed from ("fulfillment-cell-shipping", "shipItButton") to
+# ("fulfillment-cell-shipping", "shippingButton").
+
+def test_add_to_cart_shipping_waits_on_and_clicks_shippingButton():
+    """The fixed selector: shipping add_to_cart must gate on and click
+    data-test="shippingButton", not the stale "shipItButton" that matched
+    nothing in the live DOM."""
+    page = FakePage([])
+    client = _client_with_headed(FakeBrowser(page))
+    client.add_to_cart("89003156", method="shipping")
+
+    cell = 'button[data-test="fulfillment-cell-shipping"]'
+    assert page.waits.count(cell) == 1
+    assert any("shippingButton" in sel for sel in page.clicks)
+    assert not any("shipItButton" in sel for sel in page.waits + page.clicks)
+
+
+def test_add_to_cart_shipping_raises_when_button_not_found():
+    """If Target's shipping button selector drifts again (or the item is
+    genuinely not shippable), add_to_cart must still fail loud with a clear
+    ClientError -- not silently succeed or hang. This is exactly the failure
+    mode the original "shipItButton" bug produced: wait_for_selector times out
+    because the attribute never appears in the live DOM."""
+    page = FakePage([])
+    page.missing_selectors.add('button[data-test="shippingButton"]:not([disabled])')
+    client = _client_with_headed(FakeBrowser(page))
+    with pytest.raises(ClientError, match="shipping"):
+        client.add_to_cart("11111111", method="shipping")
+
+
+def test_fulfillment_shipping_button_selector_is_shippingButton_not_shipItButton():
+    """Direct assertion on the selector table itself: guards against the exact
+    stale-selector regression (shipItButton matched zero live elements)
+    reappearing silently."""
+    assert TargetClient._FULFILLMENT["shipping"] == ("fulfillment-cell-shipping", "shippingButton")

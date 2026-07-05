@@ -315,6 +315,19 @@
             }
           ]
         },
+        "clear": {
+          "help": "Empty the cart by removing every item in it (no-op if already empty).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation",
+              "short": "-y"
+            }
+          ]
+        },
         "list": {
           "help": "View current cart contents.",
           "arguments": [],
@@ -851,6 +864,6 @@
       }
     }
   },
-  "total_commands": 38,
-  "discovered_at": "2026-07-04T22:01:17Z"
+  "total_commands": 39,
+  "discovered_at": "2026-07-04T23:47:16Z"
 }

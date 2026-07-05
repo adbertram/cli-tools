@@ -214,6 +214,27 @@ def cart_remove(item_id: str = typer.Argument(..., help="Item TCIN")):
         client.close()
 
 
+@cart_app.command("clear")
+@command
+def cart_clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+):
+    """Empty the cart by removing every item in it (no-op if already empty)."""
+    from cli_tools_shared.output import confirm_destructive_action
+    confirm_destructive_action(
+        "Clear the cart? This removes every item currently in it.",
+        assume_yes=yes,
+        action_description="clear the cart",
+        skip_flag_hint="--yes",
+    )
+    client = get_client()
+    try:
+        removed = client.clear_cart()
+        print_info(f"Cleared the cart ({removed} item(s) removed).")
+    finally:
+        client.close()
+
+
 @cart_app.command("checkout")
 @command
 def cart_checkout(

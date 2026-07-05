@@ -11,6 +11,7 @@ import json
 import os
 import re
 from contextlib import contextmanager
+from datetime import date
 from typing import List, Optional
 
 from cli_tools_shared.data_cache import cached
@@ -25,6 +26,7 @@ from .api import (
 )
 from .config import get_config
 from .parsers import (
+    is_orderable,
     normalize_favorites,
     normalize_fulfillment,
     normalize_product_detail,
@@ -109,6 +111,19 @@ class TargetClient:
         return normalize_fulfillment(raw, item_id)
 
     @cached
+    def _get_fulfillment_cached(self, item_id: str) -> dict:
+        """Cached fulfillment read used only to compute favorites purchasability.
+
+        Separate from ``get_inventory`` (which stays live/uncached for
+        `products inventory`, a deliberate "check stock right now" command).
+        `favorites list` hydrates up to ``--limit`` favorites per call (24 by
+        default), so caching here keeps repeat favorites reads cheap without
+        changing the freshness contract of the dedicated inventory command.
+        """
+        raw = self._get_api().fulfillment(item_id)
+        return normalize_fulfillment(raw, item_id)
+
+    @cached
     def find_stores(self, zip_code: str) -> List[dict]:
         """List Target stores near a zip code."""
         return normalize_stores(self._get_api().nearby_stores(zip_code))
@@ -155,9 +170,18 @@ class TargetClient:
         match = re.search(r"\$[\d,]+\.\d{2}", text)
         return match.group(0) if match else text.strip()
 
-    def get_cart(self) -> dict:
-        """Get cart contents (read -- headless)."""
-        page = self._get_browser().get_page("https://www.target.com/cart")
+    def _read_cart_on_page(self, page) -> dict:
+        """Read cart items/total from an ALREADY-LOADED cart ``page`` (no navigation).
+
+        Each ``[data-test="cartItem"]`` row carries the line item's TCIN directly
+        on a ``data-tcin`` attribute (verified live on the real cart page, e.g.
+        ``<div data-test="cartItem" data-tcin="95015332" ...>`` for an "All In
+        Motion" shorts item; the row's linked title/image ``<a>`` tags also embed
+        the same TCIN in their ``/A-<tcin>`` product href, corroborating it).
+        Shared by ``get_cart`` (fresh navigation, its own browser) and
+        ``clear_cart``'s post-removal re-check (reuses the one already-open
+        headed page instead of opening a second browser session).
+        """
         items = []
         try:
             page.wait_for_selector('[data-test="cartItem"]', timeout=10000)
@@ -165,6 +189,7 @@ class TargetClient:
                 title_el = item.locator('[data-test="cartItem-title"]')
                 price_el = item.locator('[data-test="cartItem-price"]')
                 items.append({
+                    "tcin": item.get_attribute("data-tcin"),
                     "title": title_el.inner_text().strip() if title_el.count() > 0 else "Unknown",
                     "price": self._price(price_el.inner_text()) if price_el.count() > 0 else None,
                 })
@@ -174,10 +199,24 @@ class TargetClient:
         total = self._price(total_el.inner_text()) if total_el.count() > 0 else "$0.00"
         return {"items": items, "total": total}
 
+    def get_cart(self) -> dict:
+        """Get cart contents (read -- headless)."""
+        page = self._get_browser().get_page("https://www.target.com/cart")
+        return self._read_cart_on_page(page)
+
     # data-test attrs for each fulfillment method: the selector cell + its add button.
+    # Shipping's add button is "shippingButton" (verified live on TCIN 89003156,
+    # a Hanes t-shirt with shipping IN_STOCK: after selecting the shipping cell,
+    # the rendered button carries data-test="shippingButton", aria-label
+    # "Add to cart for ...", text "Add to cart", not disabled). The prior value
+    # "shipItButton" matched nothing in the live DOM (a full page.evaluate sweep
+    # for [data-test] elements found zero "shipItButton" matches, before or
+    # after selecting shipping), so every shipping add failed at the
+    # `wait_for_selector(... :not([disabled]) ...)` gate with "No active
+    # shipping 'Add to cart' button" regardless of real stock.
     _FULFILLMENT = {
         "pickup": ("fulfillment-cell-pickup", "orderPickupButton"),
-        "shipping": ("fulfillment-cell-shipping", "shipItButton"),
+        "shipping": ("fulfillment-cell-shipping", "shippingButton"),
         "delivery": ("fulfillment-cell-delivery", "scheduledDeliveryButton"),
     }
 
@@ -296,25 +335,79 @@ class TargetClient:
                 return
         raise ClientError(f"Timed out confirming add to cart for item {item_id}.")
 
+    def _remove_cart_item_on_page(self, page, item_id: str) -> None:
+        """Click the delete button for ``item_id`` on an ALREADY-OPEN cart ``page``.
+
+        Pure DOM step shared by ``remove_from_cart`` (opens its own headed
+        browser, single item) and ``clear_cart`` (opens ONE headed browser for
+        the whole operation and calls this once per item on that same page) --
+        the one place that owns the "find row by tcin -> click delete" logic.
+        """
+        try:
+            page.wait_for_selector('[data-test="cartItem"]', timeout=12000)
+        except Exception:
+            raise ClientError("Cart is empty or did not load.")
+
+        for item in page.locator('[data-test="cartItem"]').all():
+            if item.locator(f'a[href*="A-{item_id}"]').count() == 0:
+                continue
+            remove = item.locator('button[data-test="cartItem-deleteBtn"]')
+            if remove.count() == 0:
+                raise ClientError(f"Found item {item_id} but no delete button.")
+            remove.first.click()
+            page.wait_for_timeout(2500)
+            return
+        raise ClientError(f"Item {item_id} not found in cart.")
+
     def remove_from_cart(self, item_id: str) -> None:
-        """Remove an item from the cart by TCIN (headed)."""
+        """Remove an item from the cart by TCIN (headed; opens its own browser)."""
         with self._headed_browser() as browser:
             page = browser.get_page("https://www.target.com/cart")
-            try:
-                page.wait_for_selector('[data-test="cartItem"]', timeout=12000)
-            except Exception:
-                raise ClientError("Cart is empty or did not load.")
+            self._remove_cart_item_on_page(page, item_id)
 
-            for item in page.locator('[data-test="cartItem"]').all():
-                if item.locator(f'a[href*="A-{item_id}"]').count() == 0:
-                    continue
-                remove = item.locator('button[data-test="cartItem-deleteBtn"]')
-                if remove.count() == 0:
-                    raise ClientError(f"Found item {item_id} but no delete button.")
-                remove.first.click()
-                page.wait_for_timeout(2500)
-                return
-            raise ClientError(f"Item {item_id} not found in cart.")
+    _CLEAR_CART_MAX_RETRY_PASSES = 3
+
+    def clear_cart(self) -> int:
+        """Empty the cart: remove every item, reusing ONE headed browser session.
+
+        Opens ``_headed_browser()`` ONCE for the whole operation (not once per
+        item -- that compounds a fresh-Chrome + fresh-daemon launch/teardown
+        cycle per removal and can push a modest cart's clear past 10 minutes)
+        and drives every removal against that single already-open page via
+        ``_remove_cart_item_on_page``. After the initial pass, re-reads the cart
+        and retries any tcins still present, up to
+        ``_CLEAR_CART_MAX_RETRY_PASSES`` bounded passes total; raises
+        ``ClientError`` if items remain after exhausting retries (no silent
+        infinite loop). A cart that is already empty is a no-op that returns 0.
+        """
+        items = self.get_cart()["items"]
+        if not items:
+            return 0
+        total = len(items)
+        remaining_tcins = [item["tcin"] for item in items]
+
+        with self._headed_browser() as browser:
+            page = browser.get_page("https://www.target.com/cart")
+            for _ in range(self._CLEAR_CART_MAX_RETRY_PASSES):
+                for tcin in remaining_tcins:
+                    self._remove_cart_item_on_page(page, tcin)
+                # Re-check on the SAME open headed page (re-navigate, don't open
+                # a second browser session) so a pathological "item didn't
+                # disappear" case is retried against fresh DOM state.
+                recheck_page = browser.get_page("https://www.target.com/cart")
+                still_present = {item["tcin"] for item in self._read_cart_on_page(recheck_page)["items"]}
+                remaining_tcins = [tcin for tcin in remaining_tcins if tcin in still_present]
+                if not remaining_tcins:
+                    break
+                page = recheck_page
+
+        if remaining_tcins:
+            raise ClientError(
+                f"Could not clear the cart: {len(remaining_tcins)} item(s) still present "
+                f"after {self._CLEAR_CART_MAX_RETRY_PASSES} removal attempt(s): "
+                f"{', '.join(remaining_tcins)}."
+            )
+        return total
 
     # ---------- payment methods (browser, headed) ----------
     # The CLI never handles the real card. `payment-method add` opens Target's
@@ -1143,13 +1236,27 @@ class TargetClient:
         return payload
 
     def _hydrate_favorite(self, favorite: dict) -> dict:
-        """Enrich one favorite TCIN with redsky title/price; degrade if delisted.
+        """Enrich one favorite TCIN with redsky title/price + real purchasability.
 
         Reuses the existing product_detail read (cached) so favorite records carry
         the same id/title/price/brand/url fields as `products list`/`get`. A
         favorited product that Target has delisted yields no redsky product; that
-        favorite is returned with its identity fields and ``available: False``
-        rather than raising, since a discontinued favorite is real membership data.
+        favorite is returned with its identity fields, ``available: False``, and
+        ``status: "delisted"`` rather than raising, since a discontinued favorite
+        is real membership data.
+
+        For a listed product, ``available`` means "purchasable right now" (some
+        fulfillment channel is orderable) -- NOT merely "the listing exists". A
+        live listing with no orderable channel is either ``coming_soon`` (it has a
+        future ``street_date``, e.g. the LoveShackFancy x Target x Yoobi collection
+        street-dated 2026-07-05) or ``out_of_stock`` (no future street date).
+
+        A ``coming_soon`` favorite also carries WHEN it drops --
+        ``available_online_date``/``available_instore_date`` (from the
+        fulfillment read's ``future_selling_intent``) and ``notify_me_eligible`` --
+        threaded from the same cached fulfillment read used to compute
+        ``available``. These are enrichment-only fields (like ``brand``/``url``/
+        ``rating``) and are absent on a delisted favorite.
         """
         tcin = favorite["tcin"]
         record = {
@@ -1157,6 +1264,8 @@ class TargetClient:
             "title": None,
             "price": None,
             "available": False,
+            "street_date": None,
+            "status": "delisted",
             "added": favorite.get("added"),
             "note": favorite.get("note"),
         }
@@ -1164,17 +1273,40 @@ class TargetClient:
             detail = self.get_item(tcin)
         except ClientError:
             return record
+        fulfillment = self._get_fulfillment_cached(tcin)
+        available = is_orderable(fulfillment)
+        street_date = detail.get("street_date")
         record.update(
             {
                 "title": detail.get("title"),
                 "price": detail.get("price"),
-                "available": True,
+                "available": available,
+                "street_date": street_date,
+                "status": self._favorite_status(available, street_date),
                 "brand": detail.get("brand"),
                 "url": detail.get("url"),
                 "rating": detail.get("rating"),
+                "notify_me_eligible": fulfillment.get("notify_me_eligible"),
+                "available_online_date": fulfillment.get("available_online_date"),
+                "available_instore_date": fulfillment.get("available_instore_date"),
             }
         )
         return record
+
+    @staticmethod
+    def _favorite_status(available: bool, street_date: Optional[str]) -> str:
+        """Classify a listed (non-delisted) favorite's purchasability.
+
+        ``street_date`` is an ISO ``YYYY-MM-DD`` string when the product has a
+        (past or future) release date, else ``None``. Compared as a string
+        against today's date (also ``YYYY-MM-DD``) rather than parsed, since
+        ISO-8601 date strings sort lexicographically the same as chronologically.
+        """
+        if available:
+            return "available"
+        if street_date and street_date > date.today().isoformat():
+            return "coming_soon"
+        return "out_of_stock"
 
 
 _client: Optional[TargetClient] = None

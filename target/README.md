@@ -104,6 +104,21 @@ target products inventory 88830890 --table           # pickup + shipping availab
 target products inventory 88830890 --store 1481 --zip 47715
 ```
 
+`products get` includes `street_date` (a `"YYYY-MM-DD"` release date, or `null`
+when the item has none). `products inventory` includes `orderable` (bool): `true`
+when shipping or at least one store's pickup is in an orderable status right now.
+
+`products inventory` also surfaces pre-launch ("coming soon") signals, present
+only for items that aren't purchasable yet (`null`/absent for a normal in-stock
+item):
+
+- **`notify_me_eligible`** (bool or `null`): whether Target offers a "notify me"
+  signup for this item.
+- **`available_online_date`** / **`available_instore_date`** (ISO datetime string
+  or `null`): when the item is scheduled to become orderable online / in stores.
+- **`pre_order_quantity`** (number or `null`): the pre-order-to-promise quantity
+  signal (the max across stores, when Target has allocated pre-order stock).
+
 ### Cart (`target cart`)
 
 ```bash
@@ -111,9 +126,17 @@ target cart list --table                     # view cart contents
 target cart add 88830890                     # add item by TCIN (store pickup by default)
 target cart add 88830890 --method shipping   # ...or ship this item instead
 target cart remove 88830890                  # remove item by TCIN
+target cart clear                            # remove every item in the cart (asks to confirm)
+target cart clear --yes                      # skip confirmation
 target cart checkout                         # DRY RUN — reviews order, places nothing
 target cart checkout --yes                   # places the real order (spends money)
 ```
+
+Each `cart list` item includes `tcin`, alongside its existing `title`/`price`,
+so a line item can be fed straight into `cart remove <tcin>` or `products get
+<tcin>` without hand-copying an id from the title. `cart clear` empties the
+cart by listing its current items and removing each one (the same removal
+`cart remove` uses); an already-empty cart is a no-op ("0 item(s) removed").
 
 ### Payment methods (`target payment-method`)
 
@@ -176,28 +199,57 @@ target favorites remove 78790319         # un-favorite an item by TCIN
 `favorites list` reads your saved favorites (the heart) from your Target account,
 so it needs a logged-in account session (`target auth login`) just like `cart` and
 `orders`. Target stores favorites as product IDs only, so each item's title and
-price are enriched from the fast-search API. A favorite whose product Target has
-since delisted still appears with `available: false` (its title/price are `null`).
+price are enriched from the fast-search API, and a real fulfillment (pickup +
+shipping) read determines whether it's actually purchasable right now.
+
+Each favorite carries:
+
+- **`available`** (bool): `true` only when the item is purchasable NOW (some
+  fulfillment channel -- shipping or an in-store pickup -- is orderable). This is
+  NOT "the listing exists"; a live, in-stock-soon listing that can't be ordered
+  yet is `available: false`.
+- **`street_date`** (string or `null`): the item's release date (`"YYYY-MM-DD"`)
+  when Target has one on file, e.g. for a not-yet-launched collection; `null`
+  when the item has no release date.
+- **`status`** (string): one of
+  - `"available"` -- purchasable now
+  - `"coming_soon"` -- not purchasable yet, but has a future `street_date`
+    (a pre-launch item, like a collection that drops in stores next week)
+  - `"out_of_stock"` -- not purchasable and has no future `street_date`
+  - `"delisted"` -- Target no longer has this product at all (title/price are
+    `null`)
+- **`notify_me_eligible`** (bool or `null`): whether Target offers a "notify me"
+  signup for this item; `null` for a delisted favorite.
+- **`available_online_date`** / **`available_instore_date`** (ISO datetime string
+  or `null`): when a `coming_soon` favorite is scheduled to become orderable
+  online / in stores -- so a pre-launch favorite shows WHEN it drops, not just
+  its `street_date`. `null` for an available/out-of-stock/delisted favorite.
 
 `favorites remove <tcin>` un-favorites an item: it looks up the TCIN in your
 favorites, resolves it to the item's membership id, and deletes it (errors if the
 TCIN isn't one of your favorites). This is handy for clearing out delisted
-favorites that show `available: false`.
+favorites that show `status: "delisted"`.
 
-Example output:
+Example output (a real pre-launch favorite -- a collection street-dated for the
+next day):
 
 ```json
 [
   {
     "id": "94962117",
-    "title": "LoveShackFancy x Target - Yoobi Ribbon Rosa Quilted Tote Bag",
+    "title": "LoveShackFancy x Target - Yoobi Ribbon Rosa Quilted Tote Bag Sterling Dusk",
     "price": "$34.99",
-    "available": true,
+    "available": false,
+    "street_date": "2026-07-05",
+    "status": "coming_soon",
     "added": "2026-07-03T21:10:14Z",
     "note": null,
     "brand": "LoveShackFancy x Target",
-    "url": "https://www.target.com/p/-/A-94962117",
-    "rating": 0.0
+    "url": "https://www.target.com/p/loveshackfancy-x-target-yoobi-ribbon-rosa-quilted-tote-bag-sterling-dusk/-/A-94962117",
+    "rating": 0.0,
+    "notify_me_eligible": true,
+    "available_online_date": "2026-07-05T10:00:00.000Z",
+    "available_instore_date": "2026-07-05T10:00:00.000Z"
   }
 ]
 ```
