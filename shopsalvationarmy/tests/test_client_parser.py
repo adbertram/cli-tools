@@ -108,6 +108,15 @@ class FakeResponse:
         return None
 
 
+class FakeGetSession:
+    def __init__(self):
+        self.urls = []
+
+    def get(self, url):
+        self.urls.append(url)
+        return FakeResponse("")
+
+
 class FakeSession:
     def __init__(self):
         self.posts = []
@@ -169,3 +178,16 @@ def test_should_calculate_shipping_rates_from_internal_realtime_endpoint():
             "timeout": 30,
         }
     ]
+
+
+def test_search_uses_site_full_text_query_parameter():
+    client = ShopSalvationArmyClient(require_auth=False, config=object())
+    client.session = FakeGetSession()
+
+    result = client.search(query="Canon camera", price_max=50)
+
+    assert len(client.session.urls) == 1
+    requested_url = client.session.urls[0]
+    assert "FullTextQuery=Canon+camera" in requested_url
+    assert "Keywords=" not in requested_url
+    assert result["url"] == requested_url

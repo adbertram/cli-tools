@@ -155,7 +155,7 @@ class ShopSalvationArmyClient:
 
         # Add query parameter if searching
         if query:
-            params["Keywords"] = query
+            params["FullTextQuery"] = query
 
         # Add listing type filter
         if listing_type:
