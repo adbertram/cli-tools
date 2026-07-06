@@ -7,9 +7,14 @@ import re
 import signal
 import subprocess
 import time
+import errno
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+
+class ProcessTableUnavailableError(RuntimeError):
+    """Raised when the host sandbox forbids process-table inspection."""
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,17 @@ class ProcessCommand:
     ppid: int
     stat: str
     command: str
+
+
+def _process_table_error(exc: BaseException) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    if isinstance(exc, OSError) and exc.errno in {errno.EACCES, errno.EPERM}:
+        return True
+    if isinstance(exc, subprocess.CalledProcessError):
+        output = f"{exc.stdout or ''}\n{exc.stderr or ''}".lower()
+        return "operation not permitted" in output or "permission denied" in output
+    return False
 
 
 def list_process_commands() -> list[ProcessCommand]:
@@ -30,6 +46,12 @@ def list_process_commands() -> list[ProcessCommand]:
             check=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
+        if _process_table_error(exc):
+            raise ProcessTableUnavailableError(
+                "Process table inspection is unavailable in this environment. "
+                "Close any Chrome window using this CLI profile, or run the command "
+                "from a shell allowed to inspect local processes."
+            ) from exc
         raise RuntimeError(f"Failed to inspect process table: {exc}") from exc
 
     rows: list[ProcessCommand] = []
@@ -121,6 +143,23 @@ def _pid_running(pid: int) -> bool:
         if process.pid == pid:
             return not process.stat.startswith("Z")
     return False
+
+
+def pid_is_running(pid: int) -> bool:
+    """Return whether a PID exists without reading the full process table."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return False
+        if exc.errno == errno.EPERM:
+            return True
+        raise RuntimeError(f"Failed to inspect process {pid}: {exc}") from exc
+    return True
 
 
 def terminate_process(

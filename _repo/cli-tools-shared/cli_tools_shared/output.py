@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from pydantic import BaseModel
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 from rich import box
 
@@ -103,14 +104,23 @@ def safe_symbol(name: str) -> str:
 
 
 def _format_cell_value(value: Any) -> str:
-    """Format a cell value for table display."""
+    """Format a cell value for table display.
+
+    Rich renders cell text with markup enabled, so bracketed data (file paths
+    like ``[/repo/client.py:1321]``, ``[link]`` tokens, log lines, JSON arrays)
+    would be parsed as Rich markup tags and crash rendering with
+    ``closing tag '...' doesn't match any open tag``. All data-derived strings
+    are escaped here with ``rich.markup.escape`` so brackets display literally.
+    The ``None`` and bool branches return static, bracket-free text and need no
+    escaping. This is the sole caller-facing formatter for table cells.
+    """
     if value is None:
         return ""
     if isinstance(value, bool):
         return safe_symbol("check") if value else safe_symbol("cross")
     if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
+        return escape(json.dumps(value, ensure_ascii=False))
+    return escape(str(value))
 
 
 def print_table(
@@ -195,9 +205,12 @@ def print_table(
         box=box.HEAVY_HEAD,
     )
 
-    # Add columns - allow wrapping for long values
+    # Add columns - allow wrapping for long values. Headers are often
+    # auto-derived from data keys, so escape them too: a bracketed key would
+    # otherwise be parsed as Rich markup. header_style (set on Table above) is
+    # applied separately and is unaffected by escaping the header text.
     for header, col in zip(headers, columns):
-        table.add_column(header, no_wrap=False)
+        table.add_column(escape(header), no_wrap=False)
 
     # Add rows
     for row in rows:

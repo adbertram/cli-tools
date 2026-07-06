@@ -20,7 +20,14 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
-from .processes import ProcessCommand, command_user_data_dir, list_process_commands, profile_process_pids
+from .processes import (
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    command_user_data_dir,
+    list_process_commands,
+    pid_is_running,
+    profile_process_pids,
+)
 
 
 class PlaywrightServiceError(BrowserHarnessError):
@@ -127,6 +134,8 @@ class PlaywrightBrowserService:
         """Return process-table rows for the local process table."""
         try:
             return list_process_commands()
+        except ProcessTableUnavailableError:
+            raise
         except RuntimeError as exc:
             raise PlaywrightServiceError(f"Failed to inspect process table: {exc}") from exc
 
@@ -141,10 +150,7 @@ class PlaywrightBrowserService:
         return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
 
     def _pid_running(self, pid: int) -> bool:
-        for process in self._list_process_table():
-            if process.pid == pid:
-                return not process.stat.startswith("Z")
-        return False
+        return pid_is_running(pid)
 
     def _terminate_session_pid(self, pid: int) -> None:
         try:
@@ -183,7 +189,11 @@ class PlaywrightBrowserService:
 
     def _cleanup_stale_profile_processes(self) -> None:
         """Terminate Chrome helpers that still own this exact user-data-dir."""
-        for pid in self._session_process_pids():
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
+        for pid in pids:
             self._terminate_session_pid(pid)
 
     @staticmethod
@@ -191,7 +201,10 @@ class PlaywrightBrowserService:
         return command_user_data_dir(command)
 
     def _raise_if_profile_in_use(self) -> None:
-        pids = self._session_process_pids()
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
         if not pids:
             return
         raise PlaywrightServiceError(

@@ -43,6 +43,20 @@ _JSON_CHILD = (
     "print_json({'page_id': 'abc', 'ok': True})\n"
 )
 
+# Bracketed path that, unescaped, Rich parses as a markup closing tag and
+# crashes with "closing tag '...' doesn't match any open tag".
+_BRACKET_PATH = "[/Users/adam/Dropbox/GitRepos/cli-tools/copilot/copilot_cli/client.py:1321]"
+
+# Child program: render a table whose cells contain bracketed text (a file
+# path and a JSON array) through the shared print_table path. If markup were
+# not escaped this exits non-zero with a Rich MarkupError.
+_BRACKET_TABLE_CHILD = (
+    "from cli_tools_shared.output import print_table\n"
+    "print_table([\n"
+    "    {'path': %r, 'refs': ['[a]', '[b]']},\n"
+    "])\n"
+) % _BRACKET_PATH
+
 
 def _run_in_pipe(child_code: str, extra_env: dict | None = None) -> bytes:
     """Run ``child_code`` with stdout connected to a pipe; return stdout bytes."""
@@ -148,3 +162,20 @@ def test_table_to_pty_without_no_color_keeps_color():
     env["TERM"] = "xterm-256color"
     out = _run_in_pty(_TABLE_CHILD, env=env)
     assert _ANSI_ESCAPE.search(out), repr(out[:160])
+
+
+def test_table_with_bracketed_cells_does_not_crash():
+    # Bracketed cell data (file paths, [link] tokens, JSON arrays) must be
+    # escaped so Rich does not parse it as markup. Before the escape fix this
+    # child exited non-zero with
+    # "closing tag '[/Users/.../client.py:1321]' doesn't match any open tag".
+    # A wide console keeps the long path on one line so the literal-text
+    # assertion is width-independent.
+    out = _run_in_pipe(_BRACKET_TABLE_CHILD, {"COLUMNS": "200"})
+    text = out.decode("utf-8")
+    # The escape is consumed on render: the visible output shows the literal
+    # bracketed path, NOT a backslash-escaped form.
+    assert _BRACKET_PATH in text, repr(text)
+    assert "\\[/Users" not in text, repr(text)
+    # The JSON-array cell renders with its brackets intact too.
+    assert '["[a]", "[b]"]' in text, repr(text)

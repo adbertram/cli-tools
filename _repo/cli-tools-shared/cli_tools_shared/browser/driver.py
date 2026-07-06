@@ -29,7 +29,14 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
-from .processes import ProcessCommand, command_user_data_dir, list_process_commands, profile_process_pids
+from .processes import (
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    command_user_data_dir,
+    list_process_commands,
+    pid_is_running,
+    profile_process_pids,
+)
 
 logger = get_debug_logger("cli_tools.browser_service")
 
@@ -277,6 +284,8 @@ class BrowserHarnessService:
         """Return process-table rows for the local process table."""
         try:
             return list_process_commands()
+        except ProcessTableUnavailableError:
+            raise
         except RuntimeError as e:
             raise BrowserHarnessError(f"Failed to inspect process table: {e}") from e
 
@@ -367,7 +376,7 @@ class BrowserHarnessService:
                     pid = int(tail)
                 except ValueError:
                     pid = None
-            if pid is not None and self._pid_running(pid):
+            if pid is not None and pid_is_running(pid):
                 raise BrowserHarnessError(
                     f"Browser session '{self.session}' is held by PID {pid}. "
                     "Finish or kill it before retrying."
@@ -398,10 +407,17 @@ class BrowserHarnessService:
 
         logger.debug("_cleanup_stale_session: session=%s", self.session)
         restart_daemon(name=self.session)
-        for pid in self._session_process_pids():
+        for pid in self._stale_session_process_pids():
             logger.debug("_cleanup_stale_session: stopping stale pid=%s", pid)
             self._terminate_session_pid(pid)
         self._cleanup_session_lock_files()
+
+    def _stale_session_process_pids(self) -> List[int]:
+        try:
+            return self._session_process_pids()
+        except ProcessTableUnavailableError as exc:
+            logger.debug("process-table cleanup unavailable for session %s: %s", self.session, exc)
+            return []
 
     def _acquire_lifecycle_lock(self) -> None:
         """Acquire the per-session lifecycle lock until close/delete."""
@@ -433,7 +449,7 @@ class BrowserHarnessService:
         self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
-        for pid in self._session_process_pids():
+        for pid in self._stale_session_process_pids():
             self._terminate_session_pid(pid)
         self._opened = False
         self._cdp_port = None

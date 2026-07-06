@@ -8,7 +8,7 @@ from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _fill_js
-from cli_tools_shared.browser.processes import ProcessCommand
+from cli_tools_shared.browser.processes import ProcessCommand, ProcessTableUnavailableError
 import cli_tools_shared.browser.driver as driver
 
 
@@ -146,6 +146,82 @@ def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks
     assert killed == [201, 202]
     for path in lock_paths:
         assert not path.exists()
+
+
+def test_browser_open_continues_when_process_table_unavailable_without_profile_lock(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    events: list[str] = []
+    persistent = tmp_path / "chromium-profile"
+
+    def process_table_unavailable():
+        raise ProcessTableUnavailableError("Process table inspection is unavailable in this environment.")
+
+    monkeypatch.setattr("browser_harness.admin.restart_daemon", lambda name=None: events.append(f"restart:{name}"))
+    monkeypatch.setattr(service, "_list_process_table", process_table_unavailable)
+    monkeypatch.setattr(driver, "_find_free_port", lambda: 51312)
+    monkeypatch.setattr(driver, "_wait_for_cdp", lambda port, timeout: events.append(f"wait:{port}"))
+    monkeypatch.setattr(driver, "_chrome_binary", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: events.append("popen") or _Proc(4242),
+    )
+    monkeypatch.setattr(service, "_start_daemon", lambda: events.append("daemon"))
+    monkeypatch.setattr(
+        service,
+        "_page_info",
+        lambda: {"url": "", "title": "", "console_errors": 0, "console_warnings": 0},
+    )
+    monkeypatch.setattr(service, "_request_browser_close", lambda: events.append("graceful-close"))
+    monkeypatch.setattr(service, "_stop_daemon", lambda: events.append("stop"))
+    monkeypatch.setattr(service, "_terminate_chrome", lambda: events.append("terminate"))
+
+    class _Helpers:
+        def cdp(self, *_args, **_kwargs):
+            events.append("cdp")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    service.browser_open("https://example.com/dashboard", persistent_profile_dir=persistent)
+    service.browser_close()
+
+    assert events == [
+        "restart:sample-browser-session",
+        "popen",
+        "wait:51312",
+        "daemon",
+        "cdp",
+        "graceful-close",
+        "stop",
+        "terminate",
+    ]
+
+
+def test_cleanup_session_lock_files_reports_live_profile_lock_without_process_table(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    user_data_dir = tmp_path / "chromium-profile"
+    user_data_dir.mkdir(parents=True)
+    (user_data_dir / "SingletonLock").symlink_to("host-12345")
+    service._user_data_dir = user_data_dir
+    checked: list[int] = []
+
+    def fake_pid_is_running(pid: int) -> bool:
+        checked.append(pid)
+        return True
+
+    monkeypatch.setattr(driver, "pid_is_running", fake_pid_is_running)
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: (_ for _ in ()).throw(
+            ProcessTableUnavailableError("Process table inspection is unavailable in this environment.")
+        ),
+    )
+
+    with pytest.raises(BrowserHarnessError, match="held by PID 12345"):
+        service._cleanup_session_lock_files()
+
+    assert checked == [12345]
 
 
 def test_browser_open_surfaces_stale_cleanup_failure(tmp_path, monkeypatch):
