@@ -77,6 +77,13 @@ commands, first run a JSON command with `--properties id,<needed fields>` when
 the command supports it, copy the full UUID from JSON, then call commands such
 as `notion pages get PAGE_ID`, `notion database page update PAGE_ID`, or
 `notion comments create --discussion-id DISCUSSION_ID`.
+
+When any requested property name contains spaces, quote the entire
+comma-separated `--properties` value so Bash passes it as one argument:
+`notion database page list --database-id DB_ID --properties "id,Name,Website,Contact Email"`.
+Do not pass an unquoted comma list such as
+`--properties id,Name,Website,Contact Email`; Bash splits `Contact Email` and
+Typer rejects the extra `Email` argument before the CLI can parse properties.
 </principle>
 
 <principle name="Comment Text With Shell Metacharacters">

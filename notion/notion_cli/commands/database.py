@@ -774,7 +774,7 @@ def page_list(
         None,
         "--properties",
         "-p",
-        help="Comma-separated list of properties to include in output",
+        help="Quoted comma-separated list of properties to include in output",
     ),
     limit: int = typer.Option(
         100,
@@ -805,7 +805,7 @@ def page_list(
 
     Output Examples:
         notion database page list DB_ID --table
-        notion database page list DB_ID --properties "Title,Status,Due Date"
+        notion database page list DB_ID --properties "id,Name,Website,Contact Email"
         notion database page list DB_ID --limit 10
     """
     client = get_client()

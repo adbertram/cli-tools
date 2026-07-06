@@ -62,7 +62,7 @@ notion database list <database-id> --filter-status "Done"
 | `--filter-checkbox` | Filter by checkbox property (format: 'property:true/false') |
 | `--filter-text` | Filter by text contains (format: 'property:value') |
 | `-f, --filter` | Raw JSON filter object |
-| `-p, --properties` | Comma-separated list of properties to include |
+| `-p, --properties` | Quoted comma-separated list of properties to include, for example `"id,Name,Website,Contact Email"` |
 | `-l, --limit` | Maximum number of results |
 | `--sort` | Sort by property (format: 'property' or 'property:asc/desc') |
 

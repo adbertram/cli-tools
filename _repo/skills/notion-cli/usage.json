@@ -1090,8 +1090,8 @@
               ]
             },
             "list": {
-              "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"Title,Status,Due Date\" notion database page list DB_ID --limit 10",
-              "usage_instructions": "Run `notion database page list --help` for exact arguments and options. Use default JSON output with `--properties id,<needed fields>` when a page ID will be copied into a follow-up command. Do not copy UUIDs from `--table` output that contains an ellipsis (`...` or `…`).",
+              "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"id,Name,Website,Contact Email\" notion database page list DB_ID --limit 10",
+              "usage_instructions": "Run `notion database page list --help` for exact arguments and options. Use default JSON output with `--properties \"id,<needed fields>\"` when a page ID will be copied into a follow-up command; quote the entire comma-separated value when any property contains spaces, for example `--properties \"id,Name,Website,Contact Email\"`. Do not copy UUIDs from `--table` output that contains an ellipsis (`...` or `…`).",
               "arguments": [],
               "options": [
                 {
@@ -1119,7 +1119,7 @@
                   "name": "--properties",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Comma-separated list of properties to include in output",
+                  "help": "Quoted comma-separated list of properties to include in output",
                   "short": "-p"
                 },
                 {
