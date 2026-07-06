@@ -1319,10 +1319,15 @@ beginDialog:
         if status != "Succeeded":
             diag_messages = []
             for dd in lfpo.get("diagnosticDetails") or []:
-                component_id = dd.get("componentId", "?")
+                component_id = dd.get("componentId") or "?"
                 for d in dd.get("diagnosticList") or []:
+                    fields = [
+                        d.get("errorCode"),
+                        d.get("violationType"),
+                        d.get("errorMessage", "unknown error"),
+                    ]
                     diag_messages.append(
-                        f"component {component_id}: {d.get('errorMessage', 'unknown error')}"
+                        f"component {component_id}: " + " | ".join(str(field) for field in fields if field)
                     )
             diag_str = "; ".join(diag_messages) if diag_messages else "no diagnostic details returned"
             raise ClientError(

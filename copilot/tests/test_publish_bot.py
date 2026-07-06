@@ -104,6 +104,61 @@ def test_publish_bot_raises_when_job_fails_with_unknown_node(monkeypatch):
     assert "abcdef01-2345-6789-abcd-ef0123456789" in msg
 
 
+def test_publish_bot_raises_with_dlp_diagnostic_code_and_violation_type(monkeypatch):
+    """Failed publish errors include structured DLP diagnostic fields."""
+    client = _make_client()
+
+    sync_states = iter([
+        {
+            "lastFinishedPublishOperation": {
+                "status": "Succeeded",
+                "operationEnd": BASELINE_OP_END,
+                "diagnosticDetails": [],
+            }
+        },
+        {
+            "lastFinishedPublishOperation": {
+                "status": "Failed",
+                "operationEnd": NEW_OP_END,
+                "diagnosticDetails": [
+                    {
+                        "componentId": None,
+                        "diagnosticList": [
+                            {
+                                "errorCode": "DlpViolationError",
+                                "violationType": "BlockedConnector",
+                                "errorMessage": "At least one connector here has been blocked by your admin",
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    ])
+
+    def fake_get(path: str):
+        if "synchronizationstatus" in path:
+            return {"synchronizationstatus": next(sync_states)}
+        raise AssertionError(f"unexpected GET path: {path}")
+
+    class FakeHttp:
+        def post(self, url, headers=None, json=None, timeout=None):
+            return _FakeResponse(200, {"PublishedBotContentId": "", "PublishBotJobResponse": None})
+
+    monkeypatch.setattr(client, "get", fake_get)
+    monkeypatch.setattr(client, "_get_headers", lambda: {})
+    client._http_client = FakeHttp()
+
+    with pytest.raises(ClientError) as excinfo:
+        client.publish_bot(BOT_ID, poll_timeout=10.0, poll_interval=0.0)
+
+    msg = str(excinfo.value)
+    assert "component ?" in msg
+    assert "DlpViolationError" in msg
+    assert "BlockedConnector" in msg
+    assert "At least one connector here has been blocked by your admin" in msg
+
+
 def test_publish_bot_returns_success_when_job_succeeds(monkeypatch):
     """Happy path: sync state advances and status becomes Succeeded."""
     client = _make_client()

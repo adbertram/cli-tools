@@ -59,6 +59,10 @@ operators = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "in", "nin", "sta
 # agent knowledge azure-ai-search add are at depth 4.
 max_nested_depth = 4
 
+[cli_specific.copilot.param_fixtures]
+"agent trigger list" = { "--agentId" = "agent_id" }
+"connections test" = { "--connector-id" = "connector_id", "--connection-id" = "connection_id" }
+
 [cli_specific.ebay]
 # eBay seller store categories commands live at seller store categories <action>.
 max_nested_depth = 4

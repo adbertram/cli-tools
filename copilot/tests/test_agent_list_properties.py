@@ -36,7 +36,9 @@ def test_status_property_selects_dataverse_statuscode_and_outputs_status(monkeyp
             ]
 
     monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
-    monkeypatch.setattr(agent, "print_json", lambda payload: captured.setdefault("payload", payload))
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
 
     agent.list_agents(
         table=False,
@@ -60,7 +62,9 @@ def test_empty_knowledge_list_outputs_json_array_by_default(monkeypatch, capsys)
             return []
 
     monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
-    monkeypatch.setattr(agent, "print_json", lambda payload: captured.setdefault("payload", payload))
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
 
     agent.knowledge_list(
         agent_id="00000000-0000-0000-0000-000000000000",
@@ -84,7 +88,9 @@ def test_empty_knowledge_list_keeps_message_for_table(monkeypatch, capsys):
             return []
 
     monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
-    monkeypatch.setattr(agent, "print_json", lambda payload: captured.setdefault("payload", payload))
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
 
     agent.knowledge_list(
         agent_id="00000000-0000-0000-0000-000000000000",
@@ -108,7 +114,9 @@ def test_empty_tool_list_outputs_json_array_by_default(monkeypatch, capsys):
             return []
 
     monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
-    monkeypatch.setattr(agent, "print_json", lambda payload: captured.setdefault("payload", payload))
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
 
     agent.tool_list(
         agent_id="00000000-0000-0000-0000-000000000000",
@@ -131,7 +139,9 @@ def test_empty_tool_list_keeps_message_for_table(monkeypatch, capsys):
             return []
 
     monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
-    monkeypatch.setattr(agent, "print_json", lambda payload: captured.setdefault("payload", payload))
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
 
     agent.tool_list(
         agent_id="00000000-0000-0000-0000-000000000000",
@@ -144,3 +154,56 @@ def test_empty_tool_list_keeps_message_for_table(monkeypatch, capsys):
 
     assert "payload" not in captured
     assert capsys.readouterr().out == "No agent tools found for this agent.\n"
+
+
+def test_empty_trigger_list_outputs_json_array_by_default(monkeypatch, capsys):
+    captured = {}
+
+    class FakeClient:
+        def list_triggers(self, agent_id):
+            return []
+
+    monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        agent, "print_json", lambda payload: captured.setdefault("payload", payload)
+    )
+
+    agent.trigger_list(
+        agent_id="00000000-0000-0000-0000-000000000000",
+        table=False,
+        limit=100,
+        filter=None,
+        properties=None,
+    )
+
+    assert captured["payload"] == []
+    assert capsys.readouterr().out == ""
+
+
+def test_empty_trigger_list_keeps_message_for_table(monkeypatch, capsys):
+    captured = {}
+
+    class FakeClient:
+        def list_triggers(self, agent_id):
+            return []
+
+    monkeypatch.setattr(agent, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(
+        agent,
+        "print_table",
+        lambda rows, columns, headers: captured.setdefault(
+            "table", {"rows": rows, "columns": columns, "headers": headers}
+        ),
+    )
+
+    agent.trigger_list(
+        agent_id="00000000-0000-0000-0000-000000000000",
+        table=True,
+        limit=100,
+        filter=None,
+        properties=None,
+    )
+
+    assert captured["table"]["rows"] == []
+    assert captured["table"]["columns"] == ["name", "trigger_type", "status", "trigger_id"]
+    assert capsys.readouterr().out == ""

@@ -157,6 +157,14 @@ Use `--table` only when human-readable output is requested.
 - **For web embeds, prefer a token over the secret.** Run `copilot agent channel get-token <agent>` to mint a short-lived Direct Line token (no secret exposure), or exchange a secret for a token server-side via `POST https://directline.botframework.com/v3/directline/tokens/generate`. Never put the Direct Line secret in browser code.
 </gotcha>
 
+<gotcha name="DLP policy inspection: do not use PowerApps admin PowerShell module on macOS">
+**Do not use `Microsoft.PowerApps.Administration.PowerShell` on macOS as a substitute for missing `copilot` DLP policy commands.** Microsoft's Power Platform PowerShell docs require Windows PowerShell 5.x and .NET Framework; PowerShell 6+ uses .NET Core and is incompatible with those modules. On macOS, `Get-AdminDlpPolicy` can fail during module auth with `System.Windows.Forms` / `WithAuthority` assembly errors because the module's auth helper calls Windows Forms APIs. Treat DLP policy reads and changes as Power Platform admin/portal work unless the CLI grows a first-class, tested Dataverse/Power Platform API path.
+</gotcha>
+
+<gotcha name="pac CLI: verify tenant/profile before using as evidence">
+`pac` is not interchangeable with the repo-owned `copilot --profile <name>` auth profile. Before using `pac` as evidence, run `pac auth who` and prove the tenant, environment, and user match the target Copilot Studio environment. A stale/default `pac` profile can point at Adam's personal default tenant while `copilot --profile psdxautomation` points at a Progress/PSDX tenant. `pac` has copilot publish/status and connector list commands, but no verified DLP policy command and no portal-only channel enablement or Direct Line secret retrieval surface.
+</gotcha>
+
 <gotcha name="tool/knowledge add: deterministic Copilot Studio capacity pre-check">
 **Before attaching a tool or knowledge source, the CLI runs a fail-fast capacity pre-check on the target Power Platform environment. If the environment has no Copilot Studio capacity, the attach is blocked with a non-zero exit BEFORE any mutation.** This guards `copilot agent tool add`, `copilot agent knowledge add`, `copilot agent knowledge upload` (including its `--force` replace, whose existing-source delete is also blocked), and `copilot agent knowledge azure-ai-search add`. (`copilot agent create`/`update` are NOT gated — they take no inline tool/knowledge payload.)
 

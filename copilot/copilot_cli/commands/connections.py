@@ -1,10 +1,17 @@
 """Connection commands for managing Power Platform connections."""
+
 import typer
 from typing import Optional, List, Dict, Any
 
 from ..client import get_client, ClientError
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error, safe_symbol
+from cli_tools_shared.output import (
+    print_json,
+    print_table,
+    print_success,
+    handle_error,
+    safe_symbol,
+)
 from . import connections_onedrive
 from . import connections_operations
 from .custom_connector import is_custom_connector
@@ -39,36 +46,16 @@ app.add_typer(connections_onedrive.app, name="onedrive")
 app.add_typer(connections_operations.app, name="operations")
 
 COMMAND_CREDENTIALS = {
-    "auth": [
-        "custom"
-    ],
-    "bind": [
-        "custom"
-    ],
-    "create": [
-        "custom"
-    ],
-    "delete": [
-        "custom"
-    ],
-    "get": [
-        "custom"
-    ],
-    "list": [
-        "custom"
-    ],
-    "onedrive": [
-        "custom"
-    ],
-    "operations": [
-        "custom"
-    ],
-    "remove": [
-        "custom"
-    ],
-    "test": [
-        "custom"
-    ]
+    "auth": ["custom"],
+    "bind": ["custom"],
+    "create": ["custom"],
+    "delete": ["custom"],
+    "get": ["custom"],
+    "list": ["custom"],
+    "onedrive": ["custom"],
+    "operations": ["custom"],
+    "remove": ["custom"],
+    "test": ["custom"],
 }
 
 
@@ -105,11 +92,13 @@ def extract_connector_auth_types(connector: dict) -> List[Dict[str, Any]]:
                             is_oauth = True
                             break
 
-                auth_types.append({
-                    "name": name,
-                    "display_name": display_name,
-                    "is_oauth": is_oauth,
-                })
+                auth_types.append(
+                    {
+                        "name": name,
+                        "display_name": display_name,
+                        "is_oauth": is_oauth,
+                    }
+                )
 
     return auth_types
 
@@ -261,7 +250,11 @@ def _create_oauth_connection(
     # Show OAuth redirect URL configuration requirement for custom connectors
     # Managed connectors have redirect URLs pre-configured by Microsoft
     if is_custom:
-        redirect_connector_id = connector_id.replace("shared_", "", 1) if connector_id.startswith("shared_") else connector_id
+        redirect_connector_id = (
+            connector_id.replace("shared_", "", 1)
+            if connector_id.startswith("shared_")
+            else connector_id
+        )
         typer.echo()
         typer.echo("OAuth Redirect URL Configuration Required")
         typer.echo()
@@ -345,7 +338,9 @@ def _create_oauth_connection(
     typer.echo(f"Check connection status: copilot connections list -c {connector_id} --table")
 
 
-def format_connection_for_display(connection: dict, connector_id: str = "", truncate: bool = False) -> dict:
+def format_connection_for_display(
+    connection: dict, connector_id: str = "", truncate: bool = False
+) -> dict:
     """Format a connection for display.
 
     Args:
@@ -539,13 +534,18 @@ def connections_list(
                 typer.echo("\nThis could mean:")
                 typer.echo("  - No connections have been created for this connector")
                 typer.echo("  - The connector ID might be incorrect")
-                typer.echo("\nUse 'copilot managed-connector list --table' or 'copilot custom-connector list --table' to see available connectors.")
+                typer.echo(
+                    "\nUse 'copilot managed-connector list --table' or 'copilot custom-connector list --table' to see available connectors."
+                )
             else:
                 typer.echo("No connections found in the environment.")
             return
 
         use_table = table or output == "table"
-        formatted = [format_connection_for_display(c, connector_id or "", truncate=use_table) for c in connections]
+        formatted = [
+            format_connection_for_display(c, connector_id or "", truncate=use_table)
+            for c in connections
+        ]
 
         # Apply filters using standard field:op:value syntax
         if filter:
@@ -563,8 +563,7 @@ def connections_list(
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
             formatted = [
-                {k: v for k, v in item.items() if k in property_list}
-                for item in formatted
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
             ]
 
         if use_table:
@@ -575,7 +574,14 @@ def connections_list(
                 print_table(
                     formatted,
                     columns=["name", "connector", "auth_type", "id", "status", "created"],
-                    headers=["Name", "Connector", "Auth Type", "Connection ID", "Status", "Created"],
+                    headers=[
+                        "Name",
+                        "Connector",
+                        "Auth Type",
+                        "Connection ID",
+                        "Status",
+                        "Created",
+                    ],
                 )
         else:
             print_json(formatted)
@@ -665,39 +671,49 @@ def connections_test(
         copilot connections test -c shared_asana --connection-id abc123
     """
     if not connector_id and not all_connectors:
-        typer.echo("Error: Either --connector-id/-c or --all is required.")
+        typer.echo("Error: Either --connector-id/-c or --all is required.", err=True)
         raise typer.Exit(1)
 
     try:
         client = get_client()
 
         if all_connectors:
-            typer.echo("Finding all connections in the environment...")
+            if table:
+                typer.echo("Finding all connections in the environment...")
             connections = client.list_connections()
         else:
-            typer.echo(f"Finding connections for connector: {connector_id}...")
+            if table:
+                typer.echo(f"Finding connections for connector: {connector_id}...")
             connections = client.list_connections(connector_id)
 
         if not connections:
-            if all_connectors:
+            if not table:
+                print_json([])
+            elif all_connectors:
                 typer.echo("No connections found in the environment.")
             else:
                 typer.echo(f"No connections found for connector '{connector_id}'.")
                 typer.echo("\nThis could mean:")
                 typer.echo("  - No connections have been created for this connector")
                 typer.echo("  - The connector ID might be incorrect")
-                typer.echo("\nUse 'copilot managed-connector list --table' or 'copilot custom-connector list --table' to see available connectors.")
+                typer.echo(
+                    "\nUse 'copilot managed-connector list --table' or 'copilot custom-connector list --table' to see available connectors."
+                )
             return
 
         # If specific connection requested, filter to that one
         if connection_id:
             connections = [c for c in connections if c.get("name") == connection_id]
             if not connections:
-                typer.echo(f"Connection '{connection_id}' not found for connector '{connector_id}'.")
+                typer.echo(
+                    f"Connection '{connection_id}' not found for connector '{connector_id}'.",
+                    err=True,
+                )
                 raise typer.Exit(1)
 
         mode_label = "live probe" if live else "stored status"
-        typer.echo(f"Found {len(connections)} connection(s). Checking via {mode_label}...\n")
+        if table:
+            typer.echo(f"Found {len(connections)} connection(s). Checking via {mode_label}...\n")
 
         results = []
         for conn in connections:
@@ -746,11 +762,13 @@ def connections_test(
             results.append(result)
 
             # Print progress
-            status_icon = "+" if is_healthy else "x"
-            display_name_short = display_name[:50] if len(display_name) > 50 else display_name
-            typer.echo(f"  {status_icon} {display_name_short} ({auth_result})")
+            if table:
+                status_icon = "+" if is_healthy else "x"
+                display_name_short = display_name[:50] if len(display_name) > 50 else display_name
+                typer.echo(f"  {status_icon} {display_name_short} ({auth_result})")
 
-        typer.echo("")
+        if table:
+            typer.echo("")
 
         # Summary
         healthy_count = sum(1 for r in results if r["healthy"])
@@ -766,13 +784,15 @@ def connections_test(
             print_json(results)
 
         if unhealthy_count > 0:
-            typer.echo(
-                f"\nSummary: {healthy_count} healthy, {unhealthy_count} unhealthy "
-                f"out of {len(results)} connection(s)"
-            )
+            if table:
+                typer.echo(
+                    f"\nSummary: {healthy_count} healthy, {unhealthy_count} unhealthy "
+                    f"out of {len(results)} connection(s)"
+                )
             raise typer.Exit(1)
         else:
-            typer.echo(f"\nSummary: All {len(results)} connection(s) are healthy")
+            if table:
+                typer.echo(f"\nSummary: All {len(results)} connection(s) are healthy")
 
     except typer.Exit:
         raise
@@ -888,7 +908,7 @@ def connections_create(
                 typer.echo(
                     "Error: Environment ID not found. Please set DATAVERSE_ENVIRONMENT_ID "
                     "in your .env file or use --environment.",
-                    err=True
+                    err=True,
                 )
                 raise typer.Exit(1)
 
@@ -909,13 +929,21 @@ def connections_create(
         # If multiple auth types, require --auth-type
         if len(available_auth_types) > 1:
             if not auth_type:
-                typer.echo(f"\nError: Connector '{connector_id}' supports multiple authentication types.", err=True)
+                typer.echo(
+                    f"\nError: Connector '{connector_id}' supports multiple authentication types.",
+                    err=True,
+                )
                 typer.echo("\nAvailable auth types:", err=True)
                 for at in available_auth_types:
                     oauth_indicator = " (OAuth)" if at["is_oauth"] else ""
                     typer.echo(f"  - {at['name']}: {at['display_name']}{oauth_indicator}", err=True)
-                typer.echo("\nUse --auth-type to specify which authentication method to use.", err=True)
-                typer.echo(f"Example: copilot connections create -c {connector_id} -n \"{name}\" --auth-type {available_auth_types[0]['name']}", err=True)
+                typer.echo(
+                    "\nUse --auth-type to specify which authentication method to use.", err=True
+                )
+                typer.echo(
+                    f"Example: copilot connections create -c {connector_id} -n \"{name}\" --auth-type {available_auth_types[0]['name']}",
+                    err=True,
+                )
                 raise typer.Exit(1)
 
             # Validate provided auth type
@@ -930,11 +958,12 @@ def connections_create(
 
             # Find the exact auth type (case-insensitive match)
             selected_auth_type = next(
-                at for at in available_auth_types
-                if at["name"].lower() == auth_type.lower()
+                at for at in available_auth_types if at["name"].lower() == auth_type.lower()
             )
 
-            typer.echo(f"Using auth type: {selected_auth_type['name']} ({selected_auth_type['display_name']})")
+            typer.echo(
+                f"Using auth type: {selected_auth_type['name']} ({selected_auth_type['display_name']})"
+            )
 
             # Get required parameters for this auth type
             required_params = get_required_user_parameters(connector, selected_auth_type["name"])
@@ -965,7 +994,10 @@ def connections_create(
                         missing.append("--client-secret")
                     if not tenant_id:
                         missing.append("--tenant-id")
-                    typer.echo(f"Error: ServicePrincipalOauth requires all three flags: {', '.join(missing)} missing.", err=True)
+                    typer.echo(
+                        f"Error: ServicePrincipalOauth requires all three flags: {', '.join(missing)} missing.",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
             # If OAuth-based auth type and no params provided at all, use browser OAuth flow
@@ -988,8 +1020,13 @@ def connections_create(
                         raise typer.Exit(1)
 
                 _create_oauth_connection(
-                    client, connector_id, name, environment,
-                    is_custom=is_custom, client_id=client_id or "", client_secret=client_secret or "",
+                    client,
+                    connector_id,
+                    name,
+                    environment,
+                    is_custom=is_custom,
+                    client_id=client_id or "",
+                    client_secret=client_secret or "",
                 )
                 return
 
@@ -998,10 +1035,15 @@ def connections_create(
                 missing_params = []
                 for param_name, param_def in required_params.items():
                     if param_name not in params_dict:
-                        missing_params.append(f"  - {param_name}: {param_def['display_name']} ({param_def['description']})")
+                        missing_params.append(
+                            f"  - {param_name}: {param_def['display_name']} ({param_def['description']})"
+                        )
 
                 if missing_params:
-                    typer.echo(f"\nError: Missing required parameters for auth type '{selected_auth_type['name']}'.", err=True)
+                    typer.echo(
+                        f"\nError: Missing required parameters for auth type '{selected_auth_type['name']}'.",
+                        err=True,
+                    )
                     typer.echo("\nRequired parameters:", err=True)
                     for mp in missing_params:
                         typer.echo(mp, err=True)
@@ -1080,8 +1122,13 @@ def connections_create(
                     raise typer.Exit(1)
 
             _create_oauth_connection(
-                client, connector_id, name, environment,
-                is_custom=is_custom, client_id=client_id or "", client_secret=client_secret or "",
+                client,
+                connector_id,
+                name,
+                environment,
+                is_custom=is_custom,
+                client_id=client_id or "",
+                client_secret=client_secret or "",
             )
             return
 
@@ -1093,9 +1140,11 @@ def connections_create(
             if not endpoint or not api_key:
                 typer.echo(
                     "Error: Azure AI Search requires 'endpoint' and 'api_key' in --parameters",
-                    err=True
+                    err=True,
                 )
-                typer.echo('Example: --parameters \'{"endpoint": "https://mysearch.search.windows.net", "api_key": "xxx"}\'')
+                typer.echo(
+                    'Example: --parameters \'{"endpoint": "https://mysearch.search.windows.net", "api_key": "xxx"}\''
+                )
                 raise typer.Exit(1)
 
             result = client.create_azure_ai_search_connection(
@@ -1207,7 +1256,7 @@ def connections_delete(
                 typer.echo(
                     "Error: Environment ID not found. Please set DATAVERSE_ENVIRONMENT_ID "
                     "in your .env file or use --environment.",
-                    err=True
+                    err=True,
                 )
                 raise typer.Exit(1)
 
@@ -1227,7 +1276,9 @@ def connections_delete(
         typer.echo("\nChecking for connection references...")
         connection_refs_found = client.list_connection_references(connection_id=connection_id)
         if connection_refs_found:
-            typer.echo(f"Found {len(connection_refs_found)} connection reference(s) pointing to this connection:")
+            typer.echo(
+                f"Found {len(connection_refs_found)} connection reference(s) pointing to this connection:"
+            )
             for ref in connection_refs_found:
                 ref_name = ref.get("connectionreferencedisplayname", "Unnamed")
                 ref_id = ref.get("connectionreferenceid", "")
@@ -1244,29 +1295,35 @@ def connections_delete(
                 auth_config = agent.get("authenticationconfiguration")
                 if auth_config:
                     import json
+
                     try:
-                        auth_data = json.loads(auth_config) if isinstance(auth_config, str) else auth_config
+                        auth_data = (
+                            json.loads(auth_config) if isinstance(auth_config, str) else auth_config
+                        )
                         conn_name = auth_data.get("connectionName")
                         if conn_name == connection_id:
                             agent_name = agent.get("name", "Unnamed")
                             agent_id = agent.get("botid", "")
-                            agents_with_auth.append({
-                                "name": agent_name,
-                                "id": agent_id
-                            })
+                            agents_with_auth.append({"name": agent_name, "id": agent_id})
                     except (json.JSONDecodeError, AttributeError):
                         pass
 
             if agents_with_auth:
-                typer.echo(f"Found {len(agents_with_auth)} agent(s) using this connection for authentication:")
+                typer.echo(
+                    f"Found {len(agents_with_auth)} agent(s) using this connection for authentication:"
+                )
                 for agent in agents_with_auth:
                     typer.echo(f"  - {agent['name']} ({agent['id']})")
-                typer.echo("\nWARNING: Deleting this connection will break authentication for these agents!")
+                typer.echo(
+                    "\nWARNING: Deleting this connection will break authentication for these agents!"
+                )
                 typer.echo("They will fail with error: 'SignInTopicNeededButNotFound'")
             else:
                 typer.echo("No agents found using this connection for authentication.")
         except Exception as e:
-            typer.echo(f"Warning: Could not check for agent authentication dependencies: {e}", err=True)
+            typer.echo(
+                f"Warning: Could not check for agent authentication dependencies: {e}", err=True
+            )
 
         # Always check for agent connector tools
         typer.echo("\nChecking for agent connector tools...")
@@ -1306,11 +1363,17 @@ def connections_delete(
         if not force:
             typer.echo("\nWARNING: This may break flows or agents using this connection.")
             if agents_with_auth:
-                typer.echo(f"WARNING: {len(agents_with_auth)} agent(s) use this connection for authentication and will fail!")
+                typer.echo(
+                    f"WARNING: {len(agents_with_auth)} agent(s) use this connection for authentication and will fail!"
+                )
             if cascade is True and connection_refs_found:
-                typer.echo(f"WARNING: This will also delete {len(connection_refs_found)} connection reference(s).")
+                typer.echo(
+                    f"WARNING: This will also delete {len(connection_refs_found)} connection reference(s)."
+                )
             if cascade is True and tools_found:
-                typer.echo(f"WARNING: This will also delete {len(tools_found)} agent connector tool(s).")
+                typer.echo(
+                    f"WARNING: This will also delete {len(tools_found)} agent connector tool(s)."
+                )
             if cascade is False and has_dependents:
                 typer.echo("WARNING: Dependent resources will be left orphaned (--no-cascade).")
             confirm = typer.confirm("Are you sure you want to delete this connection?")
@@ -1330,7 +1393,10 @@ def connections_delete(
                         client.remove_tool(tool_id)
                         typer.echo(f"  {safe_symbol('check')} Deleted agent tool: {tool_name}")
                     except Exception as e:
-                        typer.echo(f"  {safe_symbol('cross')} Failed to delete agent tool {tool_name}: {e}", err=True)
+                        typer.echo(
+                            f"  {safe_symbol('cross')} Failed to delete agent tool {tool_name}: {e}",
+                            err=True,
+                        )
 
             # Delete connection references
             if connection_refs_found:
@@ -1340,12 +1406,19 @@ def connections_delete(
                     ref_name = ref.get("connectionreferencedisplayname", "Unnamed")
                     try:
                         client.delete_connection_reference(ref_id)
-                        typer.echo(f"  {safe_symbol('check')} Deleted connection reference: {ref_name}")
+                        typer.echo(
+                            f"  {safe_symbol('check')} Deleted connection reference: {ref_name}"
+                        )
                     except Exception as e:
                         if "404" in str(e):
-                            typer.echo(f"  {safe_symbol('check')} Connection reference already removed by Dataverse: {ref_name}")
+                            typer.echo(
+                                f"  {safe_symbol('check')} Connection reference already removed by Dataverse: {ref_name}"
+                            )
                         else:
-                            typer.echo(f"  {safe_symbol('cross')} Failed to delete connection reference {ref_name}: {e}", err=True)
+                            typer.echo(
+                                f"  {safe_symbol('cross')} Failed to delete connection reference {ref_name}: {e}",
+                                err=True,
+                            )
 
         # Delete the connection
         client.delete_connection(connection_id, connector_id, environment)
@@ -1458,7 +1531,7 @@ def connections_auth(
                 typer.echo(
                     "Error: Environment ID not found. Please set DATAVERSE_ENVIRONMENT_ID "
                     "in your .env file or use --environment.",
-                    err=True
+                    err=True,
                 )
                 raise typer.Exit(1)
 
@@ -1484,7 +1557,7 @@ def connections_auth(
                 typer.echo(
                     "Error: Could not determine connector ID from connection. "
                     "Please provide --connector-id.",
-                    err=True
+                    err=True,
                 )
                 raise typer.Exit(1)
 
@@ -1529,7 +1602,10 @@ def connections_auth(
             typer.echo("The 'auth' command only works with OAuth-based connectors.", err=True)
             typer.echo("")
             typer.echo("For non-OAuth connectors, you may need to:", err=True)
-            typer.echo("  1. Delete the existing connection: copilot connections delete <id> -c <connector>", err=True)
+            typer.echo(
+                "  1. Delete the existing connection: copilot connections delete <id> -c <connector>",
+                err=True,
+            )
             typer.echo("  2. Create a new connection with updated credentials", err=True)
             raise typer.Exit(1)
 
@@ -1546,7 +1622,9 @@ def connections_auth(
             typer.echo("")
             typer.echo("Error: OAuth client ID is not configured for this connector.", err=True)
             typer.echo("")
-            typer.echo("The connector's OAuth settings are missing the client ID, which means", err=True)
+            typer.echo(
+                "The connector's OAuth settings are missing the client ID, which means", err=True
+            )
             typer.echo("authentication cannot proceed.", err=True)
             typer.echo("")
             typer.echo("To fix this, update the connector with OAuth credentials:", err=True)
@@ -1585,7 +1663,9 @@ def connections_auth(
         if force:
             typer.echo("")
             typer.echo("Browser opened. Complete the OAuth flow to re-authenticate.")
-            typer.echo(f"Check connection status: copilot connections test -c {connector_id} --table")
+            typer.echo(
+                f"Check connection status: copilot connections test -c {connector_id} --table"
+            )
             return
 
         # Poll for connection status
@@ -1607,11 +1687,17 @@ def connections_auth(
                     status = statuses[0].get("status", "Unknown")
                     if status.lower() == "connected":
                         typer.echo("")
-                        print_success(f"Authentication complete! Connection '{display_name}' is now connected.")
+                        print_success(
+                            f"Authentication complete! Connection '{display_name}' is now connected."
+                        )
                         return
                     elif status.lower() == "error":
                         error_obj = statuses[0].get("error", {})
-                        error_msg = error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj)
+                        error_msg = (
+                            error_obj.get("message", "")
+                            if isinstance(error_obj, dict)
+                            else str(error_obj)
+                        )
                         if error_msg:
                             typer.echo("")
                             typer.echo(f"  Connection status: Error - {error_msg}", err=True)
@@ -1716,7 +1802,7 @@ def connections_bind(
                 typer.echo(
                     "Error: Environment ID not found. Please set DATAVERSE_ENVIRONMENT_ID "
                     "in your .env file or use --environment.",
-                    err=True
+                    err=True,
                 )
                 raise typer.Exit(1)
 
@@ -1738,7 +1824,9 @@ def connections_bind(
         typer.echo(f"Binding key: {result.get('binding_key', '')}")
         typer.echo("")
         typer.echo("The agent can now use this connection for connector tool authentication.")
-        typer.echo("Remember to publish the agent to make changes live: copilot agent publish <agent-id>")
+        typer.echo(
+            "Remember to publish the agent to make changes live: copilot agent publish <agent-id>"
+        )
 
     except typer.Exit:
         raise
