@@ -87,6 +87,16 @@ Do NOT set `POWERPLATFORM_CLOUD_URL` to force a cloud — that legacy profile va
 Override only for a cloud the host table cannot classify: set `POWERPLATFORM_CLOUD` to a `PowerPlatformCloud` enum name understood by the SDK (`Prod`, `Gov`, `High`, `DoD`, `Mooncake`). A free-form base address is intentionally NOT accepted because the SDK's `Other` base-address path cannot build a valid connection URL.
 </gotcha>
 
+<gotcha name="agent prompt: EnvironmentGroupPolicyViolation while flow invocation succeeds (admin-side channel block)">
+**If `copilot agent prompt` authenticates, opens a conversation, and delivers the message but the agent replies with `Error code: EnvironmentGroupPolicyViolation`, the environment's Power Platform environment-group rule is blocking direct chat channels at runtime.** The block is transport-independent for direct paths (Direct Line and M365 SDK Direct-to-Engine fail identically) but does NOT apply to connector invocation: the same agent answers normally through the Microsoft Copilot Studio connector (`ExecuteCopilotAsyncV2`) inside a Power Automate/agent flow (`copilot agent-flow test <flow-id> --trigger manual --body-file <f> --wait`).
+
+Diagnose by running both paths against the same agent minutes apart — direct fails with the violation, flow succeeds. This proves the agent, auth, and LLM are all fine and the block is a governance rule. The fix is admin-side only: a tenant admin must adjust the environment group's rules (Power Platform admin center → Manage → Environment groups → group → Rules); non-admin makers get 403 listing the rules via the governance API. Do not retry other client-side transports — build/keep a minimal flow-based invoke path (`copilot agent-flow create --file <def>` with an `ExecuteCopilotAsyncV2` action) as the policy-compliant route until the rule changes.
+</gotcha>
+
+<gotcha name="agent prompt: M365 SDK needs ENTRA_CLIENT_ID in the profile .env; MSAL cache is reusable across tools">
+**`copilot agent prompt` in M365 SDK mode fails with `--client-id or ENTRA_CLIENT_ID env var required` unless the auth profile's `.env` sets `ENTRA_CLIENT_ID=<public-client app id>`** (an app with delegated `CopilotStudio.Copilots.Invoke` consented, e.g. the psdxautomation app `12d53a00-9654-4398-9855-a8517fb732c4`). The MSAL token cache lives at `<profile>/cache/.m365-token-cache.json` and is a standard MSAL `SerializableTokenCache` JSON — a cache from another tool using the same client id + tenant (e.g. AgentTrainer's `<profile>/msal_cache.bin`) can be copied there to skip the device-code sign-in; MSAL silently exchanges the refresh token for the `https://api.powerplatform.com/.default` scope.
+</gotcha>
+
 <gotcha name="agent prompt: 405 'App-only S2S access is not enabled' (use delegated auth)">
 **If `copilot agent prompt` reaches the agent but fails with HTTP `405` while the active profile has a service-principal secret (`AZURE_CLIENT_SECRET`/`M365_SDK_CLIENT_SECRET`), the environment does not allow app-only (service principal) access to Copilot Studio conversations.** The Direct-to-Engine endpoint returns `App-only S2S access is not enabled for this environment.`
 
