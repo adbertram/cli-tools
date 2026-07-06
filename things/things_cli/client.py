@@ -1007,6 +1007,15 @@ class ThingsClient:
 
         todo_id = self._run_applescript(script)
 
+        # If the todo was created directly inside a project, Things ignores list
+        # placement in the `make new to do ... at beginning of project ...`
+        # AppleScript statement and leaves the task in Anytime. Honor explicit
+        # --when by applying the same post-create move/schedule operation that
+        # `update_todo(..., when=...)` uses; read-back then reflects the
+        # requested start value while preserving project membership.
+        if project and when in ('inbox', 'today', 'tomorrow', 'evening', 'anytime', 'someday'):
+            self.update_todo(todo_id, when=when)
+
         # If 'when' is an ISO date (not a keyword), schedule for that date
         if when and when not in ('inbox', 'today', 'tomorrow', 'evening', 'anytime', 'someday'):
             as_date = self._iso_to_applescript_date(when)
