@@ -142,6 +142,23 @@ shippo shipments create \
   --to-city "Chicago" --to-state IL --to-zip 60601 \
   --length 10 --width 8 --height 4 --weight 16
 
+# Create an international shipment with customs and IOSS data
+shippo shipments create \
+  --to-name "Bram Akkermans" \
+  --to-address "Spinveld 34A" \
+  --to-city BREDA \
+  --to-state NB \
+  --to-zip "4815 HS" \
+  --to-country NL \
+  --weight 2 \
+  --customs-description "LEGO building blocks" \
+  --customs-value 22.81 \
+  --customs-quantity 5 \
+  --customs-tax-id IOSS_NUMBER \
+  --customs-tax-id-type IOSS \
+  --customs-vat-collected \
+  --customs-invoice 32005565
+
 # Display rates as table
 shippo shipments create ... --table
 ```

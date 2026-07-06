@@ -336,6 +336,10 @@ class ShippoClient:
         customs_item_value: Optional[float] = None,
         customs_item_quantity: int = 1,
         customs_signer: Optional[str] = None,
+        customs_tax_id_number: Optional[str] = None,
+        customs_tax_id_type: Optional[str] = None,
+        customs_is_vat_collected: Optional[bool] = None,
+        customs_invoice: Optional[str] = None,
         # Options
         async_mode: bool = False,
     ) -> Shipment:
@@ -353,6 +357,10 @@ class ShippoClient:
             customs_item_value: Value of goods in USD (for international)
             customs_item_quantity: Number of items (default: 1)
             customs_signer: Name of person certifying customs info
+            customs_tax_id_number: Tax/IOSS/VAT number for customs declaration
+            customs_tax_id_type: Tax ID type, such as EIN, VAT, IOSS, or ARN
+            customs_is_vat_collected: Whether VAT was collected by the marketplace
+            customs_invoice: Invoice/order reference for customs declaration
             async_mode: Whether to create async (default: False)
 
         Returns:
@@ -396,6 +404,16 @@ class ShippoClient:
         customs_declaration = None
         is_international = to_country.upper() != from_country.upper()
         if is_international and customs_item_description and customs_item_value:
+            exporter_identification = None
+            if customs_tax_id_number:
+                exporter_identification = components.CustomsExporterIdentification(
+                    tax_id=components.CustomsTaxIdentification(
+                        number=customs_tax_id_number,
+                        type=components.CustomsTaxIdentificationType(
+                            (customs_tax_id_type or "IOSS").upper()
+                        ),
+                    )
+                )
             customs_item = components.CustomsItemCreateRequest(
                 description=customs_item_description,
                 quantity=customs_item_quantity,
@@ -411,6 +429,9 @@ class ShippoClient:
                 certify=True,
                 certify_signer=customs_signer or from_name,
                 items=[customs_item],
+                exporter_identification=exporter_identification,
+                is_vat_collected=customs_is_vat_collected,
+                invoice=customs_invoice,
             )
 
         # Create shipment request
