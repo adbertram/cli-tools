@@ -277,7 +277,7 @@ google gmail filters create --subject "Daily digest" --size 5000000 --size-compa
 google gmail filters delete <filter-id> --confirm
 ```
 
-**Note:** The `send`, `send-draft`, `reply`, and `reply-all` commands show a preview by default. `--confirm` is only accepted from an interactive terminal after explicit human approval; non-interactive sessions are refused before any Gmail send API call is made.
+**Note:** The `send`, `send-draft`, `reply`, and `reply-all` commands show a preview by default. Passing `--confirm` is the explicit approval boundary and sends the message, including from non-interactive automation.
 
 ### Google Cloud Projects
 

@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 import zlib
 from zipfile import ZipFile
 
@@ -56,6 +58,14 @@ class CapturingSession:
 
 def make_client(session):
     return ChromeWebStoreClient(access_token="access-token", session=session)
+
+
+@pytest.fixture(scope="session")
+def playwright_chromium_headless_shell():
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium-headless-shell"],
+        check=True,
+    )
 
 
 def png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
@@ -385,7 +395,7 @@ ID: mjcpgmoefpffompneljbkkndhconnnff
             _assert_listing_is_editable(FakeService(status))
 
 
-def test_text_field_update_rejects_disabled_review_field():
+def test_text_field_update_rejects_disabled_review_field(playwright_chromium_headless_shell):
     from playwright.sync_api import sync_playwright
 
     fields = [{"name": "description", "labels": ("Description",), "value": "new value"}]
@@ -461,7 +471,7 @@ def marked_file_inputs(html: str, section_name: str) -> list[dict]:
             browser.close()
 
 
-def test_file_input_marker_targets_nearest_promo_section():
+def test_file_input_marker_targets_nearest_promo_section(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>
@@ -490,7 +500,7 @@ def test_file_input_marker_targets_nearest_promo_section():
     ]
 
 
-def test_file_input_marker_ignores_hidden_template_input():
+def test_file_input_marker_ignores_hidden_template_input(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>
@@ -514,7 +524,7 @@ def test_file_input_marker_ignores_hidden_template_input():
     ]
 
 
-def test_file_input_marker_clears_stale_markers():
+def test_file_input_marker_clears_stale_markers(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>

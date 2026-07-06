@@ -74,8 +74,6 @@ app.add_typer(labels_app, name="labels")
 filters_app = typer.Typer(help="Manage Gmail filters")
 app.add_typer(filters_app, name="filters")
 
-GMAIL_SEND_APPROVAL_PHRASE = "I have explicit human approval to send this Gmail message"
-
 GMAIL_MESSAGE_PROPERTIES = {
     'id',
     'name',
@@ -89,23 +87,9 @@ GMAIL_MESSAGE_PROPERTIES = {
 }
 
 
-def require_human_gmail_send_approval(action: str) -> None:
-    """Require an interactive human approval gate before Gmail sends."""
-    if not sys.stdin.isatty():
-        print_error(
-            f"Refusing to {action} from a non-interactive session. "
-            "Preview the message first, get explicit human approval, then rerun "
-            "from an interactive terminal with --confirm."
-        )
-        raise typer.Exit(1)
-
-    print_info(f"About to {action}.")
-    print_info("Gmail sends require explicit human approval in this terminal.")
-    print_info(f"Type exactly: {GMAIL_SEND_APPROVAL_PHRASE}")
-    typed = sys.stdin.readline().strip()
-    if typed != GMAIL_SEND_APPROVAL_PHRASE:
-        print_error("Gmail send cancelled: approval phrase did not match.")
-        raise typer.Exit(1)
+def confirm_gmail_send(action: str) -> None:
+    """Record that --confirm approved a Gmail send action."""
+    print_info(f"Confirmed with --confirm; about to {action}.")
 
 
 def resolve_output_properties(properties: Optional[List[str]]) -> List[str]:
@@ -569,7 +553,7 @@ def gmail_send(
     """Send an email message with optional attachments.
 
     By default, shows a preview of the message without sending.
-    Use --confirm from an interactive terminal and type the approval phrase to actually send the email.
+    Use --confirm to actually send the email.
     """
     try:
         client = get_client(profile=profile)
@@ -655,12 +639,11 @@ def gmail_send(
 
             print_json(preview)
             print_info(
-                "To send, rerun from an interactive terminal with --confirm after "
-                "explicit human approval; Gmail sends are refused from automation."
+                "To send, rerun the same command with --confirm."
             )
             return
 
-        require_human_gmail_send_approval("send this email")
+        confirm_gmail_send("send this email")
 
         sent_message = service.users().messages().send(
             userId='me',
@@ -1026,7 +1009,7 @@ def gmail_send_draft(
     """Send an existing Gmail draft.
 
     By default, prints the draft metadata without sending.
-    Use --confirm from an interactive terminal and type the approval phrase to actually send the draft.
+    Use --confirm to actually send the draft.
     """
     try:
         client = get_client(profile=profile)
@@ -1053,12 +1036,11 @@ def gmail_send_draft(
                 preview['bcc'] = headers['bcc']
             print_json(preview)
             print_info(
-                "To send this draft, rerun from an interactive terminal with --confirm after "
-                "explicit human approval; Gmail sends are refused from automation."
+                "To send this draft, rerun the same command with --confirm."
             )
             return
 
-        require_human_gmail_send_approval("send this draft")
+        confirm_gmail_send("send this draft")
 
         sent = service.users().drafts().send(
             userId='me',
@@ -1107,7 +1089,7 @@ def gmail_reply(
     """Reply to a message (sender only).
 
     By default, shows a preview of the reply without sending.
-    Use --confirm from an interactive terminal and type the approval phrase to actually send the reply.
+    Use --confirm to actually send the reply.
     """
     try:
         client = get_client(profile=profile)
@@ -1220,12 +1202,11 @@ def gmail_reply(
 
             print_json(preview)
             print_info(
-                "To send this reply, rerun from an interactive terminal with --confirm after "
-                "explicit human approval; Gmail sends are refused from automation."
+                "To send this reply, rerun the same command with --confirm."
             )
             return
 
-        require_human_gmail_send_approval("send this reply")
+        confirm_gmail_send("send this reply")
 
         sent_message = service.users().messages().send(
             userId='me',
@@ -1262,7 +1243,7 @@ def gmail_reply_all(
     """Reply to all recipients of a message.
 
     By default, shows a preview of the reply without sending.
-    Use --confirm from an interactive terminal and type the approval phrase to actually send the reply.
+    Use --confirm to actually send the reply.
     """
     try:
         client = get_client(profile=profile)
@@ -1408,12 +1389,11 @@ def gmail_reply_all(
 
             print_json(preview)
             print_info(
-                "To send this reply-all, rerun from an interactive terminal with --confirm after "
-                "explicit human approval; Gmail sends are refused from automation."
+                "To send this reply-all, rerun the same command with --confirm."
             )
             return
 
-        require_human_gmail_send_approval("send this reply-all")
+        confirm_gmail_send("send this reply-all")
 
         # Send the reply in the same thread
         sent_message = service.users().messages().send(

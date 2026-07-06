@@ -433,7 +433,7 @@ def test_gmail_search_supports_comma_separated_properties(monkeypatch):
     ]
 
 
-def test_gmail_send_confirm_refuses_non_interactive_send(monkeypatch):
+def test_gmail_send_confirm_sends_from_noninteractive_session(monkeypatch):
     resource = _patch_message_client(monkeypatch, FakeMessagesResource())
 
     result = CliRunner().invoke(
@@ -451,12 +451,19 @@ def test_gmail_send_confirm_refuses_non_interactive_send(monkeypatch):
         ],
     )
 
-    assert result.exit_code == 1
-    assert "Refusing to send this email from a non-interactive session" in result.stderr
-    assert resource.send_calls == []
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "id": "sent-msg-1",
+        "to": "user@example.com",
+        "subject": "Hello",
+        "attachments": [],
+        "status": "sent",
+    }
+    assert len(resource.send_calls) == 1
+    assert resource.send_calls[0]["userId"] == "me"
 
 
-def test_gmail_send_draft_confirm_refuses_non_interactive_send(monkeypatch):
+def test_gmail_send_draft_confirm_sends_from_noninteractive_session(monkeypatch):
     draft = {
         "id": "draft-1",
         "message": {
@@ -473,9 +480,16 @@ def test_gmail_send_draft_confirm_refuses_non_interactive_send(monkeypatch):
 
     result = CliRunner().invoke(app, ["gmail", "send-draft", "draft-1", "--confirm"])
 
-    assert result.exit_code == 1
-    assert "Refusing to send this draft from a non-interactive session" in result.stderr
-    assert resource.send_calls == []
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "id": "sent-draft-1",
+        "thread_id": "thread-1",
+        "draft_id": "draft-1",
+        "to": "user@example.com",
+        "subject": "Draft subject",
+        "status": "sent",
+    }
+    assert resource.send_calls == [{"userId": "me", "body": {"id": "draft-1"}}]
 
 
 def test_gmail_draft_get_uses_drafts_api_and_decodes_body(monkeypatch):
@@ -522,7 +536,7 @@ def test_gmail_draft_get_uses_drafts_api_and_decodes_body(monkeypatch):
     assert resource.get_calls == [{"userId": "me", "id": "draft-1", "format": "full"}]
 
 
-def test_gmail_reply_confirm_refuses_non_interactive_send(monkeypatch):
+def test_gmail_reply_confirm_sends_from_noninteractive_session(monkeypatch):
     message = {
         "id": "msg-1",
         "threadId": "thread-1",
@@ -543,12 +557,21 @@ def test_gmail_reply_confirm_refuses_non_interactive_send(monkeypatch):
         app, ["gmail", "reply", "msg-1", "--body", "Reply body", "--confirm"]
     )
 
-    assert result.exit_code == 1
-    assert "Refusing to send this reply from a non-interactive session" in result.stderr
-    assert resource.send_calls == []
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "id": "sent-msg-1",
+        "to": "sender@example.com",
+        "subject": "Re: Question",
+        "thread_id": "thread-1",
+        "attachments": [],
+        "status": "sent",
+    }
+    assert len(resource.send_calls) == 1
+    assert resource.send_calls[0]["userId"] == "me"
+    assert resource.send_calls[0]["body"]["threadId"] == "thread-1"
 
 
-def test_gmail_reply_all_confirm_refuses_non_interactive_send(monkeypatch):
+def test_gmail_reply_all_confirm_sends_from_noninteractive_session(monkeypatch):
     message = {
         "id": "msg-1",
         "threadId": "thread-1",
@@ -571,9 +594,19 @@ def test_gmail_reply_all_confirm_refuses_non_interactive_send(monkeypatch):
         app, ["gmail", "reply-all", "msg-1", "--body", "Reply body", "--confirm"]
     )
 
-    assert result.exit_code == 1
-    assert "Refusing to send this reply-all from a non-interactive session" in result.stderr
-    assert resource.send_calls == []
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "id": "sent-msg-1",
+        "to": "sender@example.com, teammate@example.com",
+        "cc": "manager@example.com",
+        "subject": "Re: Question",
+        "thread_id": "thread-1",
+        "attachments": [],
+        "status": "sent",
+    }
+    assert len(resource.send_calls) == 1
+    assert resource.send_calls[0]["userId"] == "me"
+    assert resource.send_calls[0]["body"]["threadId"] == "thread-1"
 
 
 def test_gmail_search_rejects_invalid_properties(monkeypatch):

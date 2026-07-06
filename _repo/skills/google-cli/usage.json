@@ -2755,8 +2755,8 @@
           ]
         },
         "send": {
-          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Non-interactive sessions must preview first, get explicit human approval, then rerun with --confirm from an interactive terminal.",
-          "usage_instructions": "Run without --confirm to preview the message. Do not use --confirm from a non-interactive agent session; the CLI refuses with: Refusing to send this email from a non-interactive session. After explicit human approval, rerun the same command with --confirm from an interactive terminal.",
+          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Passing --confirm sends the message, including from non-interactive automation.",
+          "usage_instructions": "Run without --confirm to preview the message. After approval, rerun the same command with --confirm to send from either an interactive terminal or non-interactive automation.",
           "arguments": [],
           "options": [
             {

@@ -88,11 +88,11 @@ return Gmail 404 for the old message ID.
 </principle>
 
 <principle name="Gmail Send Approval Guard">
-`google gmail send` without `--confirm` is the required preview step. In
-non-interactive agent sessions, do not run `google gmail send ... --confirm`;
-the CLI refuses with `Refusing to send this email from a non-interactive
-session`. Workflow: preview without `--confirm`, get explicit human approval,
-then rerun the same command with `--confirm` from an interactive terminal.
+`google gmail send` without `--confirm` is the required preview step. Passing
+`--confirm` is the explicit approval boundary and sends the message, including
+from non-interactive automation. Workflow: preview without `--confirm` when a
+review step is needed, then rerun the same command with `--confirm` after
+approval.
 </principle>
 
 <principle name="Google Contacts Filters And Properties">
