@@ -33,6 +33,59 @@ from ..parsers import format_local_time
 app = typer.Typer(help="Manage Airtable records")
 
 
+# --- Airtable record-aware --properties projection ---
+#
+# Airtable records are always shaped ``{"id", "createdTime", "fields": {...}}``.
+# Unlike the generic shared ``apply_properties_filter`` (which is shape-agnostic
+# and stays untouched), this projector understands that record contract and,
+# unlike CourseCraft's projector, keeps BARE output keys instead of dotted
+# ``fields.<name>`` keys.
+#
+# Each ``--properties`` token resolves deterministically (one path per input
+# form, never a fallback):
+#   - ``id`` / ``createdTime`` -> same key, value ``record.get(token)`` (the
+#     only top-level record keys).
+#   - ``fields`` -> key ``fields``, value = the whole ``record["fields"]`` object.
+#   - ``fields.<name>`` (dotted) OR bare ``<name>`` -> key = bare ``<name>``
+#     (a leading ``fields.`` prefix is stripped), value =
+#     ``record["fields"].get("<name>")``.
+#
+# Explicit-null rule: every requested key is ALWAYS present in the output; an
+# absent or empty requested field projects an explicit ``None`` (it is never
+# dropped). Bare and ``fields.``-dotted forms are equivalent.
+_RECORD_TOP_LEVEL_KEYS = frozenset({"id", "createdTime"})
+_FIELDS_PREFIX = "fields."
+
+
+def _project_one(record: dict, prop_list: List[str]) -> dict:
+    record_fields = record.get("fields", {})
+    projected: dict = {}
+    for prop in prop_list:
+        if prop in _RECORD_TOP_LEVEL_KEYS:
+            projected[prop] = record.get(prop)
+        elif prop == "fields":
+            projected["fields"] = record.get("fields")
+        else:
+            field_name = prop[len(_FIELDS_PREFIX):] if prop.startswith(_FIELDS_PREFIX) else prop
+            projected[field_name] = record_fields.get(field_name)
+    return projected
+
+
+def project_records(records: List[dict], properties: Optional[str]) -> List[dict]:
+    if not properties or not records:
+        return records
+    prop_list = [p.strip() for p in properties.split(",") if p.strip()]
+    if not prop_list:
+        return records
+    return [_project_one(rec, prop_list) for rec in records]
+
+
+def project_record(record: dict, properties: Optional[str]) -> dict:
+    if not properties:
+        return record
+    return project_records([record], properties)[0]
+
+
 def resolve_base_id(base_id: Optional[str]) -> str:
     """Resolve base_id from argument or config default."""
     if base_id:
@@ -109,17 +162,9 @@ def records_list(
 
     records = result.get("records", [])
 
-    # Apply properties selection to output
+    # Apply properties selection to output (Airtable record-aware projection).
     if properties:
-        prop_list = [f.strip() for f in properties.split(",")]
-        filtered_records = []
-        for record in records:
-            filtered = {"id": record.get("id", "")}
-            record_fields = record.get("fields", {})
-            for prop in prop_list:
-                if prop in record_fields:
-                    filtered[prop] = record_fields[prop]
-            filtered_records.append(filtered)
+        filtered_records = project_records(records, properties)
     else:
         filtered_records = records
 
@@ -173,6 +218,7 @@ def records_get(
     record_id: str = typer.Argument(..., help="The record ID"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include in output"),
 ):
     """
     Get a specific record by ID.
@@ -180,10 +226,16 @@ def records_get(
     Examples:
         airtable records get "Tasks" recXXXXXXXXXXXXXX
         airtable records get "Tasks" recXXX --table
+
+        # Select specific properties (absent/empty fields project explicit null)
+        airtable records get "Tasks" recXXX --properties "id,Name,Status"
     """
     resolved_base_id = resolve_base_id(base_id)
     client = get_client()
     record = client.get_record(resolved_base_id, table_id, record_id)
+
+    if properties and not table:
+        record = project_record(record, properties)
 
     if table:
         # Flatten for table display

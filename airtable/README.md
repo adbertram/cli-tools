@@ -148,6 +148,24 @@ airtable records list "Tasks" --properties "Name,Status,Priority"
 
 # Sort records
 airtable records list "Tasks" --sort-field "Created" --sort-direction desc
+```
+
+**`--properties` projection contract** (applies to both `records list` and `records get`):
+
+- Output keys are **bare** (e.g. `Name`, not `fields.Name`).
+- Every requested key is **always present**. An absent or empty requested field
+  projects an explicit `null` — it is never dropped.
+- `id` and `createdTime` are the only top-level record keys; everything else is
+  an Airtable field.
+- A bare field name and its dotted form are **equivalent**: `--properties "Name"`
+  and `--properties "fields.Name"` both project `{"Name": ...}`.
+- `--properties "fields"` returns the whole `fields` object under a `fields` key.
+- **Gotcha:** `--properties` only projects top-level record keys and first-level
+  field names. To pull a deep sub-field out of a nested field value
+  (`fields.X.Y`), don't use `--properties` — fetch the full record and extract
+  with `jq`, e.g. `airtable records get "Tasks" recXXX | jq '.fields.X.Y'`.
+
+```bash
 
 # Display as table
 airtable records list "Tasks" --table
@@ -167,6 +185,10 @@ airtable records get "Tasks" recXXXXXXXXXXXXXX
 
 # Display as table
 airtable records get "Tasks" recXXX
+
+# Select specific properties (absent/empty fields project explicit null;
+# ignored when combined with --table)
+airtable records get "Tasks" recXXX --properties "id,Name,Status"
 ```
 
 #### Update a Record
