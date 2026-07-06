@@ -14,120 +14,144 @@ from .config import get_config
 from .models.search_result import SearchResult
 
 
-# CSS selectors for eBay search results page (2025+ s-card layout)
+# CSS selectors for eBay search results page (2026 su-item-card layout)
 SELECTORS = {
-    "results_container": ".srp-results",
-    "item": "li.s-card",
-    "title": ".s-card__title .su-styled-text",
-    "price": ".s-card__price",
-    "caption": ".s-card__caption .su-styled-text",
-    "condition": ".s-card__subtitle .su-styled-text",
-    "link": "a.s-card__link",
-    "image": ".s-card__image",
+    "results_container": ".srp-river-main",
+    "item": "div.su-item-card.s-item-card[data-listingid]",
+    "title": "a.su-item-card__title",
+    "price": ".su-item-card__price",
+    "caption": ".signal",
+    "condition": ".su-item-card__subtitle",
+    "link": "a.su-item-card__title[href*='/itm/']",
+    "image": ".su-image img",
+    "attributes_primary": ".su-card-container__attributes__primary .su-styled-text",
+    "attributes_secondary": ".su-card-container__attributes__secondary .su-styled-text",
     "next_page": "a.pagination__next",
 }
 
+SEARCH_CONDITION_ALIASES = {
+    "new": "1000",
+    "open_box": "1500",
+    "refurbished": "2000",
+    "used": "3000",
+    "for_parts": "7000",
+}
+SEARCH_CONDITION_HELP = (
+    "Item condition ("
+    + ", ".join(SEARCH_CONDITION_ALIASES)
+    + ", or eBay condition ID)"
+)
+
 # JavaScript to extract search results from the page
-EXTRACT_JS = """() => {
-    const cards = document.querySelectorAll('li.s-card');
+EXTRACT_JS = """(selectors) => {
+    const cards = document.querySelectorAll(selectors.item);
     const results = [];
+    const seenItemIds = new Set();
+
+    function cleanText(el) {
+        return el ? el.textContent.replace(/\\s+/g, ' ').trim() : '';
+    }
+
+    function cleanCardText(el) {
+        return el ? el.innerText.replace(/\\s+/g, ' ').trim() : '';
+    }
+
+    function parsePrice(text) {
+        const match = text.match(/[\\$\\u00A3\\u20AC]([\\d,]+(?:\\.\\d{2})?)/);
+        return match ? match[1].replace(/,/g, '') : text.trim();
+    }
+
+    function parseCurrency(text) {
+        const currMatch = text.match(/([\\$\\u00A3\\u20AC])/);
+        if (!currMatch) return 'USD';
+        if (currMatch[1] === '\\u00A3') return 'GBP';
+        if (currMatch[1] === '\\u20AC') return 'EUR';
+        return 'USD';
+    }
+
+    function normalizeDate(text) {
+        const match = text.match(/\\b(?:sold|ended)\\s+(.+)/i);
+        if (!match) return null;
+        return match[1].replace(/\\b[A-Z]{3}\\b/g, (month) => (
+            month.charAt(0) + month.slice(1).toLowerCase()
+        ));
+    }
 
     for (const card of cards) {
-        // Title
-        const titleEl = card.querySelector('.s-card__title .su-styled-text');
+        const titleEl = card.querySelector(selectors.title);
         if (!titleEl) continue;
-        const title = titleEl.textContent.trim();
+        const title = cleanText(titleEl);
         if (title === 'Shop on eBay' || title === 'Results matching fewer words') continue;
 
-        // Item ID from data attribute or URL
-        let itemId = card.dataset.listingid || '';
-        const linkEl = card.querySelector('a.s-card__link[href*="/itm/"]');
+        const itemId = card.getAttribute('data-listingid') || '';
+        if (!itemId || seenItemIds.has(itemId)) continue;
+        seenItemIds.add(itemId);
+
+        const linkEl = card.querySelector(selectors.link);
         const url = linkEl ? linkEl.href : '';
-        if (!itemId && url) {
-            const idMatch = url.match(/itm\\/(?:[^/]*\\/)?(\\d+)|itm\\/(\\d+)/);
-            itemId = idMatch ? (idMatch[1] || idMatch[2] || '') : '';
-        }
 
-        // Price
-        const priceEl = card.querySelector('.s-card__price');
-        let price = priceEl ? priceEl.textContent.trim() : '';
-        const priceMatch = price.match(/[\\$\\u00A3\\u20AC]([\\d,\\.]+)/);
-        price = priceMatch ? priceMatch[1].replace(',', '') : price;
+        const priceEl = card.querySelector(selectors.price);
+        const priceText = cleanText(priceEl);
+        const price = parsePrice(priceText);
+        const currency = parseCurrency(priceText);
 
-        // Currency
-        const currMatch = (priceEl ? priceEl.textContent : '').match(/([\\$\\u00A3\\u20AC])/);
-        let currency = 'USD';
-        if (currMatch) {
-            if (currMatch[1] === '\\u00A3') currency = 'GBP';
-            else if (currMatch[1] === '\\u20AC') currency = 'EUR';
-        }
-
-        // Caption: "Sold  Mar 9, 2026" or similar
-        const captionEl = card.querySelector('.s-card__caption .su-styled-text');
-        const captionText = captionEl ? captionEl.textContent.trim() : '';
+        const captionEl = card.querySelector(selectors.caption);
+        const captionText = cleanText(captionEl);
         const isSold = captionText.toLowerCase().includes('sold');
         const status = isSold ? 'sold' : 'unsold';
+        const dateSold = normalizeDate(captionText);
 
-        let dateSold = null;
-        if (captionText) {
-            const dateMatch = captionText.match(/(\\w+ \\d+, \\d{4})/);
-            dateSold = dateMatch ? dateMatch[1] : null;
-        }
+        const condEl = card.querySelector(selectors.condition);
+        const condition = cleanText(condEl) || null;
 
-        // Condition
-        const condEl = card.querySelector('.s-card__subtitle .su-styled-text');
-        const condition = condEl ? condEl.textContent.trim() : null;
-
-        // Attribute rows: shipping, format, bids, seller
-        const attrRows = card.querySelectorAll('.s-card__attribute-row');
+        const fullText = cleanCardText(card);
+        const attributeEls = card.querySelectorAll(selectors.attributes_primary);
         let shippingPrice = null;
         let format = null;
         let bids = null;
         let seller = null;
 
-        for (const row of attrRows) {
-            const text = row.textContent.trim();
+        for (const attrEl of attributeEls) {
+            const text = cleanText(attrEl);
             const textLower = text.toLowerCase();
 
-            // Shipping
             if (textLower.includes('delivery') || textLower.includes('shipping')) {
                 if (textLower.includes('free')) {
                     shippingPrice = '0.00';
                 } else {
                     const shipMatch = text.match(/[\\$\\u00A3\\u20AC]([\\d,\\.]+)/);
-                    shippingPrice = shipMatch ? shipMatch[1].replace(',', '') : null;
+                    shippingPrice = shipMatch ? shipMatch[1].replace(/,/g, '') : null;
                 }
             }
 
-            // Format
-            if (textLower.includes('buy it now') || textLower === 'or best offer') {
+            if (textLower.includes('best offer')) {
+                format = 'Best Offer';
+            } else if (textLower.includes('buy it now')) {
                 format = 'Buy It Now';
-            }
-
-            // Bids
-            const bidsMatch = text.match(/(\\d+)\\s*bid/i);
-            if (bidsMatch) {
-                bids = parseInt(bidsMatch[1]);
-                format = 'Auction';
-            }
-
-            // Seller (pattern: "username NN% positive (N)")
-            const sellerMatch = text.match(/^(\\S+)\\s+[\\d.]+%\\s+positive/);
-            if (sellerMatch) {
-                seller = sellerMatch[1];
             }
         }
 
-        // Default format
+        const bidsMatch = fullText.match(/(\\d+)\\s*bid/i);
+        if (bidsMatch) {
+            bids = parseInt(bidsMatch[1], 10);
+            format = 'Auction';
+        }
+
+        const sellerEl = card.querySelector(selectors.attributes_secondary);
+        const sellerText = cleanText(sellerEl);
+        const sellerMatch = sellerText.match(/^(\\S+)\\s+[\\d.]+%\\s+positive/);
+        if (sellerMatch) {
+            seller = sellerMatch[1];
+        }
+
         if (!format) {
             format = bids !== null ? 'Auction' : 'Buy It Now';
         }
 
-        // Image
-        const imgEl = card.querySelector('.s-card__image');
+        const imgEl = card.querySelector(selectors.image);
         const imageUrl = imgEl ? (imgEl.src || imgEl.dataset.src || null) : null;
 
-        if (itemId && title) {
+        if (title && price && url) {
             results.push({
                 item_id: itemId,
                 title: title,
@@ -236,7 +260,7 @@ class EbayBrowserClient:
             page.wait_for_timeout(2000)  # Let results load
 
             # Extract results via JavaScript
-            raw_results = page.evaluate(EXTRACT_JS)
+            raw_results = page.evaluate(EXTRACT_JS, SELECTORS)
 
             if not raw_results:
                 break
@@ -288,15 +312,7 @@ class EbayBrowserClient:
             params["_sacat"] = category
 
         if condition:
-            # Map common condition names to eBay condition IDs
-            condition_map = {
-                "new": "1000",
-                "open_box": "1500",
-                "refurbished": "2000",
-                "used": "3000",
-                "for_parts": "7000",
-            }
-            cond_id = condition_map.get(condition.lower(), condition)
+            cond_id = SEARCH_CONDITION_ALIASES.get(condition.lower(), condition)
             params["LH_ItemCondition"] = cond_id
 
         if page > 1:

@@ -3,6 +3,7 @@
 Uses the eBay Stores API to manage store settings and categories.
 API Docs: https://developer.ebay.com/api-docs/sell/stores/resources/store/methods/getStoreCategories
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "categories": ["oauth_authorization_code"],
@@ -59,6 +60,7 @@ def _flatten_categories(categories: list, parent_path: str = "") -> list:
 
 
 @categories_app.command("list")
+@command
 def categories_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     flat: bool = typer.Option(False, "--flat", help="Flatten category hierarchy into a flat list"),
@@ -178,6 +180,7 @@ def categories_list(
 
 
 @categories_app.command("get")
+@command
 def categories_get(
     category_id: str = typer.Argument(..., help="Store category ID to look up"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

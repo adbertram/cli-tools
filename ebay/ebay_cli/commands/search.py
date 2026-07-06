@@ -15,8 +15,9 @@ from typing import Optional
 
 import typer
 
-from ..browser_client import get_browser_client, BrowserError
+from ..browser_client import get_browser_client, BrowserError, SEARCH_CONDITION_HELP
 from cli_tools_shared.output import (
+    command,
     print_json,
     print_table,
     handle_error,
@@ -34,6 +35,7 @@ SEARCH_TABLE_HEADERS = ["Title", "Price", "Shipping", "Status", "Date", "Format"
 
 
 @app.command("search")
+@command
 def listings_search(
     keywords: str = typer.Argument(..., help="Search keywords"),
     sold: bool = typer.Option(False, "--sold/--no-sold", help="Only show sold items (default: all completed)"),
@@ -42,7 +44,7 @@ def listings_search(
     category: Optional[str] = typer.Option(None, "--category", "-c", help="eBay category ID"),
     condition: Optional[str] = typer.Option(
         None, "--condition",
-        help="Item condition (new, open_box, refurbished, used, for_parts, or eBay condition ID)"
+        help=SEARCH_CONDITION_HELP,
     ),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of results"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

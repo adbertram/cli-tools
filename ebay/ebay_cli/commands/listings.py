@@ -13,6 +13,7 @@ Commands:
 - unpublish: Withdraw active listing back to draft
 - preview: Preview draft before publishing
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "create": ["oauth_authorization_code"],
     "delete": ["oauth_authorization_code"],
@@ -980,6 +981,7 @@ def _generate_preview_html(listing: Listing) -> str:
 
 
 @app.command("list")
+@command
 def listings_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of listings (default: all)"),
@@ -1082,6 +1084,7 @@ def listings_list(
 
 
 @app.command("get")
+@command
 def listings_get(
     sku: str = typer.Argument(..., help="The SKU of the listing"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1131,6 +1134,7 @@ def listings_get(
 
 
 @app.command("create")
+@command
 def listings_create(
     sku: str = typer.Option(..., "--sku", "-s", help="SKU for the listing (required)"),
     template: Optional[str] = typer.Option(None, "--template", help="Template name for default values"),
@@ -1787,6 +1791,7 @@ def listings_create(
 
 
 @app.command("update")
+@command
 def listings_update(
     sku: str = typer.Argument(..., help="SKU of the listing to update"),
     title: Optional[str] = typer.Option(None, "--title", help="Update title"),
@@ -1945,6 +1950,7 @@ def listings_update(
 
 
 @app.command("delete")
+@command
 def listings_delete(
     sku: str = typer.Argument(..., help="SKU of the listing to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -2012,6 +2018,7 @@ def listings_delete(
 
 
 @app.command("publish")
+@command
 def listings_publish(
     sku: str = typer.Argument(..., help="SKU of the listing to publish"),
     price: Optional[str] = typer.Option(None, "--price", "-p", help="Set final price (required for pseudo-drafts)"),
@@ -2128,6 +2135,7 @@ def listings_publish(
 
 
 @app.command("unpublish")
+@command
 def listings_unpublish(
     sku: str = typer.Argument(..., help="SKU of the listing to unpublish"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -2192,6 +2200,7 @@ def listings_unpublish(
 
 
 @app.command("preview")
+@command
 def listings_preview(
     sku: str = typer.Argument(..., help="SKU of the listing to preview"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Save HTML to file instead of opening browser"),

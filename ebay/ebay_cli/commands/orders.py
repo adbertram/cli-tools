@@ -3,6 +3,7 @@
 Uses the eBay Fulfillment API to query and manage orders.
 API Docs: https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrders
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -26,6 +27,7 @@ shipping_label_app = typer.Typer(help="Manage eBay shipping labels")
 
 
 @app.command("list")
+@command
 def orders_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of orders to return (max 200)"),
@@ -190,6 +192,7 @@ def orders_list(
 
 
 @app.command("get")
+@command
 def orders_get(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -294,6 +297,7 @@ def orders_get(
 
 
 @shipping_label_app.command("create")
+@command
 def shipping_label_create(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     weight: float = typer.Option(..., help="Package weight value"),
@@ -589,6 +593,7 @@ def _void_shipment(shipment_id: str, force: bool):
 
 
 @shipping_label_app.command("void")
+@command
 def shipping_label_void(
     shipment_id: str = typer.Argument(..., help="The shipment ID to void"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
@@ -604,6 +609,7 @@ def shipping_label_void(
 
 
 @shipping_label_app.command("cancel", hidden=True)
+@command
 def shipping_label_cancel(
     shipment_id: str = typer.Argument(..., help="The shipment ID to cancel"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
@@ -613,6 +619,7 @@ def shipping_label_cancel(
 
 
 @shipping_label_app.command("download")
+@command
 def shipping_label_download(
     shipment_id: str = typer.Argument(..., help="The shipment ID"),
     out: str = typer.Option(None, "--out", "-o", help="Output file path (default: label_<shipment_id>.pdf)"),
@@ -641,6 +648,7 @@ def shipping_label_download(
 
 
 @app.command("fulfillments")
+@command
 def orders_fulfillments(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

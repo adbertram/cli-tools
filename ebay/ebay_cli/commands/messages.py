@@ -2,6 +2,7 @@
 
 Uses the eBay Trading API to query and manage buyer messages about listings.
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -163,6 +164,7 @@ def _parse_my_messages_xml(xml_content: str) -> list[dict]:
 
 
 @app.command("list")
+@command
 def messages_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of messages to return (max 200)"),
@@ -372,6 +374,7 @@ def messages_list(
 
 
 @app.command("get")
+@command
 def messages_get(
     message_id: str = typer.Argument(..., help="Message ID or comma-separated list of IDs (max 10)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -416,6 +419,7 @@ def messages_get(
 
 
 @app.command("reply")
+@command
 def messages_reply(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: Optional[str] = typer.Option(None, "--body", "-b", help="Reply body text (max 2000 chars)"),

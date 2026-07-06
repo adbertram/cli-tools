@@ -1,7 +1,7 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-06-20T19:44:48Z",
+  "discovered_at": "2026-07-05T20:41:50Z",
   "total_commands": 68,
   "global_options": [
     {
@@ -39,7 +39,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -391,10 +391,10 @@
           "help": "Browse the category tree from a parent category. Shows child categories of the specified parent. Use this to drill down into the category hierarchy to find the right leaf category for your item.",
           "arguments": [
             {
-              "name": "category_id",
-              "type": "CATEGORY_ID",
+              "name": "[category_id]",
+              "type": "TEXT",
               "required": false,
-              "help": "Parent category ID to browse (omit for root-level categories)"
+              "help": "TEXT  Parent category ID to browse (omit for root-level categories)"
             }
           ],
           "options": [
