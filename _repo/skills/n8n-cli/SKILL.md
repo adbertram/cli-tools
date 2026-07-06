@@ -37,6 +37,17 @@ n8n <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Name Collision Guard">
+`n8n` also exists as an upstream/vendor Node CLI on this host, and that binary
+fails repo-owned commands with `Error: Command "workflows" not found`. Before
+running n8n service commands, especially inside `&&` batches after unrelated
+scripts, verify resolution with `command -v n8n` or bypass PATH with the
+canonical repo-owned launcher: `$HOME/.local/bin/n8n`. If `command -v n8n` is not
+`$HOME/.local/bin/n8n`, do not run bare `n8n`; run `$HOME/.local/bin/n8n ...` or
+prepend `$HOME/.local/bin` and clear the shell command cache (`hash -r` in Bash)
+first.
+</principle>
+
 <principle name="Bounded Discovery Probes">
 Use `usage.json` as the primary syntax source. Do not run unbounded n8n
 group-level help probes or unbounded local Node source-inspection probes against

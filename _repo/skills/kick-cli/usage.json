@@ -27,7 +27,7 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Authenticate with Kick via OAuth2. Opens browser for authorization.",
+          "usage_instructions": "Authenticate with Kick via OAuth2. Opens browser for authorization. Check `kick auth login --help` before automating: current installs support `--profile/-p` plus `--force/-F`, so use `kick auth login --profile default --force` for a default-profile refresh. If a stale install omits `--profile`, select the profile first with `kick auth profiles select default`, then run `kick auth login --force`.",
           "arguments": [],
           "options": [
             {
