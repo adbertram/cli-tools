@@ -1,7 +1,7 @@
 """System permission commands for iMessage CLI."""
 import typer
 
-from cli_tools_shared.output import handle_error, print_json, print_success, print_table
+from cli_tools_shared.output import command, print_json, print_success, print_table
 
 from ..client import get_client
 
@@ -66,54 +66,42 @@ def _status_payload(status_dict):
 
 
 @app.command("status")
+@command
 def auth_status(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """Check system permissions and accessibility."""
-    try:
-        status = get_client().auth_status()
-        status_dict = _to_dict(status)
-        if table:
-            print_table([status_dict], STATUS_COLUMNS, STATUS_HEADERS)
-        else:
-            print_json(_status_payload(status_dict))
-        if not status_dict["authenticated"]:
-            raise typer.Exit(2)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    status = get_client().auth_status()
+    status_dict = _to_dict(status)
+    if table:
+        print_table([status_dict], STATUS_COLUMNS, STATUS_HEADERS)
+    else:
+        print_json(_status_payload(status_dict))
+    if not status_dict["authenticated"]:
+        raise typer.Exit(2)
 
 
 @app.command("login")
+@command
 def auth_login(
     force: bool = typer.Option(False, "--force", "-F", help="Re-open System Settings"),
 ):
     """Open System Settings to grant permissions."""
-    try:
-        result = get_client().auth_login(force=force)
-        print_json(result)
-        if result.get("success"):
-            print_success(result.get("message", "System Settings opened."))
-        else:
-            raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    result = get_client().auth_login(force=force)
+    print_json(result)
+    if result.get("success"):
+        print_success(result.get("message", "System Settings opened."))
+    else:
+        raise typer.Exit(1)
 
 
 @app.command("logout")
+@command
 def auth_logout():
     """Clear iMessage CLI auth state."""
-    try:
-        result = get_client().auth_logout()
-        print_json(result)
-        if result.get("success"):
-            print_success(result.get("message", "No session to clear."))
-        else:
-            raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    result = get_client().auth_logout()
+    print_json(result)
+    if result.get("success"):
+        print_success(result.get("message", "No session to clear."))
+    else:
+        raise typer.Exit(1)

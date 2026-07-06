@@ -40,6 +40,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **conversations** -- Conversation threads (list, get)
 - **messages** -- Read and send messages (list, get, send)
 </principle>
+
+<principle name="Sending Requires Interactive Automation Consent">
+`imessage messages send` requires macOS Messages **Automation** consent (the
+Apple Events / TCC gate, distinct from Full Disk Access). Without it the CLI
+fails fast with an actionable error instead of hanging. Sending cannot run under
+launchd/cron/headless because there is no automation-consent UI in those
+contexts -- use the `google gmail` CLI for unattended notifications.
+</principle>
 </essential_principles>
 
 <reference_index>

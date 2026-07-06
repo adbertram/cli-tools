@@ -11,6 +11,9 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 - macOS (tested on macOS 10.15+)
 - Full Disk Access granted to terminal (for reading chat.db)
 - Contacts access permission (for contacts commands)
+- Automation permission for Messages (for sending messages) — this is the
+  System Settings → Privacy & Security → **Automation** gate, which is separate
+  from Full Disk Access
 
 ## Installation
 
@@ -25,10 +28,21 @@ pip install -e .
 
 Before using the CLI, you need to grant permissions:
 
+**Full Disk Access** (for reading messages/conversations from `chat.db`):
+
 1. Open System Settings (or use `imessage auth login`)
 2. Navigate to Privacy & Security > Full Disk Access
 3. Add your terminal app (Terminal.app, iTerm.app, etc.)
 4. Restart your terminal
+
+**Automation** (for sending messages — separate from Full Disk Access):
+
+1. Open System Settings > Privacy & Security > Automation
+2. Under the app running the CLI (Terminal.app, iTerm.app, etc.), enable
+   **Messages**
+3. The consent prompt appears the first time an app tries to control Messages;
+   there is no consent UI in headless/launchd/cron contexts, so sending must be
+   set up from an interactive session
 
 Check permissions status:
 ```bash
@@ -50,7 +64,7 @@ imessage auth status --table
 **Output fields:**
 - `authenticated`: Whether Full Disk Access is granted
 - `messages_db_accessible`: Whether Messages database is readable
-- `messages_app_available`: Whether Messages app scripting is available
+- `messages_app_available`: Whether Messages can be scripted via Apple Events (send-capable)
 - `contacts_accessible`: Whether Contacts app is accessible
 - `macos_version`: macOS version
 
@@ -423,10 +437,29 @@ On newer macOS versions, message text is stored in `attributedBody` blob. The CL
 
 ### Sending messages fails
 
-Ensure:
-1. Messages app is running
-2. iMessage is signed in
-3. Recipient format is correct (phone with country code or email)
+Sending requires macOS **Automation** permission for Messages (the Apple Events
+/ TCC gate), which is separate from Full Disk Access. Without it, a
+`tell application "Messages"` event would hang until the AppleScript timeout;
+the CLI now probes the Automation gate first and **fails fast** (~3s) with an
+actionable error instead of hanging ~30s.
+
+Grant Automation permission:
+
+1. System Settings > Privacy & Security > **Automation**
+2. Under the app running the CLI (Terminal.app, iTerm.app, etc.), enable
+   **Messages**
+3. Or run `imessage auth login` and grant the prompt
+
+Then confirm with `imessage auth status` — `messages_app_available: true` means
+Messages is scriptable via Apple Events (send-capable).
+
+Also ensure:
+1. iMessage is signed in
+2. Recipient format is correct (phone with country code or email)
+
+Note: iMessage sending cannot work in headless/launchd/cron contexts because
+there is no automation-consent UI there. Use the `google gmail` CLI to send
+notifications from unattended jobs.
 
 ## Examples
 
@@ -470,6 +503,9 @@ imessage conversations list | jq '.[] | select(.is_read == false) | .display_nam
 - Attachments are detected but not downloaded
 - Group message handling is limited to basic metadata
 - Requires macOS with Messages app
+- Sending needs interactive Messages **Automation** consent and cannot run
+  under launchd/cron/headless (no automation-consent UI) — use the
+  `google gmail` CLI to send notifications from unattended jobs
 
 ## License
 

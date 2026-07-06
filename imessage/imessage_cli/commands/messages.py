@@ -7,11 +7,11 @@ from cli_tools_shared.filters import (
     validate_filters,
 )
 from cli_tools_shared.output import (
+    command,
     print_error,
     print_json,
-    print_table,
-    handle_error,
     print_success,
+    print_table,
 )
 from pydantic import BaseModel
 
@@ -53,6 +53,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def messages_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of messages to return"),
@@ -71,54 +72,51 @@ def messages_list(
         imessage messages list --filter "is_from_me:true"
         imessage messages list --properties "id,text,date"
     """
-    try:
-        # Validate filters if provided
-        if filter:
-            try:
-                validate_filters(filter)
-            except FilterValidationError as e:
-                print_error(str(e))
-                raise typer.Exit(1)
+    # Validate filters if provided
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
 
-        client = get_client()
-        # When client-side filters are present, fetch without limit so
-        # filtering doesn't reduce results below the requested count.
-        # The limit is applied after filtering instead.
-        sql_limit = limit if not filter else 0
-        messages = client.list_messages(limit=sql_limit, contact=contact)
+    client = get_client()
+    # When client-side filters are present, fetch without limit so
+    # filtering doesn't reduce results below the requested count.
+    # The limit is applied after filtering instead.
+    sql_limit = limit if not filter else 0
+    messages = client.list_messages(limit=sql_limit, contact=contact)
 
-        # Apply client-side filters
-        if filter and isinstance(messages, list):
-            messages_dict = [model_to_dict(msg) for msg in messages]
-            messages_dict = apply_filters(messages_dict, filter)
-            messages = messages_dict[:limit]
+    # Apply client-side filters
+    if filter and isinstance(messages, list):
+        messages_dict = [model_to_dict(msg) for msg in messages]
+        messages_dict = apply_filters(messages_dict, filter)
+        messages = messages_dict[:limit]
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        messages = extract_fields(messages, fields)
+
+    if table:
+        if not messages:
+            print("No messages found.")
+            return
+
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            messages = extract_fields(messages, fields)
-
-        if table:
-            if not messages:
-                print("No messages found.")
-                return
-
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table(messages, columns, columns)
-            else:
-                # Default columns for Message model
-                columns = ["id", "text", "date", "is_from_me", "handle_id"]
-                headers = ["ID", "Text", "Date", "From Me", "Handle"]
-                print_table(messages, columns, headers)
+            columns = [f.strip() for f in properties.split(",")]
+            print_table(messages, columns, columns)
         else:
-            print_json(messages)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Default columns for Message model
+            columns = ["id", "text", "date", "is_from_me", "handle_id"]
+            headers = ["ID", "Text", "Date", "From Me", "Handle"]
+            print_table(messages, columns, headers)
+    else:
+        print_json(messages)
 
 
 @app.command("get")
+@command
 def messages_get(
     message_id: str = typer.Argument(..., help="The message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -132,32 +130,29 @@ def messages_get(
         imessage messages get MESSAGE_ID --table
         imessage messages get MESSAGE_ID --properties "id,text,date"
     """
-    try:
-        client = get_client()
-        message = client.get_message(message_id)
+    client = get_client()
+    message = client.get_message(message_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        message = extract_fields([message], fields)[0]
+
+    if table:
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            message = extract_fields([message], fields)[0]
-
-        if table:
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table([message], columns, columns)
-            else:
-                # Convert model to key-value table
-                message_dict = model_to_dict(message)
-                rows = [{"field": k, "value": str(v)[:60]} for k, v in message_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            columns = [f.strip() for f in properties.split(",")]
+            print_table([message], columns, columns)
         else:
-            print_json(message)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Convert model to key-value table
+            message_dict = model_to_dict(message)
+            rows = [{"field": k, "value": str(v)[:60]} for k, v in message_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(message)
 
 
 @app.command("send")
+@command
 def messages_send(
     recipient: str = typer.Argument(..., help="Recipient phone number or email"),
     text: str = typer.Argument(..., help="Message text to send"),
@@ -168,17 +163,18 @@ def messages_send(
     Recipient can be a phone number or email address.
     Phone numbers are auto-normalized (e.g., +1 prefix added for US numbers).
 
+    Requires Messages Automation permission (System Settings → Privacy &
+    Security → Automation); without it this fails fast instead of hanging. It
+    cannot run headless/launchd/cron (no automation-consent UI) — use the
+    `google gmail` CLI to send notifications there.
+
     Examples:
         imessage messages send "+15551234567" "Hello!"
         imessage messages send "user@example.com" "Hi there"
     """
-    try:
-        client = get_client()
-        result = client.send_message(recipient, text)
+    client = get_client()
+    result = client.send_message(recipient, text)
 
-        print_json(result)
-        if result.success:
-            print_success(f"Message sent to {result.recipient}")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_json(result)
+    if result.success:
+        print_success(f"Message sent to {result.recipient}")
