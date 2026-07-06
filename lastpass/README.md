@@ -79,11 +79,23 @@ lastpass items list --filter "name:like:%github%"
 lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table
 lastpass items list Work --category "Credit Card" --table
 
+# List only selected fields (dot notation supported)
+lastpass items list --properties "id,name"
+
 # Get entry details (password masked by default)
 lastpass items get github.com
-lastpass items get github.com
+lastpass items get github.com --table
 
-# Get entry with password visible
+# Get only selected non-secret fields (dot notation supported).
+# Absent fields project an explicit null.
+lastpass items get github.com --properties "id,name,URL,Username"
+lastpass items get github.com -p "id,name"
+
+# Secret fields are refused through --properties — this errors and never
+# prints the password. Use `items password` or `--show-password` instead.
+# lastpass items get github.com --properties "password"   # Error, exit 1
+
+# Get entry with secret fields visible (cannot be combined with --properties)
 lastpass items get github.com --show-password
 
 # Get just the password

@@ -1,8 +1,8 @@
 {
   "tool": "lastpass",
   "description": "LastPass password manager CLI wrapper",
-  "discovered_at": "2026-06-20T19:49:46Z",
-  "total_commands": 20,
+  "discovered_at": "2026-07-06T03:45:44Z",
+  "total_commands": 21,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -443,7 +475,13 @@
               "name": "--show-password",
               "type": "bool",
               "required": false,
-              "help": "Show password (default: masked)",
+              "help": "Show secret fields unmasked (cannot be combined with --properties)"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of non-secret fields to include (supports dot notation). Secret fields (e.g. password) are refused",
               "short": "-p"
             },
             {
@@ -468,10 +506,10 @@
           "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below. When using `--category`, first narrow candidates with a group argument or metadata `--filter`; category-only scans fail above 50 candidates.",
           "arguments": [
             {
-              "name": "group",
-              "type": "GROUP",
+              "name": "[group]",
+              "type": "TEXT",
               "required": false,
-              "help": "Folder/group to list (e.g., 'Work' or 'Work/Servers')"
+              "help": "TEXT  Folder/group to list (e.g., 'Work' or 'Work/Servers')"
             }
           ],
           "options": [

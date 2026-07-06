@@ -2,13 +2,12 @@
 import json
 import subprocess
 
-from lastpass_cli.client import LastpassClient
+from lastpass_cli.client import LastpassClient, MASKED_SECRET_VALUE as MASKED
 
 
 SYNTHETIC_PASSWORD = "synthetic-password-value"
 SYNTHETIC_SECRET = "synthetic-api-secret-value"
 SYNTHETIC_EMAIL = "synthetic-user@example.invalid"
-MASKED = "********"
 
 
 def _client_with_show_output(output: str) -> LastpassClient:

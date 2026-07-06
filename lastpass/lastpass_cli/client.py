@@ -76,8 +76,13 @@ class MultipleMatchesError(ClientError):
         )
 
 
-def _is_sensitive_item_detail_key(key: str) -> bool:
-    """Return True for item detail fields that should be hidden by default."""
+def is_sensitive_item_detail_key(key: str) -> bool:
+    """Return True for item detail fields that should be hidden by default.
+
+    This is the single source of truth for what counts as a secret-bearing
+    field. Both the default masking in ``get_item`` and the ``--properties``
+    secret-field guard in the ``items`` commands use it.
+    """
     normalized = re.sub(r"[^a-z0-9]", "", str(key).casefold())
     return any(marker in normalized for marker in SENSITIVE_ITEM_DETAIL_KEY_MARKERS)
 
@@ -100,7 +105,7 @@ def _mask_item_detail_secrets(value: Any) -> Any:
     if isinstance(value, dict):
         return {
             key: MASKED_SECRET_VALUE
-            if _is_sensitive_item_detail_key(key)
+            if is_sensitive_item_detail_key(key)
             else _mask_item_detail_secrets(item)
             for key, item in value.items()
         }
@@ -470,7 +475,7 @@ class LastpassClient:
         result = self._run_command(args)
         items = self._parse_lpass_ls(result.stdout)
         if category is not None:
-            items = self._filter_items_by_category(items, category)
+            items = self.filter_items_by_category(items, category)
         return items
 
     @staticmethod
@@ -519,10 +524,6 @@ class LastpassClient:
                 item["category"] = actual
                 matches.append(item)
         return matches
-
-    def _filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
-        """Backward-compatible wrapper for category filtering."""
-        return self.filter_items_by_category(items, category)
 
     def get_item(self, item_id: str, show_password: bool = False) -> Dict:
         """
