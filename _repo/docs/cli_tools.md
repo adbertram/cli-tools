@@ -58,6 +58,7 @@
 | `mailchimp` | The `mailchimp` CLI provides a command-line interface for Mailchimp API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
+| `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
 | `mindmeister` | The `mindmeister` CLI provides a command-line interface for Mindmeister API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `monarch` | The `monarch` CLI provides a command-line interface for Monarch API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `moz` | The `moz` CLI provides a command-line interface for Moz API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
