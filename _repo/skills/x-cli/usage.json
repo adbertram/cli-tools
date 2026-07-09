@@ -1,8 +1,8 @@
 {
   "tool": "x",
   "description": "CLI interface for X API",
-  "discovered_at": "2026-06-20T19:57:21Z",
-  "total_commands": 15,
+  "discovered_at": "2026-07-09T16:03:33Z",
+  "total_commands": 17,
   "global_options": [
     {
       "name": "--version",
@@ -27,7 +27,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Set up X API OAuth credentials. Pass all four tokens directly with --consumer-key/-k, --consumer-secret/-s, --access-token/-t, --access-token-secret/-a, or run without flags to be prompted. Use --force/-F to clear existing credentials and re-authenticate. Get credentials from https://developer.x.com/en/portal/dashboard.",
           "arguments": [],
           "options": [
             {
@@ -41,8 +40,15 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom', 'browser_session')",
+              "short": "-c"
             }
           ]
         },
@@ -77,7 +83,20 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "options": []
+              "options": [
+                {
+                  "name": "--auth-type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Authentication type for this profile. Valid values: custom, browser_session"
+                },
+                {
+                  "name": "--auth-param",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
+                }
+              ]
             },
             "delete": {
               "help": "Delete a profile and its data.",
@@ -122,7 +141,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `x auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -176,6 +195,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -191,7 +242,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Verify that X API credentials are configured and valid. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -252,6 +303,58 @@
           "usage_instructions": "Run `x cache clear --help` for exact arguments and options.",
           "arguments": [],
           "options": []
+        }
+      }
+    },
+    "credits": {
+      "help": "Purchase X API credits",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "add": {
+          "help": "Purchase X API credits using the saved Developer Console browser session.",
+          "arguments": [
+            {
+              "name": "amount",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credit amount in USD"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview without submitting payment"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm purchase and payment submission"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Browser-session auth profile name"
+            }
+          ]
         }
       }
     },

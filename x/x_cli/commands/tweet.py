@@ -6,7 +6,7 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_success, handle_error
 from cli_tools_shared.filters import apply_filters, apply_limit
 
 
@@ -14,6 +14,7 @@ app = typer.Typer(help="Manage tweets", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def tweet_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tweets to return (5-100)"),
@@ -74,6 +75,7 @@ def tweet_list(
 
 
 @app.command("post")
+@command
 def tweet_post(
     text: str = typer.Argument(..., help="The text content of the tweet (max 280 chars)"),
     reply_to: Optional[str] = typer.Option(None, "--reply-to", "-r", help="Tweet ID to reply to"),
@@ -98,6 +100,7 @@ def tweet_post(
 
 
 @app.command("delete")
+@command
 def tweet_delete(
     tweet_id: str = typer.Argument(..., help="The ID of the tweet to delete"),
 ):
@@ -121,6 +124,7 @@ def tweet_delete(
 
 
 @app.command("get")
+@command
 def tweet_get(
     tweet_id: str = typer.Argument(..., help="The ID of the tweet to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

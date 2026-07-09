@@ -13,8 +13,15 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, tweet
+from .commands import auth, credits, tweet
 app.add_typer(auth.app, name="auth", help="Manage X API authentication")
+register_commands(
+    app,
+    get_config,
+    credits,
+    name="credits",
+    help="Purchase X API credits",
+)
 register_commands(app, get_config, tweet, name="tweet", help="Manage tweets")
 app.add_typer(create_cache_app(get_config), name="cache")
 
