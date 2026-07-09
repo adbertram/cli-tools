@@ -172,6 +172,13 @@ list_commands = [
     "channel videos list",
 ]
 
+[cli_specific.x]
+# X tweet reads are credit-gated by the live developer account; requiring
+# generic compliance runs to call `tweet list` would force a paid credit state.
+list_commands = [
+    "auth profiles list",
+]
+
 [cli_specific.raptive]
 # Raptive uses non-standard command names for list-style operations
 # These commands return lists and should be tested for --filter, --limit, etc.

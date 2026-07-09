@@ -235,6 +235,58 @@ def test_regenerate_usage_json_drops_enrichment_with_removed_options(tmp_path):
     assert "usage_instructions" not in node
 
 
+def test_regenerate_usage_json_refreshes_help_when_options_are_unchanged(tmp_path):
+    skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
+    fake_cli.write_text(
+        _fake_cli_source().replace(
+            '    print("List fake items.")',
+            '    print("List fake items.")\n    print("Second sentence.")',
+        )
+    )
+    usage_json.write_text(
+        json.dumps(
+            {
+                "tool": "fake",
+                "description": "Fake CLI",
+                "commands": {
+                    "items": {
+                        "commands": {
+                            "list": {
+                                "help": "Old list help.",
+                            }
+                        }
+                    }
+                },
+                "total_commands": 1,
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill_root / SCRIPT),
+            "fake",
+            "--cli-executable",
+            str(fake_cli),
+            "--usage-json",
+            str(usage_json),
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["changed"] is True
+    generated = json.loads(usage_json.read_text())
+    node = generated["commands"]["items"]["commands"]["list"]
+    assert node["help"] == "List fake items. Second sentence."
+
+
 def test_regenerate_usage_json_drops_examples_for_renamed_command(tmp_path):
     skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
     fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)

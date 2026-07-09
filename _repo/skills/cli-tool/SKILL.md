@@ -172,6 +172,10 @@ match.
 Scope CLI-tool investigation searches to bounded source roots such as the target tool directory, `_repo/`, repo-owned skills, docs, tests, or exact files proven relevant. Do not run recursive `rg`, `grep`, or `find` over user cache/profile roots such as `/Users/adam/.npm`, `/Users/adam/.local/share`, `/Users/adam/Library`, or a whole home directory. When runtime profile or cache evidence is needed, inspect the exact known file or tool-owned profile path after proving it exists; do not discover it with a broad recursive search.
 </principle>
 
+<principle name="Service Browser Sessions Stay In The CLI">
+For browser-backed service CLIs, the CLI-owned persistent browser profile is the only source of truth after `auth login` succeeds. Do not switch to Codex's in-app browser, Computer Use, a visible local browser, or another browser surface to reuse or repair that saved CLI auth context. Use the service CLI and its saved browser-session profile directly. If a post-login service command still opens a headed/manual browser flow, cannot run against the saved profile headlessly, or only hands the user off to finish the requested operation, treat that as a CLI implementation/documentation defect and fix the service CLI before claiming the operation is done.
+</principle>
+
 <principle name="Safe printf Formats">
 When composing CLI verification or diagnostic Bash commands, do not put leading
 hyphens in the `printf` format operand unless options are terminated. Use
