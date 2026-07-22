@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-07-01T22:28:55Z",
+  "discovered_at": "2026-07-22T14:38:33Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -19,7 +19,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
           "options": [
             {
@@ -209,7 +209,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "arguments": [],
           "options": [
             {
@@ -270,7 +270,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get a specific conversation by ID. The conversation ID format is session_id:conversation_number (e.g., abc123:1). Example: claude-code-sessions conversations get abc123:1 --project MyProject",
+          "help": "Get a specific conversation by ID. Two ways to identify the conversation: - Positional: session:conversation_number (e.g., abc123:1), where session is a UUID or a session name. The number is split off the right, so names containing colons (e.g. \"Course: ...\") are accepted. - Flags: --session-name NAME --conversation-id N (useful when you prefer not to embed the number in a colon-containing name). --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions conversations get abc123:1 claude-code-sessions conversations get \"Course: OpenAI Codex Advanced Features Module 2:1\" claude-code-sessions conversations get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" -C 1 claude-code-sessions conversations get abc123:1 --project MyProject",
           "arguments": [
             {
               "name": "[conversation_id]",
@@ -398,7 +398,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get details for a specific project. Example: claude-code-sessions projects get Agent-ATABlogger",
+          "help": "Get details for a specific project. Example: claude-code-sessions projects get ExampleProject",
           "arguments": [
             {
               "name": "name",
@@ -561,7 +561,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get full session details including messages and tool calls. Example: claude-code-sessions sessions get abc123-def456-789",
+          "help": "Get full session details including messages and tool calls. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. Example: claude-code-sessions sessions get abc123-def456-789 claude-code-sessions sessions get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions sessions get --session-name \"Course: OpenAI Codex Advanced Features Module 2\"",
           "arguments": [
             {
               "name": "[session_id]",
@@ -594,7 +594,7 @@
           ]
         },
         "list": {
-          "help": "List sessions. With no --project / --project-path, returns sessions across all projects. Example: claude-code-sessions sessions list --project Agent-ATABlogger claude-code-sessions sessions list --date-alias yesterday --limit 5 claude-code-sessions sessions list --date 2026-05-15 --min-tool-calls 1 claude-code-sessions sessions list --date-alias yesterday --include-prompts first:3,last:3 --prompts-clean",
+          "help": "List sessions. With no --project / --project-path, returns sessions across all projects. Example: claude-code-sessions sessions list --project ExampleProject claude-code-sessions sessions list --date-alias yesterday --limit 5 claude-code-sessions sessions list --date 2026-05-15 --min-tool-calls 1 claude-code-sessions sessions list --date-alias yesterday --include-prompts first:3,last:3 --prompts-clean",
           "arguments": [],
           "options": [
             {
@@ -697,7 +697,7 @@
           ]
         },
         "search": {
-          "help": "Search for sessions containing a query string across all projects by default. Use --project or --project-path to restrict scope. Example: claude-code-sessions sessions search \"authentication\" claude-code-sessions sessions search \"authentication\" --project Agent-ATABlogger claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
+          "help": "Search for sessions containing a query string. With no --project / --project-path, searches sessions across all projects. Example: claude-code-sessions sessions search \"authentication\" claude-code-sessions sessions search \"authentication\" --project ExampleProject claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
           "arguments": [
             {
               "name": "query",
@@ -778,7 +778,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get details for a specific skill/command invocation. Example: claude-code-sessions skills get <skill-id> --project Agent-ATABlogger",
+          "help": "Get details for a specific skill/command invocation. Example: claude-code-sessions skills get <skill-id> --project ExampleProject",
           "arguments": [
             {
               "name": "skill_id",
@@ -811,7 +811,7 @@
           ]
         },
         "list": {
-          "help": "List all skill/command invocations for a project. Example: claude-code-sessions skills list --project Agent-ATABlogger claude-code-sessions skills list --project Agent-ATABlogger --since 1h claude-code-sessions skills list --project Agent-ATABlogger --filter \"name:eq:start-post-pipeline\" claude-code-sessions skills list --project Agent-ATABlogger --session-id abc123",
+          "help": "List all skill/command invocations for a project. Example: claude-code-sessions skills list --project ExampleProject claude-code-sessions skills list --project ExampleProject --since 1h claude-code-sessions skills list --project ExampleProject --filter \"name:eq:start-post-pipeline\" claude-code-sessions skills list --project ExampleProject --session-id abc123",
           "arguments": [],
           "options": [
             {
@@ -893,7 +893,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get full details for a subagent invocation. Example: claude-code-sessions subagent-activity get tool-123 --project Agent-ATABlogger",
+          "help": "Get full details for a subagent invocation. Example: claude-code-sessions subagent-activity get tool-123 --project ExampleProject",
           "arguments": [
             {
               "name": "subagent_id",
@@ -926,7 +926,7 @@
           ]
         },
         "list": {
-          "help": "List all subagent invocations for a project. Example: claude-code-sessions subagent-activity list --project Agent-ATABlogger claude-code-sessions subagent-activity list --project Agent-ATABlogger --since 5h claude-code-sessions subagent-activity list --project Agent-ATABlogger --filter \"type:eq:Explore\" claude-code-sessions subagent-activity list --project Agent-ATABlogger --session-id abc123",
+          "help": "List all subagent invocations for a project. Example: claude-code-sessions subagent-activity list --project ExampleProject claude-code-sessions subagent-activity list --project ExampleProject --since 5h claude-code-sessions subagent-activity list --project ExampleProject --filter \"type:eq:Explore\" claude-code-sessions subagent-activity list --project ExampleProject --session-id abc123",
           "arguments": [],
           "options": [
             {
@@ -1008,7 +1008,7 @@
       ],
       "commands": {
         "consolidated": {
-          "help": "Show ALL activity for a session in a single consolidated view.",
+          "help": "Show ALL activity for a session in a single consolidated view. Combines user prompts, main agent tool calls, subagent launches, and subagent tool calls into one chronological timeline. Example: claude-code-sessions timeline consolidated --session-id abc123 claude-code-sessions timeline consolidated --session-name \"My Session\" --table claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --table claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --hide-agent-tools claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --show-thinking claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --filter \"status:eq:error\" --wide",
           "arguments": [],
           "options": [
             {
@@ -1083,7 +1083,7 @@
           ]
         },
         "get": {
-          "help": "Get timeline for a specific session. Example: claude-code-sessions timeline get abc123 --project Agent-ATABlogger",
+          "help": "Get timeline for a specific session. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions timeline get abc123 claude-code-sessions timeline get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get abc123 --project CourseCraft",
           "arguments": [
             {
               "name": "[session_id]",
@@ -1138,7 +1138,7 @@
           ]
         },
         "list": {
-          "help": "Show unified timeline of all activities. Combines skills, tool calls, subagent launches, and errors into one chronological view. Example: claude-code-sessions timeline list --project Agent-ATABlogger --since 1h claude-code-sessions timeline list --project Agent-ATABlogger --session-id abc123 claude-code-sessions timeline list --project Agent-ATABlogger --errors-only claude-code-sessions timeline list --project Agent-ATABlogger --filter \"event_type:eq:skill\"",
+          "help": "Show unified timeline of all activities. Combines skills, tool calls, subagent launches, and errors into one chronological view. Example: claude-code-sessions timeline list --project ExampleProject --since 1h claude-code-sessions timeline list --project ExampleProject --session-id abc123 claude-code-sessions timeline list --project ExampleProject --errors-only claude-code-sessions timeline list --project ExampleProject --filter \"event_type:eq:skill\"",
           "arguments": [],
           "options": [
             {
@@ -1235,7 +1235,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get a specific todo by ID. Example: claude-code-sessions todos get <todo-id> --project Agent-ATABlogger",
+          "help": "Get a specific todo by ID. Example: claude-code-sessions todos get <todo-id> --project ExampleProject",
           "arguments": [
             {
               "name": "todo_id",
@@ -1268,7 +1268,7 @@
           ]
         },
         "list": {
-          "help": "List all todos from sessions in a project. Example: claude-code-sessions todos list --project Agent-ATABlogger claude-code-sessions todos list --project Agent-ATABlogger --filter \"status:eq:pending\" claude-code-sessions todos list --project Agent-ATABlogger --since 1d claude-code-sessions todos list --project Agent-ATABlogger --session-id abc123",
+          "help": "List all todos from sessions in a project. Example: claude-code-sessions todos list --project ExampleProject claude-code-sessions todos list --project ExampleProject --filter \"status:eq:pending\" claude-code-sessions todos list --project ExampleProject --since 1d claude-code-sessions todos list --project ExampleProject --session-id abc123",
           "arguments": [],
           "options": [
             {
@@ -1350,7 +1350,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get details for a specific tool call. Example: claude-code-sessions tool-calls get toolu_123 --project Agent-ATABlogger",
+          "help": "Get details for a specific tool call. Example: claude-code-sessions tool-calls get toolu_123 --project ExampleProject",
           "arguments": [
             {
               "name": "tool_call_id",
@@ -1383,7 +1383,7 @@
           ]
         },
         "list": {
-          "help": "List all tool calls for a project. Example: claude-code-sessions tool-calls list --project Agent-ATABlogger claude-code-sessions tool-calls list --project Agent-ATABlogger --since 1d claude-code-sessions tool-calls list --project Agent-ATABlogger --filter \"status:eq:error\" claude-code-sessions tool-calls list --project Agent-ATABlogger --filter \"tool:eq:Bash\" claude-code-sessions tool-calls list --project Agent-ATABlogger --include-subagents claude-code-sessions tool-calls list --project Agent-ATABlogger --subagent-id toolu_01ABC...",
+          "help": "List all tool calls for a project. Example: claude-code-sessions tool-calls list --project ExampleProject claude-code-sessions tool-calls list --project ExampleProject --since 1d claude-code-sessions tool-calls list --project ExampleProject --filter \"status:eq:error\" claude-code-sessions tool-calls list --project ExampleProject --filter \"tool:eq:Bash\" claude-code-sessions tool-calls list --project ExampleProject --include-subagents claude-code-sessions tool-calls list --project ExampleProject --subagent-id toolu_01ABC...",
           "arguments": [],
           "options": [
             {
