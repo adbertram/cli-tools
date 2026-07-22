@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import pytest
 import shutil
 import subprocess
 import tomllib
@@ -116,6 +117,12 @@ def test_repo_install_script_requires_uv_managed_global_launcher():
 
 
 def test_repo_install_script_installs_personal_cli_by_name_with_fake_uv(tmp_path):
+    if not (REPO_ROOT / "_personal" / "ata-blog" / "pyproject.toml").is_file():
+        pytest.skip(
+            "_personal/ata-blog not present (gitignored, worktree-local); "
+            "run from the primary checkout to exercise this fixture"
+        )
+
     script = REPO_ROOT / "_repo/_scripts/install-cli-tool.sh"
     fake_bin = tmp_path / "bin"
     fake_home = tmp_path / "home"

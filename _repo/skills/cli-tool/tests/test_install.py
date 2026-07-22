@@ -19,6 +19,48 @@ def _find_cli_tools_root(cli_dir: Path) -> Path | None:
     return None
 
 
+def _primary_checkout_root(repo_root: Path) -> Path | None:
+    """Resolve the primary checkout root when ``repo_root`` is a linked git worktree.
+
+    ``uv tool install`` targets a single global venv per CLI at
+    ``~/.local/share/uv/tools/<name>``, shared across every git worktree on
+    the machine -- there is no per-worktree install. Whichever checkout most
+    recently ran the installer is the one the global venv's editable pointer
+    references, so a test invoked from a *different* linked worktree must
+    still recognize that checkout's path as valid.
+
+    A linked worktree's ``.git`` is a file containing
+    ``gitdir: <primary>/.git/worktrees/<name>``. ``git rev-parse
+    --git-common-dir`` resolves that back to the primary checkout's shared
+    ``.git`` directory (an absolute path from a linked worktree, or the
+    relative ``.git`` from the primary checkout itself), so its parent is the
+    primary checkout root. Returns None when ``repo_root`` is not inside a
+    git worktree (for example an unpacked archive) so callers can skip the
+    extra candidate instead of failing.
+    """
+    try:
+        is_worktree = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if is_worktree.returncode != 0 or is_worktree.stdout.strip() != "true":
+        return None
+
+    common_dir = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True,
+    )
+    if common_dir.returncode != 0 or not common_dir.stdout.strip():
+        return None
+
+    git_dir = Path(common_dir.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = (repo_root / git_dir).resolve()
+    return git_dir.parent
+
+
 def _package_module_names(pkg_dir: Path, cli_dir: Path) -> list[str]:
     """Return importable package modules, excluding Dropbox conflict copies."""
     modules = []
@@ -171,9 +213,23 @@ def test_cli_tools_shared_uses_local_editable_repo_when_available(cli_name, cli_
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
         f"Fix: uv tool install -e {cli_dir} --force --refresh"
     )
-    assert f"Editable project location: {local_shared_dir}" in result.stdout, (
+
+    # uv tool install is not worktree-scoped (see _primary_checkout_root), so
+    # when this suite runs from a linked worktree, the global venv's editable
+    # pointer legitimately targets the primary checkout instead of this
+    # worktree. Accept either -- a pointer anywhere else is still a failure.
+    acceptable_shared_dirs = {local_shared_dir}
+    primary_checkout_root = _primary_checkout_root(cli_tools_root)
+    if primary_checkout_root is not None and primary_checkout_root != cli_tools_root:
+        acceptable_shared_dirs.add(primary_checkout_root / "_repo" / "cli-tools-shared")
+
+    assert any(
+        f"Editable project location: {shared_dir}" in result.stdout
+        for shared_dir in acceptable_shared_dirs
+    ), (
         f"{cli_name} is not executing against the local cli-tools-shared repo.\n"
-        f"Expected Editable project location: {local_shared_dir}\n"
+        f"Expected Editable project location to be one of: "
+        f"{sorted(str(shared_dir) for shared_dir in acceptable_shared_dirs)}\n"
         f"Actual uv pip show output:\n{result.stdout}\n"
         f"Fix: reinstall with install-cli-tool.sh so cli-tools-shared overlays "
         f"the local repo as an editable dependency."
