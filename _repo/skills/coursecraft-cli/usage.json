@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-19T23:44:26Z",
-  "total_commands": 55,
+  "discovered_at": "2026-07-23T15:21:50Z",
+  "total_commands": 56,
   "global_options": [
     {
       "name": "--version",
@@ -74,7 +74,7 @@
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Profile name (e.g., staging, production)"
+                  "help": "Profile name (e.g., staging, production)"
                 }
               ],
               "options": []
@@ -87,7 +87,7 @@
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Profile name to delete"
+                  "help": "Profile name to delete"
                 }
               ],
               "options": [
@@ -108,7 +108,7 @@
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Profile name to get details for"
+                  "help": "Profile name to get details for"
                 }
               ],
               "options": [
@@ -163,7 +163,7 @@
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Profile name to delete"
+                  "help": "Profile name to delete"
                 }
               ],
               "options": [
@@ -183,13 +183,13 @@
                   "name": "old",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Existing profile name to rename"
+                  "help": "Existing profile name to rename"
                 },
                 {
                   "name": "new",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  New profile name (must not already exist)"
+                  "help": "New profile name (must not already exist)"
                 }
               ],
               "options": [
@@ -215,7 +215,7 @@
                   "name": "name",
                   "type": "TEXT",
                   "required": true,
-                  "help": "<str>  Profile name to activate within its auth type"
+                  "help": "Profile name to activate within its auth type"
                 }
               ],
               "options": []
@@ -283,7 +283,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Use `coursecraft cache clear` for Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.. Check this command's arguments and options in `usage.json` before execution.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -345,9 +352,9 @@
             },
             {
               "name": "--target-length",
-              "type": "INTEGER",
+              "type": "FLOAT",
               "required": false,
-              "help": "Target length in minutes",
+              "help": "Target length in minutes (e.g., 5.2)",
               "short": "-t"
             },
             {
@@ -390,7 +397,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Clip record ID"
+              "help": "Clip record ID"
             }
           ],
           "options": [
@@ -428,7 +435,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Clip record ID"
+              "help": "Clip record ID"
             }
           ],
           "options": [
@@ -523,7 +530,7 @@
               "name": "clip_identifier",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Clip record ID, ID pattern (M1C1, M1C2), or name"
+              "help": "Clip record ID, ID pattern (M1C1, M1C2), or name"
             }
           ],
           "options": [
@@ -549,7 +556,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Clip record ID"
+              "help": "Clip record ID"
             }
           ],
           "options": [
@@ -597,9 +604,9 @@
             },
             {
               "name": "--target-length",
-              "type": "INTEGER",
+              "type": "FLOAT",
               "required": false,
-              "help": "Target length in minutes"
+              "help": "Target length in minutes (e.g., 5.2)"
             },
             {
               "name": "--notes",
@@ -717,7 +724,7 @@
               "name": "course",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Course record ID or Course ID slug"
+              "help": "Course record ID or Course ID slug"
             }
           ],
           "options": [
@@ -944,6 +951,12 @@
               "help": "<Automatic Narration Generation|Manual Instructor Generation>  Recording dictation method (Automatic Narration Generation, Manual Instructor Generation)"
             },
             {
+              "name": "--powerpoint-slide-deck-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"
+            },
+            {
               "name": "--short-description",
               "type": "TEXT",
               "required": false,
@@ -1069,7 +1082,7 @@
               "name": "course",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Course record ID or Course ID slug"
+              "help": "Course record ID or Course ID slug"
             }
           ],
           "options": [
@@ -1103,7 +1116,7 @@
               "name": "course",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Course record ID or Course ID slug"
+              "help": "Course record ID or Course ID slug"
             }
           ],
           "options": [
@@ -1212,7 +1225,7 @@
               "name": "course",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Course record ID or Course ID slug"
+              "help": "Course record ID or Course ID slug"
             }
           ],
           "options": [
@@ -1383,6 +1396,12 @@
               "help": "<Automatic Narration Generation|Manual Instructor      Recording dictation method (Automatic Narration Generation>                                            Generation, Manual Instructor Generation)"
             },
             {
+              "name": "--powerpoint-slide-deck-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"
+            },
+            {
               "name": "--active",
               "type": "bool",
               "required": false,
@@ -1442,7 +1461,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order.",
+          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order. In batch mode the per-demo JSON keys \"name\", \"clip_order\", \"target_length\", \"demo_overview\", \"action_summary\", \"script\", \"execution_method\", and \"notes\" set each demo's values. Every one of those keys except \"name\" falls back to the matching CLI option when the key is absent, so --clip-order, --target-length, --demo-overview, --action-summary, --script, --execution-method, and --notes act as per-demo defaults. --name is never a batch default: two demos in one clip cannot share a name.",
           "examples": [
             "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\"",
             "coursecraft demos create --clip recXXX --clip-order 1 --json '[{\"name\":\"Demo 1\",\"clip_order\":1},{\"name\":\"Demo 2\",\"clip_order\":2}]'",
@@ -1543,7 +1562,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Demo record ID"
+              "help": "Demo record ID"
             }
           ],
           "options": [
@@ -1575,7 +1594,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Demo record ID"
+              "help": "Demo record ID"
             }
           ],
           "options": [
@@ -1678,17 +1697,25 @@
           "help": "Update a demo record.",
           "examples": [
             "coursecraft demos update recXXX --name \"New Name\"",
+            "coursecraft demos update recXXX --clip recCLIPID",
+            "coursecraft demos update recXXX --clip \"\"  # unlink the demo from its clip",
             "coursecraft demos update recXXX --clip-order 2",
             "coursecraft demos update recXXX --action-summary \"Step-by-step demo flow...\"",
-            "coursecraft demos update recXXX --tested-approved --script-review-human",
-            "coursecraft demos update recXXX --dictation-recorded"
+            "coursecraft demos update recXXX --demo-overview \"High-level demo plan...\"",
+            "coursecraft demos update recXXX --execution-method \"Automated Walkthrough\"",
+            "coursecraft demos update recXXX --demo-overview-review-human",
+            "coursecraft demos update recXXX --action-summary-review-human",
+            "coursecraft demos update recXXX --ai-tested",
+            "coursecraft demos update recXXX --dictation-recorded",
+            "coursecraft demos update recXXX --voice-recording-path /path/to/audio.mp3",
+            "coursecraft demos update recXXX --audio-synced"
           ],
           "arguments": [
             {
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Demo record ID"
+              "help": "Demo record ID"
             }
           ],
           "options": [
@@ -1703,7 +1730,7 @@
               "name": "--clip",
               "type": "TEXT",
               "required": false,
-              "help": "Re-parent the demo to this clip record ID",
+              "help": "Re-parent the demo to this clip record ID; pass \"\" to unlink the demo from its clip",
               "short": "-c"
             },
             {
@@ -1788,10 +1815,10 @@
               "help": "Mark action summary human review as complete"
             },
             {
-              "name": "--tested-approved",
+              "name": "--ai-tested",
               "type": "bool",
               "required": false,
-              "help": "Mark demo as tested and approved"
+              "help": "Mark the demo's current design as AI tested after verification"
             },
             {
               "name": "--script",
@@ -1896,7 +1923,7 @@
               "name": "project",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Descript project name (partial match supported)"
+              "help": "Descript project name (partial match supported)"
             }
           ],
           "options": [
@@ -1956,7 +1983,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required: 'User' for feedback Adam gives directly, 'Pluralsight' for rows imported from a Pluralsight review sheet.",
+          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required: 'CourseCraft' for feedback Adam gives directly, 'Pluralsight Feedback Sheet' for rows imported from a Pluralsight review sheet.",
           "arguments": [],
           "options": [
             {
@@ -2076,7 +2103,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Feedback record ID"
+              "help": "Feedback record ID"
             }
           ],
           "options": [
@@ -2102,7 +2129,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Feedback record ID"
+              "help": "Feedback record ID"
             }
           ],
           "options": [
@@ -2209,7 +2236,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Feedback record ID"
+              "help": "Feedback record ID"
             }
           ],
           "options": [
@@ -2325,6 +2352,51 @@
         }
       }
     },
+    "fields": {
+      "help": "Manage CourseCraft Airtable schema fields",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "rename": {
+          "help": "Rename one CourseCraft Airtable field and verify the schema read-back.",
+          "arguments": [
+            {
+              "name": "table",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft Airtable table name"
+            },
+            {
+              "name": "current_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Current Airtable field name"
+            },
+            {
+              "name": "new_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "New Airtable field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "modules": {
       "help": "Manage module records",
       "arguments": [],
@@ -2343,6 +2415,7 @@
             "coursecraft modules create --name \"Getting Started\" --course recXXX --order 1",
             "coursecraft modules create --name \"Getting Started\" --course my-course --json '[{\"name\":\"Intro\"}]'"
           ],
+          "usage_instructions": "Create a module record, optionally with clips. Requires --name/-n and --course/-c (record ID or Course ID slug). Optional fields include --order/-o, --description/-d, --learning-objectives/-l, --target-length/-t, --demo-density (demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module), and --notes. Supports nested creation of clips via --json (inline JSON) or --file (JSON file path).",
           "arguments": [],
           "options": [
             {
@@ -2388,6 +2461,12 @@
               "short": "-t"
             },
             {
+              "name": "--demo-density",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module"
+            },
+            {
               "name": "--notes",
               "type": "TEXT",
               "required": false,
@@ -2427,7 +2506,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Module record ID"
+              "help": "Module record ID"
             }
           ],
           "options": [
@@ -2465,7 +2544,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Module record ID"
+              "help": "Module record ID"
             }
           ],
           "options": [
@@ -2561,7 +2640,7 @@
               "name": "module_identifier",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Module record ID, ID pattern (M1, M2), or name"
+              "help": "Module record ID, ID pattern (M1, M2), or name"
             }
           ],
           "options": [
@@ -2582,12 +2661,13 @@
         },
         "update": {
           "help": "Update a module record.",
+          "usage_instructions": "Update an existing module by record ID (positional argument). All fields are optional -- only provided fields are updated. Key fields: --name/-n, --order/-o, --description/-d, --learning-objectives/-l, --target-length/-t, --demo-density (demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module), --notes, --feedback-requested, --feedback-requested-at. Supports --brainstorming-outline/-b or --brainstorming-outline-file for outline content. Also supports gate/review flags: --brainstorming-outline-fact-checked, --module-plan-complete, --module-review-complete, --plan-review-ai, --powerpoint-deck-review-ai, --slide-build-review-ai, --slides-submitted, --pluralsight-slides-approved, --powerpoint-deck-human-verified, --slide-deck-hash, --module-submitted-to-pluralsight, --pluralsight-module-video-approved, --pluralsight-feedback-review-needed, --post-feedback-ready-to-submit, --slide-narration-approved, --slide-narration-recorded, --slide-narration-complete.",
           "arguments": [
             {
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Module record ID"
+              "help": "Module record ID"
             }
           ],
           "options": [
@@ -2624,6 +2704,12 @@
               "type": "INTEGER",
               "required": false,
               "help": "Target length in minutes"
+            },
+            {
+              "name": "--demo-density",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module"
             },
             {
               "name": "--notes",
@@ -2870,7 +2956,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Template record ID"
+              "help": "Template record ID"
             }
           ],
           "options": [
@@ -2897,7 +2983,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Template record ID or name"
+              "help": "Template record ID or name"
             }
           ],
           "options": [
@@ -2978,7 +3064,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Template record ID"
+              "help": "Template record ID"
             }
           ],
           "options": [
@@ -3158,7 +3244,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Slide record ID"
+              "help": "Slide record ID"
             }
           ],
           "options": [
@@ -3190,7 +3276,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Slide record ID"
+              "help": "Slide record ID"
             }
           ],
           "options": [
@@ -3294,7 +3380,7 @@
               "name": "record_id",
               "type": "TEXT",
               "required": true,
-              "help": "<str>  Slide record ID"
+              "help": "Slide record ID"
             }
           ],
           "options": [
@@ -3322,7 +3408,7 @@
               "name": "--clip",
               "type": "TEXT",
               "required": false,
-              "help": "Parent clip record ID (re-parent slide to a different clip)",
+              "help": "Parent clip record ID (re-parent slide to a different clip); pass \"\" to unlink the slide from its clip",
               "short": "-c"
             },
             {
@@ -3382,6 +3468,18 @@
               "type": "bool",
               "required": false,
               "help": "Mark slide as recorded"
+            },
+            {
+              "name": "--slide-type-human-verified",
+              "type": "bool",
+              "required": false,
+              "help": "Mark the slide's chosen type/template as human-verified"
+            },
+            {
+              "name": "--script-human-verified",
+              "type": "bool",
+              "required": false,
+              "help": "Mark the slide's Script as human-verified"
             },
             {
               "name": "--demo",
