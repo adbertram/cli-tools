@@ -22,7 +22,8 @@ mercari <command-group> <action> [arguments] [options]
 | Authenticate | `mercari auth login` |
 | Check auth | `mercari auth status` |
 | Search others' listings | `mercari listings search lego --table --limit 10` |
-| Search sold, cheapest first | `mercari listings search lego --status sold --sort price_asc --table` |
+| Search sold, cheapest first | `mercari listings search lego --status sold --sort price --table` |
+| Search newest listed first (default) | `mercari listings search lego --sort newest --limit 20 --table` |
 | Filter search by condition/price | `mercari listings search lego --condition good --min-price 20 --max-price 100 --table` |
 | List active listings | `mercari listings list --status active` |
 | List sold listings (table) | `mercari listings list --status complete --table` |
@@ -38,7 +39,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="Command Groups">
 - **listings** -- Read and search Mercari listings (read-only):
-  - `search <keyword>` -- OTHER sellers' public listings. Options (all validated against the real search API): `--status on_sale|sold`, `--condition new|like_new|good|fair|poor`, `--min-price`/`--max-price` (US dollars), `--sort relevance|price_asc|price_desc`, `--category-id`/`--brand-id` (repeatable), plus `--limit`, `--filter`, `--properties`, `--table`. Each result has `id` + canonical `url`.
+  - `search <keyword>` -- OTHER sellers' public listings. Options (all validated against the real search API): `--status on_sale|sold` (long-form only here), `--condition new|like_new|good|fair|poor`, `--min-price`/`--max-price` (US dollars), `--sort/-s newest|price|relevance` (default `newest`; Source-CLI Sort Standard) with `--desc/-d` to reverse (only valid with `price` — Mercari has no oldest-first, so `newest --desc`/`relevance --desc` error), `--category-id`/`--brand-id` (repeatable), plus `--limit`, `--filter`, `--properties`, `--table`. Each result has `id` + canonical `url`.
   - `list` -- the authenticated seller's OWN listings (by `--status active|inactive|complete`, with `--limit`, `--filter`, `--properties`, `--table`).
   - `get <id>` -- full detail for any listing/item (by id or URL, with `--properties`, `--table`).
 - **auth** -- Authentication management (login, logout, status, test) and nested `auth profiles`

@@ -46,8 +46,55 @@ STATUS_MAP = {
 # in the URL (comma-joined values break the SPA parser).
 SEARCH_STATUS_MAP = {"on_sale": [1], "sold": [2, 3]}
 SEARCH_CONDITION_MAP = {"new": 1, "like_new": 2, "good": 3, "fair": 4, "poor": 5}
-# sortOrder is a no-op; direction is baked into the sortBy code.
-SEARCH_SORT_MAP = {"relevance": 0, "price_asc": 3, "price_desc": 4}
+# The Source-CLI Sort Standard field -> Mercari `sortBy` code mapping lives in
+# main.py (`_resolve_sort`). The numeric sortBy code arrives here already
+# resolved; `sort_by=None` omits the param (best-match/relevance). `sortOrder`
+# is a no-op — direction is baked into each sortBy code (verified live: a
+# sortOrder URL param does not re-trigger the searchFacetQuery).
+
+
+def build_search_params(
+    keyword: str,
+    status: Optional[str] = None,
+    condition: Optional[str] = None,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    sort_by: Optional[int] = None,
+    category_ids: Optional[List[int]] = None,
+    brand_ids: Optional[List[int]] = None,
+) -> List[tuple]:
+    """Build the ``/search`` URL query params the SPA translates into the
+    ``searchFacetQuery`` criteria (validated live; see README "Data source").
+
+    ``sort_by`` is a resolved numeric Mercari ``sortBy`` code (e.g. 2 = newest,
+    3 = price low->high, 4 = price high->low). ``None`` omits the param, which
+    Mercari treats as best-match/relevance. Prices are US dollars converted to
+    the API's cent unit. Multi-value params are repeated (comma-joined values
+    break the SPA parser).
+    """
+    if status is not None and status not in SEARCH_STATUS_MAP:
+        raise ClientError(
+            f"Unknown status {status!r}. Choose from: {', '.join(SEARCH_STATUS_MAP)}."
+        )
+    if condition is not None and condition not in SEARCH_CONDITION_MAP:
+        raise ClientError(
+            f"Unknown condition {condition!r}. Choose from: {', '.join(SEARCH_CONDITION_MAP)}."
+        )
+
+    params: List[tuple] = [("keyword", keyword)]
+    if status is not None:
+        params += [("itemStatuses", str(v)) for v in SEARCH_STATUS_MAP[status]]
+    if condition is not None:
+        params.append(("itemConditions", str(SEARCH_CONDITION_MAP[condition])))
+    if min_price is not None:
+        params.append(("minPrice", str(int(round(min_price * 100)))))
+    if max_price is not None:
+        params.append(("maxPrice", str(int(round(max_price * 100)))))
+    if sort_by is not None:
+        params.append(("sortBy", str(sort_by)))
+    params += [("categoryIds", str(c)) for c in (category_ids or [])]
+    params += [("brandIds", str(b)) for b in (brand_ids or [])]
+    return params
 
 SHELL_URL = "https://www.mercari.com/mypage/"
 HOME_URL = "https://www.mercari.com/"
@@ -265,13 +312,21 @@ class MercariClient:
 
     @cached
     def get_item(self, item_id: str) -> dict:
-        """Get full detail for a single listing/item by id or URL."""
+        """Get full detail for a single listing/item by id or URL.
+
+        Mercari item pages are PUBLIC (any item URL is viewable logged-out), so
+        this drives the public app shell — the same surface as ``search`` — and
+        never gates on a seller login. It only needs the persistent
+        ``cf_clearance`` cookie to clear Cloudflare, so item detail keeps working
+        in headless/automated runs even after the seller session expires. Only
+        ``list`` (the seller's OWN listings) requires the authenticated shell.
+        """
         normalized_id = _normalize_item_id(item_id)
 
         def accept(variables: dict) -> bool:
             return variables.get("id") == normalized_id
 
-        page = self._authenticated_shell()
+        page = self._app_shell(HOME_URL)
         route = ITEM_ROUTE.format(item_id=normalized_id)
         bodies = self._capture(page, route, "productQuery", accept)
         if not bodies:
@@ -293,43 +348,29 @@ class MercariClient:
         condition: Optional[str] = None,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
-        sort: str = "relevance",
+        sort_by: Optional[int] = None,
         category_ids: Optional[List[int]] = None,
         brand_ids: Optional[List[int]] = None,
     ) -> List[dict]:
         """Search OTHER sellers' public Mercari listings.
 
         Filters are passed as /search URL params that the SPA translates into
-        the searchFacetQuery GraphQL criteria (validated live). Prices in
+        the searchFacetQuery GraphQL criteria (validated live). ``sort_by`` is a
+        resolved numeric Mercari ``sortBy`` code (see main._resolve_sort);
+        ``None`` omits it (best-match/relevance). Prices in
         --min-price/--max-price are US dollars and converted to the API's cent
         unit. Item prices in results remain in cents (API-faithful).
         """
-        if status is not None and status not in SEARCH_STATUS_MAP:
-            raise ClientError(
-                f"Unknown status {status!r}. Choose from: {', '.join(SEARCH_STATUS_MAP)}."
-            )
-        if condition is not None and condition not in SEARCH_CONDITION_MAP:
-            raise ClientError(
-                f"Unknown condition {condition!r}. Choose from: {', '.join(SEARCH_CONDITION_MAP)}."
-            )
-        if sort not in SEARCH_SORT_MAP:
-            raise ClientError(
-                f"Unknown sort {sort!r}. Choose from: {', '.join(SEARCH_SORT_MAP)}."
-            )
-
-        params: List[tuple] = [("keyword", keyword)]
-        if status is not None:
-            params += [("itemStatuses", str(v)) for v in SEARCH_STATUS_MAP[status]]
-        if condition is not None:
-            params.append(("itemConditions", str(SEARCH_CONDITION_MAP[condition])))
-        if min_price is not None:
-            params.append(("minPrice", str(int(round(min_price * 100)))))
-        if max_price is not None:
-            params.append(("maxPrice", str(int(round(max_price * 100)))))
-        if SEARCH_SORT_MAP[sort]:
-            params.append(("sortBy", str(SEARCH_SORT_MAP[sort])))
-        params += [("categoryIds", str(c)) for c in (category_ids or [])]
-        params += [("brandIds", str(b)) for b in (brand_ids or [])]
+        params = build_search_params(
+            keyword,
+            status=status,
+            condition=condition,
+            min_price=min_price,
+            max_price=max_price,
+            sort_by=sort_by,
+            category_ids=category_ids,
+            brand_ids=brand_ids,
+        )
         route = "/search/?" + urlencode(params)
 
         def accept(variables: dict) -> bool:

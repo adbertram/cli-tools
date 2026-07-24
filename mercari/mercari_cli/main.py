@@ -23,6 +23,53 @@ LIST_COLUMNS = ["id", "name", "price", "status", "created"]
 # Validated present on every searchFacetQuery item (see README "Data source").
 SEARCH_COLUMNS = ["id", "name", "price", "status", "categoryTitle"]
 
+# Source-CLI Sort Standard -> Mercari search `sortBy` URL code.
+# The Mercari search SPA translates a numeric ?sortBy= code into the
+# searchFacetQuery criteria; each code bakes in its own direction (a sortOrder
+# URL param is a no-op — verified live). Codes verified live against the fired
+# criteria and the returned result order (top items' productQuery `created`
+# timestamps were strictly descending for code 2):
+#   newest    -> 2      created-time DESCENDING (newest listed first)
+#   price     -> 3      price ascending  (low -> high)  [natural]
+#   price -d  -> 4      price descending (high -> low)  [reversed]
+#   relevance -> None   omit sortBy => best-match (codes 0/1 == best match)
+# Mercari US search has NO oldest-first (created-ascending) code, so
+# `newest --desc` is rejected fail-fast (no silent fallback to newest-first).
+SORT_MAP = {
+    "newest": 2,
+    "price": 3,
+    "relevance": None,
+}
+# Fields whose natural direction can be reversed with --desc, mapped to the
+# Mercari sortBy code for the reversed direction.
+SORT_DESC_MAP = {
+    "price": 4,
+}
+
+
+def _resolve_sort(sort: str, desc: bool = False) -> Optional[int]:
+    """Resolve --sort/--desc to a Mercari `sortBy` code (fail-fast, no fallback).
+
+    Returns the numeric ``sortBy`` URL code, or ``None`` to omit the param
+    (best-match/relevance). Raises ``typer.BadParameter`` for unknown fields,
+    for ``relevance --desc``, and for ``newest --desc`` (Mercari US search has
+    no oldest-first order).
+    """
+    key = sort.lower()
+    if key not in SORT_MAP:
+        valid = ", ".join(SORT_MAP)
+        raise typer.BadParameter(f"Invalid --sort '{sort}'. Valid values: {valid}")
+    if not desc:
+        return SORT_MAP[key]
+    if key in SORT_DESC_MAP:
+        return SORT_DESC_MAP[key]
+    if key == "newest":
+        raise typer.BadParameter(
+            "--desc is not supported with --sort newest: Mercari US search has no "
+            "oldest-first order (only newest-first). Drop --desc for newest-first."
+        )
+    raise typer.BadParameter("--desc is not valid with --sort relevance.")
+
 app = create_app(name="mercari", help="CLI interface for Mercari", version=__version__)
 listings_app = typer.Typer(help="Read and search Mercari listings", no_args_is_help=True)
 
@@ -104,7 +151,7 @@ def listings_list(
 def listings_search(
     keyword: str = typer.Argument(..., help="Search keyword"),
     status: Optional[str] = typer.Option(
-        None, "--status", "-s", help="Item status: on_sale or sold"
+        None, "--status", help="Item status: on_sale or sold"
     ),
     condition: Optional[str] = typer.Option(
         None, "--condition", "-c", help="Condition: new, like_new, good, fair, or poor"
@@ -116,7 +163,16 @@ def listings_search(
         None, "--max-price", help="Maximum price in US dollars"
     ),
     sort: str = typer.Option(
-        "relevance", "--sort", help="Sort: relevance, price_asc, or price_desc"
+        "newest",
+        "--sort",
+        "-s",
+        help="Sort field: 'newest' (default), 'price', or 'relevance'. Natural direction unless --desc.",
+    ),
+    desc: bool = typer.Option(
+        False,
+        "--desc",
+        "-d",
+        help="Reverse the sort field's natural direction (price low->high becomes high->low). Not valid with 'newest' or 'relevance'.",
     ),
     category_id: Optional[List[int]] = typer.Option(
         None, "--category-id", help="Filter by category id (repeatable; see result categoryId)"
@@ -139,6 +195,7 @@ def listings_search(
     are in cents (as Mercari returns them). Each result includes an `id` and
     canonical `url` so `mercari listings get <id>` composes with it.
     """
+    sort_by = _resolve_sort(sort, desc)
     _validate(filter)
     client = get_client()
     try:
@@ -149,7 +206,7 @@ def listings_search(
             condition=condition,
             min_price=min_price,
             max_price=max_price,
-            sort=sort,
+            sort_by=sort_by,
             category_ids=category_id,
             brand_ids=brand_id,
         )

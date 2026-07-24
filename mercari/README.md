@@ -50,9 +50,20 @@ validated live against the fired criteria and the returned result set:
 | `--status` | `itemStatuses` (repeated) | `on_sale`→[1], `sold`→[2,3] |
 | `--condition` | `itemConditions` | `new`=1, `like_new`=2, `good`=3, `fair`=4, `poor`=5 |
 | `--min-price` / `--max-price` | `minPrice` / `maxPrice` | US dollars → cents (×100) |
-| `--sort` | `sortBy` | `relevance`=0, `price_asc`=3, `price_desc`=4 |
+| `--sort` / `--desc` | `sortBy` | `newest`=2 (created-time desc), `price`=3 (low→high), `price --desc`=4 (high→low), `relevance`=omit (best match) |
 | `--category-id` | `categoryIds` (repeated) | raw id (see result `categoryId`) |
 | `--brand-id` | `brandIds` (repeated) | raw id (see result `brand.id`) |
+
+`listings search` follows the **Source-CLI Sort Standard**: `--sort/-s <field>`
+(default `newest`) plus `--desc/-d` to reverse a field's natural direction.
+Valid fields are `newest` (created-time descending), `price` (natural low→high;
+`--desc` = high→low), and `relevance` (best match). Each Mercari `sortBy` code
+bakes in its own direction, and Mercari US search exposes **no oldest-first
+order**, so `--sort newest --desc` and `--sort relevance --desc` are rejected
+with a clear error (fail-fast, never a silent fallback). An unknown `--sort`
+value likewise exits non-zero. Because the search command binds `-s` to
+`--sort`, its `--status` filter is long-form only (`listings list` keeps
+`--status/-s`).
 
 Pagination is offset-based; `--limit` is merged across pages under the hood
 (deduped by item id). Item prices in results are in **cents** (e.g. `17683` =
@@ -106,8 +117,12 @@ mercari listings search lego --table --limit 10
 
 # Filter search by status (on_sale | sold), condition, price (US dollars), sort
 mercari listings search lego --status on_sale --condition good --table
-mercari listings search lego --min-price 20 --max-price 100 --sort price_asc --table
-mercari listings search lego --sort price_desc --limit 20 --table
+mercari listings search lego --min-price 20 --max-price 100 --sort price --table
+mercari listings search lego --sort price --desc --limit 20 --table
+
+# Sort by newest listed (the default) or by relevance
+mercari listings search lego --sort newest --limit 20 --table
+mercari listings search lego --sort relevance --table
 
 # Filter by category id or brand id (repeatable; ids come from result fields)
 mercari listings search lego --category-id 2211 --table
@@ -195,11 +210,12 @@ mercari auth profiles delete PROFILE_NAME
 
 | Option | Short | Applies to | Description |
 |--------|-------|-----------|-------------|
-| `--status` | `-s` | `listings list` / `search` | list: `active`/`inactive`/`complete`; search: `on_sale`/`sold` |
+| `--status` | `-s` (list only) | `listings list` / `search` | list: `active`/`inactive`/`complete` (short `-s`); search: `on_sale`/`sold` (long only — `-s` is `--sort` there) |
 | `--condition` | `-c` | `listings search` | `new`, `like_new`, `good`, `fair`, `poor` |
 | `--min-price` |  | `listings search` | Minimum price in US dollars |
 | `--max-price` |  | `listings search` | Maximum price in US dollars |
-| `--sort` |  | `listings search` | `relevance`, `price_asc`, `price_desc` |
+| `--sort` | `-s` | `listings search` | Sort field: `newest` (default), `price`, `relevance` (Source-CLI Sort Standard) |
+| `--desc` | `-d` | `listings search` | Reverse the sort field's natural direction (only valid with `price`) |
 | `--category-id` |  | `listings search` | Filter by category id (repeatable) |
 | `--brand-id` |  | `listings search` | Filter by brand id (repeatable) |
 | `--limit` | `-l` | `listings list` / `search` | Maximum number of results (merged across pages) |
