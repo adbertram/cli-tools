@@ -1,7 +1,7 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-06-30T20:25:35Z",
+  "discovered_at": "2026-07-24T16:37:33Z",
   "total_commands": 56,
   "global_options": [
     {
@@ -47,7 +47,7 @@
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Run `notion auth logout --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `notion auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -223,7 +223,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Run `notion auth status --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -283,7 +283,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `notion cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -310,10 +317,10 @@
           "usage_instructions": "Run `notion comments create --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "[text]",
+              "name": "text",
               "type": "TEXT",
               "required": false,
-              "help": "TEXT  Comment text content"
+              "help": "Comment text content"
             }
           ],
           "options": [
@@ -430,6 +437,12 @@
               "short": "-c"
             },
             {
+              "name": "--open-only",
+              "type": "bool",
+              "required": false,
+              "help": "Acknowledge that Notion's public API can list only open/unresolved comments; resolved comments cannot be enumerated"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -482,7 +495,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a new database under a parent page.",
+          "help": "Create a new database under a parent page. PARENT_PAGE_ID must be a page ID. Notion does not allow creating a database with a database or data_source parent. The schema is supplied via raw JSON (--properties, the Notion initial_data_source.properties object) and/or convenience flags. A title property is always present: if --properties does not define one, a title property named by --title-property (default \"Name\") is added. Relation properties use the TARGET's data_source ID (not a database container ID), per Notion API 2025-09-03.",
           "arguments": [
             {
               "name": "parent_page_id",
@@ -797,7 +810,7 @@
                   ]
                 },
                 "list-blocks": {
-                  "help": "List a page's content blocks with their block IDs, types, and text.",
+                  "help": "List a page's content blocks with their block IDs, types, and text. Use this to map paragraphs/headings to their block IDs so a targeted, non-destructive edit can be made with 'content update-block --block-id'. Editing a block in place preserves the block ID, so any inline comments anchored to OTHER blocks are not affected.",
                   "arguments": [
                     {
                       "name": "page_id",
@@ -851,7 +864,7 @@
                   ]
                 },
                 "set": {
-                  "help": "Replace all page content with new content.",
+                  "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
                   "examples": [
                     "notion database page content set PAGE_ID --text \"New content\"",
                     "notion database page content set PAGE_ID --file content.md",
@@ -896,7 +909,7 @@
                   ]
                 },
                 "update-block": {
-                  "help": "Edit a single existing block's text IN PLACE without deleting it.",
+                  "help": "Edit a single existing block's text IN PLACE without deleting it. PATCHes the block's rich_text via the Notion API (PATCH /v1/blocks/{id}), which preserves the block and its ID. Because the block ID is unchanged, any inline/block-anchored comments on this page (including on OTHER blocks) SURVIVE the edit. This is the non-destructive alternative to 'content set', which deletes and recreates every block and so destroys all inline comments. Supported block types: paragraph, heading_1/2/3, bulleted_list_item, numbered_list_item, quote, callout, to_do, toggle. Find block IDs with 'content list-blocks PAGE_ID'.",
                   "arguments": [],
                   "options": [
                     {
@@ -1012,7 +1025,7 @@
               ]
             },
             "delete": {
-              "help": "Delete (archive) a page.",
+              "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion database page update PAGE_ID --restore'.",
               "examples": [
                 "notion database page delete abc123-def456",
                 "notion database page delete abc123-def456 --force"
@@ -1151,7 +1164,7 @@
               ]
             },
             "update": {
-              "help": "Update a page's properties.",
+              "help": "Update a page's properties. Property Examples: notion database page update PAGE_ID --status \"Done\" notion database page update PAGE_ID --status \"Status:In progress\" notion database page update PAGE_ID --select \"Priority:High\" notion database page update PAGE_ID --select \"Client:Acme\" --select \"Contact:Jane Doe\" notion database page update PAGE_ID --text \"Notes:Updated content\" notion database page update PAGE_ID --checkbox \"Complete:true\" notion database page update PAGE_ID --number \"Score:95\" Archive/Restore: notion database page update PAGE_ID --archive notion database page update PAGE_ID --restore Raw JSON (for complex updates): notion database page update PAGE_ID --properties '{\"Status\": {\"status\": {\"name\": \"Done\"}}}'",
               "usage_instructions": "Run `notion database page update --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -1909,7 +1922,7 @@
               ]
             },
             "list": {
-              "help": "List blocks (children) of a page or block.",
+              "help": "List blocks (children) of a page or block. Returns the complete child-block list by default, paginating through every page of the Notion children endpoint (has_more/next_cursor). Pass --limit to cap the result; without it, all blocks are returned.",
               "examples": [
                 "notion pages blocks list --page-id PAGE_ID",
                 "notion pages blocks list --page-id PAGE_ID --table",
@@ -2203,7 +2216,7 @@
               ]
             },
             "set": {
-              "help": "Replace all page content with new content.",
+              "help": "Replace all page content with new content. This clears existing content and sets new content. Automatically handles content larger than Notion's 100-block limit by splitting into chunks and uploading sequentially. Use --json-file to import raw Notion blocks (preserving rich formatting like callouts, colors, columns) exported via 'notion pages export --format notion-json'.",
               "examples": [
                 "notion pages content set PAGE_ID --text \"New content\"",
                 "notion pages content set PAGE_ID --file content.md",
@@ -2309,7 +2322,7 @@
           ]
         },
         "delete": {
-          "help": "Delete (archive) a page.",
+          "help": "Delete (archive) a page. Note: Notion doesn't truly delete pages - this archives them. Archived pages can be restored using 'notion pages update PAGE_ID --restore'.",
           "examples": [
             "notion pages delete abc123-def456",
             "notion pages delete abc123-def456 --force"
@@ -2340,7 +2353,7 @@
           ]
         },
         "duplicate": {
-          "help": "Duplicate a page including all blocks and rich formatting. Supports pages in databases and standalone pages (page parents). Preserves column layouts, callouts with colors, bold/italic annotations, images, and all other Notion block types. Handles arbitrary nesting depth.",
+          "help": "Duplicate a page including all blocks, child pages/subpages, and rich formatting. Supports pages in databases and standalone pages (page parents). Preserves column layouts, callouts with colors, bold/italic annotations, images, and recursively nested child-page content. Handles arbitrary nesting depth. Fails before creating the destination when the source contains a block type that the Notion API cannot recreate completely.",
           "examples": [
             "notion pages duplicate PAGE_ID",
             "notion pages duplicate PAGE_ID --title \"New Copy\"",
@@ -2394,7 +2407,7 @@
           ]
         },
         "export": {
-          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON.",
+          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
           "examples": [
             "notion pages export PAGE_ID --output document.pdf",
             "notion pages export PAGE_ID -o report.pdf",
