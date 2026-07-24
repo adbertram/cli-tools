@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import xmlrpc.client
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -51,6 +52,12 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # User agent for all requests
 DEFAULT_USER_AGENT = "WordPressClient/1.0"
+
+# XML-RPC transport for post mutations (see update_post/delete_post). WordPress
+# ignores the blog_id argument on single-site installs, but it is a required
+# positional in every wp.* method, so send a constant.
+XMLRPC_BLOG_ID = 1
+
 WPCOM_API_BASE_URL = "https://public-api.wordpress.com/rest/v1.1"
 WPVULNERABILITY_API_BASE_URL = "https://api.wpvulnerability.com"
 JETPACK_PLUGIN_MANAGEMENT_ERROR = (
@@ -231,6 +238,19 @@ class WordPressClient:
         request_headers = self.headers.copy()
         if headers:
             request_headers.update(headers)
+
+        # The WordPress origin issues a canonical 301 redirect that strips the
+        # query string (and downgrades https->http) for any REST request that
+        # carries query parameters. That silently breaks pagination, filtering,
+        # and search: every paginated request collapses back to the default
+        # first page, so callers only ever see the first 10 items. Carry GET
+        # query parameters in a JSON body via X-HTTP-Method-Override so they
+        # survive the redirect and reach WP_REST_Request intact.
+        if method.upper() == "GET" and params:
+            request_headers["X-HTTP-Method-Override"] = "GET"
+            method = "POST"
+            data = params
+            params = None
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
@@ -485,13 +505,13 @@ class WordPressClient:
 
         all_posts: List[Post] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_posts) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -507,9 +527,8 @@ class WordPressClient:
             posts = [create_post(post) for post in response]
             all_posts.extend(posts)
 
-            # Check if we've exhausted available posts
-            if len(posts) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more posts available
+            if len(posts) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -517,10 +536,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(posts)
             page += 1
 
-        return all_posts
+        return all_posts[:limit]
 
     def get_post(self, post_id: int, context: str = "view") -> PostDetail:
         """
@@ -608,13 +626,201 @@ class WordPressClient:
 
         return create_post_detail(response)
 
+    def _site_root_url(self) -> str:
+        """Return the site origin (no /wp-json/wp/v2 suffix) for non-REST endpoints."""
+        suffix = "/wp-json/wp/v2"
+        base_url = self.base_url.rstrip("/")
+        if not base_url.endswith(suffix):
+            raise ClientError(f"Expected WordPress API base URL to end with {suffix}, got {self.base_url}")
+        return base_url[: -len(suffix)]
+
+    def _xmlrpc_call(self, method: str, *params: Any) -> Any:
+        """
+        Call a WordPress XML-RPC method at /xmlrpc.php.
+
+        Post mutations must not use the /wp/v2/<type>/<id> REST item routes on
+        this host: the origin issues a canonical 301 that strips the trailing
+        numeric id (and downgrades https->http), collapsing the request onto the
+        collection endpoint. requests then follows it and, for a POST, converts
+        it to GET, so an update lands on `GET /posts` (a list) and a delete lands
+        on `DELETE /posts` (404 rest_no_route). get_post already avoids this for
+        reads via an `include=` collection query, but there is no collection-level
+        write. /xmlrpc.php is a fixed path with no trailing numeric segment, so
+        the strip rule never matches it and the id travels safely in the request
+        body. Jetpack (connected here) keeps XML-RPC enabled.
+        """
+        payload = xmlrpc.client.dumps(params, method, allow_none=True)
+        url = f"{self._site_root_url()}/xmlrpc.php"
+        response = requests.post(
+            url,
+            data=payload.encode("utf-8"),
+            headers={"Content-Type": "text/xml", "User-Agent": DEFAULT_USER_AGENT},
+            timeout=60,
+        )
+        if not response.ok:
+            raise ClientError(f"XML-RPC request failed ({response.status_code}): {response.text}")
+        try:
+            result, _ = xmlrpc.client.loads(response.content)
+        except xmlrpc.client.Fault as fault:
+            raise ClientError(f"XML-RPC {method} fault ({fault.faultCode}): {fault.faultString}")
+        return result[0] if result else None
+
+    @staticmethod
+    def _xmlrpc_post_date(value: str) -> xmlrpc.client.DateTime:
+        """Convert an ISO 8601 date string to the XML-RPC DateTime WordPress expects."""
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return xmlrpc.client.DateTime(parsed.strftime("%Y%m%dT%H:%M:%S"))
+
+    # Page fields the /wp/v2/pages REST route accepts but this host's wp.editPost
+    # silently drops: wp_insert_post via XML-RPC only honors its whitelisted keys
+    # plus post_parent, so menu_order and page_template never take effect
+    # (verified live). Reject them loudly instead of reporting a false success.
+    _XMLRPC_UNSUPPORTED_PAGE_FIELDS = ("menu_order", "template")
+
+    def _post_fields_to_xmlrpc_struct(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Map REST post/page fields (as built by the update commands) to an XML-RPC content_struct.
+
+        Covers both posts and pages. `parent` (post_parent) is additive and
+        mapped only when supplied, so a post update that never sends it is
+        unaffected. menu_order and page_template are intentionally not mapped
+        here; wp.editPost drops them on this host, so update_page rejects them
+        rather than mapping a no-op.
+        """
+        rest_to_xmlrpc = {
+            "title": "post_title",
+            "content": "post_content",
+            "excerpt": "post_excerpt",
+            "slug": "post_name",
+        }
+        struct: Dict[str, Any] = {}
+        for rest_key, xmlrpc_key in rest_to_xmlrpc.items():
+            if rest_key in fields:
+                struct[xmlrpc_key] = fields[rest_key]
+
+        if "status" in fields:
+            status = fields["status"]
+            struct["post_status"] = getattr(status, "value", status)
+        if "date" in fields:
+            struct["post_date"] = self._xmlrpc_post_date(fields["date"])
+        if "featured_media" in fields:
+            struct["post_thumbnail"] = int(fields["featured_media"])
+        if "parent" in fields:
+            struct["post_parent"] = int(fields["parent"])
+
+        terms: Dict[str, List[int]] = {}
+        if "categories" in fields:
+            terms["category"] = [int(t) for t in fields["categories"]]
+        if "tags" in fields:
+            terms["post_tag"] = [int(t) for t in fields["tags"]]
+        if terms:
+            struct["terms"] = terms
+
+        if "meta" in fields:
+            struct["custom_fields"] = [
+                {"key": key, "value": str(value)} for key, value in fields["meta"].items()
+            ]
+        return struct
+
+    def _term_fields_to_xmlrpc_struct(self, taxonomy: str, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Map REST term fields (as built by the category/tag update commands) to an XML-RPC content_struct.
+
+        wp.editTerm requires the taxonomy in the struct and accepts partial
+        updates of name/slug/description/parent. parent applies only to
+        hierarchical taxonomies (category); post_tag never supplies it.
+        """
+        struct: Dict[str, Any] = {"taxonomy": taxonomy}
+        for key in ("name", "slug", "description"):
+            if key in fields:
+                struct[key] = fields[key]
+        if "parent" in fields:
+            struct["parent"] = int(fields["parent"])
+        return struct
+
+    def _xmlrpc_delete_term(self, taxonomy: str, term_id: int) -> dict:
+        """Delete a term via wp.deleteTerm. Categories and tags have no trash, so this is permanent."""
+        result = self._xmlrpc_call(
+            "wp.deleteTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            taxonomy,
+            term_id,
+        )
+        if result is not True:
+            raise ClientError(
+                f"XML-RPC wp.deleteTerm did not confirm deleting {taxonomy} term {term_id}: {result!r}"
+            )
+        return {"deleted": True, "id": term_id, "taxonomy": taxonomy}
+
+    def _xmlrpc_post_status(self, post_id: int) -> Optional[str]:
+        """Return an object's post_status via wp.getPost, or None if it no longer exists.
+
+        Only the "invalid post ID" 404 fault is swallowed (mapped to None);
+        every other fault (permissions, transport) still raises. Used to decide
+        whether a second wp.deletePost is needed for a permanent delete without
+        assuming the object is trashable.
+        """
+        try:
+            current = self._xmlrpc_call(
+                "wp.getPost",
+                XMLRPC_BLOG_ID,
+                self.config.username,
+                self.config.app_password,
+                post_id,
+                ["post_id", "post_status"],
+            )
+        except ClientError as exc:
+            if "fault (404)" in str(exc):
+                return None
+            raise
+        if not isinstance(current, dict):
+            raise ClientError(f"XML-RPC wp.getPost returned a non-struct for {post_id}: {current!r}")
+        status = current.get("post_status")
+        if not isinstance(status, str):
+            raise ClientError(f"XML-RPC wp.getPost did not include post_status for {post_id}: {current!r}")
+        return status
+
+    def _xmlrpc_trash_post(self, post_id: int, force: bool) -> dict:
+        """Trash or permanently delete a trashable post-type object via wp.deletePost.
+
+        wp.deletePost moves a live (published/draft/etc.) object to trash;
+        calling it again on the now-trashed object permanently deletes it. For
+        force=True the current status is queried first so exactly the right
+        number of calls is issued whether the object is live or already trashed.
+        Shared by delete_post and delete_page; both post types support trash.
+        """
+        username = self.config.username
+        app_password = self.config.app_password
+
+        already_trashed = False
+        if force:
+            already_trashed = self._xmlrpc_post_status(post_id) == "trash"
+
+        result = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, post_id)
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.deletePost did not confirm deleting {post_id}: {result!r}")
+
+        if force and not already_trashed:
+            permanent = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, post_id)
+            if permanent is not True:
+                raise ClientError(
+                    f"XML-RPC wp.deletePost did not confirm permanent deletion of {post_id}: {permanent!r}"
+                )
+
+        return {"deleted": True, "id": post_id, "forced": force}
+
     def update_post(self, post_id: int, fields: Dict[str, Any]) -> PostDetail:
         """
-        Update an existing post.
+        Update an existing post via XML-RPC (wp.editPost).
+
+        The /wp/v2/posts/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so item writes go through /xmlrpc.php. The updated post is
+        read back through the working REST include= path so the return type and
+        rendered fields stay identical to the previous behavior.
 
         Args:
             post_id: The post ID
-            fields: Dictionary of fields to update
+            fields: Dictionary of fields to update (REST field names)
 
         Returns:
             PostDetail model of updated post
@@ -622,14 +828,33 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a post")
 
-        endpoint = f"/posts/{post_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._post_fields_to_xmlrpc_struct(fields)
+        if not struct:
+            raise ClientError(f"No updatable fields mapped for post {post_id}: {sorted(fields)}")
 
-        return create_post_detail(response)
+        result = self._xmlrpc_call(
+            "wp.editPost",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            post_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editPost did not confirm the update for post {post_id}: {result!r}")
+
+        return self.get_post(post_id)
 
     def delete_post(self, post_id: int, force: bool = False) -> dict:
         """
-        Delete a post.
+        Delete a post via XML-RPC (wp.deletePost).
+
+        The /wp/v2/posts/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. wp.deletePost moves a
+        live (published/draft/etc.) post to trash; calling it again on the
+        now-trashed post permanently deletes it. For force=True the current
+        status is queried first so exactly the right number of calls is issued
+        whether the post is live or already in the trash.
 
         Args:
             post_id: The post ID
@@ -638,14 +863,7 @@ class WordPressClient:
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/posts/{post_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_trash_post(post_id, force)
 
     # Schedule reservation directory for preventing race conditions between
     # concurrent auto-schedule calls (e.g., parallel pipeline runs)
@@ -771,11 +989,13 @@ class WordPressClient:
 
         all_pages: List[Page] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_pages) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
             if filters:
                 params.update(filters)
 
@@ -787,17 +1007,16 @@ class WordPressClient:
             pages_batch = [create_page(p) for p in response]
             all_pages.extend(pages_batch)
 
-            if len(pages_batch) < per_page:
+            if len(pages_batch) < WP_MAX_PER_PAGE:
                 break
 
             total_pages = int(headers.get("x-wp-totalpages", 1))
             if page >= total_pages:
                 break
 
-            remaining -= len(pages_batch)
             page += 1
 
-        return all_pages
+        return all_pages[:limit]
 
     def get_page(self, page_id: int, context: str = "view") -> PageDetail:
         """Get a specific page by ID.
@@ -862,28 +1081,61 @@ class WordPressClient:
         return create_page_detail(response)
 
     def update_page(self, page_id: int, fields: Dict[str, Any]) -> PageDetail:
-        """Update an existing page."""
+        """Update an existing page via XML-RPC (wp.editPost with post_type=page).
+
+        The /wp/v2/pages/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so item writes go through /xmlrpc.php. A page is a post
+        with post_type "page"; the updated page is read back through the working
+        REST include= path so the return type stays identical to the previous
+        behavior.
+
+        Args:
+            page_id: The page ID
+            fields: Dictionary of fields to update (REST field names)
+
+        Returns:
+            PageDetail model of updated page
+        """
         if not fields:
             raise ValueError("fields cannot be empty when updating a page")
 
-        endpoint = f"/pages/{page_id}"
-        response = self._make_request("POST", endpoint, data=fields)
-        return create_page_detail(response)
+        unsupported = [name for name in self._XMLRPC_UNSUPPORTED_PAGE_FIELDS if name in fields]
+        if unsupported:
+            raise ClientError(
+                f"Cannot update page field(s) {unsupported} on this host: the REST item route is "
+                "unreachable (canonical redirect strips the id), and this site's XML-RPC wp.editPost "
+                "silently drops menu_order and page_template. Set these in wp-admin, or update the "
+                "server-side redirect so the native REST route works."
+            )
+
+        struct = self._post_fields_to_xmlrpc_struct(fields)
+        struct["post_type"] = "page"
+
+        result = self._xmlrpc_call(
+            "wp.editPost",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            page_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editPost did not confirm the update for page {page_id}: {result!r}")
+
+        return self.get_page(page_id)
 
     def delete_page(self, page_id: int, force: bool = False) -> dict:
-        """Delete a page.
+        """Delete a page via XML-RPC (wp.deletePost).
+
+        The /wp/v2/pages/<id> REST route is unreachable on this host (see
+        _xmlrpc_call). A page is a trashable post type, so deletion follows the
+        same trash-then-permanent flow as delete_post.
 
         Args:
             page_id: The page ID
             force: If True, permanently delete. If False, move to trash.
         """
-        endpoint = f"/pages/{page_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-        return response
+        return self._xmlrpc_trash_post(page_id, force)
 
     # ==================== Navigation Menu Methods ====================
 
@@ -955,17 +1207,22 @@ class WordPressClient:
         if limit <= 0:
             raise ValueError("limit must be a positive integer")
 
+        WP_MAX_PER_PAGE = 100
+
         all_items: List[dict] = []
         page = 1
-        remaining = limit
-        while remaining > 0:
-            per_page = min(remaining, 100)
+
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_items) < limit:
             response, headers = self._make_request(
                 "GET",
                 "/menu-items",
                 params={
                     "menus": menu_id,
-                    "per_page": per_page,
+                    "per_page": WP_MAX_PER_PAGE,
                     "page": page,
                     "orderby": "menu_order",
                     "order": "asc",
@@ -975,14 +1232,13 @@ class WordPressClient:
             if not isinstance(response, list):
                 raise ClientError(f"Expected menu item list response to be a list, got {type(response)}")
             all_items.extend(response)
-            if len(response) < per_page:
+            if len(response) < WP_MAX_PER_PAGE:
                 break
             total_pages = int(headers.get("x-wp-totalpages", 1))
             if page >= total_pages:
                 break
-            remaining -= len(response)
             page += 1
-        return all_items
+        return all_items[:limit]
 
     def add_page_to_menu(
         self,
@@ -1090,13 +1346,13 @@ class WordPressClient:
 
         all_media: List[Media] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_media) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -1112,9 +1368,8 @@ class WordPressClient:
             media_items = [create_media(item) for item in response]
             all_media.extend(media_items)
 
-            # Check if we've exhausted available media
-            if len(media_items) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more media available
+            if len(media_items) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -1122,10 +1377,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(media_items)
             page += 1
 
-        return all_media
+        return all_media[:limit]
 
     def get_media(self, media_id: int) -> Media:
         """
@@ -1150,23 +1404,44 @@ class WordPressClient:
 
     def delete_media(self, media_id: int, force: bool = False) -> dict:
         """
-        Delete a media item.
+        Delete a media item via XML-RPC (wp.deletePost).
+
+        The /wp/v2/media/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), and there is no clean XML-RPC media edit/delete method. A
+        media item is an "attachment" post type, so wp.deletePost is the
+        reachable path. Attachments only support trash when the site defines
+        MEDIA_TRASH; otherwise the first call already deletes the file
+        permanently. Rather than assume the site's MEDIA_TRASH setting, the item
+        is deleted once and, when force is requested, its existence is re-checked
+        so a still-present (trashed) attachment is permanently removed by a
+        second call.
 
         Args:
             media_id: The media ID
-            force: If True, permanently delete. If False, move to trash.
+            force: If True, guarantee a permanent delete even where MEDIA_TRASH
+                keeps the first call as a trash. If False, a single delete
+                (trash where supported, otherwise permanent).
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/media/{media_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
+        username = self.config.username
+        app_password = self.config.app_password
 
-        response = self._make_request("DELETE", endpoint, params=params)
+        result = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, media_id)
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.deletePost did not confirm deleting media {media_id}: {result!r}")
 
-        return response
+        if force and self._xmlrpc_post_status(media_id) is not None:
+            # MEDIA_TRASH is enabled: the first call only trashed the attachment,
+            # so a second call permanently deletes it.
+            permanent = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, media_id)
+            if permanent is not True:
+                raise ClientError(
+                    f"XML-RPC wp.deletePost did not confirm permanent deletion of media {media_id}: {permanent!r}"
+                )
+
+        return {"deleted": True, "id": media_id, "forced": force}
 
     # ==================== Category Methods ====================
 
@@ -1195,13 +1470,13 @@ class WordPressClient:
 
         all_categories: List[Category] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_categories) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -1217,9 +1492,8 @@ class WordPressClient:
             categories = [create_category(cat) for cat in response]
             all_categories.extend(categories)
 
-            # Check if we've exhausted available categories
-            if len(categories) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more categories available
+            if len(categories) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -1227,10 +1501,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(categories)
             page += 1
 
-        return all_categories
+        return all_categories[:limit]
 
     def get_category(self, category_id: int) -> Category:
         """
@@ -1300,29 +1573,39 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a category")
 
-        endpoint = f"/categories/{category_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._term_fields_to_xmlrpc_struct("category", fields)
+        result = self._xmlrpc_call(
+            "wp.editTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            category_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(
+                f"XML-RPC wp.editTerm did not confirm the update for category {category_id}: {result!r}"
+            )
 
-        return create_category(response)
+        return self.get_category(category_id)
 
     def delete_category(self, category_id: int, force: bool = True) -> dict:
         """
-        Delete a category.
+        Delete a category via XML-RPC (wp.deleteTerm).
+
+        The /wp/v2/categories/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. Categories have no
+        trash, so this is always a permanent delete (force is accepted for
+        signature compatibility).
 
         Args:
             category_id: The category ID
-            force: Must be True for categories (no trash support)
+            force: Accepted for compatibility; categories have no trash support
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/categories/{category_id}"
-        # Categories don't support trash, force must be true
-        params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_delete_term("category", category_id)
 
     # ==================== Tag Methods ====================
 
@@ -1351,13 +1634,13 @@ class WordPressClient:
 
         all_tags: List[Tag] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_tags) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -1373,9 +1656,8 @@ class WordPressClient:
             tags = [create_tag(tag) for tag in response]
             all_tags.extend(tags)
 
-            # Check if we've exhausted available tags
-            if len(tags) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more tags available
+            if len(tags) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -1383,10 +1665,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(tags)
             page += 1
 
-        return all_tags
+        return all_tags[:limit]
 
     def get_tag(self, tag_id: int) -> Tag:
         """
@@ -1468,29 +1749,37 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a tag")
 
-        endpoint = f"/tags/{tag_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._term_fields_to_xmlrpc_struct("post_tag", fields)
+        result = self._xmlrpc_call(
+            "wp.editTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            tag_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editTerm did not confirm the update for tag {tag_id}: {result!r}")
 
-        return create_tag(response)
+        return self.get_tag(tag_id)
 
     def delete_tag(self, tag_id: int, force: bool = True) -> dict:
         """
-        Delete a tag.
+        Delete a tag via XML-RPC (wp.deleteTerm).
+
+        The /wp/v2/tags/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. Tags have no trash,
+        so this is always a permanent delete (force is accepted for signature
+        compatibility).
 
         Args:
             tag_id: The tag ID
-            force: Must be True for tags (no trash support)
+            force: Accepted for compatibility; tags have no trash support
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/tags/{tag_id}"
-        # Tags don't support trash, force must be true
-        params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_delete_term("post_tag", tag_id)
 
     # ==================== Plugin Methods ====================
 
