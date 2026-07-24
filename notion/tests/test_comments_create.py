@@ -1,4 +1,5 @@
 from notion_cli.commands import comments as comments_cmd
+from typer.testing import CliRunner
 
 
 def comment(comment_id, text="Test comment", parent_type="page_id", parent_id="page-1"):
@@ -26,6 +27,17 @@ class FakeCreateCommentClient:
             }
         )
         return comment("comment-1", text="".join(part["text"]["content"] for part in rich_text))
+
+
+class FakeTextDroppingCommentClient(FakeCreateCommentClient):
+    def create_comment(self, rich_text, page_id=None, block_id=None, discussion_id=None):
+        super().create_comment(rich_text, page_id, block_id, discussion_id)
+        return comment(
+            "empty-comment-1",
+            text="",
+            parent_type="block_id",
+            parent_id="deleted-block-1",
+        )
 
 
 def test_build_comment_rich_text_splits_long_text_without_losing_content():
@@ -93,3 +105,52 @@ def test_comment_create_reads_text_file_without_shell_interpretation(monkeypatch
     assert client.calls[0]["discussion_id"] == "discussion-1"
     assert "".join(part["text"]["content"] for part in sent_rich_text) == comment_text
     assert printed_json[0]["text"] == comment_text
+
+
+def test_comment_create_fails_when_api_drops_nonempty_reply_text(monkeypatch, tmp_path, capsys):
+    client = FakeTextDroppingCommentClient()
+    comment_text = "This reply must never be silently discarded."
+    text_file = tmp_path / "reply.md"
+    text_file.write_text(comment_text, encoding="utf-8")
+
+    monkeypatch.setattr(comments_cmd, "get_client", lambda: client)
+
+    try:
+        comments_cmd.comment_create(
+            text=None,
+            text_file=text_file,
+            page_id=None,
+            block_id=None,
+            discussion_id="orphaned-discussion-1",
+            table=False,
+        )
+    except Exception as exc:
+        assert getattr(exc, "exit_code", None) == 1
+    else:
+        raise AssertionError("text-dropping response was reported as success")
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "empty-comment-1" in captured.err
+    assert "did not preserve the submitted text" in captured.err
+    assert "submitted 44 characters, returned 0" in captured.err
+    assert len(client.calls) == 1
+    assert client.calls[0]["discussion_id"] == "orphaned-discussion-1"
+
+
+def test_comment_create_rejects_unsupported_new_inline_discussion(monkeypatch):
+    runner = CliRunner()
+    monkeypatch.setattr(
+        comments_cmd,
+        "get_client",
+        lambda: (_ for _ in ()).throw(AssertionError("API must not be called")),
+    )
+
+    result = runner.invoke(
+        comments_cmd.app,
+        ["create", "Review this text", "--block-id", "block-1"],
+    )
+
+    assert result.exit_code == 1
+    assert "cannot start an inline discussion" in result.output
+    assert "not enumerable by List comments" in result.output

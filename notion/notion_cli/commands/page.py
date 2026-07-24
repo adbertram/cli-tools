@@ -20,6 +20,7 @@ COMMAND_CREDENTIALS = {
 
 from ..client import get_client
 from ..block_limits import enforce_block_limits, find_oversize_rich_text as _find_oversize_rich_text
+from cli_tools_shared import confirm_destructive_action
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (
     print_json,
@@ -304,6 +305,9 @@ def page_get(
         notion pages get abc123-def456 --include-blocks --markdown
         notion pages get abc123-def456 -b -m --out-file content.md
     """
+    if out_file and not (include_blocks and markdown):
+        raise ValueError("--out-file requires --include-blocks and --markdown")
+
     client = get_client()
     page = client.get_page(page_id)
 
@@ -979,11 +983,13 @@ def page_duplicate(
     ),
 ):
     """
-    Duplicate a page including all blocks and rich formatting.
+    Duplicate a page including all blocks, child pages/subpages, and rich formatting.
 
     Supports pages in databases and standalone pages (page parents).
     Preserves column layouts, callouts with colors, bold/italic annotations,
-    images, and all other Notion block types. Handles arbitrary nesting depth.
+    images, and recursively nested child-page content. Handles arbitrary nesting depth.
+    Fails before creating the destination when the source contains a block type
+    that the Notion API cannot recreate completely.
 
     Examples:
         notion pages duplicate PAGE_ID
@@ -1776,6 +1782,20 @@ def _nest_section_under_heading(client, heading_block_id: str, progress_callback
     # Hydrate any nested children so we re-create the full subtree.
     client._fetch_children_parallel(section_blocks, max_workers=5)
 
+    # Re-upload Notion-hosted files (image/video/pdf/file) via the File Upload
+    # API BEFORE cleaning. Cleaning rewrites a hosted file block to
+    # image.external using its signed, EXPIRING S3 URL, which Notion rejects on
+    # create (400 image.file_upload should be defined at depth-2) or silently
+    # empties to ![]() (depth-1). Re-uploading converts each hosted file to a
+    # file_upload reference so the re-parented section keeps its images intact,
+    # mirroring the proven `pages duplicate` path.
+    reuploaded = client._reupload_file_blocks(section_blocks, progress_callback)
+    if reuploaded > 0 and progress_callback:
+        progress_callback(
+            "nest",
+            f"Re-uploaded {reuploaded} Notion-hosted file(s) so they survive re-parenting...",
+        )
+
     cleaned_blocks = client._clean_blocks_recursive(section_blocks)
     if not cleaned_blocks:
         # Section consisted entirely of uncreatable blocks. Don't delete the
@@ -2203,17 +2223,16 @@ def blocks_delete(
         children_ids = [c["id"] for c in children]
         children_count = len(children_ids)
 
-    # Confirm unless force flag is set
-    if not force:
-        if recursive and children_count > 0:
-            confirm = typer.confirm(
-                f"Delete {block_type} block {block_id} and {children_count} child block(s)?"
-            )
-        else:
-            confirm = typer.confirm(f"Delete {block_type} block {block_id}?")
-        if not confirm:
-            typer.echo("Cancelled.")
-            raise typer.Exit(0)
+    target_description = f"{block_type} block {block_id}"
+    if recursive and children_count > 0:
+        target_description += f" and {children_count} child block(s)"
+
+    confirm_destructive_action(
+        f"Delete {target_description}?",
+        assume_yes=force,
+        action_description=f"delete {target_description}",
+        skip_flag_hint="--force",
+    )
 
     deleted_count = 0
     already_gone_count = 0

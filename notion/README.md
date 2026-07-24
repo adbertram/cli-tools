@@ -128,7 +128,7 @@ notion database page get <page-id> --include-blocks --markdown
 |--------|-------------|
 | `-b, --include-blocks` | Include page content blocks |
 | `-m, --markdown` | Output blocks as markdown (requires --include-blocks) |
-| `-o, --out-file` | Write markdown to file |
+| `-o, --out-file` | Write markdown to file (requires `--include-blocks --markdown`) |
 
 ### Create Page
 
@@ -383,7 +383,7 @@ notion pages get <page-id> -b -m --out-file content.md
 |--------|-------------|
 | `-b, --include-blocks` | Include page content blocks |
 | `-m, --markdown` | Output blocks as markdown (requires --include-blocks) |
-| `-o, --out-file` | Write markdown to file |
+| `-o, --out-file` | Write markdown to file (requires `--include-blocks --markdown`) |
 
 ### Create Page
 
@@ -544,6 +544,18 @@ notion pages content clear <page-id>
 notion pages content clear <page-id> --force
 ```
 
+### Delete a Block
+
+```bash
+notion pages blocks delete <block-id>
+notion pages blocks delete <block-id> --force
+notion pages blocks delete <block-id> --recursive --force
+```
+
+Interactive terminals prompt for confirmation. Non-interactive callers such as
+agent Bash tools, CI, cron jobs, and pipes must pass `--force`; otherwise the
+command refuses before deletion and prints the required non-interactive syntax.
+
 ### Toggle Headings (collapsible sections)
 
 The right-arrow ▶ in the Notion UI is the `is_toggleable: true` flag on a
@@ -585,18 +597,30 @@ Manage comments on pages and blocks.
 
 ### List Comments
 
+Notion's public List comments endpoint returns only **open/unresolved** comments;
+it cannot enumerate resolved comments. To prevent a successful but silently
+incomplete result, the CLI fails unless you explicitly accept that API scope with
+`--open-only`:
+
 ```bash
-notion comments list --page-id <page-id>
-notion comments list --page-id <page-id> --with-context
-notion comments list --block-id <block-id>
-notion comments list --discussion-id <discussion-id>
-notion comments list --page-id <page-id> --limit 10
+notion comments list --page-id <page-id> --open-only
+notion comments list --page-id <page-id> --with-context --open-only
+notion comments list --block-id <block-id> --open-only
+notion comments list --discussion-id <discussion-id> --open-only
+notion comments list --page-id <page-id> --open-only --limit 10
 ```
 
-By default, `--page-id` lists comments attached directly to the page. Use
-`--with-context` when you need to scan page blocks for inline block comments and
-include the parent block text each comment is attached to, plus nearby block
+By default, `--page-id` lists open comments attached directly to the page. Use
+`--with-context` to recursively scan every page block for open inline comments
+and include the parent block text each comment is attached to, plus nearby block
 context in JSON output. JSON output reports the parent block as `selected_block`.
+Every page/block comment source is fully paginated before results are merged and
+the global `--limit` is applied. Any traversal, lookup, or malformed-pagination
+failure exits nonzero rather than returning a partial array.
+
+A comment retrievable by `comments get COMMENT_ID` can still be absent from an
+`--open-only` list when its discussion is resolved. The public API provides no
+endpoint for discovering those resolved comment IDs.
 
 **Options:**
 | Option | Description |
@@ -605,7 +629,8 @@ context in JSON output. JSON output reports the parent block as `selected_block`
 | `-b, --block-id` | Block ID to get comments for |
 | `-d, --discussion-id` | Discussion thread ID to get comments for |
 | `-c, --with-context` | Include parent block text (only with --page-id) |
-| `-l, --limit` | Maximum number of comments to return |
+| `--open-only` | Explicitly accept the API's open/unresolved-only listing scope (required) |
+| `-l, --limit` | Maximum number of comments to return after complete source pagination |
 | `--max-workers` | Maximum concurrent block comment lookups when using `--with-context` (default: 25) |
 | `-f, --filter` | Filter comments with `field:op:value` syntax |
 
@@ -620,23 +645,30 @@ notion comments get <comment-id>
 
 ```bash
 notion comments create "This is my comment" --page-id <page-id>
-notion comments create "Comment on this block" --block-id <block-id>
 notion comments create "My reply" --discussion-id <discussion-id>
 notion comments create --text-file reply.md --discussion-id <discussion-id>
 ```
+
+The public API can add a page comment or reply to an existing inline discussion,
+but it cannot start a new inline discussion on a block. The CLI retains
+`--block-id` only to produce a clear compatibility error before making a request.
+Some Notion API versions accept that unsupported payload and return a comment
+object that `comments get` can retrieve but `comments list` cannot enumerate.
+The CLI refuses to create that inaccessible state.
 
 **Options:**
 | Option | Description |
 |--------|-------------|
 | `-f, --text-file` | File containing comment text content |
 | `-p, --page-id` | Page ID to add comment to |
-| `-b, --block-id` | Block ID to add comment to |
+| `-b, --block-id` | Unsupported for creation; fails before any API request |
 | `-d, --discussion-id` | Discussion thread ID to reply to |
 
 Use `--text-file` for comment bodies that contain shell-sensitive text such as
 backticks, `$()`, angle-bracket placeholders, quotes, or newlines.
 
-**Note:** Exactly one of --page-id, --block-id, or --discussion-id must be provided.
+**Note:** Exactly one target must be provided. Use `--page-id` or
+`--discussion-id`; `--block-id` always fails loud.
 
 ## Additional Commands
 

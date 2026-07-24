@@ -708,15 +708,13 @@ class NotionClient:
                 for block in blocks_with_children
             }
 
-            # Collect results as they complete
+            # Collect results as they complete. A recursive read is all-or-nothing:
+            # silently replacing a failed subtree with [] makes export/duplicate
+            # report success while omitting content (especially child pages).
             for future in as_completed(future_to_block):
                 block = future_to_block[future]
-                try:
-                    children = future.result()
-                    block_to_children[block["id"]] = children
-                except Exception:
-                    # On error, set empty children (fail gracefully)
-                    block_to_children[block["id"]] = []
+                children = future.result()
+                block_to_children[block["id"]] = children
 
         # Assign children to blocks
         for block in blocks_with_children:
@@ -919,21 +917,35 @@ class NotionClient:
         return self._make_request("PATCH", f"/blocks/{block_id}", data=block_data)
 
     def clear_page_content(self, page_id: str) -> Dict:
-        """
-        Delete all block children from a page using the erase_content API flag.
+        """Archive every current top-level child block of a page.
 
-        This is much more efficient than deleting blocks one-by-one as it uses
-        a single API call regardless of the number of blocks.
-
-        Note: This is a destructive action that cannot be reversed via the API.
+        Notion's ``erase_content`` page update can fail when a page contains
+        nested blocks: archiving a parent cascades to its descendants while the
+        server-side erase continues trying to edit those now-archived children.
+        Fetching only top-level children and archiving them sequentially avoids
+        that parent/descendant race. ``delete_block_if_present`` keeps retries
+        idempotent if a prior attempt already archived a returned block.
 
         Args:
-            page_id: The page ID to clear
+            page_id: The page ID to clear.
 
         Returns:
-            Updated page object
+            A summary containing the page ID and top-level block counts.
         """
-        return self.update_page(page_id, erase_content=True)
+        blocks = self.get_block_children_all(page_id, recursive=False)
+        archived = 0
+        already_archived = 0
+        for block in blocks:
+            if self.delete_block_if_present(block["id"]):
+                archived += 1
+            else:
+                already_archived += 1
+
+        return {
+            "page_id": page_id,
+            "blocks_archived": archived,
+            "blocks_already_archived": already_archived,
+        }
 
     def create_page(
         self,
@@ -1337,11 +1349,19 @@ class NotionClient:
                 page_size=page_size,
                 start_cursor=start_cursor,
             )
-            all_comments.extend(result.get("results", []))
+            results = result.get("results")
+            if not isinstance(results, list):
+                raise ClientError("Notion comments response is missing a results list")
+            all_comments.extend(results)
             if limit is not None and len(all_comments) >= limit:
                 return all_comments[:limit]
             has_more = result.get("has_more", False)
             start_cursor = result.get("next_cursor")
+            if has_more and not start_cursor:
+                raise ClientError(
+                    "Notion comments response has_more=true without next_cursor; "
+                    "refusing to return an incomplete list"
+                )
 
         return all_comments
 
@@ -1426,17 +1446,12 @@ class NotionClient:
         block_texts: Dict[str, str] = {}
         block_contexts: Dict[str, Dict[str, str]] = {}
 
-        # First, fetch page-level comments (comments attached to the page itself)
-        page_size = min(limit, 100) if limit is not None else 100
-        page_result = self.list_comments(block_id=page_id, page_size=page_size)
-        page_comments = page_result.get("results", [])
+        # Fetch every open page-level comment. Do not apply the caller's global
+        # limit to this source: doing so can fill the limit before block traversal
+        # and silently omit inline comments. The global limit is applied only
+        # after all page/block sources have been paginated and merged.
+        page_comments = self.list_comments_all(block_id=page_id)
         all_comments.extend(page_comments)
-
-        if limit is not None and len(all_comments) >= limit:
-            limited_comments = all_comments[:limit]
-            for comment in limited_comments:
-                comment["context"] = ""
-            return limited_comments
 
         # Get all blocks on the page (recursive to find inline comments on nested blocks)
         blocks_tree = self.get_block_children_all(
@@ -1481,13 +1496,14 @@ class NotionClient:
         # Fetch comments for all blocks in parallel
 
         def fetch_block_comments(block: Dict) -> Tuple[List[Dict], str]:
-            """Fetch comments for a single block."""
+            """Fetch every open comment for a single block."""
             block_id = block.get("id", "")
-
-            # Get comments for this block
-            result = self.list_comments(block_id=block_id)
-            comments = result.get("results", [])
-
+            if not block_id:
+                raise ClientError(
+                    "Notion block response is missing an id; refusing to return "
+                    "an incomplete comment list"
+                )
+            comments = self.list_comments_all(block_id=block_id)
             return (comments, block_id)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1497,14 +1513,26 @@ class NotionClient:
                 comments, block_id = future.result()
                 all_comments.extend(comments)
 
-        # Deduplicate comments by ID
+        # Deduplicate comments by ID. Missing IDs make completeness impossible to
+        # prove, so fail instead of collapsing malformed records together.
         seen_ids: set = set()
         unique_comments: List[Dict] = []
         for comment in all_comments:
             cid = comment.get("id", "")
+            if not cid:
+                raise ClientError(
+                    "Notion comment response is missing an id; refusing to return "
+                    "an incomplete list"
+                )
             if cid not in seen_ids:
                 seen_ids.add(cid)
                 unique_comments.append(comment)
+
+        # Parallel block lookups complete in arbitrary order. Sort before applying
+        # the global limit so bounded output is deterministic.
+        unique_comments.sort(
+            key=lambda comment: (comment.get("created_time", ""), comment.get("id", ""))
+        )
 
         # Add context to each comment
         for comment in unique_comments:
@@ -2067,10 +2095,19 @@ class NotionClient:
                             import os as _os
                             _os.unlink(temp_path)
 
-                    except Exception:
-                        # If re-upload fails, leave as-is (will be converted to
-                        # external in _clean_block_for_creation as fallback)
-                        pass
+                    except Exception as exc:
+                        # Fail loud instead of degrading to an expiring external
+                        # URL. The only blocks reaching here are Notion-hosted
+                        # files whose signed S3 URL was just fetched; if we cannot
+                        # re-upload one, falling back to image.external would hand
+                        # Notion an expiring prod-files-secure URL that it rejects
+                        # (400 image.file_upload should be defined) or silently
+                        # empties to ![](), destroying the image. One path, no
+                        # fallback.
+                        raise ClientError(
+                            f"Failed to re-upload Notion-hosted {block_type} block "
+                            f"via the File Upload API: {exc}"
+                        ) from exc
 
             # Recurse into children
             children = block.get("children", [])
@@ -2148,6 +2185,97 @@ class NotionClient:
         blocks = self.get_block_children_all(page_id, recursive=True)
         return self._clean_blocks_recursive(blocks)
 
+    def _validate_duplicate_source_blocks(
+        self,
+        blocks: List[Dict],
+        *,
+        page_level: bool = True,
+    ) -> None:
+        """Fail before mutation when a source tree cannot be duplicated completely."""
+        for block in blocks:
+            block_type = block.get("type", "")
+            if block_type == "child_page":
+                if not page_level:
+                    raise ClientError(
+                        "Cannot completely duplicate a child_page nested below a regular block. "
+                        "No destination page was created."
+                    )
+                if not block.get("id"):
+                    raise ClientError(
+                        "Cannot completely duplicate a child_page without a source page ID. "
+                        "No destination page was created."
+                    )
+                self._validate_duplicate_source_blocks(
+                    self._get_children(block), page_level=True
+                )
+                continue
+            if block_type in self._UNCREATABLE_BLOCK_TYPES:
+                raise ClientError(
+                    f"Cannot completely duplicate block type '{block_type}'. "
+                    "No destination page was created."
+                )
+            children = self._get_children(block)
+            if children:
+                self._validate_duplicate_source_blocks(children, page_level=False)
+
+    def _upload_duplicate_page_children(
+        self,
+        parent_page_id: str,
+        raw_blocks: List[Dict],
+        progress_callback=None,
+    ) -> Tuple[int, int]:
+        """Upload blocks and recursively recreate child pages in source order.
+
+        Notion rejects ``child_page`` in ``PATCH /blocks/{id}/children``. Child
+        pages must instead be created with ``POST /pages`` using the duplicated
+        page as their parent. Uploading contiguous regular-block runs around each
+        child page preserves source order while allowing arbitrary subpage depth.
+
+        Returns:
+            ``(blocks_created, child_pages_created)`` for the complete subtree.
+        """
+        blocks_created = 0
+        child_pages_created = 0
+        pending_blocks: List[Dict] = []
+
+        def flush_pending() -> None:
+            nonlocal blocks_created, pending_blocks
+            if not pending_blocks:
+                return
+            cleaned = self._clean_blocks_recursive(pending_blocks)
+            count, _created_ids = self._upload_blocks_with_nesting(
+                parent_page_id,
+                cleaned,
+                progress_callback=progress_callback,
+            )
+            blocks_created += count
+            pending_blocks = []
+
+        for block in raw_blocks:
+            if block.get("type") != "child_page":
+                pending_blocks.append(block)
+                continue
+
+            flush_pending()
+            child_title = block.get("child_page", {}).get("title") or "Untitled"
+            if progress_callback:
+                progress_callback(5, f"Creating child page '{child_title}'...")
+            child_page = self.create_standalone_page(
+                parent_page_id=parent_page_id,
+                title=child_title,
+            )
+            child_pages_created += 1
+            nested_blocks, nested_pages = self._upload_duplicate_page_children(
+                child_page["id"],
+                self._get_children(block),
+                progress_callback=progress_callback,
+            )
+            blocks_created += nested_blocks
+            child_pages_created += nested_pages
+
+        flush_pending()
+        return blocks_created, child_pages_created
+
     def duplicate_page(
         self,
         page_id: str,
@@ -2181,19 +2309,21 @@ class NotionClient:
             progress_callback(2, "Fetching page blocks...")
         raw_blocks = self.get_block_children_all(page_id, recursive=True)
 
+        # A complete recursive read is required before any destination mutation.
+        # Reject block types Notion cannot recreate instead of filtering them and
+        # later claiming a complete duplicate.
+        self._validate_duplicate_source_blocks(raw_blocks)
+
         # Step 2b: Re-upload file-type images/files via Notion File Upload API
         image_count = self._reupload_file_blocks(raw_blocks, progress_callback)
         if image_count > 0 and progress_callback:
             progress_callback(2, f"Re-uploaded {image_count} file(s)")
 
-        # Step 2c: Clean blocks for creation
-        blocks = self._clean_blocks_recursive(raw_blocks)
-
         # Step 3: Apply text replacements if any
         if replacements:
             if progress_callback:
                 progress_callback(3, f"Applying {len(replacements)} text replacement(s)...")
-            self._apply_text_replacements(blocks, replacements)
+            self._apply_text_replacements(raw_blocks, replacements)
 
         # Step 4: Determine parent type and target
         parent = source_page.get("parent", {})
@@ -2230,9 +2360,28 @@ class NotionClient:
         if progress_callback:
             progress_callback(4, "Creating new page...")
 
-        # Copy icon and cover if present
+        # Copy reusable icon/cover metadata. Page reads can return signed
+        # `file` covers, but page creation accepts only `external` and
+        # `file_upload` covers. Omit null, unsupported, or incomplete cover
+        # objects instead of forwarding a payload that fails API validation.
         icon = source_page.get("icon")
         cover = source_page.get("cover")
+        required_cover_field: Optional[str] = None
+        cover_data = None
+        if isinstance(cover, dict):
+            if cover.get("type") == "external":
+                required_cover_field = "url"
+                cover_data = cover.get("external")
+            elif cover.get("type") == "file_upload":
+                required_cover_field = "id"
+                cover_data = cover.get("file_upload")
+        if not (
+            required_cover_field is not None
+            and isinstance(cover_data, dict)
+            and isinstance(cover_data.get(required_cover_field), str)
+            and cover_data[required_cover_field]
+        ):
+            cover = None
 
         if is_page_parent:
             # Page parent: use create_standalone_page
@@ -2275,16 +2424,22 @@ class NotionClient:
 
         new_page_id = new_page["id"]
 
-        # Step 7: Upload blocks with nesting handling
-        if blocks:
+        # Step 7: Upload blocks and recursively create child pages/subpages.
+        if raw_blocks:
             if progress_callback:
-                progress_callback(5, f"Uploading {len(blocks)} blocks...")
+                progress_callback(5, f"Uploading {len(raw_blocks)} top-level items...")
 
-            self._upload_blocks_with_nesting(
+            blocks_created, child_pages_created = self._upload_duplicate_page_children(
                 new_page_id,
-                blocks,
+                raw_blocks,
                 progress_callback=progress_callback,
             )
+            if progress_callback:
+                progress_callback(
+                    5,
+                    f"Duplicated {blocks_created} block(s) and "
+                    f"{child_pages_created} child page(s)",
+                )
 
         return new_page
 

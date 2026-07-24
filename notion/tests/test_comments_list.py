@@ -27,6 +27,24 @@ class FakeCommentsClient:
         return [comment("comment-1")]
 
 
+def test_comments_list_fails_loudly_without_open_only(monkeypatch):
+    runner = CliRunner()
+    monkeypatch.setattr(
+        comments_cmd,
+        "get_client",
+        lambda: (_ for _ in ()).throw(AssertionError("API must not be called")),
+    )
+
+    result = runner.invoke(
+        comments_cmd.app,
+        ["list", "--page-id", "page-1", "--with-context"],
+    )
+
+    assert result.exit_code == 1
+    assert "cannot enumerate resolved comments" in result.output
+    assert "--open-only" in result.output
+
+
 def test_comments_list_page_id_uses_direct_comment_lookup_without_context(monkeypatch):
     client = FakeCommentsClient()
     printed_json = []
@@ -39,6 +57,7 @@ def test_comments_list_page_id_uses_direct_comment_lookup_without_context(monkey
         block_id=None,
         discussion_id=None,
         with_context=False,
+        open_only=True,
         table=False,
         limit=1,
         max_workers=5,
@@ -62,6 +81,7 @@ def test_comments_list_page_id_with_context_passes_limit(monkeypatch):
         block_id=None,
         discussion_id=None,
         with_context=True,
+        open_only=True,
         table=False,
         limit=2,
         max_workers=25,
@@ -84,6 +104,7 @@ def test_comments_list_page_id_with_context_passes_max_workers(monkeypatch):
         block_id=None,
         discussion_id=None,
         with_context=True,
+        open_only=True,
         table=False,
         limit=2,
         max_workers=25,
@@ -112,6 +133,7 @@ def test_comments_list_empty_table_uses_table_output(monkeypatch):
         block_id=None,
         discussion_id=None,
         with_context=False,
+        open_only=True,
         table=True,
         limit=1,
         max_workers=5,
@@ -212,7 +234,15 @@ def test_comments_list_page_id_with_context_defaults_to_fast_worker_count(monkey
 
     result = runner.invoke(
         comments_cmd.app,
-        ["list", "--page-id", "page-1", "--with-context", "--limit", "2"],
+        [
+            "list",
+            "--page-id",
+            "page-1",
+            "--with-context",
+            "--open-only",
+            "--limit",
+            "2",
+        ],
     )
 
     assert result.exit_code == 0
@@ -230,6 +260,75 @@ def test_list_comments_with_context_passes_worker_count_to_block_tree_fetch():
     assert results[1]["context"] == "Commented block text"
     assert results[1]["context_around"] == "Commented block text"
     assert client.children_calls == [("page-1", True, 25)]
+
+
+class FakeMultiPageBlockContextClient(FakeContextClient):
+    def list_comments(self, block_id=None, discussion_id=None, page_size=100, start_cursor=None):
+        if block_id == "block-1":
+            self.comment_calls.append((block_id, discussion_id, page_size, start_cursor))
+            if start_cursor is None:
+                return {
+                    "results": [
+                        comment(
+                            "comment-2",
+                            text="First inline comment",
+                            parent_type="block_id",
+                            parent_id="block-1",
+                        )
+                    ],
+                    "has_more": True,
+                    "next_cursor": "block-page-2",
+                }
+            assert start_cursor == "block-page-2"
+            return {
+                "results": [
+                    comment(
+                        "comment-3",
+                        text="Second inline comment",
+                        parent_type="block_id",
+                        parent_id="block-1",
+                    )
+                ],
+                "has_more": False,
+                "next_cursor": None,
+            }
+        return super().list_comments(block_id, discussion_id, page_size, start_cursor)
+
+
+def test_list_comments_with_context_paginates_each_block_comment_source():
+    client = FakeMultiPageBlockContextClient()
+
+    results = client.list_comments_with_context("page-1", max_workers=1, limit=100)
+
+    assert [item["id"] for item in results] == ["comment-1", "comment-2", "comment-3"]
+    assert ("block-1", None, 100, None) in client.comment_calls
+    assert ("block-1", None, 100, "block-page-2") in client.comment_calls
+
+
+class FakeMissingCursorClient(NotionClient):
+    def __init__(self):
+        pass
+
+    def list_comments(
+        self,
+        block_id=None,
+        discussion_id=None,
+        page_size=100,
+        start_cursor=None,
+    ):
+        return {"results": [comment("comment-1")], "has_more": True, "next_cursor": None}
+
+
+def test_list_comments_all_fails_when_pagination_cursor_is_missing():
+    client = FakeMissingCursorClient()
+
+    try:
+        client.list_comments_all(block_id="page-1")
+    except Exception as exc:
+        assert "has_more=true without next_cursor" in str(exc)
+        assert "incomplete list" in str(exc)
+    else:
+        raise AssertionError("Malformed pagination was reported as complete")
 
 
 class FakeFailingBlockCommentClient(FakeContextClient):
@@ -278,6 +377,7 @@ def test_comments_list_uses_parent_block_as_selected_block(monkeypatch):
         block_id=None,
         discussion_id=None,
         with_context=True,
+        open_only=True,
         table=False,
         limit=1,
         max_workers=25,

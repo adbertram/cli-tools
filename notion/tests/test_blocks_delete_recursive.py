@@ -11,6 +11,7 @@ while still reporting success. These tests pin the corrected behavior:
      surfaced as a non-zero exit -- it is never swallowed or miscounted.
 """
 import pytest
+from typer.testing import CliRunner
 
 from cli_tools_shared import output as shared_output
 from notion_cli import client as client_mod
@@ -66,6 +67,28 @@ class RecursiveDeleteClient:
         # The parent block delete (always the live, non-idempotent path).
         self.deleted_blocks.append(block_id)
         return _block(block_id)
+
+
+def test_noninteractive_delete_without_force_refuses_with_actionable_error(monkeypatch):
+    client = RecursiveDeleteClient()
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(shared_output, "_stdin_is_interactive_tty", lambda: False)
+    monkeypatch.setattr(
+        page.typer,
+        "confirm",
+        lambda *args, **kwargs: pytest.fail("non-interactive deletion must not prompt"),
+    )
+
+    result = CliRunner().invoke(page.blocks_app, ["delete", client.parent_id])
+
+    assert result.exit_code == 1
+    assert client.deleted_blocks == []
+    assert "Delete toggle block parent-block?" not in result.stdout
+    assert "unknown error occurred" not in result.stderr
+    assert (
+        "Error: Refusing to delete toggle block parent-block without confirmation. "
+        "Re-run with --force in non-interactive contexts."
+    ) in result.stderr
 
 
 def test_recursive_delete_succeeds_when_a_child_is_already_archived(monkeypatch):

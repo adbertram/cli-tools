@@ -35,6 +35,7 @@ notion <command-group> <action> [arguments] [options]
 | List page/block children | `notion pages blocks list --page-id PAGE_ID` |
 | List blocks with IDs (database page) | `notion database page content list-blocks PAGE_ID --table` |
 | Edit one block in place (keeps comments) | `notion database page content update-block --block-id BLOCK_ID --text "New text"` |
+| Delete a block non-interactively | `notion pages blocks delete BLOCK_ID --force` |
 | Toggle existing heading on/off | `notion pages blocks update BLOCK_ID --toggleable` (or `--no-toggleable`) |
 </quick_start>
 
@@ -48,6 +49,17 @@ For `pages blocks list`, the page or block ID is a required option, not a positi
 ```bash
 notion pages blocks list --page-id PAGE_ID --markdown
 ```
+
+For database status-page readbacks, `database page get` does not accept
+`--properties`; that option is available on list/search-style commands such as
+`notion database page list --database-id DB_ID --properties "id,Name,Status,url"`.
+When checking one known page after an update, run:
+```bash
+notion database page get PAGE_ID
+```
+Its default JSON output includes the page summary fields produced by the CLI
+(for example `id`, `url`, `Status`, and `Name`). Filter that JSON after the
+command if you need a smaller display.
 
 For page Markdown reads, `pages get` does not accept output-format flags. Before
 adding any output-format option to `notion pages get`, inspect
@@ -66,6 +78,22 @@ Notion page exports as a valid zero-byte Markdown file. Inspect or print that
 Markdown file separately. If JSON page metadata is needed, run a separate
 `notion pages get PAGE_ID` command without `--markdown` or `--out-file` and
 parse that command's stdout.
+</principle>
+
+<principle name="Non-Interactive Destructive Commands Require Explicit Confirmation Flags">
+Destructive Notion commands prompt only when stdin is an interactive terminal.
+In agent Bash tools, CI, cron jobs, pipes, or other non-interactive contexts,
+pass the command's documented confirmation-skip flag explicitly. For block
+deletion, use:
+
+```bash
+notion pages blocks delete BLOCK_ID --force
+notion pages blocks delete BLOCK_ID --recursive --force
+```
+
+Without `--force`, the command refuses before deletion and tells the caller to
+re-run with `--force`; it does not read from non-interactive stdin. Always
+confirm the exact target ID before supplying a mutation-skip flag.
 </principle>
 
 <principle name="Full ID Extraction">
@@ -103,6 +131,18 @@ notion comments create --text-file "$comment_file" --discussion-id DISCUSSION_ID
 Do not put shell-sensitive comment text inside a double-quoted command argument;
 Bash evaluates backticks and command substitutions before the CLI receives the
 text.
+</principle>
+
+<principle name="Replies to Discussions on Deleted Blocks Fail Loudly">
+Notion can accept `POST /comments` for an inline discussion whose parent block
+is in trash while creating a comment with empty `rich_text`, even when the
+request contains non-empty text. The CLI validates the created comment response
+against the submitted text. If Notion drops or changes any non-empty reply text,
+`notion comments create` prints an error containing the created comment ID and
+exits nonzero instead of emitting success JSON.
+
+Do not retry the same discussion: retries can create more empty comments. Move
+the reply to a live page/block discussion or restore the parent block first.
 </principle>
 
 <principle name="Database Page Create Options">
@@ -148,6 +188,9 @@ notion pages content replace-section PAGE_ID --heading "## Section Title" --file
 ```
 
 Only use `pages content set` when you intend to replace the ENTIRE page content.
+It also archives/removes any child pages represented by `child_page` blocks in
+that parent. Create intended child pages only after the full parent replacement,
+or avoid `pages content set` and use a non-full-replace operation.
 </principle>
 
 <principle name="Edit a Single Block In Place to Preserve Comments">
@@ -175,11 +218,15 @@ be edited with `--text`; use `pages blocks update BLOCK_ID --json '...'` for tho
 
 CAVEAT: `pages blocks update BLOCK_ID --toggleable` (without `--no-nest`)
 RE-CREATES the heading's section siblings to nest them, which assigns NEW block
-IDs and DROPS their comments. Plain `--text` (and `--toggleable --no-nest`) never
-recreate blocks. Verified: editing block A in place leaves block B's comment
-intact (`comments list --page-id PAGE_ID --with-context` still resolves it to its
-block); a `content set` on the same page trashes the block (`archived: true`) and
-orphans the comment.
+IDs and DROPS their block-scoped comments. Notion-hosted images/files in the
+section are now PRESERVED: the re-parent path re-uploads each hosted `image`/
+`video`/`pdf`/`file` block via the File Upload API before recreating it, so the
+image survives inside the toggle intact (see Known Issue #7). Only comments (and
+the block IDs they anchor to) are lost. Plain `--text` (and
+`--toggleable --no-nest`) never recreate blocks. Verified: editing block A in
+place leaves block B's comment intact (`comments list --page-id PAGE_ID
+--with-context` still resolves it to its block); a `content set` on the same page
+trashes the block (`archived: true`) and orphans the comment.
 </principle>
 
 <principle name="content set Is Non-Destructive on Oversize Blocks">
@@ -374,8 +421,11 @@ There are three ways to put content inside a toggle:
 
    Caveat: re-parenting recreates the section blocks via the API, so block
    IDs change and any block-scoped comments on those blocks are dropped.
-   Page-level comments are unaffected. Use `--no-nest` when you must preserve
-   block IDs.
+   Page-level comments are unaffected. Notion-hosted images/files ARE preserved:
+   the CLI re-uploads each hosted `image`/`video`/`pdf`/`file` block via the File
+   Upload API before recreating it, so section images survive inside the toggle
+   (see Known Issue #7). Use `--no-nest` when you must preserve block IDs and
+   block-scoped comments.
 
 2. **Append children directly** to a heading that's already toggleable:
    ```bash
@@ -393,30 +443,60 @@ There are three ways to put content inside a toggle:
 
 ## Known Issues
 
-### 1. Comment Context Reads Can Stall on Large Pages
-**Symptom:** `notion comments list --page-id PAGE_ID --with-context --limit 100` can sit silent for more than a minute and write an empty output file while the process remains alive. After a heavy comment scan, a direct API check may return HTTP 429 with `Retry-After` (for example, 50 seconds).
+### 1. Comment Listing Is Open/Unresolved Only
+
+**Symptom:** A comment can be created successfully and remain retrievable by
+`notion comments get COMMENT_ID`, while the Notion List comments endpoint omits
+it. The API returns HTTP 200 with `has_more: false`, so pagination, cache, block
+traversal, discussion grouping, and CLI response shaping cannot recover it.
+
+**Cause:** Notion documents List comments as an open/unresolved-only endpoint and
+documents that the public API cannot retrieve resolved comments or start a new
+inline discussion. Some API versions nevertheless accept
+`POST /comments` with `parent.block_id` and return a comment object. That object
+can be individually retrievable without being enumerable.
+
+**Fix:** `comments list` now fails before reading unless `--open-only` explicitly
+accepts the API's narrower scope. With `--open-only --with-context`, every page
+and block source is fully paginated; lookup/traversal/pagination failures remain
+nonzero. `comments create --block-id` fails before writing. Use `--page-id` to add
+a page comment or `--discussion-id` to reply to an existing inline discussion.
+
+**Verification:** On page `3965d9c85b2b81239ef5d7ceba8f9b13`, comment
+`3a05d9c8-5b2b-81a4-a658-001da3a6bb20` was retrievable with full text and live
+parent block `39f5d9c8-5b2b-81b8-a3df-fec2c4c500e1`. The raw block list response
+returned one sibling, `has_more: false`, and omitted the target. Tests cover the
+fail-loud default, unsupported block creation, per-block pagination, and malformed
+pagination.
+
+**Recurrence Prevention:** Never describe Notion List comments output as all
+comments. Require explicit `--open-only`, and never use `--block-id` to create a
+new inline discussion.
+
+### 2. Comment Context Reads Can Stall on Large Pages
+**Symptom:** `notion comments list --page-id PAGE_ID --with-context --open-only --limit 100` can sit silent for more than a minute and write an empty output file while the process remains alive. After a heavy comment scan, a direct API check may return HTTP 429 with `Retry-After` (for example, 50 seconds).
 
 **Cause:** Notion's public comments endpoint does not return this workspace's inline block comments from the parent page ID alone, so `--with-context` must recursively read page blocks and check comments on each block. The old CLI used only 5 workers and did not pass the configured worker count into the recursive block-read phase. Repeated comment scans can also hit Notion API rate limiting; the CLI honors `Retry-After`, so it may appear silent while it waits.
 
-**Fix:** Use the normal command; the CLI now defaults to 25 workers and applies that count to both recursive block reads and block comment lookups: `notion comments list --page-id PAGE_ID --with-context --limit 100 > comments.json`.
+**Fix:** Use the explicit open-only command; the CLI defaults to 25 workers and applies that count to both recursive block reads and block comment lookups: `notion comments list --page-id PAGE_ID --with-context --open-only --limit 100 > comments.json`.
 
 **Verification:** Confirm the output file contains valid JSON and `jq 'length' comments.json` returns the expected comment count. On the BricklinkBook page `3f5aaa654fc74a11bc0fc3865cdfcedd`, the no-manual-worker command returned 34 comments in about 25 seconds after the rate-limit window cleared.
 
 **Recurrence Prevention:** Do not reintroduce silent exception suppression or a low default worker count in comment context reads. `--max-workers` remains available for diagnostics, but large-page review workflows should be fast by default. Avoid repeated parallel comment scans against the same large page; if 429 appears, wait the `Retry-After` period before rerunning.
 
-### 2. Comment Target Block Is Available
+### 3. Comment Target Block Is Available
 
-**Symptom:** `notion comments list --page-id PAGE_ID --with-context` returns inline comments and parent block context. That parent block is the selected comment target for review work. Older report workflows treated `[table_row block]` as missing comment context.
+**Symptom:** `notion comments list --page-id PAGE_ID --with-context --open-only` returns open inline comments and parent block context. That parent block is the selected comment target for review work. Older report workflows treated `[table_row block]` as missing comment context.
 
 **Cause:** Notion's public comments API returns comment metadata, parent, discussion ID, author/timestamps, `rich_text`, attachments, and display name. It exposes the parent block, which the CLI reports as `context` and `selected_block`. The CLI can derive nearby context by reading adjacent blocks. Separately, older CLI context extraction only read `rich_text`, so table rows and other non-`rich_text` blocks produced weak context like `[table_row block]`.
 
-**Fix:** Use the parent block as the comment target. Use `notion comments list --page-id PAGE_ID --with-context --limit 100` for parent block and nearby block context. Current JSON output includes `context`, `context_before`, `context_after`, `context_around`, `selected_block`, and `selected_block_status`.
+**Fix:** Use the parent block as the comment target. Use `notion comments list --page-id PAGE_ID --with-context --open-only --limit 100` for parent block and nearby block context. Current JSON output includes `context`, `context_before`, `context_after`, `context_around`, `selected_block`, and `selected_block_status`.
 
 **Verification:** A raw `GET /comments/{comment_id}` probe on BricklinkBook comment `3535d9c8-5b2b-800a-a540-001dccf638dc` returned parent block metadata. Unit tests cover table-row context extraction and selected block output.
 
 **Recurrence Prevention:** Review workflows must use the parent block as the comment target and use parent/nearby block context for revision planning.
 
-### 3. Replace-Section Local Images and Dry Runs
+### 4. Replace-Section Local Images and Dry Runs
 **Symptom:** `notion pages content replace-section PAGE_ID --heading "## Section" --file section.md` did not upload local Markdown images, so replacement content containing `![alt](local.png)` could not persist image blocks correctly. The first repair attempt also uploaded images during `--dry-run`.
 
 **Cause:** `replace-section` parsed Markdown with `text_to_blocks(content)` directly, while `content append` and database Markdown paths process local images first and pass `image_uploads` into `text_to_blocks`. Image processing was initially added before the dry-run branch, which made dry runs perform Notion file uploads.
@@ -448,6 +528,78 @@ There are three ways to put content inside a toggle:
 **Verification:** Duplicating page `9cb674489a004afd83df94b9dfc26756` (5-column `column_list` + callout with children) succeeded; the new page's `column_list` contained all 5 columns, each with its heading, divider, and list items, and the callout kept its 8 children. Regression tests in `tests/test_page_duplicate_columns.py` cover inline column payload shape, nested sub-bullet re-attachment by index path, callout append-after-creation, and `--replace` reaching type-nested children. Full suite: 107 passed; `test-cli-tool.sh --cli-name notion`: 288 passed, 0 failed.
 
 **Recurrence Prevention:** When uploading blocks, never pop the children of a block whose type is in `_CHILD_REQUIRED_TYPES` (`column_list`, `column`, `table`, `synced_block`) — the required chain must stay inline in the creation payload. Any new recursive block walker must use `_get_children`/`_pop_children` so both block-level and API-2025-09-03 type-nested children locations are handled.
+
+### 6. `pages duplicate` Omitted Child Pages and Their Content
+
+**Symptom:** `notion pages duplicate PAGE_ID` reported success after uploading the
+ordinary top-level blocks, but the destination contained no `child_page` blocks
+and none of the nested subpage content.
+
+**Cause:** The creation cleaner classified `child_page` as uncreatable through
+the block-children endpoint and silently filtered it. In addition, recursive
+block reads caught subtree API failures and substituted an empty child list, so
+a failed child-page read was indistinguishable from a genuinely empty page.
+
+**Fix:** Duplication now preflights the complete recursively fetched source tree
+before creating a destination. It uploads contiguous ordinary-block runs and
+recreates each `child_page` with the pages endpoint under the new parent, then
+recurses through all nested subpages while preserving source order. Recursive
+read failures propagate, and other block types the API cannot recreate cause a
+clear pre-mutation error instead of silent omission.
+
+**Verification:** `tests/test_page_duplicate_child_pages.py` covers a root page,
+child page, nested grandchild page, content at every level, ordering around the
+child page, unsupported-block preflight, and propagation of child-page read
+errors. The Notion unit suite passes 120 tests; `test-cli-tool.sh --cli-name
+notion` passes with 0 failures.
+
+**Recurrence Prevention:** Never pass `child_page` through
+`append_block_children`; create it through `POST /pages` under the duplicated
+page and recurse. Recursive export/duplicate reads are all-or-nothing and must
+never replace a failed subtree with `[]`.
+
+### 7. Toggle-Flip Re-Parenting Destroyed Notion-Hosted Images
+
+**Symptom:** `notion pages blocks update HEADING_ID --toggleable` (auto-nesting a
+heading's section under the new toggle) destroyed any Notion-hosted `image` block
+in that section. At depth-2 it failed with `400 -
+body.children[N]...image.file_upload should be defined`; at depth-1 it silently
+recreated the image with an empty URL, rendering `![]()`.
+
+**Cause:** `_nest_section_under_heading` (in
+`notion_cli/commands/page.py`) hydrated the section blocks with
+`_fetch_children_parallel`, then ran them straight through
+`client._clean_blocks_recursive`. For a Notion-hosted image (`image.type ==
+"file"`), `_clean_block_for_creation` rewrites the block to `image.external`
+using the signed, EXPIRING `prod-files-secure.s3…` URL. Notion rejects (or
+empties) that expiring URL on create. The proven `pages duplicate` path already
+calls `client._reupload_file_blocks(raw_blocks)` before cleaning; the toggle-flip
+path never did.
+
+**Fix:** `_nest_section_under_heading` now calls
+`client._reupload_file_blocks(section_blocks, progress_callback)` AFTER hydrating
+children and BEFORE cleaning, mirroring `duplicate`. Each hosted
+`image`/`video`/`pdf`/`file` block is downloaded and re-uploaded via the File
+Upload API and recreated as a native `file_upload` reference inside the toggle.
+`_reupload_file_blocks` was also hardened to FAIL LOUD (raise `ClientError`)
+instead of swallowing a download/upload error and degrading to a broken expiring
+`external` URL — the original section blocks are never deleted when re-upload
+fails, so no data is lost. One path, no fallback.
+
+**Verification:** On a scratch page, an H2 section with a native `file` image was
+flipped with `--toggleable`. Pre-fix (fix stashed) the image rendered `![]()`
+(destroyed); post-fix the image survived as an `image.file` child of the toggle
+with a valid hosted URL (freshly re-uploaded temp filename). Regression tests in
+`notion/tests/test_toggle_nest_image_reupload.py` cover depth-1 and depth-2
+re-upload-before-clean and the fail-loud-keeps-originals behavior. Notion suite:
+137 passed; `test-cli-tool.sh --cli-name notion`: 315 passed, 0 failed.
+
+**Recurrence Prevention:** Any path that re-creates existing blocks containing
+Notion-hosted files (`image`/`video`/`pdf`/`file` with `type == "file"`) must
+call `_reupload_file_blocks` BEFORE `_clean_blocks_recursive`, never rely on the
+expiring `image.external` fallback, and must fail loud rather than silently
+recreate a broken external file. (Block-scoped comments on re-parented blocks
+still change IDs and drop — that is unchanged; use `--no-nest` to preserve them.)
 
 <success_criteria>
 - Command executes without error

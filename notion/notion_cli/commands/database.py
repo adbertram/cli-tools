@@ -925,6 +925,9 @@ def page_get(
         notion database page get abc123-def456 --include-blocks --markdown
         notion database page get abc123-def456 --include-blocks --markdown --out-file content.md
     """
+    if out_file and not (include_blocks and markdown):
+        raise ValueError("--out-file requires --include-blocks and --markdown")
+
     client = get_client()
     page = client.get_page(page_id)
 

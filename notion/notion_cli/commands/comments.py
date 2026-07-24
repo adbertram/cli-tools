@@ -87,6 +87,14 @@ def comments_list(
         "-c",
         help="Include parent block text as context (only with --page-id)",
     ),
+    open_only: bool = typer.Option(
+        False,
+        "--open-only",
+        help=(
+            "Acknowledge that Notion's public API can list only open/unresolved "
+            "comments; resolved comments cannot be enumerated"
+        ),
+    ),
     table: bool = typer.Option(
         False,
         "--table",
@@ -128,6 +136,18 @@ def comments_list(
         # List comments in a discussion thread
         notion comments list --discussion-id ghi789
     """
+    # The public list endpoint explicitly excludes resolved comments. A plain
+    # successful array therefore cannot satisfy an all-comments contract.
+    # Require callers to opt into the narrower, honest contract.
+    if not open_only:
+        handle_error(
+            "Notion's public API cannot enumerate resolved comments, so a complete "
+            "comment listing is unavailable. Pass --open-only to explicitly list "
+            "all open/unresolved comments; otherwise this command fails rather than "
+            "returning a silently incomplete array."
+        )
+        raise typer.Exit(1)
+
     # Validate input
     provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
     if provided == 0:
@@ -290,6 +310,15 @@ def comment_create(
         handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
         raise typer.Exit(1)
 
+    if block_id:
+        handle_error(
+            "Notion's public API cannot start an inline discussion on a block. "
+            "The API may return a comment object for parent.block_id that is not "
+            "enumerable by List comments. Use --page-id for a page comment or "
+            "--discussion-id to reply to an existing inline discussion."
+        )
+        raise typer.Exit(1)
+
     if text_file is not None:
         comment_text = text_file.read_text(encoding="utf-8")
     else:
@@ -307,6 +336,22 @@ def comment_create(
     )
 
     formatted = format_comment_for_display(comment)
+
+    # Notion accepts replies to discussions whose parent block is in trash, but
+    # can create an empty comment while returning HTTP 200. Treat the response
+    # body as a write postcondition: a successful command must echo the exact
+    # non-empty text that was submitted. This check also catches partial loss on
+    # any other comment target without printing a false-success JSON object.
+    if comment_text and formatted["text"] != comment_text:
+        comment_id = formatted["id"] or "unknown"
+        raise RuntimeError(
+            "Notion created comment "
+            f"{comment_id} but did not preserve the submitted text "
+            f"(submitted {len(comment_text)} characters, returned "
+            f"{len(formatted['text'])}). This occurs when replying to an inline "
+            "discussion whose parent block is in trash. The command is failing "
+            "instead of reporting success with lost text."
+        )
 
     if table:
         print_table([formatted])
