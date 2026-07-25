@@ -61,6 +61,15 @@ Interaction commands can report a markdown `### Error` block after the browser h
 <principle name="Session Management">
 - **Default session**: Commands operate on the most recent browser session automatically.
 - **Named sessions**: Use `-s=<session_name>` global option to target a specific session.
+- **A named session is not a persistent profile**: The daemon defaults to an
+  isolated context. A config file can contain `browser.userDataDir`, but that
+  path is not used unless `open` also enables persistence. When the config owns
+  the profile and executable, use
+  `playwright-cli -s=svc open URL --config /absolute/path/cli.config.json --persistent`
+  and require the resulting status to report the configured path. A reported
+  `user-data-dir: <in-memory>` is a failed profile launch. `--profile <dir>`
+  also implies persistence; do not give it a path that conflicts with the
+  config's `browser.userDataDir`.
 - **Do not use implicit `default` for automation**: For portal login,
 credential, and multi-step browser work, open and reuse a short named session
 with `-s=<short-name>` on every command. A bare command uses `default`, which
@@ -141,7 +150,17 @@ The categories below mirror the section headers in `playwright-cli --help`. They
 </principle>
 
 <principle name="Output Format">
-Commands return **markdown** (Slack-style `mrkdwn` with `###` headers and indented list items) — **not JSON**. Large results (snapshots, network logs, console logs) are written to files inside `.playwright-cli/` and the command output references them by path. Read those files directly for structured data. When using `--filename`, keep the command output visible and verify the referenced file is non-empty before relying on it; modal dialogs and failed or blocked states can still produce useful command output even when a redirected file is empty.
+Commands return **markdown** (Slack-style `mrkdwn` with `###` headers and
+indented list items) — **not JSON**. Large results (snapshots, network logs,
+console logs) are written to files inside `.playwright-cli/` and the command
+output references them by path. Read those files directly for structured data.
+When using `--filename`, keep the command output visible and verify the
+referenced file is non-empty before relying on it; modal dialogs and failed or
+blocked states can still produce useful command output even when a redirected
+file is empty. `snapshot --filename FILE` can also exit `0` and print a
+Snapshot link while `FILE` is zero bytes if the page has not produced an
+accessibility tree yet. Wait for a target-specific semantic locator, take a
+fresh snapshot, and require `test -s FILE`; the link alone is not proof.
 
 When redirecting `playwright-cli` stdout to an artifact, especially for
 `run-code`, do not run a bare command such as `playwright-cli ... run-code ...

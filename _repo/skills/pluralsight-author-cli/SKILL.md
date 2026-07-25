@@ -25,8 +25,8 @@ pluralsight-author <command-group> <action> [arguments] [options]
 | `pluralsight-author icons search <query>` | Search icons by a single keyword matched as a case-insensitive substring across id, name, category, color, and tags. The query is not tokenized, so a multi-word phrase usually matches nothing -- search one keyword at a time. |
 | `pluralsight-author icons get <icon-id>` | Fetch one icon-library record. |
 | `pluralsight-author icons download <icon-id> --output <path>` | Download one icon asset. |
-| `pluralsight-author auth login` | Create or refresh the saved browser session required for live reads. |
-| `pluralsight-author cache clear` | Clear cached responses before a fresh live read. |
+| `pluralsight-author auth login` | Create or refresh the saved browser session required for live opportunity reads. |
+| `pluralsight-author cache clear` | Clear cached opportunity and icon data before a fresh read. |
 </quick_start>
 
 <essential_principles>
@@ -42,9 +42,9 @@ After every `pluralsight-author` command, inspect stdout. If it is JSON with `ty
 <principle name="Command Groups">
 - `opportunities`: Direct list/get access to the live Pluralsight Author opportunities dataset.
 - `search`: Keyword search over the opportunity dataset.
-- `icons`: Search, list, inspect, and download Author Kit icon-library assets.
+- `icons`: Search, list, inspect, and download public Author Kit icon-library assets through the profile-scoped HTTP cache. Icon commands do not start Chrome or require browser authentication; `--profile` selects the cache namespace.
 - `auth`: Browser-session login, status, auth tests, and nested profile management.
-- `cache`: Clear cached opportunity responses.
+- `cache`: Clear cached opportunity and icon data.
 </principle>
 </essential_principles>
 

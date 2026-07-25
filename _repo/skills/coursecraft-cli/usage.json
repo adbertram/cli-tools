@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-23T15:21:50Z",
+  "discovered_at": "2026-07-24T23:27:50Z",
   "total_commands": 56,
   "global_options": [
     {
@@ -1522,7 +1522,14 @@
               "name": "--execution-method",
               "type": "bool",
               "required": false,
-              "help": "<Automated Walkthrough|Manual Instructor>  Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+              "help": "<Automated Walkthrough|Manual Instructor>                      Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+            },
+            {
+              "name": "--recording-dictation-method",
+              "type": "bool",
+              "required": false,
+              "help": "<Manual Instructor Generation|Automatic Narration Generation>  How this demo's narration is produced: 'Manual Instructor Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited",
+              "default": "Manual Instructor Generation"
             },
             {
               "name": "--notes",
@@ -1793,7 +1800,13 @@
               "name": "--execution-method",
               "type": "bool",
               "required": false,
-              "help": "<Automated Walkthrough|Manual Instructor>  Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+              "help": "<Automated Walkthrough|Manual Instructor>                    Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+            },
+            {
+              "name": "--recording-dictation-method",
+              "type": "bool",
+              "required": false,
+              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited"
             },
             {
               "name": "--action-summary",
@@ -2464,7 +2477,7 @@
               "name": "--demo-density",
               "type": "FLOAT",
               "required": false,
-              "help": "Demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module"
+              "help": "Percentage (0-100) of this module's teaching minutes (Content Slide + demo target minutes) that should be demo; the single dial for how demo-heavy a module is -- high for a technical module that must get into the weeds, low for a conceptual one. Unset or 0 means the demo-first density gate is not enforced for this module"
             },
             {
               "name": "--notes",
@@ -2709,7 +2722,7 @@
               "name": "--demo-density",
               "type": "FLOAT",
               "required": false,
-              "help": "Demo target minutes / Content Slide target minutes ratio required for the demo-first density gate; unset or 0 means the gate is not enforced for this module"
+              "help": "Percentage (0-100) of this module's teaching minutes (Content Slide + demo target minutes) that should be demo; the single dial for how demo-heavy a module is -- high for a technical module that must get into the weeds, low for a conceptual one. Unset or 0 means the demo-first density gate is not enforced for this module"
             },
             {
               "name": "--notes",

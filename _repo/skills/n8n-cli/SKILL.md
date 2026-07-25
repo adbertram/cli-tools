@@ -2,57 +2,67 @@
 name: n8n-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
-  MANDATORY: Use this skill for ALL n8n CLI operations. DO NOT run `n8n` CLI commands
-  or guess flag syntax without loading this skill first. Covers workflows, nodes, executions,
-  credentials, data tables, server/logs, auth, and profiles.
+  MANDATORY: Use this skill for ALL n8n CLI operations. Invoke the repo-owned launcher as
+  `$HOME/.local/bin/n8n`, not bare `n8n` or `n8n-cli`, and do not guess flag syntax without
+  loading this skill first. Covers workflows, nodes, executions, credentials, data tables,
+  server/logs, auth, and profiles.
   Triggers: n8n, n8n cli, n8n workflows, n8n executions, n8n credentials, n8n nodes, n8n data tables, list n8n workflows, n8n server logs, my n8n, trigger n8n workflow, n8n execution history, install n8n node
 ---
 
 <objective>
-Execute n8n operations using the `n8n` CLI. All n8n interactions should use this CLI.
+Execute n8n operations using the repo-owned launcher at `$HOME/.local/bin/n8n`.
+All n8n interactions should use that explicit launcher path.
 </objective>
 
 <quick_start>
-The `n8n` CLI follows this pattern:
+The canonical launcher for this repo is `$HOME/.local/bin/n8n`. On this host,
+Homebrew also provides unrelated `n8n` and `n8n-cli` binaries, so do not rely
+on bare command names.
+
+The repo-owned n8n CLI follows this pattern:
 ```bash
-n8n <command-group> <action> [arguments] [options]
+$HOME/.local/bin/n8n <command-group> <action> [arguments] [options]
 ```
 
 | Task | Command |
 |------|---------|
-| List workflows | `n8n workflows list --table` |
-| Get workflow detail | `n8n workflows get <workflow_id>` |
-| Trigger a workflow | `n8n workflows execute <workflow_id>` |
-| Query recent executions | `n8n executions list --filter created_at:gte:2026-04-11 --table` |
-| Get execution detail | `n8n executions get <execution_id>` |
-| List credentials | `n8n credentials list --table` |
-| List data-table rows | `n8n data-tables rows <table_id> --table` |
-| Check server version | `n8n server version` |
-| Check auth status | `n8n auth status` |
+| List workflows | `$HOME/.local/bin/n8n workflows list --table` |
+| Get workflow detail | `$HOME/.local/bin/n8n workflows get <workflow_id>` |
+| Trigger a workflow | `$HOME/.local/bin/n8n workflows execute <workflow_id>` |
+| Query recent executions | `$HOME/.local/bin/n8n executions list --filter created_at:gte:2026-04-11 --table` |
+| Get execution detail | `$HOME/.local/bin/n8n executions get <execution_id>` |
+| List credentials | `$HOME/.local/bin/n8n credentials list --table` |
+| List data-table rows | `$HOME/.local/bin/n8n data-tables rows <table_id> --table` |
+| Check server version | `$HOME/.local/bin/n8n server version` |
+| Check auth status | `$HOME/.local/bin/n8n auth status` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `n8n` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY repo-owned `$HOME/.local/bin/n8n` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
 <principle name="Name Collision Guard">
-`n8n` also exists as an upstream/vendor Node CLI on this host, and that binary
-fails repo-owned commands with `Error: Command "workflows" not found`. Before
-running n8n service commands, especially inside `&&` batches after unrelated
-scripts, verify resolution with `command -v n8n` or bypass PATH with the
-canonical repo-owned launcher: `$HOME/.local/bin/n8n`. If `command -v n8n` is not
-`$HOME/.local/bin/n8n`, do not run bare `n8n`; run `$HOME/.local/bin/n8n ...` or
-prepend `$HOME/.local/bin` and clear the shell command cache (`hash -r` in Bash)
-first.
+This host already has upstream/vendor Homebrew binaries named both `n8n` and
+`n8n-cli`. `command -v n8n` can resolve to `/opt/homebrew/bin/n8n`, where
+`n8n auth status -t` fails with `Error: Command "auth" not found`, and
+`command -v n8n-cli` can also resolve to Homebrew. The durable repo contract is:
+**always invoke the repo-owned launcher as `$HOME/.local/bin/n8n`**.
+
+Use `command -v n8n` / `type -a n8n` only to diagnose a collision; do not use
+their output as permission to run bare `n8n` in automation. If you intentionally
+repair PATH for an interactive shell, prepend `$HOME/.local/bin` and clear the
+shell command cache (`hash -r` in Bash), but repo-owned docs, skills, and
+automation should still prefer the explicit launcher path.
 </principle>
 
 <principle name="Bounded Discovery Probes">
 Use `usage.json` as the primary syntax source. Do not run unbounded n8n
 group-level help probes or unbounded local Node source-inspection probes against
-global n8n `node_modules` paths. `n8n data-tables --help` is known to hang for
-over 40 seconds and can exit `130` after Ctrl+C with no output; a local Node
+global n8n `node_modules` paths. `$HOME/.local/bin/n8n data-tables --help` is
+known to hang for over 40 seconds and can exit `130` after Ctrl+C with no
+output; a local Node
 heredoc reading
 `/opt/homebrew/lib/node_modules/n8n/node_modules/n8n-nodes-base/dist/nodes/DataTable/DataTable.node.js`
 has shown the same failure shape. If live help or local source inspection is
@@ -63,11 +73,12 @@ successful command discovery.
 </principle>
 
 <principle name="Workflow List Output Contract">
-`n8n workflows list` has no `--json` option. The command's default stdout is
-JSON; `--table` switches to table output. For machine parsing, run
-`n8n workflows list --properties "id,name,active"` without `--json`, save stdout
-to a file, verify the command status and non-empty file, then parse. For human
-display, use `--table`. The supported options are the ones in `usage.json`:
+`$HOME/.local/bin/n8n workflows list` has no `--json` option. The command's
+default stdout is JSON; `--table` switches to table output. For machine
+parsing, run `$HOME/.local/bin/n8n workflows list --properties "id,name,active"`
+without `--json`, save stdout to a file, verify the command status and non-empty
+file, then parse. For human display, use `--table`. The supported options are
+the ones in `usage.json`:
 `--table`, `--limit`, `--filter`, `--properties`, `--active`, and `--profile`.
 </principle>
 
@@ -90,11 +101,11 @@ Examples: `--filter name:contains:sync`, `--filter active:eq:true`, `--filter cr
 </principle>
 
 <principle name="Workflow Create Output Parsing">
-`n8n workflows create` emits the created workflow JSON on stdout. When a later
-step needs the workflow ID, save stdout to a file, verify the create command
-exited `0`, then parse `.id` from that JSON with `jq -r '.id'` or another JSON
-parser. Do not grep for labels such as `id:`; JSON uses `"id":`, and an
-unguarded no-match can make a successful create look failed.
+`$HOME/.local/bin/n8n workflows create` emits the created workflow JSON on
+stdout. When a later step needs the workflow ID, save stdout to a file, verify
+the create command exited `0`, then parse `.id` from that JSON with `jq -r '.id'`
+or another JSON parser. Do not grep for labels such as `id:`; JSON uses
+`"id":`, and an unguarded no-match can make a successful create look failed.
 </principle>
 </essential_principles>
 

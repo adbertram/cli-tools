@@ -1,8 +1,8 @@
 {
   "tool": "fitnesspal",
   "description": "MyFitnessPal CLI - View diary, exercises, measurements, reports, and food data",
-  "discovered_at": "2026-06-20T19:45:30Z",
-  "total_commands": 27,
+  "discovered_at": "2026-07-21T14:28:13Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all configured profiles.",
               "arguments": [],
               "options": [
@@ -176,6 +176,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -191,7 +223,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Check whether credentials are configured and valid.",
           "arguments": [],
           "options": [
@@ -817,9 +849,6 @@
       "commands": {
         "create": {
           "help": "Create a new recipe. Each ingredient requires a food_id (from 'fitnesspal food search'), quantity (number of servings), and serving size details.",
-          "examples": [
-            "fitnesspal recipes create --name \"Grilled Chicken Bowl\" --servings 2 \\"
-          ],
           "usage_instructions": "Create a new saved recipe.",
           "arguments": [],
           "options": [

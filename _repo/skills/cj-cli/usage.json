@@ -1,8 +1,8 @@
 {
   "tool": "cj",
   "description": "CLI interface for CJ Affiliate (publisher).",
-  "discovered_at": "2026-06-20T19:40:38Z",
-  "total_commands": 21,
+  "discovered_at": "2026-07-21T14:27:34Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -235,7 +235,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             },
             {
@@ -323,7 +323,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List configured profiles for cj.",
               "arguments": [],
               "options": [
@@ -368,6 +368,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -520,7 +552,6 @@
             "cj links get 14729571",
             "cj links get 14729571 --table"
           ],
-          "usage_instructions": "Get full detail for a single creative by link ID. CJ's Link Search API has no per-id endpoint, so this iterates results client-side -- when the advertiser ID is known, `cj links list <advertiser_id> --filter link_id:eq:<id>` is significantly faster.",
           "arguments": [
             {
               "name": "link_id",
@@ -695,7 +726,6 @@
         "apply-bulk": {
           "help": "Apply to many advertiser programs from a file or stdin. Each input line is one advertiser ID; comments (``#``) and blank lines are ignored.  Results stream as JSON (or a streaming table) so a downstream agent can act on each row as it lands.",
           "examples": [
-            "cj advertisers list --relationship notjoined --properties advertiser_id | jq -r '.[].advertiser_id'             | cj relationships apply-bulk -",
             "cj relationships apply-bulk targets.txt --delay 5 --dry-run"
           ],
           "usage_instructions": "Apply to many advertisers from a file (one ID per line) or stdin (`-`). Rate-limits between submissions via `--delay` (default 3s). Streams a JSON object per result so a downstream agent can react row-by-row; pass `--table` to buffer and print as a table instead. `--stop-on-error` halts on the first FAILED outcome.",

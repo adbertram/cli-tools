@@ -1,7 +1,7 @@
 {
   "tool": "dropbox",
   "description": "CLI interface for Dropbox API",
-  "discovered_at": "2026-06-25T15:08:15Z",
+  "discovered_at": "2026-07-21T14:27:58Z",
   "total_commands": 33,
   "global_options": [
     {
@@ -84,7 +84,6 @@
     },
     "auth": {
       "help": "Manage Dropbox authentication",
-      "usage_instructions": "Authentication management — login, logout, check status, refresh tokens, and test credentials. All auth commands support --profile/-p for multi-account setups.",
       "arguments": [],
       "options": [],
       "commands": {
@@ -131,7 +130,6 @@
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Use to create a new named profile. NAME is a required positional argument. After creation, use `auth login --profile NAME` to configure credentials.",
               "arguments": [
                 {
                   "name": "name",
@@ -185,7 +183,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to see all configured profiles and which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., --filter 'is_default:eq:True').",
               "arguments": [],
               "options": [
@@ -515,7 +513,6 @@
             "dropbox files history /Documents/report.pdf --limit 20",
             "dropbox files history /Documents/report.pdf --table"
           ],
-          "usage_instructions": "Use to see previous versions of a file. PATH is required. Default shows 10 revisions; adjust with --limit/-l. Use --table/-t for formatted output. Use the revision IDs from output with `files restore --rev`.",
           "arguments": [
             {
               "name": "path",
@@ -801,7 +798,6 @@
         "restore": {
           "help": "Restore a file to a previous version. First use 'history' command to find the revision ID, then restore:",
           "examples": [
-            "dropbox files history /Documents/report.pdf --table",
             "dropbox files restore /Documents/report.pdf --rev abc123def456",
             "dropbox files restore /Documents/report.pdf -r abc123def456 --force"
           ],
