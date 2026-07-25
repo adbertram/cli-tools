@@ -1,7 +1,7 @@
 {
   "tool": "americasthriftsupply",
   "description": "CLI interface for americasthriftsupply",
-  "discovered_at": "2026-07-24T19:19:30Z",
+  "discovered_at": "2026-07-25T15:07:30Z",
   "total_commands": 5,
   "global_options": [],
   "commands": {
@@ -76,6 +76,13 @@
               "short": "-f"
             },
             {
+              "name": "--page-delay",
+              "type": "bool",
+              "required": false,
+              "help": "<float range> [x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
+              "default": "5.0"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -126,7 +133,7 @@
           ]
         },
         "list": {
-          "help": "List (and search via --filter) products in the catalog. The storefront has no full-text search JSON endpoint, so text search is done client-side with --filter, e.g.: americasthriftsupply products list --filter \"title:ilike:%lego%\" The Shopify JSON endpoints ignore ?sort_by=, so --sort/--desc order the returned result set (up to --limit) client-side. Default 'newest' returns the newest-listed products first.",
+          "help": "List (and search via --filter) products in the catalog. The storefront has no full-text search JSON endpoint, so text search is done client-side with --filter, e.g.: americasthriftsupply products list --filter \"title:ilike:%lego%\" The Shopify JSON endpoints ignore ?sort_by=, so --sort/--desc order the returned result set (up to --limit) client-side. Default 'newest' returns the newest-listed products first. Crawls larger than one page (--limit above 250) are paced by --page-delay and each page is cached as it arrives, so a rate-limited crawl resumes from the first uncached page on the next run.",
           "arguments": [],
           "options": [
             {
@@ -165,6 +172,13 @@
               "required": false,
               "help": "Restrict to one collection handle (server-side), e.g. 'mystery-box' or 'lego'",
               "short": "-c"
+            },
+            {
+              "name": "--page-delay",
+              "type": "bool",
+              "required": false,
+              "help": "<float range> [x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
+              "default": "5.0"
             },
             {
               "name": "--table",

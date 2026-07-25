@@ -24,6 +24,7 @@ americasthriftsupply <command-group> <action> [arguments] [options]
 | Newest products first (default) / oldest first | `americasthriftsupply products list --sort newest [--desc]` |
 | Products by price low->high / high->low | `americasthriftsupply products list --sort price [--desc]` |
 | Get one product by handle | `americasthriftsupply products get lego-mystery-box --table` |
+| Crawl the full catalog (~1806 products, multi-page) | `americasthriftsupply products list --limit 2000 --page-delay 30` |
 | List collections (categories) | `americasthriftsupply collections list --table` |
 | Get one collection by handle | `americasthriftsupply collections get mystery-box --table` |
 </quick_start>
@@ -52,8 +53,41 @@ The storefront exposes no public full-text search JSON endpoint. Search is done 
 `products list` supports the Source-CLI Sort Standard: `--sort/-s` (default `newest`) plus `--desc/-d`. Canonical fields: `newest` (natural = newest-listed first) and `price` (natural = low->high). `--desc` reverses the natural direction. The Shopify JSON endpoints ignore `?sort_by=`, so sorting is applied client-side over the returned result set (up to `--limit`). An unknown `--sort` value fails fast with a clear error and non-zero exit.
 </principle>
 
-<principle name="Rate Limiting">
-The public storefront JSON endpoints are rate-limited (HTTP 429 with a `Retry-After` header, commonly 60s). The CLI already retries with exponential backoff honoring `Retry-After`; avoid issuing many rapid manual/raw requests outside the CLI.
+<principle name="Rate Limiting And Pacing Multi-Page Crawls">
+The public storefront JSON endpoints are rate-limited (HTTP 429 `local_rate_limited`, often with a `Retry-After` header of ~60s). The CLI retries with exponential backoff honoring `Retry-After`; never issue rapid manual/raw requests outside the CLI.
+
+**Known-good rates:** collection-scoped requests (`--collection item-shop`, `last-chance`, `vintage-shop` — roughly 150-200 products each, one page) succeed reliably when spaced about 60 seconds apart. A full-catalog crawl is ~1806 products across 8 pages of 250 and WILL be rate-limited if paged back-to-back.
+
+**`--page-delay SECONDS` (default `5`)** on `products list` and `collections list` waits between two consecutive *live* page requests. It never delays a single-page request (`--limit` up to 250), and never delays a page served from cache. For a full-catalog crawl, start at `--page-delay 30`:
+
+```bash
+americasthriftsupply products list --limit 2000 --page-delay 30
+```
+
+Prefer collection-scoped requests over full-catalog crawls whenever the target category is known.
+</principle>
+
+<principle name="Page-Level Caching And Crawl Resume">
+Every page is written to the response cache the moment it arrives (`_fetch_page_<hash>.json` under `~/.local/share/cli-tools/americasthriftsupply/authentication_profiles/<profile>/cache/`), not once per completed crawl. Consequences:
+
+- A crawl that dies partway through keeps its completed pages. **Re-running the same command resumes at the first uncached page** — cached pages cost no request and no `--page-delay` wait.
+- Page size is fixed at 250, so a page cached by one run is reused by runs with a different `--limit`.
+- The resume window is `CACHE_TTL` (default 3600s).
+- Do NOT pass `--no-cache` to a multi-page crawl. It disables page persistence, so a rate-limited crawl restarts at page 1 with nothing salvaged.
+- `americasthriftsupply cache clear` discards cached pages and forces a fresh crawl.
+</principle>
+
+<principle name="Interpreting A Rate-Limit Failure">
+When retries and backoff are exhausted the command exits **non-zero** and writes an explanation to stderr (stdout stays data-only), e.g.:
+
+```
+Error: HTTP 429: local_rate_limited
+Crawl of /products.json stopped after 7 page(s) yielding 1750 products.
+Those 7 page(s) are cached at <cache dir> - re-run the same command to resume from page 8 without re-requesting them (cache TTL 3600s).
+Retry with a slower pace, e.g. --page-delay 30 (current: 5s). Run 'americasthriftsupply cache clear' to discard cached pages and start over.
+```
+
+Recovery: re-run the SAME command with a larger `--page-delay`. Do not treat the non-zero exit as "no data available" — the reported pages are on disk and the retry only fetches what is missing. If the message instead says caching is disabled, the run used `--no-cache`; drop that flag before retrying.
 </principle>
 </essential_principles>
 

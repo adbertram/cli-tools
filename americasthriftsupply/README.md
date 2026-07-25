@@ -73,6 +73,9 @@ americasthriftsupply products list --sort newest --desc --limit 25
 americasthriftsupply products list --sort price --limit 25
 americasthriftsupply products list --sort price --desc --limit 25
 
+# Crawl the full catalog (multi-page), paced under the storefront rate limit
+americasthriftsupply products list --limit 2000 --page-delay 30
+
 # Restrict output fields
 americasthriftsupply products list --properties "handle,title,price_usd,available"
 
@@ -110,6 +113,7 @@ americasthriftsupply collections get mystery-box --table
 | `--sort` | `-s` | (`products list` only) Sort field: `newest` (default) or `price` |
 | `--desc` | `-d` | (`products list` only) Reverse the sort field's natural direction |
 | `--collection` | `-c` | (`products list` only) Restrict to one collection handle, server-side |
+| `--page-delay` |  | (list commands) Seconds between consecutive live page requests (default `5`) |
 | `--version` | `-v` | Show version and exit |
 | `--no-cache` |  | Bypass cached read responses for this execution |
 
@@ -146,13 +150,62 @@ CACHE_ENABLED=true
 CACHE_TTL=3600
 ```
 
+## Rate Limiting, Paging, and Resumable Crawls
+
+The storefront serves at most 250 products per request, so any `--limit` above
+250 becomes a multi-page crawl. The store rate-limits bursts and answers with
+`HTTP 429: local_rate_limited`, so crawls are paced and resumable:
+
+- **`--page-delay SECONDS` (default `5`)** waits between two consecutive *live*
+  page requests. A single-page request (`--limit` up to 250) never waits, so the
+  default costs nothing for ordinary lookups.
+- **Each page is cached the moment it arrives**, under
+  `~/.local/share/cli-tools/americasthriftsupply/authentication_profiles/<profile>/cache/`
+  as `_fetch_page_<hash>.json`. A crawl that dies partway through keeps every
+  completed page, and re-running the same command resumes at the first uncached
+  page instead of restarting at page 1. Cached pages are served with no request
+  and no `--page-delay` wait.
+- Page size is fixed at 250, so a page cached by one run is reused by runs with a
+  different `--limit`.
+- Cached pages expire after `CACHE_TTL` (default 3600s), which is the window for
+  resuming a failed crawl.
+
+Observed store behavior: collection-scoped requests (`--collection item-shop`,
+`last-chance`, `vintage-shop` — roughly 150-200 products, one page each) succeed
+reliably when spaced about 60 seconds apart. A full-catalog crawl (~1806
+products, 8 pages) must be paced; start at `--page-delay 30`.
+
+```bash
+# Full catalog, paced
+americasthriftsupply products list --limit 2000 --page-delay 30
+```
+
+### Recovering from a rate-limited crawl
+
+When retries and backoff are exhausted the command **exits non-zero** and prints
+an explanation to stderr, for example:
+
+```
+Error: HTTP 429: local_rate_limited
+Crawl of /products.json stopped after 7 page(s) yielding 1750 products.
+Those 7 page(s) are cached at /Users/you/.local/share/cli-tools/americasthriftsupply/authentication_profiles/default/cache - re-run the same command to resume from page 8 without re-requesting them (cache TTL 3600s).
+Retry with a slower pace, e.g. --page-delay 30 (current: 5s). Run 'americasthriftsupply cache clear' to discard cached pages and start over.
+```
+
+To recover, re-run the same command with a larger `--page-delay`. The pages
+listed as cached are replayed from disk instantly and only the remaining pages
+are requested. Do **not** pass `--no-cache` to a large crawl: it disables page
+persistence, so a rate-limited crawl cannot resume (the error message says so
+explicitly when caching is off).
+
 ## Cache
 
 ```bash
-# Clear cached read responses
+# Clear cached read responses (including completed crawl pages)
 americasthriftsupply cache clear
 
-# Bypass the cache for one execution
+# Bypass the cache for one execution (single-page lookups only - this makes
+# multi-page crawls non-resumable)
 americasthriftsupply --no-cache products list --limit 10
 ```
 
