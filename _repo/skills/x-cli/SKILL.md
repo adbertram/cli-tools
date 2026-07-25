@@ -24,7 +24,7 @@ x <command-group> <action> [arguments] [options]
 | Quote a tweet | `x tweet post "quote text" --quote TWEET_ID` |
 | List your tweets | `x tweet list` |
 | Get a tweet by ID | `x tweet get TWEET_ID` |
-| Delete a tweet | `x tweet delete TWEET_ID` |
+| Delete a tweet | `x tweet delete TWEET_ID` (plain-text success message, not JSON) |
 | Preview the current credits purchase | `x credits add 25.00 --dry-run` |
 | Purchase credits with the saved browser session | `x credits add 25.00 --profile browser --yes` |
 | Check auth status | `x auth status` |

@@ -107,6 +107,8 @@ def tweet_delete(
     """
     Delete a tweet.
 
+    Outputs a plain-text success message; this command does not emit JSON.
+
     Examples:
         x tweet delete 1234567890
     """

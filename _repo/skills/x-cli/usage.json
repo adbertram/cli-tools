@@ -376,7 +376,7 @@
           "examples": [
             "x tweet delete 1234567890"
           ],
-          "usage_instructions": "Delete a tweet by its ID. TWEET_ID is a required positional argument.",
+          "usage_instructions": "Delete a tweet by its ID. TWEET_ID is a required positional argument. On success this command emits a plain-text success message (not JSON); do not save stdout as .json or pipe it to a JSON parser.",
           "arguments": [
             {
               "name": "tweet_id",
