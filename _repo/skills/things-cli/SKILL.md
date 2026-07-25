@@ -92,6 +92,15 @@ whose `usage.json` entry exposes that option, such as `list`, `get`, or
 read command if a narrow readback is needed.
 </principle>
 
+<principle name="Todo Notes Length Limit">
+Things 3's AppleScript interface silently truncated the reproduced ASCII todo
+notes after 39,999 characters. The CLI uses a conservative 39,999 UTF-16-code-
+unit safety limit and rejects longer `todos create --notes` and `todos update
+--notes` inputs before touching Things. Do not bypass this guard or treat an
+older CLI's zero exit status as proof of full storage. See
+`references/notes-length-limit.md` for evidence and Unicode counting details.
+</principle>
+
 <principle name="Command Groups">
 - **todos** -- Manage todos (list, get, create, complete, uncomplete, delete, update, search)
 - **projects** -- Manage projects (list, get, create, complete, delete, update, search)
@@ -107,6 +116,7 @@ Exclude WF-tagged items by default when listing todos: pipe output through `jq '
 <reference_index>
 **`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
 **`references/macos-tcc-things-readback.md`** -- Diagnosing Things CLI/SQLite readback failures caused by macOS TCC Full Disk Access blocking the Python process.
+**`references/notes-length-limit.md`** -- Empirical 39,999 UTF-16-code-unit todo notes limit, pre-mutation CLI guard, and agent handling.
 </reference_index>
 
 <success_criteria>
@@ -245,24 +255,40 @@ Older installs could misreport the immediate `Operation not permitted` form as `
 
 **Cause:** Things read commands discover and open the SQLite database under `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/...`, which is protected by macOS privacy controls. If Full Disk Access is missing for the exact Python executable in the `things` launcher shebang, macOS can block filesystem traversal or return `Operation not permitted`. The CLI hardening in `client.py` converts the old silent hang/misleading no-match into explicit Full Disk Access errors.
 
-**Fix:** This cannot be completed autonomously from an agent shell. A user/admin must grant Full Disk Access to the exact Python named in the error. For the current install, that is:
+**Fix:** This cannot be completed autonomously from an agent shell. A user/admin must grant Full Disk Access to the exact responsible Python executable named in the live error. The CLI resolves `sys.executable` with `os.path.realpath(...)`, so TCC attribution follows the resolved executable rather than the `things` launcher or its shebang symlink. For the current install, that is:
 ```text
-/Users/adam/.local/share/uv/tools/things-cli/bin/python
+/Users/adam/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/bin/python3.11
 ```
-If System Settings shows that path as a greyed-out alias/symlink, grant Full Disk Access to the Homebrew Python app bundle instead:
-```text
-/opt/homebrew/Frameworks/Python.framework/Versions/3.14/Resources/Python.app
-```
-Do not grant `pip3` as a substitute. `pip3` may be selectable because it is a script with a shebang into the same Python install, but the Things CLI runs as Python, not pip.
+Do not grant `/Users/adam/.local/share/uv/tools/things-cli/bin/python`, `pip3`, Terminal, or a different Homebrew/Python bundle as a substitute when the live error names another executable.
 Open the pane with:
 ```bash
 open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 ```
-Add/enable the Python binary or Python.app bundle, then rerun a readback smoke test:
+Add/enable that exact Python executable, then rerun a readback smoke test:
 ```bash
 things todos list --limit 1 --exclude-tag WF
 ```
 
+If the blocked caller is a scheduled Hermes cron run, restart the cron host with `hermes gateway restart` before rerunning the probe.
+
 **Agent rule:** Do not retry the write or create duplicate Things tasks when this error appears. Treat it as a local readback permission blocker, report the Full Disk Access action, and resume verification after the permission is granted.
 
 **Reference:** See `references/macos-tcc-things-readback.md` for diagnostics and the CLI hardening pattern.
+
+### 7. `things todos create --area` AppleScript tries to set an area object to itself
+
+**Symptom:** `things todos create "Title" --area <AREA_UUID>` can exit 1 with `Things3 got an error: Can’t set area id "<AREA_UUID>" to area id "<AREA_UUID>". (-10006)` after the todo has already been created.
+
+**Cause:** `create_todo` used the inline AppleScript assignment `set area of theToDo to area id "<AREA_UUID>"`. In Things3's AppleScript dictionary, using the `area` property and `area id` object selector in the same assignment is parsed as an attempt to set the resolved area object to itself. A tested alternative that put `area:theArea` in the todo creation property bag was accepted but silently ignored when the todo was created at the beginning of a Things list.
+
+**Fix:** Resolve the area object first, then assign the variable in the existing post-create AppleScript:
+```applescript
+set theToDo to (to do id "<TODO_UUID>")
+set theArea to area id "<AREA_UUID>"
+set area of theToDo to theArea
+```
+The focused regression test is `things/tests/test_completion_readback.py::test_create_todo_in_area_resolves_area_before_assignment`.
+
+**Verification:** Create a uniquely titled disposable todo with `--area`, read it back by UUID and verify both `area_uuid` and `area`, then delete it with `things todos delete <UUID> --yes`. If the configured area UUID no longer appears in `things areas list`, do not create against it or create a replacement area implicitly; report the stale mapping and use an explicitly approved current area for live CLI-path verification.
+
+**Recurrence Prevention:** Keep area resolution and property assignment as separate AppleScript statements inside one bounded `osascript` call. Do not inline `area id` on the right side of `set area of ...`, and do not move todo area placement into the creation property bag without a live readback proving Things persisted it.

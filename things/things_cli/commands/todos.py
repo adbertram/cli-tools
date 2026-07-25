@@ -203,7 +203,7 @@ def todos_create(
         things todos create "Some task" --area AREA_UUID --tags "WF"
     """
     try:
-        client = get_client()
+        client = get_client(require_database=False)
         tag_list = [t.strip() for t in tags.split(",")] if tags else None
 
         todo = client.create_todo(

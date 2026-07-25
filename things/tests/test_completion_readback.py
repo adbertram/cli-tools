@@ -2,7 +2,12 @@
 import sqlite3
 
 import things_cli.client as client_mod
-from things_cli.client import AppleScriptTimeoutError, ClientError, ThingsClient
+from things_cli.client import (
+    AppleScriptTimeoutError,
+    ClientError,
+    THINGS_NOTES_MAX_UTF16_UNITS,
+    ThingsClient,
+)
 from things_cli.models import Project, StartType, Task, TaskStatus
 
 
@@ -239,6 +244,7 @@ def test_database_glob_timeout_reports_full_disk_access_python(monkeypatch):
 
     monkeypatch.setattr(client_mod.mp, "get_context", lambda name: FakeContext())
     monkeypatch.setattr(client_mod.sys, "executable", "/tmp/things-cli-python")
+    monkeypatch.setattr(client_mod.os.path, "realpath", lambda path: "/tmp/real-things-cli-python")
 
     try:
         client._glob_database_with_timeout("/protected/ThingsData-*", timeout=0.01)
@@ -246,7 +252,7 @@ def test_database_glob_timeout_reports_full_disk_access_python(monkeypatch):
         message = str(exc)
         assert "Timed out while accessing the Things database container" in message
         assert "Full Disk Access" in message
-        assert "/tmp/things-cli-python" in message
+        assert "/tmp/real-things-cli-python" in message
     else:
         raise AssertionError("Expected _glob_database_with_timeout to raise ClientError")
 
@@ -295,6 +301,131 @@ def test_database_glob_permission_denied_reports_full_disk_access_python(monkeyp
         assert "Operation not permitted" in message
     else:
         raise AssertionError("Expected _glob_database_with_timeout to raise ClientError")
+
+
+def test_create_todo_returns_dispatch_result_when_tcc_blocks_readback(monkeypatch):
+    """A committed AppleScript create must not be reported as a failed write."""
+    client = ThingsClient.__new__(ThingsClient)
+    client.db_path = None
+    monkeypatch.setattr(client, "_run_applescript", lambda script: "CREATED-UUID")
+
+    def blocked_readback(uuid):
+        raise ClientError(
+            "Timed out while accessing the Things database container. "
+            "macOS privacy/TCC is blocking filesystem access to Things data."
+        )
+
+    monkeypatch.setattr(client, "get_todo", blocked_readback)
+
+    todo = client.create_todo(
+        "Created despite TCC",
+        notes="long notes",
+        when="inbox",
+        tags=["one", "two"],
+    )
+
+    assert todo.uuid == "CREATED-UUID"
+    assert todo.title == "Created despite TCC"
+    assert todo.notes == "long notes"
+    assert todo.start == StartType.NOT_SET
+    assert todo.tags == ["one", "two"]
+
+
+def test_create_todo_does_not_hide_non_tcc_readback_failure(monkeypatch):
+    client = ThingsClient.__new__(ThingsClient)
+    client.db_path = None
+    monkeypatch.setattr(client, "_run_applescript", lambda script: "CREATED-UUID")
+
+    def failed_readback(uuid):
+        raise ClientError("database schema invalid")
+
+    monkeypatch.setattr(client, "get_todo", failed_readback)
+
+    try:
+        client.create_todo("Do not hide this")
+    except ClientError as exc:
+        assert str(exc) == "database schema invalid"
+    else:
+        raise AssertionError("Expected non-TCC readback failure to propagate")
+
+
+def test_create_todo_in_area_resolves_area_before_assignment(monkeypatch):
+    client = ThingsClient.__new__(ThingsClient)
+    client.db_path = None
+    scripts = []
+    monkeypatch.setattr(
+        client,
+        "_run_applescript",
+        lambda script: scripts.append(script) or "CREATED-UUID",
+    )
+    monkeypatch.setattr(
+        client,
+        "get_todo",
+        lambda uuid: Task(uuid=uuid, title="Area todo", area_uuid="AREA-UUID"),
+    )
+
+    todo = client.create_todo("Area todo", area="AREA-UUID")
+
+    assert todo.area_uuid == "AREA-UUID"
+    assert len(scripts) == 2
+    assert "make new to do" in scripts[0]
+    assert 'set theArea to area id "AREA-UUID"' in scripts[1]
+    assert "set area of theToDo to theArea" in scripts[1]
+    assert 'set area of theToDo to area id "AREA-UUID"' not in scripts[1]
+
+
+def test_create_todo_rejects_notes_over_things_limit_before_dispatch(monkeypatch):
+    client = ThingsClient.__new__(ThingsClient)
+    client.db_path = None
+    dispatched = []
+    monkeypatch.setattr(client, "_run_applescript", lambda script: dispatched.append(script))
+
+    try:
+        client.create_todo("Too large", notes="x" * (THINGS_NOTES_MAX_UTF16_UNITS + 1))
+    except ClientError as exc:
+        message = str(exc)
+        assert "at most 39,999 UTF-16 code units" in message
+        assert "received 40,000 code units" in message
+        assert "No Things record was created or updated" in message
+    else:
+        raise AssertionError("Expected oversized notes to be rejected")
+
+    assert dispatched == []
+
+
+def test_create_todo_accepts_notes_at_things_limit(monkeypatch):
+    client = ThingsClient.__new__(ThingsClient)
+    client.db_path = None
+    notes = "x" * THINGS_NOTES_MAX_UTF16_UNITS
+    monkeypatch.setattr(client, "_run_applescript", lambda script: "CREATED-UUID")
+    monkeypatch.setattr(
+        client,
+        "get_todo",
+        lambda uuid: Task(uuid=uuid, title="At limit", notes=notes),
+    )
+
+    todo = client.create_todo("At limit", notes=notes)
+
+    assert todo.notes == notes
+
+
+def test_update_todo_rejects_astral_notes_over_utf16_limit_before_read_or_dispatch(monkeypatch):
+    client = ThingsClient.__new__(ThingsClient)
+    calls = []
+    monkeypatch.setattr(client, "get_todo", lambda uuid: calls.append(("read", uuid)))
+    monkeypatch.setattr(client, "_run_applescript", lambda script: calls.append(("write", script)))
+    notes = "😀" * 20_000
+
+    try:
+        client.update_todo("todo-uuid", notes=notes)
+    except ClientError as exc:
+        message = str(exc)
+        assert "received 40,000 code units (20,000 Python characters)" in message
+        assert "No Things record was created or updated" in message
+    else:
+        raise AssertionError("Expected oversized notes to be rejected")
+
+    assert calls == []
 
 
 def _client_with_db(tmp_path):

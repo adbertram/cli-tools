@@ -40,6 +40,33 @@ class AppleScriptTimeoutError(ClientError):
     pass
 
 
+# Things 3 silently truncated a reproduced ASCII todo-notes AppleScript write
+# after 39,999 characters. Use the conservative NSString-compatible UTF-16
+# measure before dispatch so non-BMP text cannot exceed the observed budget and
+# a successful process exit can never conceal a lossy write.
+THINGS_NOTES_MAX_UTF16_UNITS = 39_999
+
+
+def _utf16_code_units(value: str) -> int:
+    """Return NSString-compatible UTF-16 code-unit length."""
+    return len(value.encode("utf-16-le")) // 2
+
+
+def _validate_notes_length(notes: Optional[str]) -> None:
+    """Reject notes that Things 3 would silently truncate."""
+    if notes is None:
+        return
+    units = _utf16_code_units(notes)
+    if units > THINGS_NOTES_MAX_UTF16_UNITS:
+        raise ClientError(
+            "Things 3 supports at most "
+            f"{THINGS_NOTES_MAX_UTF16_UNITS:,} UTF-16 code units in todo notes; "
+            f"received {units:,} code units ({len(notes):,} Python characters). "
+            "No Things record was created or updated. Shorten or split the notes "
+            "and retry."
+        )
+
+
 def _glob_database_worker(pattern: str, protected_root: Optional[str], queue):
     """Run protected Things database glob in a killable child process."""
     try:
@@ -66,15 +93,22 @@ class ThingsClient:
     DB_CONTAINER = "Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac"
     DB_PATTERN = f"{DB_CONTAINER}/ThingsData-*/Things Database.thingsdatabase/main.sqlite"
 
-    def __init__(self):
-        """Initialize Things client and discover database."""
-        self.db_path = self._discover_database()
-        self._validate_database()
+    def __init__(self, require_database: bool = True):
+        """Initialize the client, optionally without protected SQLite access.
+
+        AppleScript-only create operations must not be blocked before dispatch by
+        macOS TCC on the separate SQLite readback channel.
+        """
+        self.db_path: Optional[Path] = None
+        if require_database:
+            self.db_path = self._discover_database()
+            self._validate_database()
 
     def _things_tcc_message(self) -> str:
+        executable = os.path.realpath(sys.executable)
         return (
             "macOS privacy/TCC is blocking filesystem access to Things data. "
-            f"Grant Full Disk Access to the Python binary running this CLI ({sys.executable}), "
+            f"Grant Full Disk Access to the responsible Python binary ({executable}), "
             "then retry."
         )
 
@@ -177,6 +211,10 @@ class ThingsClient:
                 "Cannot write while Things app is running. "
                 "Please close Things and retry."
             )
+
+        if self.db_path is None:
+            self.db_path = self._discover_database()
+            self._validate_database()
 
         mode = 'ro' if readonly else 'rw'
         uri = f"file:{self.db_path}?mode={mode}"
@@ -965,6 +1003,7 @@ class ThingsClient:
         Raises:
             ClientError: If AppleScript fails
         """
+        _validate_notes_length(notes)
         escaped_title = self._escape_applescript_string(title)
 
         # Build properties
@@ -1028,15 +1067,45 @@ class ThingsClient:
 
         # Assign to area if specified (and not already in a project)
         if area and not project:
+            escaped_area = self._escape_applescript_string(area)
             area_script = f'''
             tell application "Things3"
                 set theToDo to (to do id "{todo_id}")
-                set area of theToDo to area id "{area}"
+                set theArea to area id "{escaped_area}"
+                set area of theToDo to theArea
             end tell
             '''
             self._run_applescript(area_script)
 
-        return self.get_todo(todo_id)
+        try:
+            return self.get_todo(todo_id)
+        except ClientError as exc:
+            if "macOS privacy/TCC is blocking filesystem access" not in str(exc):
+                raise
+
+            start = StartType.ANYTIME
+            if when == "inbox":
+                start = StartType.NOT_SET
+            elif when == "someday":
+                start = StartType.SOMEDAY
+
+            return Task(
+                uuid=todo_id,
+                title=title,
+                notes=notes,
+                start=start,
+                start_date=(
+                    when
+                    if when and when not in (
+                        "inbox", "today", "tomorrow", "evening", "anytime", "someday"
+                    )
+                    else None
+                ),
+                deadline=deadline,
+                area_uuid=area,
+                project_uuid=project,
+                tags=tags or [],
+            )
 
     def complete_todo(self, uuid: str) -> Task:
         """Mark a todo as completed using AppleScript.
@@ -1226,6 +1295,7 @@ class ThingsClient:
             ClientError: If todo not found or AppleScript fails
             ValueError: If both project and area are supplied
         """
+        _validate_notes_length(notes)
         if project is not None and area is not None:
             raise ValueError("update_todo: pass only one of `project` or `area`, not both")
 
@@ -1697,9 +1767,12 @@ class ThingsClient:
 _client: Optional[ThingsClient] = None
 
 
-def get_client() -> ThingsClient:
+def get_client(require_database: bool = True) -> ThingsClient:
     """Get or create the global Things client instance."""
     global _client
     if _client is None:
-        _client = ThingsClient()
+        _client = ThingsClient(require_database=require_database)
+    elif require_database and _client.db_path is None:
+        _client.db_path = _client._discover_database()
+        _client._validate_database()
     return _client

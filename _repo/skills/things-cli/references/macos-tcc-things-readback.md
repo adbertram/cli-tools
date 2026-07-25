@@ -44,15 +44,11 @@ things projects search "Progress" --properties uuid,title,notes,tags,area_uuid,s
 
 ## Fix
 
-Grant Full Disk Access to the exact Python binary reported by the error, currently observed as:
+Grant Full Disk Access to the exact responsible Python binary reported by the error. The CLI resolves launcher/venv symlinks because TCC attributes access to the real executable, not the symlink. Currently observed as:
 
-`/Users/adam/.local/share/uv/tools/things-cli/bin/python`
+`/Users/adam/.local/share/uv/python/cpython-3.11.15-macos-aarch64-none/bin/python3.11`
 
-If System Settings shows that path as a greyed-out alias/symlink, grant Full Disk Access to the Homebrew Python app bundle instead:
-
-`/opt/homebrew/Frameworks/Python.framework/Versions/3.14/Resources/Python.app`
-
-Do not grant `pip3` as a substitute. `pip3` may be selectable because it is a script with a shebang into the same Python install, but the Things CLI runs as Python, not pip.
+Do not grant the uv tool venv symlink, Terminal, `pip3`, or a different Homebrew Python app bundle as a substitute. The current gateway and CLI are attributed by TCC to the resolved uv-managed executable above. Re-check the live error after a uv Python upgrade because the versioned executable path can change.
 
 Open the settings pane:
 
@@ -60,20 +56,27 @@ Open the settings pane:
 open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
 ```
 
-Add that Python executable or Python.app bundle, enable it, then rerun:
+Add that exact Python executable, enable it, then rerun:
 
 ```bash
 things todos list --limit 1 --exclude-tag WF
 ```
 
+If the blocked caller is a scheduled Hermes cron run, restart the cron host
+with `hermes gateway restart` before rerunning the probe.
+
 After permissions are correct, the command should return promptly instead of failing with the TCC message.
 
 ## Agent handling rule
 
-Do not retry Things writes or create duplicate tasks when this readback blocker appears. The blocker is local macOS TCC for the CLI Python, not evidence that the requested Things write failed. Stop, report the exact Full Disk Access action above, and resume verification only after access is granted.
+Do not retry Things writes or create duplicate tasks when this readback blocker appears. The blocker is local macOS TCC for the CLI Python, not evidence that a requested Things write failed.
+
+`things todos create` is deliberately initialized without SQLite access. It dispatches the AppleScript create first and, when only its post-create SQLite readback is TCC-blocked, returns the UUID and requested fields from the confirmed AppleScript result. This keeps task creation usable and prevents a successful write from being reported as failure. Read commands still require Full Disk Access, and non-TCC readback failures still propagate.
+
+For failures produced by older CLI builds or other write commands, stop, report the exact Full Disk Access action above, and resume verification only after access is granted.
 
 ## CLI hardening pattern
 
-Do not let protected-container discovery hang indefinitely or silently collapse permission denial into "database not found." Wrap database discovery in a killable child process with a short timeout, and explicitly report `PermissionError` / `Operation not permitted` as the same Full Disk Access blocker. On timeout or permission denial, raise a clear `ClientError` that names the exact `sys.executable` needing Full Disk Access.
+Do not let protected-container discovery hang indefinitely or silently collapse permission denial into "database not found." Wrap database discovery in a killable child process with a short timeout, and explicitly report `PermissionError` / `Operation not permitted` as the same Full Disk Access blocker. On timeout or permission denial, raise a clear `ClientError` that names the exact resolved executable needing Full Disk Access.
 
 This converts a silent hang or misleading no-match into an actionable permissions error.
