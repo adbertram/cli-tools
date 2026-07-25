@@ -21,6 +21,7 @@ from lastpass_cli.commands import items as items_module
 
 
 SYNTHETIC_PASSWORD = "synthetic-password-value"
+SYNTHETIC_PASSWD = "synthetic-passwd-value"
 SYNTHETIC_TOKEN = "synthetic-token-value"
 
 SHOW_OUTPUT = "\n".join(
@@ -29,6 +30,8 @@ SHOW_OUTPUT = "\n".join(
         "URL: https://github.com",
         "Username: synthetic-user",
         f"Password: {SYNTHETIC_PASSWORD}",
+        f"passwd: {SYNTHETIC_PASSWD}",
+        "Environment: synthetic-staging",
         f'Notes: {{"api_token": "{SYNTHETIC_TOKEN}", "hint": "blue"}}',
     ]
 )
@@ -89,6 +92,7 @@ def test_properties_projects_explicit_null_for_absent_fields(runner):
         "Note.password",  # dot-notation segments are checked too
         "api_token",
         "client_secret",
+        "passwd",
     ],
 )
 def test_properties_refuses_secret_fields(runner, props):
@@ -142,7 +146,10 @@ def test_get_without_properties_still_masks_by_default(runner):
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["Password"] == MASKED
+    assert payload["passwd"] == MASKED
+    assert payload["Environment"] == "synthetic-staging"
     assert SYNTHETIC_PASSWORD not in result.output
+    assert SYNTHETIC_PASSWD not in result.output
 
 
 def test_show_password_without_properties_still_reveals(runner):
