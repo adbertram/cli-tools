@@ -1,8 +1,52 @@
+import importlib
+import pkgutil
 import subprocess
 
 import pytest
 
 import cli_tools_shared.config as config_module
+
+
+def _iter_command_apps():
+    """Yield every command-group Typer app defined under wordpress_cli.commands.
+
+    Building the root ``wordpress`` app (``import wordpress_cli.main``) calls
+    ``register_commands``, which permanently wraps each command group's
+    callbacks in place with the credential gate. Those command groups are
+    module-level singletons, so the wrapping leaks into any later test that
+    invokes a group's ``app`` directly (e.g. ``menus.app``). Enumerate the
+    groups here so an autouse fixture can restore their pristine callbacks.
+    """
+    commands_pkg = importlib.import_module("wordpress_cli.commands")
+    for module_info in pkgutil.iter_modules(commands_pkg.__path__):
+        module = importlib.import_module(f"wordpress_cli.commands.{module_info.name}")
+        app = getattr(module, "app", None)
+        if app is not None and hasattr(app, "registered_commands"):
+            yield app
+
+
+@pytest.fixture(autouse=True)
+def pristine_command_callbacks():
+    """Undo credential-gate wrapping leaked onto module-level command apps.
+
+    ``register_commands`` wraps each command callback with ``functools.wraps``,
+    so the pristine callback is recoverable via ``__wrapped__``. Restore it
+    before and after each test so command groups behave identically whether or
+    not another test has imported ``wordpress_cli.main`` first.
+    """
+
+    def unwrap():
+        for app in _iter_command_apps():
+            for command_info in app.registered_commands:
+                callback = command_info.callback
+                if getattr(callback, "_cli_tools_profile_wrapped", False) and hasattr(
+                    callback, "__wrapped__"
+                ):
+                    command_info.callback = callback.__wrapped__
+
+    unwrap()
+    yield
+    unwrap()
 
 
 @pytest.fixture(autouse=True)
