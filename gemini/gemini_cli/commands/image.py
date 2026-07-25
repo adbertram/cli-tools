@@ -6,7 +6,7 @@ from enum import Enum
 import typer
 
 from ..client import get_client
-from cli_tools_shared.output import print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_success, print_error, print_info, handle_error
 
 
 class AspectRatio(str, Enum):
@@ -39,6 +39,7 @@ app = typer.Typer(help="Image generation with Gemini")
 
 
 @app.command("generate")
+@command
 def generate_image(
     prompt: str = typer.Argument(..., help="Text prompt describing the image to generate"),
     output: Path = typer.Option(
@@ -160,6 +161,7 @@ def generate_image(
 
 
 @app.command("models")
+@command
 def list_image_models():
     """
     List available image generation models.

@@ -2,37 +2,47 @@
 name: gemini-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
-  Execute gemini operations using the `gemini` CLI tool.
+  Execute Gemini API operations using the collision-safe `gemini-api` command.
   CLI interface for Gemini API -- chat, image generation, video analysis, deep research, file management, and usage tracking.
   Triggers: gemini, gemini cli, gemini chat, gemini image, gemini research, ask gemini, generate image with gemini, analyze video with gemini, gemini api usage, gemini deep research
 ---
 
 <objective>
-Execute gemini operations using the `gemini` CLI. All gemini interactions should use this CLI.
+Execute Gemini API operations using the repo-owned CLI. Always invoke it as
+`gemini-api`; never invoke the ambiguous bare command `gemini`, which is also
+installed by Google's unrelated npm Gemini coding-agent CLI.
 </objective>
 
 <quick_start>
-The `gemini` CLI follows this pattern:
+The repo-owned Gemini API CLI follows this pattern:
 ```bash
-gemini <command-group> <action> [arguments] [options]
+gemini-api <command-group> <action> [arguments] [options]
 ```
 
 | Task | Command |
 |------|---------|
-| Chat with Gemini | `gemini chat new "Your prompt here"` |
-| Chat with file attachment | `gemini chat new "Describe this" --file image.jpg` |
-| Generate an image | `gemini image generate "A sunset over mountains" -o sunset.png` |
-| Analyze a video | `gemini video analyze video.mp4 --prompt "Summarize this"` |
-| Start deep research | `gemini research start "Research topic"` |
-| List models | `gemini models list --table` |
-| Show API usage | `gemini usage show --table` |
-| Check auth status | `gemini auth status` |
+| Chat with Gemini | `gemini-api chat new "Your prompt here"` |
+| Chat with file attachment | `gemini-api chat new "Describe this" --file image.jpg` |
+| Generate an image | `gemini-api image generate "A sunset over mountains" -o sunset.png` |
+| Analyze a video | `gemini-api video analyze video.mp4 --prompt "Summarize this"` |
+| Start deep research | `gemini-api research start "Research topic"` |
+| List models | `gemini-api models list --table` |
+| Show API usage | `gemini-api usage show --table` |
+| Check auth status | `gemini-api auth status` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `gemini` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `gemini-api` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Collision-Safe Launcher">
+**MANDATORY: Use `gemini-api`, not bare `gemini`, for every command in this
+skill.** Both the repo-owned Python Gemini API CLI and Google's npm coding-agent
+CLI install an executable named `gemini`; PATH ordering or a shell's cached
+command path can silently select the npm CLI. The repo-owned package also
+installs `gemini-api` as an unambiguous alias.
 </principle>
 
 <principle name="Command Groups">
@@ -59,7 +69,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 ## Deep Research (Interactions API)
 
-`gemini research start|status|resume` drives the Gemini Deep Research Agent
+`gemini-api research start|status|resume` drives the Gemini Deep Research Agent
 through the Google GenAI **Interactions API**. As of the May 2026 breaking
 change (legacy schema removed by the API on 2026-06-08), this requires:
 
@@ -78,7 +88,7 @@ change (legacy schema removed by the API on 2026-06-08), this requires:
   `step.delta` deltas are typed by `delta.type` (`text` → `delta.text`,
   `thought_summary` → `delta.content.text`).
 - Deep Research is **background-only** and **paid-tier-only**; a single task can
-  run 5-20+ minutes. `gemini research start` defaults to `--stream`; callers that
+  run 5-20+ minutes. `gemini-api research start` defaults to `--stream`; callers that
   capture stdout (e.g. the ClientContentWriter `research_article.js`) use
   `--no-stream`, which prints the synthesized report to stdout and exits 0.
 - Valid `--agent` values (SDK Literal): `deep-research-pro-preview-12-2025`

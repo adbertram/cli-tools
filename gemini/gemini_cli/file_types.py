@@ -39,8 +39,15 @@ SUPPORTED_AUDIO_TYPES = {
 
 SUPPORTED_DOCUMENT_TYPES = {
     "application/pdf": [".pdf"],
-    "text/plain": [".txt", ".text", ".md", ".csv", ".json", ".xml", ".html", ".css", ".js", ".py"],
+    # Markdown is a first-class Gemini-supported text type; keep it distinct from
+    # text/plain so the Files API receives an explicit mimetype for .md/.markdown.
+    "text/markdown": [".md", ".markdown"],
+    "text/plain": [".txt", ".text", ".csv", ".json", ".xml", ".html", ".css", ".js", ".py"],
 }
+
+# MIME type used for unknown-but-text files so Files API uploads never fail on
+# the SDK's mimetype auto-detection (e.g. extensionless or novel text files).
+DEFAULT_UPLOAD_MIME_TYPE = "text/plain"
 
 # Combine all supported types
 ALL_SUPPORTED_TYPES = {
@@ -68,6 +75,21 @@ def get_mime_type(file_path: Path) -> Optional[str]:
 def is_supported_file(file_path: Path) -> bool:
     """Check if file type is supported by Gemini API."""
     return get_mime_type(file_path) is not None
+
+
+def resolve_upload_mime_type(file_path: Path) -> str:
+    """Resolve an explicit MIME type for a Files API upload.
+
+    The Gemini Files API rejects uploads when it cannot determine a mimetype
+    (e.g. Markdown or other text extensions the SDK's mimetypes module does not
+    recognize), raising "Unknown mime type". This resolver always returns an
+    explicit mimetype: the known mapping when available, otherwise text/plain so
+    unknown-but-text files upload as plain text instead of failing.
+    """
+    mime_type = get_mime_type(file_path)
+    if mime_type is not None:
+        return mime_type
+    return DEFAULT_UPLOAD_MIME_TYPE
 
 
 def get_supported_extensions() -> list[str]:

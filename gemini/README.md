@@ -13,7 +13,10 @@ cd gemini
 pip install -e .
 ```
 
-After installation, the `gemini` command will be available in your terminal.
+After installation, use the `gemini-api` command. The package retains `gemini`
+as a compatibility alias, but Google's npm coding-agent CLI installs the same
+bare name; `gemini-api` cannot be redirected to that unrelated executable by
+PATH ordering or a shell's command cache.
 
 ## Quick Start
 

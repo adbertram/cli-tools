@@ -3,13 +3,14 @@ from typing import Optional
 from pathlib import Path
 import typer
 from ..client import get_client
-from cli_tools_shared.output import print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError, get_supported_extensions
 
 app = typer.Typer(help="Chat and content generation")
 
 
 @app.command("new")
+@command
 def chat_new(
     prompt: str = typer.Argument(..., help="Prompt to start the conversation"),
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to attach to the conversation"),

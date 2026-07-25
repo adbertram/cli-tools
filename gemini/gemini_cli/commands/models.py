@@ -1,12 +1,13 @@
 """Model listing commands for Gemini CLI."""
 import typer
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 
 app = typer.Typer(help="List available Gemini models")
 
 
 @app.command("list")
+@command
 def models_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):

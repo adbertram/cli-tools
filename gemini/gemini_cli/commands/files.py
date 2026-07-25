@@ -3,7 +3,7 @@ import typer
 from pathlib import Path
 from typing import List, Optional
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError
 from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 
@@ -11,6 +11,7 @@ app = typer.Typer(help="File operations with Gemini Files API")
 
 
 @app.command("upload")
+@command
 def files_upload(
     file_path: str = typer.Argument(..., help="Path to file to upload"),
     wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for processing"),
@@ -62,6 +63,7 @@ def files_upload(
 
 
 @app.command("list")
+@command
 def files_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of files to return"),
@@ -122,6 +124,7 @@ def files_list(
 
 
 @app.command("get")
+@command
 def files_get(
     file_name: str = typer.Argument(..., help="File name (e.g., files/abc123)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -162,6 +165,7 @@ def files_get(
 
 
 @app.command("delete")
+@command
 def files_delete(
     file_name: str = typer.Argument(..., help="File name to delete (e.g., files/abc123)"),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),

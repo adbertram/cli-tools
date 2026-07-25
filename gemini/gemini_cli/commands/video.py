@@ -4,13 +4,14 @@ import typer
 import json
 from pathlib import Path
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError, get_file_category
 
 app = typer.Typer(help="Video analysis operations")
 
 
 @app.command("analyze")
+@command
 def video_analyze(
     file_path: str = typer.Argument(..., help="Path to video file"),
     prompt: str = typer.Option(None, "--prompt", "-p", help="Analysis prompt (inline text)"),

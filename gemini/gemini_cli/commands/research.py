@@ -8,11 +8,12 @@ Interactions are accessed via ``client.client.interactions`` where
 ``client`` is the ``GeminiClient`` wrapper and ``client.client`` is the
 underlying ``google.genai.Client``.
 """
+import sys
 import time
 import typer
 from typing import Optional
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_success, print_error, print_info, handle_error
 
 app = typer.Typer(help="Deep Research operations using Gemini Deep Research Agent")
 
@@ -66,6 +67,7 @@ def _render_delta(delta) -> bool:
 
 
 @app.command("start")
+@command
 def research_start(
     prompt: Optional[str] = typer.Argument(None, help="Research prompt/question"),
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", "-f", help="Read prompt from file instead of argument"),
@@ -80,10 +82,10 @@ def research_start(
     It uses web search and can produce detailed, cited reports.
 
     Example:
-        gemini research start "Research the history of Google TPUs"
-        gemini research start "Compare React vs Vue in 2025" --no-stream
-        gemini research start "Analyze Cursor AI features" --timeout 1800
-        gemini research start --prompt-file /path/to/prompt.txt
+        gemini-api research start "Research the history of Google TPUs"
+        gemini-api research start "Compare React vs Vue in 2025" --no-stream
+        gemini-api research start "Analyze Cursor AI features" --timeout 1800
+        gemini-api research start --prompt-file /path/to/prompt.txt
     """
     # Handle prompt from file or argument
     if prompt_file:
@@ -270,7 +272,12 @@ def _run_streaming_research(client, prompt: str, agent: str, timeout: int):
                     elapsed = time.time() - start_time
                     mins = int(elapsed // 60)
                     secs = int(elapsed % 60)
-                    print(f"\r[{mins:02d}:{secs:02d}] Status: {interaction.status}...", end="", flush=True)
+                    print(
+                        f"\r[{mins:02d}:{secs:02d}] Status: {interaction.status}...",
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
                     time.sleep(poll_interval)
             except typer.Exit:
                 raise
@@ -330,11 +337,17 @@ def _run_polling_research(client, prompt: str, agent: str, timeout: int):
             # Still in progress
             mins = int(elapsed // 60)
             secs = int(elapsed % 60)
-            print(f"\r[{mins:02d}:{secs:02d}] Status: {interaction.status}...", end="", flush=True)
+            print(
+                f"\r[{mins:02d}:{secs:02d}] Status: {interaction.status}...",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
             time.sleep(poll_interval)
 
 
 @app.command("status")
+@command
 def research_status(
     interaction_id: str = typer.Argument(..., help="Interaction ID from a previous research task"),
 ):
@@ -342,7 +355,7 @@ def research_status(
     Check the status of a running or completed research task.
 
     Example:
-        gemini research status abc123xyz
+        gemini-api research status abc123xyz
     """
     try:
         client = get_client()
@@ -370,6 +383,7 @@ def research_status(
 
 
 @app.command("resume")
+@command
 def research_resume(
     interaction_id: str = typer.Argument(..., help="Interaction ID to resume streaming"),
     last_event_id: Optional[str] = typer.Option(None, "--from-event", "-e", help="Resume from specific event ID"),
@@ -378,8 +392,8 @@ def research_resume(
     Resume streaming a research task that was interrupted.
 
     Example:
-        gemini research resume abc123xyz
-        gemini research resume abc123xyz --from-event evt_456
+        gemini-api research resume abc123xyz
+        gemini-api research resume abc123xyz --from-event evt_456
     """
     try:
         client = get_client()

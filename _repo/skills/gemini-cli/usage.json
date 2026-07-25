@@ -1,8 +1,8 @@
 {
   "tool": "gemini",
   "description": "CLI interface for Gemini API",
-  "discovered_at": "2026-06-20T19:46:30Z",
-  "total_commands": 26,
+  "discovered_at": "2026-07-21T19:38:27Z",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -27,7 +27,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Set up API key for Gemini. Use --api-key/-k to pass key directly, or --no-browser to skip opening the browser. Without flags, opens AI Studio in browser and prompts for the key.",
           "arguments": [],
           "options": [
             {
@@ -41,7 +40,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -122,7 +121,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `gemini auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -167,6 +166,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -458,7 +489,7 @@
       "commands": {
         "generate": {
           "help": "Generate an image from a text prompt using Nano Banana Pro. Example: gemini image generate \"A cyberpunk cityscape at sunset\" gemini image generate \"Cloud infrastructure diagram\" -o cloud.png -ar 16:9 gemini image generate \"Current weather in Tokyo visualization\" --search gemini image generate \"Professional blog header\" -m nano-banana-pro -s 4K",
-          "usage_instructions": "Create an image from a text description, optionally with reference image(s) for image editing / multi-image composition. PROMPT is required (positional). Use --output/-o to set output path (default: generated_image.png). Use --model/-m to select model (default: gemini-3-pro-image-preview). Set --aspect-ratio/-a (default: 16:9, options: 1:1, 16:9, 9:16, 4:3, 3:4, 1.91:1). Set --size/-s for resolution (default: 2K, options: 1K, 2K, 4K). Use --search for real-time data grounding. Pass one or more reference images with --input-image/-i (repeatable); only Nano Banana models support this (gemini-3-pro-image-preview, gemini-2.5-flash-image) -- Imagen models will reject -i.",
+          "usage_instructions": "Create an image from a text description, optionally with reference image(s) for image editing / multi-image composition. PROMPT is required (positional). Use --output/-o to set output path (default: generated_image.png). Use --model/-m to select model (default: gemini-3-pro-image-preview). Set --aspect-ratio/-ar (default: 16:9, options: 1:1, 16:9, 9:16, 4:3, 3:4, 1.91:1). Set --size/-s for resolution (default: 2K, options: 1K, 2K, 4K). Use --search for real-time data grounding. Pass one or more reference images with --input-image/-i (repeatable); only Nano Banana models support this (gemini-3-pro-image-preview, gemini-2.5-flash-image) -- Imagen models will reject -i.",
           "arguments": [
             {
               "name": "prompt",
@@ -480,23 +511,23 @@
               "name": "--model",
               "type": "bool",
               "required": false,
-              "help": "[gemini-3-pro-image-preview|gemini-2.5-flash-image|imagen-4.0-generate-001|imagen-4.  Image generation model to use",
+              "help": "<gemini-3-pro-image-preview|gemini-2.5-flash-image|imagen-4.0-generate-001|imagen-4.  Image generation model to use",
               "short": "-m",
               "default": "gemini-3-pro-image-preview"
             },
             {
               "name": "--aspect-ratio",
-              "type": "bool",
+              "type": "1:1|16:9|9:16|4:3|3:4|1.91:1",
               "required": false,
-              "help": "r      [1:1|16:9|9:16|4:3|3:4|1.91:1]                                                        Aspect ratio of generated image",
-              "short": "-a",
+              "help": "Aspect ratio of generated image",
+              "short": "-ar",
               "default": "16:9"
             },
             {
               "name": "--size",
-              "type": "bool",
+              "type": "1K|2K|4K",
               "required": false,
-              "help": "[1K|2K|4K]                                                                            Output image size/resolution",
+              "help": "Output image size/resolution",
               "short": "-s",
               "default": "2K"
             },
@@ -551,7 +582,6 @@
       "commands": {
         "list": {
           "help": "List available Gemini models. Example: gemini models list gemini models list --table",
-          "usage_instructions": "Show all Gemini models. Use --table/-t for formatted output. Useful for finding model IDs to pass to --model flags in other commands.",
           "arguments": [],
           "options": [
             {
@@ -585,7 +615,7 @@
       ],
       "commands": {
         "resume": {
-          "help": "Resume streaming a research task that was interrupted. Example: gemini research resume abc123xyz gemini research resume abc123xyz --from-event evt_456",
+          "help": "Resume streaming a research task that was interrupted. Example: gemini-api research resume abc123xyz gemini-api research resume abc123xyz --from-event evt_456",
           "usage_instructions": "Continue streaming results from a previously started research task. INTERACTION_ID is required (positional). Use --from-event/-e to resume from a specific event ID.",
           "arguments": [
             {
@@ -612,7 +642,7 @@
           ]
         },
         "start": {
-          "help": "Start a deep research task using Gemini Deep Research Agent. The agent autonomously plans, executes, and synthesizes multi-step research tasks. It uses web search and can produce detailed, cited reports. Example: gemini research start \"Research the history of Google TPUs\" gemini research start \"Compare React vs Vue in 2025\" --no-stream gemini research start \"Analyze Cursor AI features\" --timeout 1800 gemini research start --prompt-file /path/to/prompt.txt",
+          "help": "Start a deep research task using Gemini Deep Research Agent. The agent autonomously plans, executes, and synthesizes multi-step research tasks. It uses web search and can produce detailed, cited reports. Example: gemini-api research start \"Research the history of Google TPUs\" gemini-api research start \"Compare React vs Vue in 2025\" --no-stream gemini-api research start \"Analyze Cursor AI features\" --timeout 1800 gemini-api research start --prompt-file /path/to/prompt.txt",
           "usage_instructions": "Launch a deep research task. PROMPT is optional (positional) -- can also use --prompt-file/-f to read from a file. Results stream by default; use --no-stream to wait for completion. Set --timeout/-t for max wait in seconds (default: 3600). Use --agent/-a to select agent (default: deep-research-pro-preview-12-2025).",
           "arguments": [
             {
@@ -662,7 +692,7 @@
           ]
         },
         "status": {
-          "help": "Check the status of a running or completed research task. Example: gemini research status abc123xyz",
+          "help": "Check the status of a running or completed research task. Example: gemini-api research status abc123xyz",
           "usage_instructions": "Check progress of a deep research task. INTERACTION_ID is required (positional) -- obtained from `research start` output.",
           "arguments": [
             {
@@ -777,9 +807,9 @@
             },
             {
               "name": "--source",
-              "type": "bool",
+              "type": "LOCAL|CLOUD",
               "required": false,
-              "help": "[local|cloud]  Data source: local (CLI tracking) or cloud (Cloud Monitoring)",
+              "help": "Data source: local (CLI tracking) or cloud (Cloud Monitoring)",
               "short": "-s",
               "default": "local"
             },

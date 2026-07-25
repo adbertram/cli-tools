@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 gemini = "gemini_cli.main:app"
+gemini-api = "gemini_cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
