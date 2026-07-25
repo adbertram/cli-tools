@@ -32,6 +32,8 @@ class _BrickOwlAutomation(BrowserAutomation):
 class BrickOwlBrowser:
     """Brick Owl browser operations backed by shared BrowserAutomation."""
 
+    STORE_SETTINGS_URL = "https://www.brickowl.com/mystore/settings"
+
     def __init__(self, config=None):
         self._automation = _BrickOwlAutomation(config or get_config())
         self.config = self._automation.config
@@ -56,6 +58,65 @@ class BrickOwlBrowser:
         self.get_page()
 
     # ==================== Site-Specific Methods ====================
+
+    def get_store_settings(self) -> dict:
+        """Read editable Brick Owl store settings needed by the store CLI."""
+        self._ensure_authenticated()
+        page = self.get_page(self.STORE_SETTINGS_URL)
+        page.wait_for_timeout(1500)
+        settings = page.evaluate(
+            """() => {
+                const slogan = document.querySelector('input[name="main_slogan"]');
+                return {
+                    slogan_found: !!slogan,
+                    slogan: slogan ? slogan.value : null,
+                    slogan_max_length: slogan ? Number(slogan.getAttribute('maxlength')) : null,
+                    url: location.href,
+                };
+            }"""
+        )
+        if not settings or not settings.get("slogan_found"):
+            raise RuntimeError("Brick Owl store settings page did not contain input[name='main_slogan'].")
+        return {
+            "slogan": settings.get("slogan") or "",
+            "slogan_max_length": settings.get("slogan_max_length"),
+            "store_settings_url": settings.get("url"),
+        }
+
+    def save_store_slogan(self, slogan: str) -> dict:
+        """Save Brick Owl's store Slogan / Tag Line field."""
+        self._ensure_authenticated()
+        page = self.get_page(self.STORE_SETTINGS_URL)
+        page.wait_for_timeout(1500)
+        result = page.evaluate(
+            """(slogan) => {
+                const input = document.querySelector('input[name="main_slogan"]');
+                const submit = document.querySelector('input[name="bottom_op"]');
+                if (!input) {
+                    throw new Error("Brick Owl store settings page did not contain input[name='main_slogan'].");
+                }
+                if (!submit) {
+                    throw new Error("Brick Owl store settings page did not contain input[name='bottom_op'].");
+                }
+                input.value = slogan;
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+                submit.click();
+                return {submitted: true};
+            }""",
+            slogan,
+        )
+        page.wait_for_timeout(3000)
+        settings = self.get_store_settings()
+        if settings["slogan"] != slogan:
+            raise RuntimeError(
+                "Brick Owl store settings update did not persist the requested slogan."
+            )
+        return {
+            "success": True,
+            "submitted": bool(result and result.get("submitted")),
+            "slogan": settings["slogan"],
+        }
 
     def get_user_id(self) -> Optional[str]:
         """Get the logged-in user's ID via the API (reliable) or browser fallback."""

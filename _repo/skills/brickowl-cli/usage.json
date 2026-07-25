@@ -1,8 +1,8 @@
 {
   "tool": "brickowl",
   "description": "CLI interface for Brickowl API",
-  "discovered_at": "2026-06-20T19:40:11Z",
-  "total_commands": 54,
+  "discovered_at": "2026-07-09T16:12:38Z",
+  "total_commands": 57,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             },
             {
@@ -129,7 +129,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all profiles. Use --table/-t for formatted output.",
               "arguments": [],
               "options": [
@@ -183,6 +183,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -198,7 +230,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Check auth status. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -2004,6 +2036,98 @@
               "help": "Auth profile name"
             }
           ]
+        }
+      }
+    },
+    "store": {
+      "help": "Manage Brick Owl store settings",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "vacation": {
+          "help": "Manage vacation shipping notice text",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "disable": {
+              "help": "Remove the vacation shipping notice from the Brick Owl Slogan / Tag Line.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Preview changes without saving"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Save changes to Brick Owl",
+                  "short": "-y"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "enable": {
+              "help": "Add or replace the vacation shipping notice on the Brick Owl Slogan / Tag Line.",
+              "arguments": [
+                {
+                  "name": "ship_out_date",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Ship-out date to show in M/D/YY or MM/DD/YYYY format"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Preview changes without saving"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Save changes to Brick Owl",
+                  "short": "-y"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },

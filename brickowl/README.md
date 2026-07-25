@@ -369,6 +369,39 @@ brickowl user details --table
 |------------|-------------|
 | `details` | Get your Brick Owl user/store details |
 
+### store
+
+Manage Brick Owl store settings.
+
+```bash
+# Preview vacation notice changes
+brickowl store vacation enable 7/21/26 --dry-run
+brickowl store vacation disable --dry-run
+
+# Save vacation notice changes
+brickowl store vacation enable 7/21/26 --yes
+brickowl store vacation disable --yes
+```
+
+`store vacation enable` appends or replaces this notice in the store Slogan / Tag Line field:
+
+```text
+ | ATTENTION: All orders will ship M/D/YY!
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `vacation enable SHIP_OUT_DATE` | Add or replace the vacation shipping notice |
+| `vacation disable` | Remove the vacation shipping notice |
+
+**vacation options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dry-run` | | Preview changes without saving |
+| `--yes` | `-y` | Save changes to Brick Owl |
+| `--table` | `-t` | Display as table |
+
 ### messages (browser automation -- not yet implemented)
 
 Manage Brick Owl messages. These commands require browser automation and are currently placeholders.
