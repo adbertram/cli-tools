@@ -143,6 +143,48 @@ parameter:
   --desc` is rejected with a clear error instead of silently returning arbitrary
   order.
 
+#### Prices and price drops
+
+Every listing record carries three price fields:
+
+| Field | Meaning |
+|-------|---------|
+| `price` | The current/active asking price, as a number |
+| `original_price` | The struck-through pre-drop price, or `null` when the seller never lowered it |
+| `price_currency` | The currency symbol Facebook rendered, verbatim (`"$"`, `"CA$"`, `"£"`) |
+
+Facebook renders a discounted listing as the current price immediately followed
+by the struck-through original (`$15` `$20`), with no separator in the page
+text. Both `list` and `get` read the price element's own text for the current
+price and the nested struck-through element for the original, so the two are
+never merged.
+
+`price_currency` matters because Marketplace shop listings are priced in the
+seller's currency — live Evansville results include `$`, `CA$`, and `£`. Compare
+`price` across listings only when `price_currency` matches; never assume USD.
+
+```bash
+# Listings the seller has discounted
+facebook marketplace list --query "LEGO" --properties title,price,original_price
+```
+
+#### Images
+
+`--download-images` saves only the listing's **own** media gallery (the hero
+image plus every thumbnail). Sidebar advertisement creatives served from the
+same Facebook CDN, and the images of the recommended listings shown below a
+detail page, are excluded.
+
+#### Empty results
+
+An empty result is only ever reported when Facebook itself says so. `marketplace
+list` returns `[]` with exit code 0 only when Facebook renders its results
+container together with its own `No listings found for "..." within N miles`
+message. Any other empty outcome — the results container never rendered, the
+page never settled, a login/block wall, or listing tiles the extractor could not
+read — exits non-zero with an error naming the cause. A silently empty result on
+a healthy session is treated as a bug, not as "no matches".
+
 ### Messenger
 
 Facebook Messenger conversations and messages.

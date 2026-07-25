@@ -62,6 +62,20 @@ A non-zero exit ONLY happens when all three verification signals fail (true subm
 Facebook strips Markdown (`**bold**`, `[label](url)`) when rendering comments — never use raw substring matching against submitted text to verify a comment landed.
 </principle>
 
+<principle name="Marketplace Prices, Currency, and Empty Results">
+Every Marketplace record carries three price fields on BOTH `marketplace list` and `marketplace get`:
+
+- `price` — the current/active asking price.
+- `original_price` — the struck-through pre-drop price, or `null` when the seller never lowered it. A non-null value means the listing has been discounted.
+- `price_currency` — the currency symbol Facebook rendered, verbatim (`"$"`, `"CA$"`, `"£"`). Marketplace shop listings are priced in the seller's currency, so compare `price` across listings ONLY when `price_currency` matches. Never assume USD.
+
+Facebook renders a discounted listing as the current price immediately followed by the struck-through original with NO separator (`$15$20`, `$850$1,100`). Both surfaces read the price element's own text for the current price and the nested struck-through element for the original, so the two are never concatenated. Never re-derive a price by string-splitting a rendered price blob.
+
+`marketplace list` returns `[]` with exit 0 ONLY when Facebook renders its own results container together with `No listings found for "..." within N miles`. Every other empty outcome exits non-zero and names the cause (results container never rendered, page never settled, blocked, or listing tiles the extractor could not read). Treat a silently empty result as impossible: if `list` exits 0 with `[]`, Facebook genuinely has no matches.
+
+`--download-images` saves only the listing's own media gallery (hero image plus thumbnails). Sidebar advertisement creatives and recommended-listing images are excluded.
+</principle>
+
 <success_criteria>
 - Command executes without error
 - Output is displayed in requested format
@@ -91,3 +105,34 @@ Facebook strips Markdown (`**bold**`, `[label](url)`) when rendering comments �
 **Verification:** `facebook groups posts comment 2318028917/posts/<id> -m "..."` returned `success: true, verification: "confirmed", signal: "exact-post-comment-found"` with a new `commentId`. Independent read path confirmed `comment_count` incremented 5 → 6 and the comment text was present. (The facebook CLI has no delete-comment command; remove a test comment by driving the comment's `aria-label="Edit or delete this"` menu → Delete menuitem → confirm "Delete Comment?" dialog via the same authenticated session.)
 
 **Recurrence Prevention:** The locator no longer depends on Facebook nesting the permalink anchor and comment controls inside a `[role="article"]`. It relies on the more stable invariants of a single-post permalink page: one visible Lexical composer document-wide, or one comment activator in `[role="main"]`. If Facebook changes the composer/activator selectors again, capture the live DOM FIRST (instantiate `FacebookClient`, call `_get_page(url)`, then `page.evaluate(...)` to dump article/anchor/composer facts) before editing — diagnose from the live page, never from assumptions. The aria-label for the inline activator is currently "Leave a comment"; the composer's `aria-placeholder` is personalized (e.g. "Answer as Adam"), so never match on placeholder text.
+
+### 3. `marketplace list` returned `[]` with exit 0 on a healthy session; `get` returned digit-concatenated prices
+
+**Symptom (2026-07-25):** Two failures on a fully authenticated session. (a) `facebook marketplace list --query "lego"` intermittently returned `[]` with exit 0 and `Loaded 0 listing(s) after 1 scroll(s)`, while an immediate identical retry returned 114 listings. (b) `facebook marketplace get <id>` returned a digit-concatenation of the current and struck-through original price on price-dropped listings — `$850` → `8501100.0`, `$15` → `1520.0` — on 8 of 28 listings in one run, while `list` reported the same items correctly.
+
+**Cause:** Both were extraction bugs that failed silently.
+- Facebook serves TWO Marketplace tile variants: aria-labelled (`"Arcade 1Up, $300, Newburgh, IN, listing 1356224139807798"`) and content-derived (`"Just listed $400 Legos. Collection with instruction books Boonville, IN"`). The old extractor parsed the flattened accessibility-tree name with regexes that only matched the aria-labelled form, so the content-derived variant parsed to ZERO listings — which the code then reported as an empty search. The aria-labelled form was also lossy: tiles with an empty location segment (`"Lego Truck, $10, , listing 123"`, i.e. ships-to-you listings) were silently dropped, 10 of 22 on one live page.
+- The detail-page extractor read the price from `main.innerText`, and Facebook renders a price drop as `<span>$15<span struck>$20</span></span>` — one text line, `"$15$20"`. The price normalizer stripped `$` and `,` and parsed `1520`.
+
+**Fix (`facebook/facebook_cli/client.py`, `facebook/facebook_cli/models.py`):**
+- `LIST_PAGE_LISTINGS_JS` extracts each tile from the DOM (`a[href*="/marketplace/item/"]`) instead of parsing the accessible name. The per-tile DOM is identical for both variants: a span whose OWN text nodes hold the current price (with the struck-through original as a nested span), then the title span, then the location span. Tiles that render text but no usable price/title are returned as `unparsed` and raise. `facebook_cli/parsers.py` was deleted.
+- `DETAIL_PAGE_PRICE_JS` applies the same own-text-vs-nested-element split on the detail page, returning `{price, originalPrice}`. The split is structural, so it does not depend on Facebook's obfuscated CSS class names.
+- `MARKETPLACE_PAGE_STATE_JS` + `_raise_for_empty_marketplace_results` make an empty extraction raise unless Facebook's own results container (`[aria-label="Collection of Marketplace items"]`) is present AND it printed `No listings found for "..." within N miles`.
+- `_wait_for_marketplace_results` replaces the fixed settle delay with a real readiness wait (first item link, or Facebook's zero-result state), removing the "page not settled" window that produced the intermittent empties. No retry was added.
+- `MarketplaceListing` gained `original_price` and `price_currency`. `normalize_price` now RAISES on an unrecognized price string instead of returning `None`.
+- Both extractors match the price as a Unicode currency symbol (`\p{Sc}`) with an optional currency-code prefix, so `$15`, `CA$75`, and `£1,600` all parse. Live Evansville results carry all three; the fail-loud tile check surfaced the `CA$` and `£` shapes, which the previous parser dropped silently.
+- Tiles are re-checked for up to 5s before the unreadable-tile error fires, because Facebook's virtualized grid can paint a tile's title before its price. That is a readiness wait on a deterministic condition, not a retry of a failed read.
+
+**Verification:** All 8 reported item IDs re-read live and returned the correct current price with the pre-drop price in `original_price` (`1543005510652070` → `price: 850.0, original_price: 1100.0`). `list --query lego --limit 120` returned 120 (140 loaded, previously 116). A nonsense query returned `[]` with exit 0 and the `No listings found` message. Regression coverage in `facebook/tests/test_marketplace_extractors.py` against verbatim live DOM in `facebook/tests/fixtures/`.
+
+**Recurrence Prevention:** Never parse a Marketplace accessible name as a string — read the tile/price DOM. A currency-prefixed price (`CA$75`) is real and appears on both surfaces; `price_currency` preserves it so 75 CAD is never reported as 75 USD. Any new tile shape now fails loudly rather than shrinking the result set.
+
+### 4. `--download-images` saved a sidebar advertisement as a listing image
+
+**Symptom (2026-07-25):** `facebook marketplace get 26999388286428618 --download-images` saved two images, the second being a scraped GoDaddy domain advertisement rather than a listing photo.
+
+**Cause:** The extractor took every `img[src*="scontent"]` with `naturalWidth > 100` that was not inside a recommended-listing anchor. Facebook serves sidebar ad creatives from the same `scontent` CDN, so a video ad in a `[role="group"][aria-label="Video player"]` slot passed the filter.
+
+**Fix:** `DETAIL_PAGE_IMAGES_JS` scopes to the listing's own media gallery via `img[alt^="Product photo of"]`, the alt Facebook applies to the hero image and every gallery thumbnail. Ad creatives and recommended-listing tiles do not carry it.
+
+**Verification:** After clearing the item's image cache, `get 26999388286428618 --download-images` saved exactly 1 image (the LEGO buckets photo, byte-identical to the previously-correct image 1) and `get 1543005510652070 --download-images` saved its 4 real gallery photos.
