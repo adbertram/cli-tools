@@ -25,11 +25,15 @@ def test_run_live_cli_command_clears_cache_before_target(monkeypatch):
 
     monkeypatch.setattr(cli_test_utils.subprocess, "run", fake_run)
 
-    cli_test_utils.run_live_cli_command("/tmp/example", ["items", "list"], timeout=17)
+    cli_test_utils.run_live_cli_command(
+        "/tmp/example",
+        ["items", "list", "--profile", "author-kit"],
+        timeout=17,
+    )
 
     assert calls == [
-        ["/tmp/example", "cache", "clear"],
-        ["/tmp/example", "items", "list"],
+        ["/tmp/example", "cache", "clear", "--profile", "author-kit"],
+        ["/tmp/example", "items", "list", "--profile", "author-kit"],
     ]
 
 

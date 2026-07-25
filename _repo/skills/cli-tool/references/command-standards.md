@@ -79,6 +79,66 @@ mycli statistics list  # NO - doesn't make sense
 
 ---
 
+## Sort Standards
+
+**MANDATORY for source/marketplace CLIs.** Every command that returns a collection of
+listings/items from an external marketplace or catalog — `search query`, `listings search`,
+`products list`, `search`, `feed`, and equivalents — MUST expose a consistent sort interface so
+callers (notably incremental "newest-first" crawlers) get the same behavior across every tool.
+
+### Sort Options
+
+| Pattern | Short | Long | Description |
+|---------|-------|------|-------------|
+| Sort field | `-s` | `--sort` | Sort field from the canonical vocabulary below. **Default: `newest`.** |
+| Descending | `-d` | `--desc` | Reverse the chosen field's natural direction. |
+
+### Canonical Vocabulary & Natural Direction
+
+Field names are direction-aware: each has a **natural** order (used when `--desc` is absent), and
+`--desc` reverses it. Do **not** invent directional twins like `price_low`/`price_high`,
+`price_asc`/`price_desc`, or `oldest` — use one field name + `--desc`.
+
+| Value | Applies to | Natural (no `--desc`) | With `--desc` | Required? |
+|-------|-----------|-----------------------|---------------|-----------|
+| `newest` | all sources | most recently listed first | oldest first | **Required (and the default)** |
+| `price` | all sources | low → high | high → low | **Required** |
+| `ending` | auction sources | soonest ending first | latest ending first | Required for auction sources |
+| `bids` | auction sources | fewest bids first | most bids first | Optional |
+| `relevance` | keyword-search sources | API relevance order | n/a — reject `--desc` with `relevance` | Optional |
+
+### Rules
+
+1. **Default is `newest`.** A bare search returns newest-listed items first. This is what
+   incremental crawlers depend on.
+2. **Reject unknown values (fail-fast).** An unrecognized `--sort` value MUST raise a clear error
+   listing the valid values and exit non-zero. **Never** silently fall back to a default — do not
+   use `sort_map.get(sort, DEFAULT)`. Validate explicitly:
+
+   ```python
+   SORT_MAP = {"newest": "ListedDate", "price": "Price", "ending": "EndingSoonest"}
+
+   def _resolve_sort(sort: str) -> str:
+       key = sort.lower()
+       if key not in SORT_MAP:
+           valid = ", ".join(SORT_MAP)
+           raise typer.BadParameter(f"Invalid --sort '{sort}'. Valid values: {valid}")
+       return SORT_MAP[key]
+   ```
+
+3. **`--desc` reverses the field's natural direction.** For `newest`, natural = newest-first, so
+   `--desc` yields oldest-first. Map to the upstream sort-order parameter accordingly; a directional
+   field name like `newest` must resolve to newest-first **by itself**, not only when `--desc` is added.
+4. **Pagination is required.** The command must expose `--limit`/`-l` (and `--page`/`-p` or a cursor)
+   so a caller can pull up to N newest listings across pages.
+5. **Recency-sort exception.** If an upstream source genuinely cannot sort by recency (e.g. a
+   completed/sold-comps scrape, or an API with no chronological order), document the limitation in the
+   README and the command help, and either map `newest` to the closest available signal (and say so) or
+   reject `newest` with a clear error. Do **not** silently return arbitrary order while accepting
+   `--sort newest`.
+
+---
+
 ## Exit Codes
 
 | Code | Meaning |

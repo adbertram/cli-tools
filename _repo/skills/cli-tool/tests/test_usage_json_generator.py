@@ -56,6 +56,21 @@ def _write_fake_cli_fixture(tmp_path):
     return fake_cli, usage_json
 
 
+def _write_fake_cli_with_typer_027_arguments(tmp_path):
+    fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
+    fake_cli.write_text(
+        _fake_cli_source().replace(
+            '    print("List fake items.")',
+            '    print("List fake items.")\n'
+            '    print("╭─ Arguments ───────────────────────────────────────────╮")\n'
+            '    print("│ *  task_id   <str>  Task ID to stop [required]       │")\n'
+            '    print("│    prompt    <str>  Follow-up prompt text             │")\n'
+            '    print("╰───────────────────────────────────────────────────────╯")',
+        )
+    )
+    return fake_cli, usage_json
+
+
 def test_regenerate_usage_json_runs_without_external_pythonpath(tmp_path):
     skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
     fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
@@ -92,6 +107,45 @@ def test_regenerate_usage_json_runs_without_external_pythonpath(tmp_path):
             "short": "-l",
             "default": "10",
         }
+    ]
+
+
+def test_regenerate_usage_json_normalizes_typer_027_argument_metavars(tmp_path):
+    skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    fake_cli, usage_json = _write_fake_cli_with_typer_027_arguments(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill_root / SCRIPT),
+            "fake",
+            "--cli-executable",
+            str(fake_cli),
+            "--usage-json",
+            str(usage_json),
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    generated = json.loads(usage_json.read_text())
+    assert generated["commands"]["items"]["commands"]["list"]["arguments"] == [
+        {
+            "name": "task_id",
+            "type": "TEXT",
+            "required": True,
+            "help": "Task ID to stop",
+        },
+        {
+            "name": "prompt",
+            "type": "PROMPT",
+            "required": False,
+            "help": "Follow-up prompt text",
+        },
     ]
 
 
@@ -198,7 +252,7 @@ def test_regenerate_usage_json_drops_enrichment_with_removed_options(tmp_path):
                                 "help": "List fake items with --status.",
                                 "examples": [
                                     "fake items list --status active",
-                                    "fake items list --limit 5",
+                                    "fake items list --status inactive",
                                 ],
                                 "usage_instructions": "Use --status to filter old item state.",
                             }
@@ -233,6 +287,172 @@ def test_regenerate_usage_json_drops_enrichment_with_removed_options(tmp_path):
     assert node["help"] == "List fake items."
     assert "examples" not in node
     assert "usage_instructions" not in node
+
+
+def _write_fake_cli_with_richer_list_options(tmp_path):
+    """Fake CLI whose ``items list`` options add a path- and text-typed option.
+
+    Used to reproduce the coursecraft ``demos update`` examples-loss bug with
+    a multi-line Examples array that mixes a filesystem path and a quoted
+    value ending in an ellipsis alongside one example referencing a
+    renamed/removed option.
+    """
+    fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
+    fake_cli.write_text(
+        _fake_cli_source().replace(
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")',
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")\n'
+            '    print("│ --output-path              PATH     Export file path │")\n'
+            '    print("│ --notes                    TEXT     Free-form notes │")',
+        )
+    )
+    return fake_cli, usage_json
+
+
+def test_regenerate_usage_json_keeps_valid_examples_when_only_one_is_stale(tmp_path):
+    """One renamed/removed option must not discard every other example.
+
+    Regression for the coursecraft `demos update` bug: the CLI renamed
+    `--tested-approved` to `--ai-tested`, so one old example line went stale.
+    The all-or-nothing staleness gate then dropped the *entire* examples
+    array -- including still-accurate examples that happened to reference a
+    filesystem path (`--output-path`) and a quoted value ending in an
+    ellipsis (`--notes "Weekly export..."`). Only the genuinely stale example
+    (`--status`, an option that does not exist on this fake CLI) should be
+    dropped; the rest must survive in their original order.
+    """
+    skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    fake_cli, usage_json = _write_fake_cli_with_richer_list_options(tmp_path)
+    usage_json.write_text(
+        json.dumps(
+            {
+                "tool": "fake",
+                "description": "Fake CLI",
+                "commands": {
+                    "items": {
+                        "commands": {
+                            "list": {
+                                "examples": [
+                                    "fake items list --limit 5",
+                                    "fake items list --output-path /path/to/export.json",
+                                    'fake items list --notes "Weekly export..."',
+                                    "fake items list --status active",
+                                ],
+                            }
+                        }
+                    }
+                },
+                "total_commands": 1,
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill_root / SCRIPT),
+            "fake",
+            "--cli-executable",
+            str(fake_cli),
+            "--usage-json",
+            str(usage_json),
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    generated = json.loads(usage_json.read_text())
+    node = generated["commands"]["items"]["commands"]["list"]
+    assert node["examples"] == [
+        "fake items list --limit 5",
+        "fake items list --output-path /path/to/export.json",
+        'fake items list --notes "Weekly export..."',
+    ]
+
+
+def _write_fake_cli_with_custom_negative_flag(tmp_path):
+    """Fake CLI whose boolean option uses a non-mechanical secondary flag name.
+
+    Mirrors kick's ``--include-rules/--no-rules``: the real secondary flag is
+    not the mechanical ``--no-include-rules`` a naive checker would assume.
+    Used to reproduce a live false positive found while auditing other
+    <tool>-cli skills for the coursecraft examples-loss bug.
+    """
+    fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
+    fake_cli.write_text(
+        _fake_cli_source().replace(
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")',
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")\n'
+            '    print("│ --include-archived      --no-archived   Include archived items │")',
+        )
+    )
+    return fake_cli, usage_json
+
+
+def test_regenerate_usage_json_keeps_example_using_custom_negative_flag(tmp_path):
+    """A custom-named secondary boolean flag must not be flagged stale.
+
+    Regression for a live false positive found while auditing other
+    <tool>-cli skills for the coursecraft examples-loss bug: kick's
+    `--include-rules/--no-rules`, mindmeister's `--closed/--open`, and
+    twelvelabs's `--skip-duplicate/--force-upload` all declare a secondary
+    flag name that is not the mechanical `--no-<primary>` form.
+    live_option_tokens must recognize the CLI's actual declared secondary
+    token (recovered by parse_help_option_secondary_tokens), or a
+    still-accurate example referencing it gets wrongly dropped as stale.
+    """
+    skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    fake_cli, usage_json = _write_fake_cli_with_custom_negative_flag(tmp_path)
+    usage_json.write_text(
+        json.dumps(
+            {
+                "tool": "fake",
+                "description": "Fake CLI",
+                "commands": {
+                    "items": {
+                        "commands": {
+                            "list": {
+                                "examples": [
+                                    "fake items list --limit 5",
+                                    "fake items list --no-archived",
+                                ],
+                            }
+                        }
+                    }
+                },
+                "total_commands": 1,
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill_root / SCRIPT),
+            "fake",
+            "--cli-executable",
+            str(fake_cli),
+            "--usage-json",
+            str(usage_json),
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    generated = json.loads(usage_json.read_text())
+    node = generated["commands"]["items"]["commands"]["list"]
+    assert node["examples"] == [
+        "fake items list --limit 5",
+        "fake items list --no-archived",
+    ]
 
 
 def test_regenerate_usage_json_refreshes_help_when_options_are_unchanged(tmp_path):
@@ -341,3 +561,10 @@ def test_update_workflow_uses_regenerate_usage_json_script():
 
     assert SCRIPT in workflow
     assert "/create-cli-tool-skill update <name>" not in workflow
+
+    simplify = workflow.index("## Step 6: Final Code Simplification")
+    refresh = workflow.index(f"{SCRIPT} <name>")
+    full_test = workflow.index("scripts/test-cli-tool.sh --cli-name <name>")
+    final_check = workflow.index(f"{SCRIPT} <name> --check")
+
+    assert simplify < refresh < full_test < final_check

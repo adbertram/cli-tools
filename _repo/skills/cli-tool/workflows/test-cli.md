@@ -237,6 +237,22 @@ The script returns JSON with:
 - `auth_command`: string - command to authenticate (if auth_required)
 - `failures`: array - each failure with test_name, file, message, and pre-formatted todo
 
+The full compliance run can take several minutes because live command tests have
+bounded subprocess timeouts and retries. An execution-tool yield such as
+`Script running with cell ID ...` is not a shell exit and is not a harness
+result. Continue waiting on that exact session until the process exits. Treat a
+capture that ends in pytest progress characters (for example `.......F...`) and
+has no JSON document on stdout as `HARNESS_STILL_RUNNING`, even if the execution
+adapter's interim response contains a zero status field. Do not launch a second
+harness run against the same CLI or shared uv environment while the first is
+still active.
+
+Completion requires all three checks: the shell process exited, stdout parses
+as one JSON document with a boolean `success` field, and the shell exit status
+agrees with that field (`0` only when `success` is `true`; nonzero when it is
+`false`). Missing JSON is a failed/incomplete invocation, never a passing test
+result.
+
 Display the summary to the user.
 
 ## Step 1.5: Handle Authentication Errors
@@ -580,6 +596,9 @@ Add mapping in `tests/cli_test_config.toml`:
 # For flag-based parameters (--database-id VALUE):
 "database page list" = { "--database-id" = "database_id" }
 "pages blocks list" = { "--page-id" = "page_id" }
+
+# For required valueless flags, use the literal boolean true:
+"comments list" = { "--page-id" = "page_id", "--open-only" = true }
 
 # For positional arguments (command VALUE):
 # Use "_pos1", "_pos2", etc. for positional args in order

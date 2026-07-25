@@ -6,6 +6,10 @@
 set -o pipefail
 
 FORCE_REFRESH="false"
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    printf '%s\n' 'Usage: install-cli-tool.sh [--force-refresh] <name>'
+    exit 0
+fi
 if [ "${1:-}" = "--force-refresh" ]; then
     FORCE_REFRESH="true"
     shift

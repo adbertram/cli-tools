@@ -238,7 +238,7 @@ max_nested_depth = 4
 "database template list" = { "--database-id" = "database_id" }
 "field list" = { "--database-id" = "database_id" }
 "pages blocks list" = { "--page-id" = "page_id" }
-"comments list" = { "--page-id" = "page_id" }
+"comments list" = { "--page-id" = "page_id", "--open-only" = true }
 
 # Airtable fixtures: records/fields commands require table args
 [cli_specific.airtable.param_fixtures]
@@ -299,3 +299,14 @@ list_commands = [
 
 [cli_specific.target.param_fixtures]
 "products list" = { "_pos1" = "query" }
+
+[cli_specific.depop]
+# Depop's only resource is public marketplace search; "search" is a
+# top-level command (not "<group> list"), so it needs an explicit
+# list_commands override to be exercised by the list-command flag tests.
+list_commands = [
+    "search",
+]
+
+[cli_specific.depop.param_fixtures]
+"search" = { "_pos1" = "query" }

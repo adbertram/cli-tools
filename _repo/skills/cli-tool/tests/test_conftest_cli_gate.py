@@ -40,8 +40,12 @@ def test_cli_gate_message_clarifies_force_is_not_live_cli_execution() -> None:
 
 def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path) -> None:
     cli_dir = tmp_path / "tool"
-    commands_dir = cli_dir / "demo_cli" / "commands"
+    package_dir = cli_dir / "demo_cli"
+    commands_dir = package_dir / "commands"
     commands_dir.mkdir(parents=True)
+    (package_dir / "config.py").write_text(
+        "CREDENTIAL_TYPES = [CredentialType.CUSTOM]\n"
+    )
     (commands_dir / "projects.py").write_text(
         'COMMAND_CREDENTIALS = {"list": ["custom"]}\n'
     )
@@ -56,3 +60,27 @@ def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path) -> None:
     )
 
     assert required_types == ["custom"]
+
+
+def test_list_command_auth_gate_excludes_profile_auth_types(tmp_path) -> None:
+    cli_dir = tmp_path / "tool"
+    package_dir = cli_dir / "demo_cli"
+    commands_dir = package_dir / "commands"
+    commands_dir.mkdir(parents=True)
+    (package_dir / "config.py").write_text(
+        "CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]\n"
+    )
+    (commands_dir / "icons.py").write_text(
+        'COMMAND_CREDENTIALS = {"list": ["author_kit", "no_auth"]}\n'
+    )
+    (commands_dir / "opportunities.py").write_text(
+        'COMMAND_CREDENTIALS = {"list": ["opportunities", "browser_session"]}\n'
+    )
+
+    required_types = _required_credential_types_for_list_commands(
+        cli_dir,
+        "demo",
+        ["icons list", "opportunities list"],
+    )
+
+    assert required_types == ["browser_session"]

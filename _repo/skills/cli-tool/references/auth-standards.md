@@ -33,20 +33,21 @@ Before asking Adam for CLI credentials, or storing any new reusable CLI credenti
 
 ## Browser-Session Auth Login Runtime
 
-For `browser_session` and browser CLI authentication, future agents must use
-Computer Use when a needed browser session is unauthenticated. First check
-`auth status` using the shaped unauthenticated-status wrapper from the router.
-If the active browser-session profile is unauthenticated, open a visible
-terminal with Computer Use, run the CLI's documented Bash login command, and
-complete the browser login interactively.
+For `browser_session` and browser CLI authentication, first check `auth status`
+using the shaped unauthenticated-status wrapper from the router. Local
+interactive login uses Computer Use to open a visible terminal and run the
+CLI's documented Bash login command. When the current task explicitly
+authorizes a non-interactive demo host or automation runner, invoke that same
+command without stdin or `/dev/tty`; `BrowserAutomation` verifies the live
+browser state directly after launch and continues only when it is authenticated.
 
 Use `--credential-type browser_session` for multi-credential CLIs and `--force`
 only when refreshing a stale or expired session. Retrieve credentials and MFA
 through the available service CLIs and the CLI-tools secret manager per
 `references/secrets.md`; ask Adam only when the required credential, code,
-approval, or local-GUI control is genuinely unavailable. Do not substitute
-headless Playwright, raw browser scripts, direct session-file edits, or another
-auth path for browser-session login.
+approval, or local-GUI control is genuinely unavailable. Do not substitute raw
+browser scripts, direct session-file edits, or another auth path for
+browser-session login.
 
 ## Pre-Auth Setup And Non-Secret Config Prompts
 
@@ -106,6 +107,7 @@ class Config(BaseConfig):
 - Per-type **conditional** keys:
   - `api_test` — when present, MUST be the literal string `"passed"` or a string starting with `"failed:"` (e.g., `"failed: unauthorized"`). Sourced from `Config.test_connection()`.
   - Extra keys from `Config.test_connection()` land here (e.g., `email`, `bot_id`, `user_id`). For OAuth, `oauth_status` lands under `credential_types.oauth`. For browser, `browser_session` / `browser_available` land under `credential_types.browser_session`.
+  - `browser_error` — present under `credential_types.browser_session` when the live browser probe could not run or complete. In that state `browser_available` is `false`; a completed probe that reaches a genuine logged-out page reports `browser_available: true`, `authenticated: false`, and no `browser_error`.
 - Per-type **optional** keys (reserved; emit when meaningful, no validator enforces them yet):
   - `expires_at` — ISO-8601 timestamp string indicating when the saved token/session expires.
   - `scopes` — list of scope strings granted by the upstream OAuth provider.

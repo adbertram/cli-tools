@@ -89,9 +89,20 @@ def _top_level_cache_command_missing(result: subprocess.CompletedProcess) -> boo
     )
 
 
-def clear_cli_cache(cli_executable: str, timeout: int = 30) -> None:
+def _profile_args(args: List[str]) -> List[str]:
+    """Return the explicit profile option from a target command."""
+    for index, arg in enumerate(args):
+        if arg == "--profile" and index + 1 < len(args):
+            return [arg, args[index + 1]]
+        if arg.startswith("--profile="):
+            return [arg]
+    return []
+
+
+def clear_cli_cache(cli_executable: str, args: List[str], timeout: int = 30) -> None:
     """Clear cached CLI responses before a live command executes."""
-    result = run_cli_command(cli_executable, ["cache", "clear"], timeout=timeout)
+    cache_args = ["cache", "clear", *_profile_args(args)]
+    result = run_cli_command(cli_executable, cache_args, timeout=timeout)
     if result.returncode == 0:
         return
     if _top_level_cache_command_missing(result):
@@ -110,7 +121,7 @@ def run_live_cli_command(
     check: bool = False
 ) -> subprocess.CompletedProcess:
     """Execute a live CLI command after clearing the response cache."""
-    clear_cli_cache(cli_executable, timeout=timeout)
+    clear_cli_cache(cli_executable, args, timeout=timeout)
     return run_cli_command(cli_executable, args, timeout=timeout, check=check)
 
 
@@ -212,6 +223,19 @@ def extract_help_sections(help_text: str) -> Dict[str, str]:
     return sections
 
 
+_HELP_METAVAR_TYPES = {
+    "path": "PATH",
+    "str": "TEXT",
+    "int": "INTEGER",
+    "float": "FLOAT",
+}
+
+
+def _normalize_help_metavar(metavar: str) -> str:
+    """Return the canonical usage.json type for a Typer angle metavar."""
+    return _HELP_METAVAR_TYPES.get(metavar, metavar.upper())
+
+
 def parse_help_arguments(section_text: str) -> List[Dict]:
     """Parse a Rich/Typer Arguments section into usage.json argument records."""
     arguments = []
@@ -225,22 +249,30 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
         if required:
             line = line[1:].strip()
 
+        angle_metavar = False
         bracket_match = re.match(r"^(\w[\w-]*)\s+\[([A-Z_]+)\]\s+(.*)", line)
         if bracket_match:
             name = bracket_match.group(1)
             arg_type = bracket_match.group(2)
             rest = bracket_match.group(3).strip()
         else:
-            bare_match = re.match(r"^(\w[\w-]*)\s{2,}([A-Z][A-Z_0-9]+)\s{2,}(.*)", line)
-            if bare_match:
-                name = bare_match.group(1)
-                arg_type = bare_match.group(2)
-                rest = bare_match.group(3).strip()
+            angle_match = re.match(r"^(\w[\w-]*)\s+<([^<>\s]+)>\s+(.*)", line)
+            if angle_match:
+                name = angle_match.group(1)
+                arg_type = _normalize_help_metavar(angle_match.group(2))
+                rest = angle_match.group(3).strip()
+                angle_metavar = True
             else:
-                parts = re.split(r"\s{2,}", line, maxsplit=1)
-                name = parts[0]
-                arg_type = "TEXT"
-                rest = parts[1] if len(parts) > 1 else ""
+                bare_match = re.match(r"^(\w[\w-]*)\s{2,}([A-Z][A-Z_0-9]+)\s{2,}(.*)", line)
+                if bare_match:
+                    name = bare_match.group(1)
+                    arg_type = bare_match.group(2)
+                    rest = bare_match.group(3).strip()
+                else:
+                    parts = re.split(r"\s{2,}", line, maxsplit=1)
+                    name = parts[0]
+                    arg_type = "TEXT"
+                    rest = parts[1] if len(parts) > 1 else ""
 
         default = None
         default_match = re.search(r"\[default:\s*(.+?)\]", rest)
@@ -251,6 +283,13 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
         if "[required]" in rest:
             required = True
             rest = rest.replace("[required]", "").strip()
+
+        # Typer 0.27 split the argument name and scalar type into separate
+        # columns. Preserve the pre-0.27 optional-argument metavar stored by
+        # canonical usage.json files while still recording required scalars by
+        # their actual type.
+        if angle_metavar and not required:
+            arg_type = name.replace("-", "_").upper()
 
         argument = {
             "name": name,
@@ -266,10 +305,13 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
     return arguments
 
 
-def parse_help_options(section_text: str) -> List[Dict]:
-    """Parse a Rich/Typer Options section into usage.json option records."""
-    options = []
-    joined_lines = []
+def _join_wrapped_option_lines(section_text: str) -> List[str]:
+    """Join a Rich/Typer Options section's wrapped continuation lines.
+
+    Shared by parse_help_options and parse_help_option_secondary_tokens so
+    both walk the same one-physical-line-per-option view of the section.
+    """
+    joined_lines: List[str] = []
 
     for line in section_text.splitlines():
         stripped = line.strip()
@@ -279,6 +321,46 @@ def parse_help_options(section_text: str) -> List[Dict]:
             joined_lines.append(stripped)
         elif joined_lines:
             joined_lines[-1] += " " + stripped
+
+    return joined_lines
+
+
+def parse_help_option_secondary_tokens(section_text: str) -> List[str]:
+    """Return every secondary/negative long flag rendered in an Options section.
+
+    Typer allows a custom secondary flag name for a paired boolean option --
+    e.g. ``--include-rules/--no-rules`` or an unrelated pair such as
+    ``--closed/--open`` -- it is not always the mechanical ``--no-<primary>``
+    form. ``parse_help_options`` intentionally strips this secondary token out
+    of the help text and does not keep it anywhere in its returned records.
+    Callers that need to know every token the live CLI currently accepts (for
+    example, a usage.json staleness check) cannot assume the negative form of
+    a boolean is always ``--no-<primary>``; they must recover the actual
+    secondary token from the help text itself, which is what this sibling
+    parser does by walking the same joined option lines.
+    """
+    secondary_tokens: List[str] = []
+
+    for line in _join_wrapped_option_lines(section_text):
+        if line.startswith("*"):
+            line = line[1:].strip()
+
+        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w+)?\s*(.*)", line)
+        if not flag_match:
+            continue
+
+        rest = flag_match.group(3).strip()
+        secondary_match = re.match(r"^(--[\w-]+)(?:\s+-\w+)?\s+", rest)
+        if secondary_match:
+            secondary_tokens.append(secondary_match.group(1))
+
+    return secondary_tokens
+
+
+def parse_help_options(section_text: str) -> List[Dict]:
+    """Parse a Rich/Typer Options section into usage.json option records."""
+    options = []
+    joined_lines = _join_wrapped_option_lines(section_text)
 
     filtered_options = {"--help", "--install-completion", "--show-completion"}
 
@@ -290,7 +372,7 @@ def parse_help_options(section_text: str) -> List[Dict]:
         if any(line.startswith(option) for option in filtered_options):
             continue
 
-        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w)?\s*(.*)", line)
+        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w+)?\s*(.*)", line)
         if not flag_match:
             continue
 
@@ -304,14 +386,18 @@ def parse_help_options(section_text: str) -> List[Dict]:
         # secondary form would otherwise be captured as part of the help text.
         # Strip a leading secondary long flag (with its own optional short
         # flag) before extracting the type/help so the help stays clean.
-        secondary_match = re.match(r"^(--[\w-]+)(?:\s+(-\w))?\s+(.*)", rest)
+        secondary_match = re.match(r"^(--[\w-]+)(?:\s+(-\w+))?\s+(.*)", rest)
         if secondary_match:
             if short_flag is None and secondary_match.group(2):
                 short_flag = secondary_match.group(2)
             rest = secondary_match.group(3).strip()
 
+        metavar_match = re.match(r"^<([^<>\s]+)>\s+(.*)", rest)
         type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
-        if type_match:
+        if metavar_match:
+            opt_type = _normalize_help_metavar(metavar_match.group(1))
+            help_text = metavar_match.group(2).strip()
+        elif type_match:
             opt_type = type_match.group(1)
             help_text = type_match.group(2).strip()
         else:
@@ -599,6 +685,7 @@ def get_fixture_args(
     Special keys:
         - Keys starting with "_pos" are treated as positional arguments (value only, no flag)
         - Example: "_pos1" = "app_id" results in just the value being added
+        - A literal true value adds a valueless flag directly
     """
     param_fixtures = test_config.get("cli_specific", {}).get(cli_name, {}).get("param_fixtures", {})
 
@@ -610,6 +697,12 @@ def get_fixture_args(
     flag_args = []
 
     for param_flag, fixture_key in cmd_params.items():
+        if fixture_key is True:
+            if param_flag.startswith("_pos"):
+                raise ValueError(f"Positional fixture {param_flag} requires a fixture key")
+            flag_args.append(param_flag)
+            continue
+
         # Support nested keys like "comment_params.page_id"
         value = cli_fixtures
         for key in fixture_key.split("."):

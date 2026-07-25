@@ -41,7 +41,15 @@ Supported commands:
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] has <name>
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] delete <name>
 <cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] list
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] export [file]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh [--remote-host <host>] import [file] [--force]
 ```
+
+`export` dumps every secret as a JSON `{name: value}` object; `import`
+restores from that same format, skipping names that already exist unless
+`--force` is given. Treat export output with the same care as any individual
+secret value — never write it to a repo, chat log, or shared/non-private
+location.
 
 Use stdin or `SECRET_VALUE` for secret values so they do not appear in shell history:
 

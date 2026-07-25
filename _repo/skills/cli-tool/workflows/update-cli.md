@@ -406,7 +406,40 @@ Test the specific changes:
 <name> newresource get <id>
 ```
 
-## Step 6: Run Full Test Suite (MANDATORY - ZERO FAILURES ALLOWED)
+## Step 6: Final Code Simplification
+
+Run `/debloat` one final time on all changes before committing.
+
+Invoke the `debloat` skill on the CLI directory.
+
+**If issues are found:**
+1. Fix them
+2. Re-run the focused tests for the changed behavior
+3. Continue only when `/debloat` is clean and the focused tests pass
+
+## Step 6.5: Refresh CLI Tool Skill Usage (if exists)
+
+If commands or parameters were added, modified, or removed, check for a corresponding CLI tool skill:
+
+```bash
+test -f <cli-tools-root>/_repo/skills/<name>-cli/usage.json
+```
+
+If the file exists, refresh its command map with the repo-owned generator:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
+```
+
+Do not import `cli_test_utils` from ad-hoc Python snippets. The generator owns
+the test-helper import path and keeps the skill-folder `usage.json` in sync with
+the installed CLI help.
+
+## Step 6.6: Run Full Test Suite (MANDATORY - ZERO FAILURES ALLOWED)
+
+Run the full suite only after the generated command map reflects the final
+installed help surface. The suite validates that generated metadata alongside
+the CLI implementation.
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
@@ -424,34 +457,18 @@ The script returns JSON with `success`, `summary`, `failures[]`, and `auth_requi
 - If `"success": false`, you are NOT done. Investigate every failure -- even if you believe the cause is external.
 - For auth-required CLIs without real credentials, follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
-## Step 6.5: Final Code Simplification
+## Step 6.7: Verify CLI Tool Skill Usage Is Stable (if exists)
 
-Run `/debloat` one final time on all changes before committing.
-
-Invoke the `debloat` skill on the CLI directory.
-
-**If issues are found:**
-1. Fix them
-2. Re-run `test-cli-tool.sh` to confirm zero failures
-3. Only proceed when both `/debloat` is clean and tests pass
-
-## Step 6.6: Refresh CLI Tool Skill Usage (if exists)
-
-If commands or parameters were added, modified, or removed, check for a corresponding CLI tool skill:
+After the full suite passes, prove the canonical usage map still matches the
+installed CLI help:
 
 ```bash
-test -f <cli-tools-root>/_repo/skills/<name>-cli/usage.json
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name> --check
 ```
 
-If the file exists, refresh its command map with the repo-owned generator:
-
-```bash
-<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
-```
-
-Do not import `cli_test_utils` from ad-hoc Python snippets. The generator owns
-the test-helper import path and keeps the skill-folder `usage.json` in sync with
-the installed CLI help.
+The check must return `"changed": false`. If it reports drift, refresh the map,
+rerun the full suite, and repeat the check. Do not complete the lifecycle with a
+post-test generated change that the full suite never validated.
 
 ## Step 7: Commit Changes
 
@@ -513,8 +530,10 @@ Update is complete when:
 - [ ] New/modified commands work as expected
 - [ ] List commands have --table, --filter, --limit, --properties options
 - [ ] Get commands have --table option
-- [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (warnings acceptable)
-- [ ] `/debloat` final pass completed (Step 6.5) — tests still pass after fixes
+- [ ] `/debloat` final pass completed (Step 6)
+- [ ] CLI tool skill usage refreshed before the full suite (Step 6.5, if the skill exists)
+- [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (Step 6.6; warnings acceptable)
+- [ ] Final usage stability check reports `"changed": false` (Step 6.7, if the skill exists)
 - [ ] Changes committed to git
 - [ ] User asked about n8n deployment (if applicable — new/modified commands or auth changes)
 - [ ] n8n node rebuild offered (if deployed)

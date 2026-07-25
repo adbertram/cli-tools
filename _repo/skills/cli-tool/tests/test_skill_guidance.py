@@ -80,6 +80,28 @@ def test_service_skills_reference_adjacent_usage_json_path():
     ) in google_skill
 
 
+def test_google_skill_requires_discovered_profile_names():
+    google_skill = (SKILL_ROOT.parent / "google-cli" / "SKILL.md").read_text()
+    google_words = _words(google_skill)
+
+    assert "Google profile names are CLI-managed identifiers" in google_words
+    assert "Before passing `--profile`, run `google auth profiles list`" in google_words
+    assert "Never derive a profile name or profile directory from an email address." in google_words
+
+
+def test_bricklink_skill_requires_managed_autonomous_browser_login_evidence():
+    bricklink_skill = (SKILL_ROOT.parent / "bricklink-cli" / "SKILL.md").read_text()
+    words = _words(bricklink_skill)
+
+    assert "bricklink auth login -c browser_session" in bricklink_skill
+    assert "managed `lastpass items username/password`" in words
+    assert "Playwright call logs can serialize a `fill()` argument" in words
+    assert "Browser Use against the visible target" in words
+    assert "visible Computer Use after verifying the target app" in words
+    assert "persisted execution contains its real tool call and result" in words
+    assert "playwright-cli and the LEGO.com login form" not in bricklink_skill
+
+
 def test_service_router_requires_wrapper_contract_before_raw_syntax():
     text = _read("workflows/skill-router.md")
     text_words = _words(text)
@@ -418,6 +440,17 @@ def test_test_workflow_documents_safe_harness_collection_command():
     assert "tests/test_command_error_wrapping.py::test_typer_commands_handle_errors" in text
     assert "Do not use `<cli-tools-root>/_repo/cli-tool-tests` as the uv project path" in text
     assert "pytest will not load the harness `conftest.py` that defines `--cli-name`" in text
+
+
+def test_test_workflow_requires_waiting_for_harness_json_contract():
+    text = _read("workflows/test-cli.md")
+    text_words = _words(text)
+
+    assert "An execution-tool yield" in text
+    assert "is not a shell exit and is not a harness result" in text_words
+    assert "HARNESS_STILL_RUNNING" in text
+    assert "stdout parses as one JSON document with a boolean `success` field" in text_words
+    assert "Missing JSON is a failed/incomplete invocation, never a passing test result" in text_words
 
 
 def test_test_workflow_documents_safe_harness_batch_command():

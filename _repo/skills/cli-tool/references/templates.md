@@ -341,7 +341,9 @@ def normalize_items(raw_items):
     → create_auth_app() detects BROWSER_SESSION credential type
     → calls config.get_browser() → BrowserAutomation subclass instance
     → BrowserAutomation.authenticate() opens persistent browser to LOGIN_URL
-    → User logs in manually in visible browser
+    → interactive terminal: user confirms after login
+      non-interactive authorized runner: live authenticated browser state is
+      the completion signal; no stdin or /dev/tty confirmation is required
     → persistent Chromium profile is written under
       get_profile_data_dir()/browser-data/chromium-profile/  → has_session() returns True
 

@@ -336,17 +336,17 @@ Continue only after explicit approval. See `references/templates.md` for type
 details.
 </principle>
 
-<principle name="Browser-Session Auth Through Computer Use">
+<principle name="Browser-Session Auth Completion Surface">
 When a CLI operation requires browser automation and `auth status` shows the
-needed `browser_session` profile is unauthenticated, do not run browser login in
-a headless shell. Use Computer Use to open a visible terminal, run the CLI's
-documented Bash login command (usually `bash -lc '<tool> auth login ...'`), and
-complete the browser login interactively. Use `--credential-type
-browser_session` for multi-credential CLIs and `--force` for stale or expired
-sessions. Follow `references/secrets.md` for credentials and MFA; ask Adam only
-when the required credential, code, approval, or local-GUI control is genuinely
-unavailable. If Computer Use is unavailable or the current host policy blocks
-local GUI control, stop and report that blocker instead of substituting raw
+needed `browser_session` profile is unauthenticated, use the browser surface
+authorized for the current host. Local interactive login uses Computer Use to
+open a visible terminal and run the CLI's documented Bash login command. An
+explicitly authorized non-interactive demo host or automation runner may invoke
+the same command without stdin or `/dev/tty`; `BrowserAutomation` then uses the
+live authenticated browser state as the completion signal and fails clearly if
+that state is not authenticated. Use `--credential-type browser_session` for
+multi-credential CLIs and `--force` for stale or expired sessions. Follow
+`references/secrets.md` for credentials and MFA. Do not substitute raw
 Playwright, session-file edits, or another auth path.
 </principle>
 

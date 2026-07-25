@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from cli_test_utils import discover_list_commands, run_cli_command
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
-COMMAND_ONLY_CREDENTIAL_TYPES = {"no_auth"}
 CLI_SELECTION_FIXTURE = "cli_name"
 CLI_NAME_REQUIRED_MESSAGE = (
     "WARNING: No --cli-name specified for CLI-dependent tests.\n"
@@ -99,6 +98,12 @@ def _required_credential_types_for_list_commands(
 ) -> list[str]:
     """Return credential types required by the discovered list commands."""
     pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    configured_credential_types = _credential_types_from_config(cli_dir, cli_name)
+    if configured_credential_types is None:
+        pytest.fail(
+            f"{cli_name} CREDENTIAL_TYPES could not be parsed from {pkg_dir / 'config.py'}."
+        )
+    configured_credential_type_set = set(configured_credential_types)
     commands_dir = pkg_dir / "commands"
     package_modules = {
         module_file.stem: module_file
@@ -152,7 +157,7 @@ def _required_credential_types_for_list_commands(
         required_types.update(
             credential_type
             for credential_type in credential_types
-            if credential_type not in COMMAND_ONLY_CREDENTIAL_TYPES
+            if credential_type in configured_credential_type_set
         )
 
     return sorted(required_types)

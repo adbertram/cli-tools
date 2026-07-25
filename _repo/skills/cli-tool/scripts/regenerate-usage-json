@@ -53,7 +53,9 @@ sys.path.insert(0, str(CLI_TOOL_TESTS))
 
 from cli_test_utils import (  # noqa: E402
     discover_nested_commands,
+    extract_help_sections,
     leaf_command_paths,
+    parse_help_option_secondary_tokens,
     parse_help_parameters,
     run_cli_command,
 )
@@ -129,7 +131,7 @@ def existing_node_meta(old_usage: dict) -> dict[str, dict]:
     return meta
 
 
-def live_option_tokens(parameters: dict) -> set[str]:
+def live_option_tokens(parameters: dict, secondary_tokens: set[str] | None = None) -> set[str]:
     tokens = set(ALWAYS_VALID_OPTION_TOKENS)
     for option in parameters.get("options", []):
         name = option.get("name")
@@ -137,7 +139,14 @@ def live_option_tokens(parameters: dict) -> set[str]:
             continue
         tokens.add(name)
         if option.get("type") == "bool":
+            # Typer's mechanical "--no-<primary>" convention is only a
+            # fallback: parse_help_option_secondary_tokens below recovers the
+            # CLI's actual declared secondary flag (e.g. --include-rules's
+            # real pair is --no-rules, not --no-include-rules), which is the
+            # authoritative token when the live help text provided one.
             tokens.add(f"--no-{name[2:]}")
+    if secondary_tokens:
+        tokens.update(secondary_tokens)
     return tokens
 
 
@@ -168,13 +177,39 @@ def stale_example_commands(value: object, command_path: str) -> list[str]:
     return stale
 
 
+def filter_valid_examples(
+    value: object, command_path: str, live_tokens: set[str]
+) -> list[str]:
+    """Keep only the carried-forward examples that are still accurate.
+
+    Enrichment examples are never re-parsed from the live CLI's ``Examples:``
+    help text (no such parser exists here); they are only ever carried
+    forward from the previous usage.json and dropped once stale. A command's
+    examples array commonly accumulates independent lines added at different
+    times, so one line going stale (e.g. a single option rename such as
+    ``--tested-approved`` -> ``--ai-tested``) must not discard every other
+    still-accurate example in the same array. Filter one example at a time
+    instead of gating the whole array on the presence of any stale token.
+    """
+    examples = value if isinstance(value, list) else [value]
+    renamed_command_examples = set(stale_example_commands(examples, command_path))
+    return [
+        example
+        for example in examples
+        if example not in renamed_command_examples
+        and not stale_option_tokens(example, live_tokens)
+    ]
+
+
 def assemble_commands(
     live_paths: list[str],
     parameters_by_path: dict[str, dict],
     help_by_path: dict[str, str],
     old_meta: dict[str, dict],
+    secondary_tokens_by_path: dict[str, set[str]] | None = None,
 ) -> dict:
     root: dict = {}
+    secondary_tokens_by_path = secondary_tokens_by_path or {}
 
     for command_path in live_paths:
         parts = command_path.split()
@@ -188,13 +223,15 @@ def assemble_commands(
             node["help"] = parsed_help
 
             parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
-            valid_option_tokens = live_option_tokens(parameters)
-            if (
-                "examples" in meta
-                and not stale_option_tokens(meta["examples"], valid_option_tokens)
-                and not stale_example_commands(meta["examples"], current_path)
-            ):
-                node["examples"] = meta["examples"]
+            valid_option_tokens = live_option_tokens(
+                parameters, secondary_tokens_by_path.get(current_path)
+            )
+            if "examples" in meta:
+                valid_examples = filter_valid_examples(
+                    meta["examples"], current_path, valid_option_tokens
+                )
+                if valid_examples:
+                    node["examples"] = valid_examples
             if "usage_instructions" in meta and not stale_option_tokens(meta["usage_instructions"], valid_option_tokens):
                 node["usage_instructions"] = meta["usage_instructions"]
 
@@ -268,6 +305,15 @@ def build_usage(
         path: extract_help_line(text)
         for path, text in help_text_by_path.items()
     }
+    # Typer allows a custom secondary flag name for a paired boolean (e.g.
+    # --include-rules's real pair is --no-rules, not the mechanical
+    # --no-include-rules live_option_tokens would otherwise assume), so
+    # recover the CLI's actual declared secondary tokens from the same
+    # already-fetched help text rather than guessing.
+    secondary_tokens_by_path = {
+        path: set(parse_help_option_secondary_tokens(extract_help_sections(text).get("Options", "")))
+        for path, text in help_text_by_path.items()
+    }
 
     new_usage = dict(old_usage)
     new_usage["commands"] = assemble_commands(
@@ -275,6 +321,7 @@ def build_usage(
         parameters_by_path,
         help_by_path,
         existing_node_meta(old_usage),
+        secondary_tokens_by_path,
     )
     new_usage["total_commands"] = len(leaf_command_paths(set(live_paths)))
     preserved_discovered_at = discovered_at or old_usage.get("discovered_at")
