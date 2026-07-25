@@ -8,9 +8,13 @@ from cli_tools_shared import CLIModel
 
 FACEBOOK_BASE_URL = "https://www.facebook.com"
 
-# A rendered Facebook price: an optional currency-code prefix, the currency
-# symbol, and the amount ("$15", "CA$1,100.00").
-PRICE_PATTERN = re.compile(r"^(?P<currency>[A-Z]{0,3}\$)\s*(?P<amount>[\d,]+(?:\.\d{2})?)$")
+# A rendered Facebook price: a currency prefix followed by the amount ("$15",
+# "CA$1,100.00", "£1,600"). The browser extractors in ``client.py`` are the
+# authoritative shape gate -- they match the currency prefix as a Unicode
+# currency symbol (``\p{Sc}``) with an optional currency code -- so this pattern
+# only has to split an already-validated token into its symbol and amount.
+# Python's ``re`` has no ``\p{Sc}``, hence the "leading non-digit run" form.
+PRICE_PATTERN = re.compile(r"^(?P<currency>[^\d\s]{1,4}?)\s?(?P<amount>[\d,]+(?:\.\d{2})?)$")
 
 
 class MarketplaceListing(CLIModel):

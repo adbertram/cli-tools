@@ -1,7 +1,6 @@
 """Facebook client using BrowserAutomation for browser automation."""
 import html
 import json
-import logging
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -112,7 +111,9 @@ MARKETPLACE_PAGE_STATE_JS = """(selector) => {
 # have not painted any text yet (scroll skeletons) are neither parsed nor
 # reported.
 LIST_PAGE_LISTINGS_JS = r"""() => {
-    const PRICE = /^(?:[A-Z]{0,3}\$[\d,]+(?:\.\d{2})?|Free|FREE)$/;
+    // Any Unicode currency symbol (\p{Sc}: $, \u00a3, \u20ac, ...), optionally prefixed with a
+    // currency code the way Facebook renders foreign-currency listings ("CA$75").
+    const PRICE = /^(?:\p{Lu}{0,3}\p{Sc}\s?[\d,]+(?:\.\d{2})?|Free|FREE)$/u;
     const ownText = (el) => {
         let text = "";
         for (const node of el.childNodes) {
@@ -188,7 +189,9 @@ DETAIL_PAGE_PRICE_JS = r"""() => {
     if (main == null) return empty;
     const h1 = main.querySelector('h1');
     if (h1 == null) return empty;
-    const PRICE = /^(?:[A-Z]{0,3}\$[\d,]+(?:\.\d{2})?|Free|FREE)$/;
+    // Any Unicode currency symbol (\p{Sc}: $, \u00a3, \u20ac, ...), optionally prefixed with a
+    // currency code the way Facebook renders foreign-currency listings ("CA$75").
+    const PRICE = /^(?:\p{Lu}{0,3}\p{Sc}\s?[\d,]+(?:\.\d{2})?|Free|FREE)$/u;
     const ownText = (el) => {
         let text = "";
         for (const node of el.childNodes) {
@@ -1027,31 +1030,44 @@ class FacebookClient:
         except Exception:
             logger.debug("_dismiss_marketplace_login_dialog: close button not actionable")
 
-    def _extract_list_page_listings(self, page) -> List[Dict]:
+    def _extract_list_page_listings(self, page, settle_ms: int = 5000) -> List[Dict]:
         """Extract listing records from a Marketplace list/search page.
 
+        Facebook's grid is virtualized, so a tile can paint its image and title
+        a moment before its price. That is a transient render state, not a
+        markup change, so unreadable tiles are re-checked until the grid settles.
+
         Raises:
-            ClientError: One or more rendered listing tiles carried text but no
-                usable price/title, which means Facebook changed its tile
+            ClientError: Listing tiles were still missing a usable price/title
+                after ``settle_ms``, which means Facebook changed its tile
                 markup. Dropping them silently would under-report results.
         """
-        result = page.evaluate(LIST_PAGE_LISTINGS_JS)
-        if not isinstance(result, dict):
-            raise ClientError(
-                "Facebook Marketplace listing extractor returned a non-object result: "
-                f"{type(result).__name__}."
+        deadline = time.monotonic() + (settle_ms / 1000)
+        while True:
+            result = page.evaluate(LIST_PAGE_LISTINGS_JS)
+            if not isinstance(result, dict):
+                raise ClientError(
+                    "Facebook Marketplace listing extractor returned a non-object result: "
+                    f"{type(result).__name__}."
+                )
+            rows = result.get("rows")
+            if not isinstance(rows, list):
+                raise ClientError("Facebook Marketplace listing extractor returned no rows array.")
+            unparsed = result.get("unparsed") or []
+            if not unparsed:
+                return rows
+            if time.monotonic() >= deadline:
+                raise ClientError(
+                    f"{len(unparsed)} Facebook Marketplace listing tile(s) still rendered "
+                    f"without a recognizable price and title after {settle_ms}ms. Facebook "
+                    "changed its tile markup and the CLI extractor needs updating. "
+                    f"Samples: {unparsed[:3]}"
+                )
+            logger.debug(
+                "_extract_list_page_listings: waiting for %d unreadable tile(s) to settle",
+                len(unparsed),
             )
-        unparsed = result.get("unparsed") or []
-        if unparsed:
-            raise ClientError(
-                f"{len(unparsed)} Facebook Marketplace listing tile(s) rendered without a "
-                "recognizable price and title. Facebook changed its tile markup and the "
-                f"CLI extractor needs updating. Samples: {unparsed[:3]}"
-            )
-        rows = result.get("rows")
-        if not isinstance(rows, list):
-            raise ClientError("Facebook Marketplace listing extractor returned no rows array.")
-        return rows
+            page.wait_for_timeout(500)
 
     def _marketplace_page_state(self, page) -> Dict:
         """Read Facebook's own view of a Marketplace list/search page."""
