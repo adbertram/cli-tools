@@ -56,10 +56,15 @@ class PoshmarkClient:
             self._browser = None
 
     @cached
-    def search(self, query: str, limit: int = 100) -> List[dict]:
-        """Search Poshmark listings for ``query`` and return up to ``limit`` results."""
+    def search(self, query: str, limit: int = 100, sort_by: str = "added_desc") -> List[dict]:
+        """Search Poshmark listings for ``query`` and return up to ``limit`` results.
+
+        ``sort_by`` is a Poshmark ``?sort_by=`` value (e.g. ``added_desc``,
+        ``price_asc``, ``price_desc``, ``relevance_v2``) resolved from the
+        ``--sort``/``--desc`` flags by ``main._resolve_sort``.
+        """
         encoded = query.replace(" ", "+").replace("&", "%26")
-        url = f"{self.config.base_url}/search?query={encoded}&sort_by=added_desc"
+        url = f"{self.config.base_url}/search?query={encoded}&sort_by={sort_by}"
         browser = self._get_browser()
         page = browser.get_page(url)
         page.wait_for_selector(".tile-grid-redesign", timeout=30000)

@@ -81,7 +81,7 @@ poshmark auth profiles delete PROFILE_NAME
 ### Listings (`poshmark listings`)
 
 ```bash
-# Search for listings (JSON output)
+# Search for listings (JSON output, newest listed first by default)
 poshmark listings search "nike shoes"
 
 # Search with table format
@@ -92,7 +92,41 @@ poshmark listings search "nike shoes" --limit 10
 
 # Restrict output fields
 poshmark listings search "nike shoes" --properties "id,title,price"
+
+# Sort by price, low to high (natural direction)
+poshmark listings search "nike shoes" --sort price
+
+# Sort by price, high to low
+poshmark listings search "nike shoes" --sort price --desc
+
+# Sort by Poshmark relevance
+poshmark listings search "nike shoes" --sort relevance
 ```
+
+#### Sorting (`--sort` / `--desc`)
+
+`listings search` follows the Source-CLI Sort Standard. `--sort`/`-s` selects the
+sort field (default `newest`); `--desc`/`-d` reverses that field's natural
+direction. Each field resolves to a Poshmark `?sort_by=` value, verified live
+against the Poshmark search "Sort By" dropdown:
+
+| `--sort` | Direction | Poshmark `sort_by` | Poshmark label |
+|----------|-----------|--------------------|----------------|
+| `newest` (default) | most recently listed first | `added_desc` | "Just In" |
+| `price` | low → high | `price_asc` | "Price Low to High" |
+| `price --desc` | high → low | `price_desc` | "Price High to Low" |
+| `relevance` | Poshmark relevance order | `relevance_v2` | "Relevance" |
+
+Rules:
+
+- An unknown `--sort` value fails fast with a clear error listing the valid
+  values (`newest, price, relevance`) and a non-zero exit; there is no silent
+  fallback.
+- `--desc` is only valid with `price`. Poshmark exposes no oldest-first
+  (`added_asc`) sort, so `newest --desc` is rejected, and `relevance` has no
+  reversed order, so `relevance --desc` is rejected.
+- Poshmark's `best_match` value is the "Just Shared" sort, not relevance; the
+  option Poshmark labels "Relevance" is `relevance_v2`.
 
 ## Output Formats
 
@@ -109,6 +143,8 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 
 | Option | Short | Description |
 |--------|-------|-------------|
+| `--sort` | `-s` | Sort field: `newest` (default), `price`, or `relevance` |
+| `--desc` | `-d` | Reverse the sort field's natural direction (only valid with `price`) |
 | `--table` | `-t` | Display data as a table |
 | `--limit` | `-l` | Maximum number of results |
 | `--properties` | `-p` | Restrict output to selected fields |
