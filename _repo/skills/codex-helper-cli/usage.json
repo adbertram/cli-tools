@@ -1,0 +1,36 @@
+{
+  "tool": "codex-helper",
+  "description": "CLI interface for codex-helper",
+  "discovered_at": "2026-07-06T14:00:18Z",
+  "total_commands": 1,
+  "global_options": [],
+  "commands": {
+    "usage": {
+      "help": "Read Codex ChatGPT plan usage from the local Codex app-server.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--json",
+          "type": "bool",
+          "required": false,
+          "help": "Emit JSON output"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Codex app-server timeout in seconds",
+          "default": "30"
+        }
+      ]
+    }
+  },
+  "usage_instructions": "Use the `codex-helper` CLI. Run `codex-helper --help` to discover command groups and `--help` on any subcommand for its options."
+}
