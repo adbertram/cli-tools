@@ -540,7 +540,10 @@ def test_list_group_posts_fills_underfilled_first_page_with_cursor(monkeypatch):
     assert [post.post_id for post in posts] == [str(1000 + index) for index in range(10)]
     assert len(calls) == 2
     assert calls[0]["regular_stories_count"] == 10
-    assert calls[1]["regular_stories_count"] == 1
+    # Facebook's group-feed cursor is inclusive of the boundary post, so a
+    # follow-up page requests one story MORE than is missing (1 remaining + 1)
+    # to absorb the repeated boundary edge.
+    assert calls[1]["regular_stories_count"] == 2
     assert calls[1]["cursor"] == "cursor-1"
 
 
