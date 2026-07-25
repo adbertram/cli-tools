@@ -79,6 +79,17 @@ brickfreedom task complete \
 # Exit 1 + JSON {"success": false, "error": "ambiguous match ...", "matches": [...]} on multiple matches -- pass --match-quantity to disambiguate.
 ```
 
+When one dashboard row contains multiple missing parts, complete the physical row once by passing its complete item set. Do not issue one completion per parsed part:
+
+```bash
+brickfreedom task complete \
+    --match-platform bricklink \
+    --match-order-id 31971224 \
+    --match-items-json '[{"itemNumber":"32952","quantity":1},{"itemNumber":"3456","quantity":1}]'
+```
+
+The item-set match is exact and order-independent. A partial set fails instead of completing a row whose other missing parts were not included in the caller's workflow.
+
 **Silent missing-part parser misses are visible.** `task list --type missing-part` includes a top-level `unparsed_count` field in JSON output and prints a stderr warning when it is > 0. When BF ships a new task text format, run `task list --type missing-part --debug-unparsed` to print the raw unparsed rows to stderr so the parser can be updated.
 </gotchas>
 

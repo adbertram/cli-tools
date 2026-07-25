@@ -1,8 +1,8 @@
 {
   "tool": "brickfreedom",
   "description": "CLI interface for Brickfreedom dashboard automation",
-  "discovered_at": "2026-06-20T19:39:16Z",
-  "total_commands": 22,
+  "discovered_at": "2026-07-20T18:46:01Z",
+  "total_commands": 23,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use `auth profiles list` for list all profiles and show which is the default..",
               "arguments": [],
               "options": [
@@ -176,6 +176,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -191,7 +223,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Use `auth status` for check authentication status across profiles..",
           "arguments": [],
           "options": [
@@ -488,7 +520,6 @@
       "commands": {
         "complete": {
           "help": "Mark a task as complete by 1-based index, by content match, or --bulk. Three modes: 1. Positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. Bulk: brickfreedom task complete --bulk 3. Match by missing-part attributes (stable for scripts — re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 Add --match-quantity to disambiguate if multiple rows match. Exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches OR multiple matches (ambiguous). JSON error printed to stdout describing the failure; resolve by passing more --match-* flags.",
-          "usage_instructions": "Use `task complete` for mark a task as complete by 1-based index, by content match, or --bulk. three modes: 1. positional index (interactive use, fragile for scripts): brickfreedom task complete 1 2. bulk: brickfreedom task complete --bulk 3. match by missing-part attributes (stable for scripts — re-resolves the current index right before completing, so prior list-shifting completions cannot mark the wrong task): brickfreedom task complete \\ --match-platform bricklink \\ --match-order-id 30823995 \\ --match-item-number 75270-1 add --match-quantity to disambiguate if multiple rows match. exit codes for match mode: - 0: exactly one match, completed. - 1: zero matches or multiple matches (ambiguous). json error printed to stdout describing the failure; resolve by passing more --match-* flags..",
           "arguments": [
             {
               "name": "index",
@@ -528,6 +559,12 @@
               "type": "INTEGER",
               "required": false,
               "help": "Match a missing-part task by quantity (use to disambiguate when multiple rows match). Cannot be combined with positional index"
+            },
+            {
+              "name": "--match-items-json",
+              "type": "TEXT",
+              "required": false,
+              "help": "Match one physical missing-part task row by its complete item set as JSON: [{\"itemNumber\":\"3001\",\"quantity\":1}]. Requires --match-platform and"
             },
             {
               "name": "--profile",

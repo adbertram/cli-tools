@@ -15,6 +15,9 @@ dependencies = [
     "playwright>=1.40.0",
 ]
 
+[dependency-groups]
+dev = ["pytest>=7.0.0"]
+
 [project.scripts]
 brickfreedom = "brickfreedom_cli.main:app"
 
