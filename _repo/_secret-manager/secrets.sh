@@ -80,6 +80,13 @@ Commands:
   delete <name>        Remove secret.
   has <name>           Exit 0 if exists, 1 if not.
   list                 List secret names.
+  export [file]        Dump all secrets as a JSON object {name: value} to
+                       <file> or stdout. Handle the output like the secret
+                       values it contains.
+  import [file] [--force]
+                       Restore secrets from a JSON object {name: value} read
+                       from <file> or stdin. Existing names are skipped
+                       unless --force is given.
 
 Options:
   --remote-host <host> Run the command on the remote host over SSH.
@@ -423,6 +430,131 @@ cmd_list() {
     log_info "security dump-keychain list completed (service=$SERVICE)"
 }
 
+cmd_export() {
+    local out_file="${1:-}"
+    ensure_managed_keychain
+
+    local names
+    names="$(cmd_list)" || return $?
+
+    local pairs_file
+    pairs_file="$(mktemp "${TMPDIR:-/tmp}/cli-tools-secrets.export.XXXXXX")"
+    chmod 600 "$pairs_file"
+
+    local name value
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        if ! value="$(cmd_get "$name")"; then
+            local status=$?
+            rm -f "$pairs_file"
+            return "$status"
+        fi
+        printf '%s\0%s\0' "$name" "$value" >>"$pairs_file"
+    done <<<"$names"
+
+    log_info "exporting $(printf '%s' "$names" | grep -c . || true) secret(s)"
+
+    local json
+    if ! json="$(python3 -c '
+import sys, json
+data = sys.stdin.buffer.read()
+parts = data.split(b"\0")
+if parts and parts[-1] == b"":
+    parts = parts[:-1]
+obj = {}
+for i in range(0, len(parts), 2):
+    obj[parts[i].decode("utf-8")] = parts[i + 1].decode("utf-8")
+json.dump(obj, sys.stdout, indent=2, sort_keys=True)
+print()
+' <"$pairs_file")"; then
+        rm -f "$pairs_file"
+        die "failed to render export JSON"
+    fi
+    rm -f "$pairs_file"
+
+    if [[ -n "$out_file" ]]; then
+        printf '%s\n' "$json" >"$out_file"
+        chmod 600 "$out_file"
+    else
+        printf '%s\n' "$json"
+    fi
+    log_info "export completed"
+}
+
+cmd_import() {
+    local force=0
+    local in_file=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force)
+                force=1
+                shift
+                ;;
+            -*)
+                die "unknown import option: $1"
+                ;;
+            *)
+                [[ -z "$in_file" ]] || die "import accepts only one file argument"
+                in_file="$1"
+                shift
+                ;;
+        esac
+    done
+    ensure_managed_keychain
+
+    local pairs_file
+    pairs_file="$(mktemp "${TMPDIR:-/tmp}/cli-tools-secrets.import.XXXXXX")"
+    chmod 600 "$pairs_file"
+
+    local parse_status=0
+    if [[ -n "$in_file" ]]; then
+        python3 -c '
+import sys, json
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    obj = json.load(f)
+for k, v in obj.items():
+    if not isinstance(v, str):
+        raise SystemExit(f"secret value for {k!r} must be a string")
+    sys.stdout.buffer.write(k.encode("utf-8") + b"\0" + v.encode("utf-8") + b"\0")
+' "$in_file" >"$pairs_file" || parse_status=$?
+    else
+        python3 -c '
+import sys, json
+obj = json.load(sys.stdin)
+for k, v in obj.items():
+    if not isinstance(v, str):
+        raise SystemExit(f"secret value for {k!r} must be a string")
+    sys.stdout.buffer.write(k.encode("utf-8") + b"\0" + v.encode("utf-8") + b"\0")
+' >"$pairs_file" || parse_status=$?
+    fi
+
+    if [[ "$parse_status" -ne 0 ]]; then
+        rm -f "$pairs_file"
+        die "invalid import JSON"
+    fi
+
+    local status=0
+    local name value
+    while IFS= read -r -d '' name && IFS= read -r -d '' value; do
+        normalize_secret_part "$name" >/dev/null
+        if [[ "$force" -ne 1 ]] && cmd_has "$name"; then
+            echo "secrets: skip existing $name (use --force to overwrite)" >&2
+            log_info "import skip existing account=$name"
+            continue
+        fi
+        if ! cmd_set "$name" "$value"; then
+            status=$?
+            rm -f "$pairs_file"
+            return "$status"
+        fi
+        log_info "import set account=$name"
+    done <"$pairs_file"
+    rm -f "$pairs_file"
+
+    log_info "import completed"
+    return "$status"
+}
+
 cleanup_remote_dir() {
     local host="$1"
     local remote_dir="$2"
@@ -653,6 +785,8 @@ main() {
         delete) if cmd_delete "$@"; then status=0; else status=$?; fi ;;
         has) if cmd_has "$@"; then status=0; else status=$?; fi ;;
         list) if cmd_list; then status=0; else status=$?; fi ;;
+        export) if cmd_export "$@"; then status=0; else status=$?; fi ;;
+        import) if cmd_import "$@"; then status=0; else status=$?; fi ;;
         *) die "unknown command: $sub (try --help)" ;;
     esac
 
