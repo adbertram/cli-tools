@@ -17,7 +17,7 @@ from typing import Optional, List
 from ..client import get_client
 from ..display import print_detail, print_list
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, handle_error
 
 app = typer.Typer(help="Manage store inventory", no_args_is_help=True)
 
@@ -54,6 +54,7 @@ TABLE_HEADERS = ["ID", "Item", "Color", "Qty", "Price", "Cond"]
 
 
 @app.command("list")
+@command
 def inventory_list(
     type: Optional[str] = typer.Option(None, "--type", help="Item type (PART,SET,MINIFIG,etc.)"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Status (Y=available,S=stockroomA,B,C,N=unavailable,R=reserved)"),
@@ -99,6 +100,7 @@ def inventory_list(
 
 
 @app.command("get")
+@command
 def inventory_get(
     inventory_id: str = typer.Argument(..., help="Inventory ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -120,6 +122,7 @@ def inventory_get(
 
 
 @app.command("stats")
+@command
 def inventory_stats(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -201,6 +204,7 @@ def inventory_stats(
 
 
 @app.command("update")
+@command
 def inventory_update(
     inventory_id: str = typer.Argument(..., help="Inventory ID"),
     price: Optional[str] = typer.Option(None, "--price", help="New unit price"),
@@ -270,6 +274,7 @@ def inventory_update(
 
 
 @app.command("update-qty")
+@command
 def inventory_update_qty(
     input_file: Optional[str] = typer.Option(None, "--input", help="JSON file with items"),
     stdin: bool = typer.Option(False, "--stdin", help="Read from stdin"),
@@ -326,6 +331,7 @@ def inventory_update_qty(
 
 
 @app.command("create")
+@command
 def inventory_create(
     type: Optional[str] = typer.Argument(None, help="Item type (PART,SET,MINIFIG)"),
     item_no: Optional[str] = typer.Argument(None, help="Item number"),
@@ -404,6 +410,7 @@ def inventory_create(
 
 
 @app.command("delete")
+@command
 def inventory_delete(
     inventory_id: str = typer.Argument(..., help="Inventory ID"),
 ):
@@ -424,6 +431,7 @@ def inventory_delete(
 
 
 @app.command("search")
+@command
 def inventory_search(
     part_no: str = typer.Argument(..., help="Part number to search for"),
     color: Optional[int] = typer.Option(None, "--color", "-c", help="Filter by color ID"),
@@ -479,6 +487,7 @@ def inventory_search(
 
 
 @app.command("stockroom")
+@command
 def inventory_stockroom(
     room: Optional[str] = typer.Option(None, "--room", help="Stockroom ID (A, B, or C)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

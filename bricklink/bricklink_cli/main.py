@@ -3,9 +3,10 @@ from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
+from cli_tools_shared.output import command
 
 from .config import get_config
-from .commands import auth, catalog, coupon, inventory, member, messages, notification, order, refund
+from .commands import auth, catalog, coupon, inventory, member, messages, notification, order, refund, store
 
 app = create_app(
     name="bricklink",
@@ -36,6 +37,7 @@ COMMAND_GROUPS = (
     (catalog, "catalog", "Browse catalog data"),
     (member, "member", "Member information"),
     (coupon, "coupon", "Manage coupons"),
+    (store, "store", "Manage store settings"),
     (messages, "messages", "Manage messages (browser)"),
     (refund, "refund", "Manage refunds (browser)"),
     (notification, "notification", "Manage notifications (browser)"),
@@ -50,6 +52,7 @@ app.add_typer(create_cache_app(get_config), name="cache")
 
 # Top-level browser commands (backward compatibility)
 @app.command("send-wanted-list-notification", hidden=True)
+@command
 def send_wanted_list_notification_cmd():
     """Send wanted list notification to matching stores (browser)."""
     notification.send_wanted_list_notification()

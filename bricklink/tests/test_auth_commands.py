@@ -1,5 +1,5 @@
 from bricklink_cli.commands.auth import _test_handler
-from bricklink_cli.commands import messages, notification, refund
+from bricklink_cli.commands import messages, notification, refund, store
 
 
 def test_test_handler_uses_uncached_connection_probe(monkeypatch):
@@ -38,4 +38,7 @@ def test_browser_only_command_groups_require_only_browser_session():
         "get": ["browser_session"],
         "list": ["browser_session"],
         "send-wanted-list": ["browser_session"],
+    }
+    assert store.COMMAND_CREDENTIALS == {
+        "vacation": ["browser_session"],
     }

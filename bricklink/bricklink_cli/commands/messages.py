@@ -27,7 +27,7 @@ import re as _re
 
 from ..display import print_detail, print_list
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
-from cli_tools_shared.output import print_json, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_success, handle_error
 from . import run_browser
 
 app = typer.Typer(help="Manage messages (browser)", no_args_is_help=True)
@@ -236,6 +236,7 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
 
 
 @app.command("list")
+@command
 def messages_list(
     folder: str = typer.Option("inbox", "--folder", help="Message folder: inbox or outbox"),
     order_id: Optional[str] = typer.Option(None, "--order-id", help="Get messages for a specific order (API-based, no browser needed)"),
@@ -322,6 +323,7 @@ def messages_list(
 
 
 @app.command("get")
+@command
 def messages_get(
     message_id: str = typer.Argument(..., help="Message ID"),
     folder: str = typer.Option("i", "--folder", help="i=inbox, o=outbox"),
@@ -361,6 +363,7 @@ def messages_get(
 
 
 @app.command("send")
+@command
 def messages_send(
     arg1: Optional[str] = typer.Argument(None, help="Order ID (when sending to an order) or message body (when using --member)"),
     arg2: Optional[str] = typer.Argument(None, help="Message body (when order ID is provided as first argument)"),
@@ -427,6 +430,7 @@ def messages_send(
 
 
 @app.command("reply")
+@command
 def messages_reply(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Argument(..., help="Reply body"),
@@ -461,6 +465,7 @@ def messages_reply(
 
 
 @app.command("mark-read")
+@command
 def messages_mark_read(
     message_id: str = typer.Argument(..., help="Message ID"),
 ):
@@ -482,6 +487,7 @@ def messages_mark_read(
 
 
 @app.command("mark-unread")
+@command
 def messages_mark_unread(
     message_id: str = typer.Argument(..., help="Message ID"),
 ):

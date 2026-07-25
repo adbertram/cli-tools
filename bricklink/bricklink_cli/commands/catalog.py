@@ -18,7 +18,7 @@ from typing import Optional, List
 from ..client import get_client
 from ..display import print_detail, print_list
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 
 app = typer.Typer(help="Browse catalog data", no_args_is_help=True)
 
@@ -31,6 +31,7 @@ def _get_catalog_item(type: str, item_no: str, table: bool = False):
 
 
 @app.command("get")
+@command
 def catalog_get(
     type: str = typer.Argument(..., help="Item type (PART,SET,MINIFIG,BOOK,GEAR,CATALOG,INSTRUCTION)"),
     item_no: str = typer.Argument(..., help="Item number"),
@@ -51,6 +52,7 @@ def catalog_get(
 
 
 @app.command("item", hidden=True)
+@command
 def catalog_item(
     type: str = typer.Argument(..., help="Item type (PART,SET,MINIFIG,BOOK,GEAR,CATALOG,INSTRUCTION)"),
     item_no: str = typer.Argument(..., help="Item number"),
@@ -71,6 +73,7 @@ def catalog_item(
 
 
 @app.command("list")
+@command
 def catalog_list(
     item_type: str = typer.Argument(..., help="Item type (PART, SET, MINIFIG, etc.)"),
     keyword: str = typer.Option(None, "--keyword", "-k", help="Search keyword"),
@@ -131,6 +134,7 @@ def catalog_list(
 
 
 @app.command("part")
+@command
 def catalog_part(
     part_no: str = typer.Argument(..., help="Part number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -149,6 +153,7 @@ def catalog_part(
 
 
 @app.command("set")
+@command
 def catalog_set(
     set_no: str = typer.Argument(..., help="Set number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -167,6 +172,7 @@ def catalog_set(
 
 
 @app.command("minifig")
+@command
 def catalog_minifig(
     fig_no: str = typer.Argument(..., help="Minifig number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -185,6 +191,7 @@ def catalog_minifig(
 
 
 @app.command("price")
+@command
 def catalog_price(
     type: Optional[str] = typer.Argument(None, help="Item type"),
     item_no: Optional[str] = typer.Argument(None, help="Item number"),
@@ -281,6 +288,7 @@ def catalog_price(
 
 
 @app.command("colors")
+@command
 def catalog_colors(
     type: str = typer.Argument(..., help="Item type"),
     item_no: str = typer.Argument(..., help="Item number"),
@@ -326,6 +334,7 @@ def catalog_colors(
 
 
 @app.command("subsets")
+@command
 def catalog_subsets(
     type: str = typer.Argument(..., help="Item type"),
     item_no: str = typer.Argument(..., help="Item number"),
@@ -366,6 +375,7 @@ def catalog_subsets(
 
 
 @app.command("supersets")
+@command
 def catalog_supersets(
     type: str = typer.Argument(..., help="Item type"),
     item_no: str = typer.Argument(..., help="Item number"),

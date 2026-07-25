@@ -9,7 +9,7 @@ from requests_oauthlib import OAuth1Session
 from .config import get_config
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.exceptions import ClientError
-from cli_tools_shared.data_cache import cached
+from cli_tools_shared.data_cache import cached, invalidate
 
 activity = get_activity_logger("bricklink")
 
@@ -324,7 +324,13 @@ class BricklinkClient:
         Returns:
             Updated order dict.
         """
-        return self._make_request("PUT", f"/orders/{order_id}", data=updates)
+        result = self._make_request("PUT", f"/orders/{order_id}", data=updates)
+        # Invalidate cached reads so the next `get_order`/`list_orders` reflects
+        # this mutation instead of serving a stale on-disk snapshot for up to
+        # CACHE_TTL seconds (see cli_tools_shared.data_cache.invalidate).
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def update_order_status(self, order_id: Union[str, int], status: str) -> Dict:
         """Update the status of an order.
@@ -336,11 +342,16 @@ class BricklinkClient:
         Returns:
             Result dict.
         """
-        return self._make_request(
+        result = self._make_request(
             "PUT",
             f"/orders/{order_id}/status",
             data={"field": "status", "value": status},
         )
+        # Same staleness hazard as update_order — invalidate the cached
+        # get_order/list_orders snapshots for this order.
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def mark_shipped(
         self,

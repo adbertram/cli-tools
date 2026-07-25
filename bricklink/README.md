@@ -1,6 +1,8 @@
 # Bricklink CLI
 
-A command-line interface for the [Bricklink API](https://www.bricklink.com/v3/api.page). Bricklink marketplace API
+## DESCRIPTION
+
+A command-line interface for the [Bricklink API]. Use it to query and manage Bricklink marketplace API data for orders, inventory, catalog records, messages, coupons, and refunds from the terminal.
 
 ## Installation
 
@@ -74,27 +76,53 @@ challenge, rebuild only the browser session first:
 bricklink auth login --credential-type browser_session
 ```
 
-In Codex or another non-interactive runner, start that command in a real TTY.
-It opens a headed Chrome profile at
-`~/.local/share/cli-tools/bricklink/authentication_profiles/default/browser-data/chromium-profile`
-and waits for Enter before verifying and closing the browser. Do not press
-Enter until the visible browser is actually signed in.
+This login is fully non-interactive. It opens a headed Chrome profile at
+`~/.local/share/cli-tools/bricklink/authentication_profiles/default/browser-data/chromium-profile`,
+auto-fills the LEGO identity login form with the managed credentials, completes
+LEGO's enforced email two-factor step, submits any emailed six-digit
+confirmation code, then verifies and closes the browser — no terminal Enter and
+no human login step. In a non-interactive runner it uses the live authenticated
+browser state as the completion signal.
 
-Important gotchas from a live recovery attempt:
+LEGO identity enforces a two-factor email code after a correct email+password
+(`identity.lego.com/.../auth/two-factor-authentication?isenforced=True`). This is
+a separate step from BrickLink's legacy confirmation page. The login fetches the
+LEGO code from the managed Gmail account (`account@mail.identity.lego.com`,
+subject `Your LEGO® code: NNNNNN`, profile `adbertram`), enters it, and submits —
+so no human relays the code. This is an automatable email OTP, not a CAPTCHA or
+device-trust wall.
+
+Managed browser-login credentials come from the **cli-tools secret manager**
+(macOS Keychain, service namespace `cli-tools`), NOT LastPass and NOT any
+`.env` file:
+
+- `bricklink-username` — the LEGO account email/username used at
+  https://identity.lego.com (this is the LEGO login identifier, NOT the
+  BrickLink store username; LEGO rejects the store username `geeklife`).
+- `bricklink-password` — the LEGO web password.
+
+Store or update them with (never echo the value):
+
+```bash
+printf '%s' "$VALUE" | \
+  ~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+  set --tool bricklink --type username
+printf '%s' "$VALUE" | \
+  ~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+  set --tool bricklink --type password
+```
+
+Important gotchas from live recovery attempts:
 
 - `--force` clears the saved browser profile before opening login. If the
-  runner cannot complete the interactive browser login, the prior session is
-  gone. Prefer the non-force command first.
-- The profile `.env` may contain `secret://...` placeholders. Resolve those
-  placeholders only through the CLI-tools secret manager, and never echo the
-  values. These are CLI credentials, not proof of a LEGO web login. In the
-  observed recovery, the saved `bricklink-username` was the store username and
-  LEGO rejected it as a login; the saved `bricklink-password` value also
-  produced LEGO `invalid_login`, so verify that secret is current before
-  trusting it for browser login.
-- Use the LEGO account email plus the LEGO web password. LastPass is the
-  expected source for that browser password. If `lastpass`/`lpass` is not logged
-  in, stop at the credential blocker; do not reset the LEGO password without
+  managed credentials are wrong, the prior session is gone. Prefer the
+  non-force command first; it already re-runs the login when the saved session
+  is invalid.
+- The OAuth/API secrets (`bricklink-client-id`, `bricklink-client-secret`,
+  `bricklink-access-token`, `bricklink-refresh-token`) are unrelated to the
+  browser login. A valid OAuth status does NOT imply a valid `browser_session`.
+- If either login secret is missing, the login fails fast with the exact
+  `secrets.sh set` command to run. Do not reset the LEGO password without
   explicit approval.
 - The CLI-owned auth browser is opened through the shared Playwright harness and
   is not exposed as an attachable CDP browser. For diagnostics, a Codex run can
@@ -219,6 +247,28 @@ bricklink refund issue <order-id> --amount 5.00
 bricklink refund full <order-id>
 ```
 
+### store
+
+Manage store settings (browser-based).
+
+```bash
+bricklink store vacation enable 07/15/2026 --dry-run
+bricklink store vacation enable 07/15/2026 --yes
+bricklink store vacation disable --dry-run
+bricklink store vacation disable --yes
+```
+
+`vacation enable` appends or replaces the trailing notice on the store
+announcement, banner, and every enabled shipping method note:
+
+```text
+ | ATTENTION: All orders will ship M/D/YY!
+```
+
+`vacation disable` removes that trailing notice from the announcement, banner,
+and enabled shipping method notes. Commands refuse to save changes unless
+`--yes` is supplied; use `--dry-run` to preview without saving.
+
 ### notification
 
 Manage notifications (browser-based).
@@ -336,3 +386,5 @@ Commands emit plain JSON-compatible dictionaries and lists. Table output is a re
 ## License
 
 MIT
+
+[Bricklink API]: https://www.bricklink.com/v3/api.page

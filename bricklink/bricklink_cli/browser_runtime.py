@@ -9,7 +9,7 @@ Handles operations not available via API:
 Uses BrowserAutomation base class with playwright CLI for session management.
 """
 import re
-import sys
+import time
 from typing import Optional
 
 from cli_tools_shared.activity_log import get_activity_logger
@@ -23,6 +23,7 @@ from .confirmation import (
     is_confirmation_code_page_url,
 )
 from .models import RefundReason
+from .managed_auth import get_bricklink_confirmation_code
 
 activity = get_activity_logger("bricklink")
 
@@ -66,16 +67,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         page.wait_for_selector("body", state="visible", timeout=15000)
 
     def _read_confirmation_code(self) -> str:
-        prompt = (
-            "The BrickLink confirmation code page has come up. "
-            "Please check your email for the confirmation code and provide it: "
-        )
-        sys.stderr.write(prompt)
-        sys.stderr.flush()
-        code = sys.stdin.readline().strip()
-        if not code:
-            raise ConfirmationRequiredError("this operation")
-        return code
+        return get_bricklink_confirmation_code(requested_after=int(time.time()) - 120)
 
     def _submit_confirmation_code(self, page, requested_url: str) -> None:
         code_input = page.query_selector("#confirmation-code")
@@ -566,6 +558,178 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return {"success": True, "message_id": message_id, "action": "mark_as_unread",
                 "message": "Message marked as unread"}
+
+    # ==================== Store Settings ====================
+
+    STORE_ANNOUNCEMENT_FIELD = "strAnnouncement"
+    STORE_BANNER_FIELD = "strBanner"
+
+    def get_store_display_settings(self) -> dict:
+        """Read the store announcement and banner text from Store Settings."""
+        page = self._get_page_for(self.STORE_SETTINGS_URL)
+        settings = page.evaluate(
+            """(fieldNames) => {
+            const announcement = document.querySelector(`input[name="${fieldNames.announcement}"]`);
+            const banner = document.querySelector(`input[name="${fieldNames.banner}"]`);
+            return {
+                announcement_found: !!announcement,
+                banner_found: !!banner,
+                announcement: announcement ? announcement.value : null,
+                banner: banner ? banner.value : null,
+            };
+        }""",
+            {
+                "announcement": self.STORE_ANNOUNCEMENT_FIELD,
+                "banner": self.STORE_BANNER_FIELD,
+            },
+        )
+        if (
+            not settings
+            or not settings.get("announcement_found")
+            or not settings.get("banner_found")
+        ):
+            raise RuntimeError(
+                "BrickLink store settings page did not contain both "
+                f"input[name='{self.STORE_ANNOUNCEMENT_FIELD}'] and "
+                f"input[name='{self.STORE_BANNER_FIELD}']."
+            )
+        return {
+            "announcement": settings.get("announcement") or "",
+            "banner": settings.get("banner") or "",
+            "store_settings_url": page.url,
+        }
+
+    def save_store_display_settings(self, announcement: str, banner: str) -> dict:
+        """Save the store announcement and banner through BrickLink's settings AJAX endpoint."""
+        page = self._get_page_for(self.STORE_SETTINGS_URL)
+        result = page.evaluate(
+            """async (payload) => {
+                const body = new URLSearchParams();
+                body.set(payload.fields.announcement, payload.announcement);
+                body.set(payload.fields.banner, payload.banner);
+
+                const response = await fetch('/ajax/renovate/mystore/display.ajax?action=update', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'x-requested-with': 'XMLHttpRequest',
+                    },
+                    body: body.toString(),
+                });
+
+                const text = await response.text();
+                let data = null;
+                try {
+                    data = JSON.parse(text);
+                } catch (error) {
+                    data = { parse_error: String(error), raw_length: text.length };
+                }
+
+                return {
+                    ok: response.ok,
+                    status: response.status,
+                    data,
+                };
+            }""",
+            {
+                "announcement": announcement,
+                "banner": banner,
+                "fields": {
+                    "announcement": self.STORE_ANNOUNCEMENT_FIELD,
+                    "banner": self.STORE_BANNER_FIELD,
+                },
+            },
+        )
+        data = (result or {}).get("data") or {}
+        if not result or not result.get("ok") or data.get("returnCode") != 0:
+            raise RuntimeError(
+                "BrickLink store settings update failed: "
+                f"status={result.get('status') if result else None}, "
+                f"returnCode={data.get('returnCode')}, "
+                f"returnMessage={data.get('returnMessage')!r}"
+            )
+        return {
+            "success": True,
+            "status": result.get("status"),
+            "returnCode": data.get("returnCode"),
+            "returnMessage": data.get("returnMessage"),
+        }
+
+    def get_enabled_shipping_methods(self) -> list[dict]:
+        """Read enabled shipping methods and their buyer-facing descriptions."""
+        page = self._get_page_for(self.SHIPPING_SETTINGS_URL)
+        page.wait_for_timeout(2500)
+        return page.evaluate(
+            r"""() => Array.from(document.querySelectorAll('.shipping-method__row')).map((row) => {
+                const link = row.querySelector('.shipping-method__method--title a');
+                const desc = row.querySelector('.shipping-method__method--description');
+                const checkbox = row.querySelector('.shipping-method__enabled input[type="checkbox"]');
+                const href = link ? link.getAttribute('href') : '';
+                const match = href.match(/id=(\d+)/);
+                return {
+                    id: match ? match[1] : null,
+                    name: link ? link.innerText.trim() : '',
+                    description: desc ? desc.innerText.trim() : '',
+                    enabled: checkbox ? checkbox.checked : false,
+                    href,
+                };
+            }).filter((item) => item.id && item.enabled)"""
+        )
+
+    def save_shipping_method_note(self, method_id: str, note: str) -> dict:
+        """Save a shipping method's buyer note through the BrickLink edit page."""
+        page = self._get_page_for(f"{self.SHIPPING_METHOD_EDIT_URL}?id={method_id}")
+        page.wait_for_selector("textarea.bl-form-text", timeout=15000)
+        save_enabled = page.evaluate(
+            """(note) => {
+                const textarea = document.querySelector('textarea.bl-form-text');
+                if (!textarea) {
+                    throw new Error('Note textarea not found');
+                }
+                const setter = Object.getOwnPropertyDescriptor(
+                    HTMLTextAreaElement.prototype,
+                    'value'
+                ).set;
+                setter.call(textarea, note);
+                textarea.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertText',
+                    data: note,
+                }));
+                textarea.dispatchEvent(new Event('change', {bubbles: true}));
+                return Array.from(document.querySelectorAll('button.js-button-save')).some(
+                    (button) => !button.disabled
+                        && !!(button.offsetWidth || button.offsetHeight || button.getClientRects().length)
+                );
+            }""",
+            note,
+        )
+        if not save_enabled:
+            raise RuntimeError(
+                f"BrickLink shipping method {method_id} Save changes button did not enable."
+            )
+        clicked = page.evaluate(
+            """() => {
+                const buttons = Array.from(document.querySelectorAll('button.js-button-save'));
+                const button = buttons.find((candidate) => !candidate.disabled
+                    && !!(candidate.offsetWidth || candidate.offsetHeight || candidate.getClientRects().length));
+                if (!button) {
+                    return false;
+                }
+                button.click();
+                return true;
+            }"""
+        )
+        if not clicked:
+            raise RuntimeError(
+                f"BrickLink shipping method {method_id} enabled Save changes button was not found."
+            )
+        page.wait_for_timeout(4000)
+        return {
+            "success": True,
+            "shipping_method_id": method_id,
+        }
 
     # ==================== Refunds ====================
 

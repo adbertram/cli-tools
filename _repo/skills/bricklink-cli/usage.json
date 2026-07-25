@@ -1,8 +1,8 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-06-20T19:39:44Z",
-  "total_commands": 57,
+  "discovered_at": "2026-07-20T15:45:40Z",
+  "total_commands": 60,
   "global_options": [
     {
       "name": "--version",
@@ -32,7 +32,7 @@
           "options": []
         },
         "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For browser sessions, BrickLink opens the LEGO account login; use the LEGO.com account email address and password, not the legacy BrickLink username. For OAuth authorization code flows, opens a browser for user consent.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "usage_instructions": "Run `bricklink auth login`. For browser-session login, enter the LEGO.com account email address and password.",
           "arguments": [],
           "options": [
@@ -47,7 +47,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             },
             {
@@ -135,7 +135,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `bricklink auth profiles list`. Use options such as --table, --limit, --filter, --properties as needed.",
               "arguments": [],
               "options": [
@@ -180,6 +180,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -1650,7 +1682,7 @@
               "name": "--page",
               "type": "bool",
               "required": false,
-              "help": "g      INTEGER  Page number",
+              "help": "g      <int>  Page number",
               "short": "-p",
               "default": "1"
             },
@@ -1809,15 +1841,15 @@
           "arguments": [
             {
               "name": "arg1",
-              "type": "TEXT",
+              "type": "ARG1",
               "required": false,
-              "help": "[ARG1]  Order ID (when sending to an order) or message body (when using --member)"
+              "help": "Order ID (when sending to an order) or message body (when using --member)"
             },
             {
               "name": "arg2",
-              "type": "TEXT",
+              "type": "ARG2",
               "required": false,
-              "help": "[ARG2]  Message body (when order ID is provided as first argument)"
+              "help": "Message body (when order ID is provided as first argument)"
             }
           ],
           "options": [
@@ -2481,7 +2513,99 @@
           ]
         }
       }
+    },
+    "store": {
+      "help": "Manage store settings",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "vacation": {
+          "help": "Manage vacation shipping notice text",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "disable": {
+              "help": "Remove the vacation shipping notice from announcement, banner, and enabled shipping methods.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Preview changes without saving"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Save changes to BrickLink",
+                  "short": "-y"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "enable": {
+              "help": "Add or replace the vacation shipping notice on announcement, banner, and enabled shipping methods.",
+              "arguments": [
+                {
+                  "name": "ship_out_date",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Ship-out date to show in M/D/YY or MM/DD/YYYY format"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Preview changes without saving"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Save changes to BrickLink",
+                  "short": "-y"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
     }
   },
-  "usage_instructions": "Use `bricklink <command>` to access Bricklink API and browser workflows. Top-level command groups: auth, cache, catalog, coupon, inventory, member, messages, notification, order, refund. Run `bricklink <command> --help` for command-specific arguments and options."
+  "usage_instructions": "Use `bricklink <command>` to access Bricklink API and browser workflows. Top-level command groups: auth, cache, catalog, coupon, inventory, member, messages, notification, order, refund, store. Run `bricklink <command> --help` for command-specific arguments and options."
 }
