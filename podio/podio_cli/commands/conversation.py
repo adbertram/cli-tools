@@ -57,6 +57,7 @@ from cli_tools_shared.filters import apply_filters, validate_filters, FilterVali
 from ..client import get_client
 from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio conversations (messages)")
@@ -67,6 +68,7 @@ app.add_typer(participant_app, name="participant")
 
 
 @participant_app.command("add")
+@command
 def participant_add(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     users: str = typer.Option(..., "--users", "-u", help="Comma-separated list of user IDs to add"),
@@ -93,12 +95,13 @@ def participant_add(
         formatted = format_response(result)
         print_success(f"Participants added to conversation {conversation_id}")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_conversations(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum conversations to return"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
@@ -132,12 +135,13 @@ def list_conversations(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -156,12 +160,13 @@ def get_conversation(
         result = client.Conversation.find(conversation_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create")
+@command
 def create_conversation(
     subject: Optional[str] = typer.Option(None, "--subject", help="Conversation subject"),
     text: Optional[str] = typer.Option(None, "--text", help="Message text"),
@@ -247,12 +252,13 @@ def create_conversation(
         formatted = format_response(result)
         print_success(f"Conversation created successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("reply")
+@command
 def reply_to_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     text: Optional[str] = typer.Option(None, "--text", help="Reply text"),
@@ -312,7 +318,7 @@ def reply_to_conversation(
         formatted = format_response(result)
         print_success(f"Reply sent to conversation {conversation_id}")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
@@ -330,6 +336,7 @@ def add_participants_deprecated(
 
 
 @app.command("mark-read")
+@command
 def mark_as_read(
     conversation_id: int = typer.Argument(..., help="Conversation ID to mark as read"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -346,12 +353,13 @@ def mark_as_read(
         client.Conversation.mark_as_read(conversation_id)
         print_success(f"Conversation {conversation_id} marked as read")
         print_output({"conversation_id": conversation_id, "marked_read": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("mark-unread")
+@command
 def mark_as_unread(
     conversation_id: int = typer.Argument(..., help="Conversation ID to mark as unread"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -368,12 +376,13 @@ def mark_as_unread(
         client.Conversation.mark_as_unread(conversation_id)
         print_success(f"Conversation {conversation_id} marked as unread")
         print_output({"conversation_id": conversation_id, "marked_unread": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("star")
+@command
 def star_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to star"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -390,12 +399,13 @@ def star_conversation(
         client.Conversation.star(conversation_id)
         print_success(f"Conversation {conversation_id} starred")
         print_output({"conversation_id": conversation_id, "starred": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("unstar")
+@command
 def unstar_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to unstar"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -412,12 +422,13 @@ def unstar_conversation(
         client.Conversation.unstar(conversation_id)
         print_success(f"Conversation {conversation_id} unstarred")
         print_output({"conversation_id": conversation_id, "starred": False}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("leave")
+@command
 def leave_conversation(
     conversation_id: int = typer.Argument(..., help="Conversation ID to leave"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -434,12 +445,13 @@ def leave_conversation(
         client.Conversation.leave(conversation_id)
         print_success(f"Left conversation {conversation_id}")
         print_output({"conversation_id": conversation_id, "left": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("search")
+@command
 def search_conversations(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(10, "--limit", help="Maximum results to return"),
@@ -459,12 +471,13 @@ def search_conversations(
         result = client.Conversation.search(query, limit=limit, offset=offset)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("events")
+@command
 def get_conversation_events(
     conversation_id: int = typer.Argument(..., help="Conversation ID"),
     limit: int = typer.Option(10, "--limit", help="Maximum events to return"),
@@ -484,12 +497,13 @@ def get_conversation_events(
         result = client.Conversation.get_events(conversation_id, limit=limit, offset=offset)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("on-object")
+@command
 def get_conversations_on_object(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
@@ -508,12 +522,13 @@ def get_conversations_on_object(
         result = client.Conversation.get_on_object(ref_type, ref_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create-on-object", hidden=True)
+@command
 def create_conversation_on_object_deprecated(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
@@ -570,6 +585,6 @@ def create_conversation_on_object_deprecated(
         formatted = format_response(result)
         print_success(f"Conversation created on {ref_type} {ref_id}")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

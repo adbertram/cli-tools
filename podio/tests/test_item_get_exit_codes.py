@@ -2,6 +2,8 @@
 
 from typer.testing import CliRunner
 
+from pypodio2.transport import TransportException
+
 from podio_cli.commands import item
 
 
@@ -25,7 +27,10 @@ class _FakeClient:
 
 
 def test_item_get_api_error_exits_nonzero_with_empty_stdout(monkeypatch):
-    error = Exception("Item has been deleted")
+    # A real Podio API error surfaces as a TransportException (e.g. 410 Gone for a
+    # deleted item); it must still route through handle_api_error's friendly
+    # "API error: ..." message, exit 1, and never leak partial stdout.
+    error = TransportException(410, '{"error":"gone","error_description":"Item has been deleted"}')
     monkeypatch.setattr(item, "get_client", lambda: _FakeClient(error=error))
 
     result = runner.invoke(item.app, ["get", "3330529630"])

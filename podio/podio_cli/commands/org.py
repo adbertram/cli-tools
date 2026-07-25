@@ -14,6 +14,8 @@ from typing import Optional, Any
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio organizations")
@@ -22,6 +24,7 @@ app = typer.Typer(help="Manage Podio organizations")
 
 
 @app.command("list")
+@command
 def list_orgs(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum organizations to return"),
     filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -58,12 +61,13 @@ def list_orgs(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_org(
     org_id: int = typer.Argument(..., help="Organization ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -82,6 +86,6 @@ def get_org(
         result = client.Org.find(org_id=org_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

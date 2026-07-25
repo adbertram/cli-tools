@@ -26,12 +26,15 @@ import typer
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio comments")
 
 
 @app.command("create")
+@command
 def create_comment(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
@@ -107,12 +110,13 @@ def create_comment(
         formatted = format_response(result)
         print_success(f"Comment added to {ref_type} {ref_id}")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_comments(
     ref_type: str = typer.Argument(..., help="Object type (e.g., 'item', 'status')"),
     ref_id: int = typer.Argument(..., help="Object ID"),
@@ -151,12 +155,13 @@ def list_comments(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_comment(
     comment_id: int = typer.Argument(..., help="Comment ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -173,12 +178,13 @@ def get_comment(
         result = client.Comment.get(comment_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update")
+@command
 def update_comment(
     comment_id: int = typer.Argument(..., help="Comment ID to update"),
     text: Optional[str] = typer.Option(None, "--text", help="Updated comment text"),
@@ -231,12 +237,13 @@ def update_comment(
         formatted = format_response(result)
         print_success(f"Comment {comment_id} updated successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("delete")
+@command
 def delete_comment(
     comment_id: int = typer.Argument(..., help="Comment ID to delete"),
     no_hook: bool = typer.Option(False, "--no-hook", help="Skip webhook execution"),
@@ -255,6 +262,6 @@ def delete_comment(
         client.Comment.delete(comment_id=comment_id, hook=not no_hook)
         print_success(f"Comment {comment_id} deleted successfully")
         print_output({"comment_id": comment_id, "deleted": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

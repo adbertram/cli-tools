@@ -465,7 +465,13 @@ class HttpTransport(object):
                 if "GET" not in internal_params:
                     return url
                 internal_params = internal_params['GET']
-            url += self._generate_params(internal_params)
+            # Only append a query string when there are real params left.
+            # Appending for an empty dict yields a bare "?" which corrupts a
+            # url that already carries its own query string (e.g. a DELETE
+            # url built with silent/hook options), turning
+            # "...?silent=true&hook=false" into "...?silent=true&hook=false?".
+            if internal_params:
+                url += self._generate_params(internal_params)
         return url
 
     def __getitem__(self, name):

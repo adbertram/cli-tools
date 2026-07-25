@@ -45,6 +45,7 @@ from cli_tools_shared.filters import apply_filters, validate_filters, FilterVali
 from ..client import get_client
 from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio tasks")
@@ -70,6 +71,7 @@ TASK_LIST_COMPLETED_VALUES = {
 
 
 @app.command("list")
+@command
 def list_tasks(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum tasks to return"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -177,12 +179,13 @@ def list_tasks(
     except typer.Exit:
         # Preserve explicit exit codes (e.g. invalid --reference format).
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @label_app.command("list")
+@command
 def label_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum labels to return"),
     filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -216,12 +219,13 @@ def label_list(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @label_app.command("get")
+@command
 def label_get(
     label_id: int = typer.Argument(..., help="Label ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -245,12 +249,13 @@ def label_get(
 
         formatted = format_response(label_data)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @label_app.command("create")
+@command
 def label_create(
     text: str = typer.Argument(..., help="Label text/name"),
     color: Optional[str] = typer.Option(None, "--color", "-c", help="Label color (hex code or color name)"),
@@ -270,12 +275,13 @@ def label_create(
         formatted = format_response(result)
         print_success(f"Label '{text}' created successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @label_app.command("update")
+@command
 def label_update(
     task_id: int = typer.Argument(..., help="Task ID to update labels on"),
     labels: str = typer.Option(..., "--labels", "-l", help="Comma-separated label IDs or names"),
@@ -307,12 +313,13 @@ def label_update(
         formatted = format_response(result)
         print_success(f"Labels updated on task {task_id}")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @label_app.command("delete")
+@command
 def label_delete(
     label_id: int = typer.Argument(..., help="Label ID to delete"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -328,12 +335,13 @@ def label_delete(
         client.Task.delete_label(label_id=label_id)
         print_success(f"Label {label_id} deleted successfully")
         print_output({"label_id": label_id, "deleted": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_task(
     task_id: int = typer.Argument(..., help="Task ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -350,12 +358,13 @@ def get_task(
         result = client.Task.find(task_id=task_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create")
+@command
 def create_task(
     json_file: Optional[Path] = typer.Option(
         None,
@@ -434,12 +443,13 @@ def create_task(
         formatted = format_response(result)
         print_success("Task created successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("complete")
+@command
 def complete_task(
     task_id: int = typer.Argument(..., help="Task ID to complete"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -457,12 +467,13 @@ def complete_task(
         formatted = format_response(result)
         print_success(f"Task {task_id} marked as complete")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("delete")
+@command
 def delete_task(
     task_id: int = typer.Argument(..., help="Task ID to delete"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -479,12 +490,13 @@ def delete_task(
         client.Task.delete(task_id=task_id)
         print_success(f"Task {task_id} deleted successfully")
         print_output({"task_id": task_id, "deleted": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update")
+@command
 def update_task(
     task_id: int = typer.Argument(..., help="Task ID to update"),
     json_file: Optional[Path] = typer.Option(
@@ -543,7 +555,7 @@ def update_task(
         formatted = format_response(result)
         print_success(f"Task {task_id} updated successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 

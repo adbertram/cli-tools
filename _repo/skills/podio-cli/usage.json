@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-07-02T18:14:58Z",
+  "discovered_at": "2026-07-22T23:44:05Z",
   "total_commands": 93,
   "global_options": [
     {
@@ -743,7 +743,7 @@
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile.",
           "arguments": [],
           "options": [
@@ -818,7 +818,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to list all profiles and see which is the default.",
               "arguments": [],
               "options": [
@@ -940,7 +940,7 @@
           ]
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Use to check current authentication status.",
           "arguments": [],
           "options": [
@@ -1000,7 +1000,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `podio cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -2993,7 +3000,7 @@
           }
         },
         "list": {
-          "help": "List tasks for the authenticated user. Supports filtering, grouping, and sorting via API parameters. Filter examples: --filter \"status:active\" --filter \"text:contains:urgent\"",
+          "help": "List tasks for the authenticated user. Supports server-side filtering, grouping, and sorting via API parameters. Provide a scope flag (--reference, --created-by, --org, --space, --app, or --responsible) to reach tasks beyond your own; a bare list returns the current user's tasks. Filter examples: --filter \"status:active\" --filter \"text:contains:urgent\"",
           "examples": [
             "podio task list",
             "podio task list --limit 50",
@@ -3183,7 +3190,7 @@
               "usage_instructions": "Disable file attachments on a webform. When disabled, users cannot attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments disable 2584779`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3214,7 +3221,7 @@
               "usage_instructions": "Enable file attachments on a webform. When enabled, users can attach files when submitting the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments enable 2584779`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3245,7 +3252,7 @@
               "usage_instructions": "Check if file attachments are enabled on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url. Notable options: --table/-t. Example: `podio webform attachments status 2584779`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3285,7 +3292,7 @@
               "usage_instructions": "Add a field to a webform. Adds an app field to the webform so it appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field add 2584779 275324144`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3323,7 +3330,7 @@
               "usage_instructions": "Get details about a specific field on a webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779). Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field get 2584779 275324144`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3362,7 +3369,7 @@
               "usage_instructions": "List all fields on a webform. Shows the field IDs currently configured on the webform. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url. Notable options: --limit/-l, --filter/-f, --properties/-p, --table/-t. Example: `podio webform field list 2584779`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"
@@ -3416,7 +3423,7 @@
               "usage_instructions": "Remove a field from a webform. Removes an app field from the webform so it no longer appears on the public form. The FORM_ID_OR_URL can be either: - A numeric form ID (e.g., 2584779) - A full webform URL (e.g., https://podio.com/webforms/12345/2584779) Note: In the URL format /webforms/{app_id}/{form_id}, the form_id is the SECOND number. Required arguments: form_id_or_url, field_id. Notable options: --table/-t. Example: `podio webform field remove 2584779 275324144`.",
               "arguments": [
                 {
-                  "name": "form_id_or_url",
+                  "name": "FORM_ID_OR_URL",
                   "type": "TEXT",
                   "required": true,
                   "help": "Webform ID or URL (e.g., 2584779 or https://podio.com/webforms/12345/2584779)"

@@ -29,6 +29,8 @@ import typer
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, print_info, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio webforms")
@@ -43,6 +45,7 @@ app.add_typer(attachments_app, name="attachments")
 
 
 @app.command("list")
+@command
 def list_webforms(
     app_id: int = typer.Argument(..., help="Application ID to list webforms from"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum webforms to return"),
@@ -85,12 +88,13 @@ def list_webforms(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_webform(
     form_id: int = typer.Argument(..., help="Webform ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -110,7 +114,7 @@ def get_webform(
         result = client.transport.GET(url=f"/form/{form_id}")
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
@@ -178,6 +182,7 @@ def _parse_form_id(form_id_or_url: str) -> int:
 
 
 @app.command("submit")
+@command
 def submit_webform(
     url: str = typer.Argument(..., help="Webform URL (e.g., https://podio.com/webforms/12345/67890)"),
     json_file: Optional[Path] = typer.Option(
@@ -358,14 +363,10 @@ def submit_webform(
     except requests.RequestException as e:
         print_error(f"HTTP request failed: {e}")
         raise typer.Exit(1)
-    except Exception as e:
-        if isinstance(e, SystemExit):
-            raise
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
 
 
 @field_app.command("get")
+@command
 def get_webform_field(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -406,12 +407,13 @@ def get_webform_field(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("add")
+@command
 def add_field_to_webform(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -474,12 +476,13 @@ def add_field_to_webform(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("remove")
+@command
 def remove_field_from_webform(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -541,12 +544,13 @@ def remove_field_from_webform(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("list")
+@command
 def list_webform_fields(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -608,7 +612,7 @@ def list_webform_fields(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
@@ -647,6 +651,7 @@ def _update_webform_attachments(form_id: int, enabled: bool) -> dict:
 
 
 @attachments_app.command("enable")
+@command
 def enable_attachments(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -678,12 +683,13 @@ def enable_attachments(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @attachments_app.command("disable")
+@command
 def disable_attachments(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -715,12 +721,13 @@ def disable_attachments(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @attachments_app.command("status")
+@command
 def attachments_status(
     form_id_or_url: str = typer.Argument(
         ...,
@@ -757,6 +764,6 @@ def attachments_status(
 
     except typer.BadParameter:
         raise
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
