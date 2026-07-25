@@ -10,7 +10,10 @@ Nextdoor routes each persisted query as ``POST {base_url}/<operationName>``
 the path and the persisted-query hash travels in the request body.
 """
 
+import uuid
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
+from urllib.parse import urljoin
 
 import requests
 
@@ -42,7 +45,13 @@ PERSISTED_QUERIES = {
     "PersonalizedFeed": "50d786132cd0779d6c34b9e683ea5fcb82e9ff71866e6c8bd32f43c805c03ad8",
     "getMe": "17d16335240791a39640e8cebc220c3f84786668a46245176749d1e5e4eb21e1",
     "dashboardBadges": "f721ff14d106e321b4019f064e130331e5b73c091c3675b55866b3775b5cd738",
-    "getDynamicSearchBarSuggestions": "9f6fba061346d5b4d18a328d6408787effcbf1121f6ecc73c60f22964c101aac",
+    # The For Sale & Free grid (https://nextdoor.com/for_sale_and_free/).
+    "searchClassifiedV2": "9b07f9e5d35a3c112fbaf1bfcf34f1d0ff29a89a43c7467d9c8219b63881df9d",
+    # One For Sale & Free listing detail page
+    # (https://nextdoor.com/for_sale_and_free/<uuid>/).
+    "ClassifiedFeedItem": "0d413ce56d2ef7b14155c237ff58fbc34a4e0206fadd2e02d006f145493fd9d6",
+    # Nextdoor's real global content search (https://nextdoor.com/search/).
+    "search": "394b62b3a306ab874cfa4eb5c2b01de9dee85f8f671dfec9b012a4d0939196f0",
 }
 
 
@@ -50,8 +59,9 @@ PERSISTED_QUERIES = {
 # default table column order for that shape. main.py imports these column tuples
 # so the display columns can never drift from the record fields. Shapes are
 # derived from real captured Nextdoor GraphQL responses.
-FEED_COLUMNS = ("id", "type", "title")
-SEARCH_COLUMNS = ("suggestion",)
+FEED_COLUMNS = ("id", "type", "title", "price", "created_at", "url")
+CLASSIFIED_COLUMNS = ("id", "title", "price", "subtitle", "url")
+SEARCH_COLUMNS = ("id", "section", "type", "title", "url")
 NOTIFICATION_COLUMNS = ("id", "label", "badges")
 
 # Maps the CLI sort vocabulary (Source-CLI Sort Standard) to Nextdoor's
@@ -66,24 +76,101 @@ NOTIFICATION_COLUMNS = ("id", "label", "badges")
 FEED_SORT_MAP = {"newest": "RECENT_POSTS", "relevance": "FOR_YOU"}
 FEED_DEFAULT_SORT_ORDER = FEED_SORT_MAP["newest"]
 
+# Maps the CLI sort vocabulary to the For Sale & Free grid's server-side sort
+# values. These are the exact values the web app sends through
+# ``classifiedSearchArgs.filters.sortOrder``, captured from the live page:
+#   newest    -> SORT_BY_TIME              ("Newest" in the Sort By menu)
+#   relevance -> SORT_BY_DISTANCE_AND_DATE ("Most Relevant" — the site default)
+# Both are genuine server-side sorts, not a client-side re-order.
+CLASSIFIED_SORT_MAP = {"newest": "SORT_BY_TIME", "relevance": "SORT_BY_DISTANCE_AND_DATE"}
+CLASSIFIED_DEFAULT_SORT_ORDER = CLASSIFIED_SORT_MAP["newest"]
 
-def _feed_item_title(raw: dict) -> Optional[str]:
+# The web app tags its For Sale & Free grid requests with this context; the
+# server uses it to select the classifieds ranking pipeline.
+CLASSIFIED_TRACKING_CONTEXT = "FSF_GRID"
+# ...and its global search requests with this one.
+SEARCH_TRACKING_CONTEXT = "GLOBAL_SEARCH_ALL"
+
+# Time zone the feed and listing-detail queries render their relative
+# timestamps in. Absolute timestamps in CLI output come from the response's own
+# epoch millis, so this only affects Nextdoor's own "9 hr ago" style strings.
+NEXTDOOR_TIME_ZONE = "America/Chicago"
+
+
+def _optional_dict(container: Optional[dict], key: str) -> Optional[dict]:
+    """Read a nested object that is allowed to be absent or null.
+
+    Absent/null means "this item does not carry that content" (e.g. a plain
+    neighbor post has no ``classified``). A present value of the wrong type is
+    a contract violation and fails loudly — no silent coercion.
+    """
+    if container is None or key not in container or container[key] is None:
+        return None
+    value = container[key]
+    if not isinstance(value, dict):
+        raise ClientError(f"Expected '{key}' to be an object, got {type(value).__name__}.")
+    return value
+
+
+def _instant_iso(instant: Optional[dict]) -> Optional[str]:
+    """Render a Nextdoor ``Instant`` object as an ISO-8601 UTC timestamp."""
+    if instant is None:
+        return None
+    millis = required_path(instant, ["epochMillis"], str)
+    return datetime.fromtimestamp(int(millis) / 1000, tz=timezone.utc).isoformat()
+
+
+def _post_permalink(post: Optional[dict]) -> Optional[str]:
+    """Absolute permalink for a feed post.
+
+    Nextdoor post permalinks are OPAQUE SHORT SLUGS that exist only in the
+    response — ``post.detailLink.href`` is ``/p/m_wcBjjgGRwy?view=detail``
+    while the feed id is a numeric ``contentId`` such as ``489406804``. The
+    slug is therefore never derivable from the id; it must come from the
+    payload. The href is site-relative, so it is resolved against the Nextdoor
+    origin. Items with no ``detailLink`` (PROMO ad slots) have no permalink,
+    which is reported truthfully as None.
+    """
+    detail_link = _optional_dict(post, "detailLink")
+    if detail_link is None:
+        return None
+    return urljoin(NEXTDOOR_ORIGIN, required_path(detail_link, ["href"], str))
+
+
+def _promo_sponsor_name(raw: dict) -> Optional[str]:
+    """Sponsor name of a PROMO (ad) feed item."""
+    promo = _optional_dict(raw, "promo")
+    creative = _optional_dict(promo, "creative")
+    sponsor = _optional_dict(creative, "sponsorName")
+    return sponsor.get("text") if sponsor is not None else None
+
+
+def _feed_item_title(raw: dict, post: Optional[dict], classified: Optional[dict]) -> Optional[str]:
     """Pull the human-readable title from a heterogeneous feed item.
 
-    Title source is dispatched by ``feedItemType``: POST items carry it at
-    ``post.subject``; PROMO (ad) items at ``promo.creative.sponsorName.text``.
-    Any other item type has no documented title field, so the title is None
-    (truthful — not a masked fallback to an unrelated field).
+    The title source is dispatched by the content the item actually carries:
+    a For Sale & Free listing that surfaces in the general feed keeps its
+    title on ``post.classified.title`` (its ``post.subject`` is an empty
+    string), a plain post keeps it on ``post.subject``, and a PROMO ad slot
+    only has ``promo.creative.sponsorName.text``. Any other item type has no
+    documented title field, so the title is None (truthful — not a masked
+    fallback to an unrelated field).
     """
-    item_type = raw.get("feedItemType")
-    if item_type == "POST":
-        post = raw.get("post")
-        return post.get("subject") if isinstance(post, dict) else None
-    if item_type == "PROMO":
-        promo = raw.get("promo")
-        creative = promo.get("creative") if isinstance(promo, dict) else None
-        sponsor = creative.get("sponsorName") if isinstance(creative, dict) else None
-        return sponsor.get("text") if isinstance(sponsor, dict) else None
+    if classified is not None:
+        return classified.get("title")
+    if post is not None:
+        return post.get("subject")
+    if raw.get("feedItemType") == "PROMO":
+        return _promo_sponsor_name(raw)
+    return None
+
+
+def _feed_item_body(post: Optional[dict], classified: Optional[dict]) -> Optional[str]:
+    """Body text of a feed item, from whichever content the post carries."""
+    if classified is not None:
+        return classified.get("description")
+    if post is not None:
+        return post.get("body")
     return None
 
 
@@ -91,23 +178,170 @@ def normalize_feed_item(raw: dict) -> dict:
     """Map one PersonalizedFeed item to the public CLI record shape.
 
     Feed items are heterogeneous (POST, PROMO, ...). The stable identity is
-    ``contentId`` and the kind is ``feedItemType``; the title is type-specific
-    (see ``_feed_item_title``).
+    ``contentId`` and the kind is ``feedItemType``; every other field is
+    content-specific (see ``_feed_item_title`` / ``_post_permalink``) and is
+    None when the item genuinely does not carry it.
     """
+    item_type = raw.get("feedItemType")
+    post = _optional_dict(raw, "post") if item_type == "POST" else None
+    classified = _optional_dict(post, "classified")
+    author = _optional_dict(post, "author")
     return {
         "id": raw.get("contentId"),
-        "type": raw.get("feedItemType"),
-        "title": _feed_item_title(raw),
+        "type": item_type,
+        "post_type": post.get("postType") if post is not None else None,
+        "title": _feed_item_title(raw, post, classified),
+        "price": classified.get("price") if classified is not None else None,
+        "author": author.get("displayName") if author is not None else None,
+        "created_at": _instant_iso(_optional_dict(post, "createdAt")),
+        "url": _post_permalink(post),
+        "body": _feed_item_body(post, classified),
     }
 
 
-def normalize_search_suggestion(raw: str) -> dict:
-    """Map one search-bar suggestion to the public CLI record shape.
+def _split_priced_title(styled: dict) -> dict:
+    """Split a classified grid item's ``StyledText`` title into price + title.
 
-    ``dynamicSearchBarSuggestions`` is a list of plain strings, so each
-    suggestion is wrapped as a single-field record.
+    Nextdoor packs the price display and the listing title into ONE StyledText
+    separated by a newline: ``"$150\\nPokemon Card Tins Collection"``. A
+    listing with no price is a single line (``"Garage sale"``); a discounted
+    listing renders both prices on the price line
+    (``"$175 $250\\nWoods RM59 finishing mower"``) and marks the original
+    price with a strikethrough style run. The style runs — not currency
+    guesswork — decide which characters are struck through, so the split is
+    structural. Anything other than one or two lines is an unknown shape and
+    fails loudly.
     """
-    return {"suggestion": raw}
+    text = required_path(styled, ["text"], str)
+    lines = text.split("\n")
+    if len(lines) == 1:
+        return {"title": lines[0], "price": None, "original_price": None}
+    if len(lines) != 2:
+        raise ClientError(f"Unexpected classified title shape ({len(lines)} lines): {text!r}")
+
+    price_line, title = lines
+    struck = set()
+    for style in _optional_list(styled, "styles"):
+        if not required_path(style, ["attributes", "isStrikethrough"], bool):
+            continue
+        start = required_path(style, ["start"], int)
+        struck.update(range(start, start + required_path(style, ["length"], int)))
+
+    price = "".join(c for i, c in enumerate(price_line) if i not in struck).strip()
+    original_price = "".join(c for i, c in enumerate(price_line) if i in struck).strip()
+    return {
+        "title": title,
+        "price": price or None,
+        "original_price": original_price or None,
+    }
+
+
+def _result_item_parts(item: dict) -> dict:
+    """Decompose a search/classifieds result item's title into title + price.
+
+    ``SearchResultGridItem`` is the For Sale & Free card, and only that node
+    packs a price display in front of the listing title, so only it gets the
+    price split. Every other search node (``SearchResult``: neighbors,
+    businesses, events, posts) carries a plain title, which is used verbatim —
+    no price parsing is attempted on content that has no price. Sponsored ad
+    slots carry no title at all.
+    """
+    styled = _optional_dict(item, "title")
+    if styled is None:
+        return {"title": None, "price": None, "original_price": None}
+    if item.get("__typename") == "SearchResultGridItem":
+        return _split_priced_title(styled)
+    return {
+        "title": required_path(styled, ["text"], str),
+        "price": None,
+        "original_price": None,
+    }
+
+
+def normalize_classified_item(raw: dict) -> dict:
+    """Map one ``searchClassifiedV2`` edge node to the public CLI record shape.
+
+    The grid is heterogeneous: ``ORGANIC`` nodes are real listings
+    (``SearchResultGridItem``) and carry the direct listing URL, while
+    sponsored nodes (``CLASSIFIEDS_GAM_ITEM``, ``CLASSIFIEDS_NAMPLUS_ITEM``)
+    are ad slots with no listing identity — their listing fields are
+    truthfully None, exactly as PROMO rows are in the feed.
+    """
+    item = required_path(raw, ["item"], dict)
+    parts = _result_item_parts(item)
+    subtitle = _optional_dict(item, "subtitle")
+    image = _optional_dict(_optional_dict(item, "image"), "image")
+    return {
+        "id": item.get("contentId"),
+        "type": raw.get("itemType"),
+        "title": parts["title"],
+        "price": parts["price"],
+        "original_price": parts["original_price"],
+        "subtitle": subtitle.get("text") if subtitle is not None else None,
+        "image_url": image.get("url") if image is not None else None,
+        "url": item.get("url"),
+    }
+
+
+def normalize_classified_detail(raw: dict) -> dict:
+    """Map one ``ClassifiedFeedItem`` classified object to the CLI record shape.
+
+    The detail operation returns the full listing, so this record carries the
+    fields the grid card cannot: the raw numeric ``price`` plus its currency,
+    the full description, the named category, sale status, expiry, and the
+    canonical listing URL Nextdoor itself publishes in ``shareText``.
+    """
+    author_user = _optional_dict(_optional_dict(raw, "author"), "user")
+    author_name = _optional_dict(author_user, "name")
+    topic_name = _optional_dict(_optional_dict(raw, "topic"), "name")
+    distance = _optional_dict(raw, "distance")
+    location = _optional_dict(_optional_dict(raw, "locationGeoTag"), "location")
+    return {
+        "id": raw.get("legacyClassifiedId"),
+        "title": raw.get("title"),
+        "price": raw.get("price"),
+        "original_price": raw.get("originalPrice"),
+        "currency": raw.get("currency"),
+        "status": raw.get("status"),
+        "is_sold": raw.get("isSold"),
+        "category": topic_name.get("singularName") if topic_name is not None else None,
+        "seller": author_name.get("displayName") if author_name is not None else None,
+        "distance_miles": distance.get("miles") if distance is not None else None,
+        "location": location.get("formattedName") if location is not None else None,
+        "created_at": _instant_iso(_optional_dict(raw, "createdAt")),
+        "expires_at": _instant_iso(_optional_dict(raw, "expiresAt")),
+        "photo_urls": [photo.get("url") for photo in _optional_list(raw, "photos")],
+        "url": raw.get("shareText"),
+        "description": raw.get("description"),
+    }
+
+
+def normalize_search_result(section: Optional[str], raw: dict) -> dict:
+    """Map one global-``search`` result node to the public CLI record shape.
+
+    Nextdoor returns two node shapes. The For Sale & Free section reuses the
+    classifieds grid node (``SearchResultItem`` wrapping a
+    ``SearchResultGridItem`` in ``item``), so those rows get the same
+    price/title split as ``classifieds list``. Neighbor, business, event and
+    post sections return the ``SearchResult`` payload directly. ``section`` is
+    the owning result view's type; ``type`` is the item's own ``contentType``
+    and is None for sponsored ad slots, which carry no content identity.
+    """
+    if raw.get("__typename") == "SearchResultItem":
+        item = required_path(raw, ["item"], dict)
+    else:
+        item = raw
+    parts = _result_item_parts(item)
+    subtitle = _optional_dict(item, "subtitle")
+    return {
+        "id": item.get("contentId"),
+        "section": section,
+        "type": item.get("contentType"),
+        "title": parts["title"],
+        "price": parts["price"],
+        "subtitle": subtitle.get("text") if subtitle is not None else None,
+        "url": item.get("url"),
+    }
 
 
 def normalize_notification(raw: dict) -> dict:
@@ -182,7 +416,7 @@ def _feed_query_variables(limit: int, sort_order: str) -> dict:
             },
             "sortOrder": sort_order,
         },
-        "timeZone": "America/Chicago",
+        "timeZone": NEXTDOOR_TIME_ZONE,
     }
 
 
@@ -358,7 +592,7 @@ class NextdoorClient:
 
     @cached
     def get_feed(self, limit: int = 10, sort_order: str = FEED_DEFAULT_SORT_ORDER) -> List[dict]:
-        """Return feed items (documented shape: id, type, title).
+        """Return feed items (shape: see ``normalize_feed_item``).
 
         ``sort_order`` is a Nextdoor server-side feed sort value (one of
         ``FEED_SORT_MAP`` values): ``RECENT_POSTS`` for newest-first
@@ -401,8 +635,8 @@ class NextdoorClient:
     def _assert_session_authenticated(self) -> None:
         """Fail loudly with the standard re-auth message if the session is logged out.
 
-        Some operations (``search``) query top-level fields that Nextdoor answers
-        with HTTP 200 + an empty list even when the session is logged out, so they
+        The search operations query top-level fields that Nextdoor answers with
+        HTTP 200 + an empty result even when the session is logged out, so they
         cannot self-detect an expired session. This runs one cheap ``me``-scoped
         probe; ``_graphql`` raises the standard re-auth ``ClientError`` when
         ``data.me`` is null. It is intentionally NOT ``@cached`` so a dead session
@@ -411,22 +645,150 @@ class NextdoorClient:
         self._graphql("PersonalizedFeed", _feed_query_variables(1, FEED_DEFAULT_SORT_ORDER))
 
     @cached
-    def search(self, query: str) -> List[dict]:
-        """Return dynamic search-bar suggestions for ``query``.
+    def list_classifieds(
+        self,
+        query: str = "",
+        limit: int = 25,
+        sort_order: str = CLASSIFIED_DEFAULT_SORT_ORDER,
+    ) -> List[dict]:
+        """Return For Sale & Free listings (shape: ``normalize_classified_item``).
 
-        Nextdoor answers ``getDynamicSearchBarSuggestions`` with HTTP 200 and an
-        empty list even when the session is logged out (no ``me`` field, no
-        GraphQL error, no login wall), so an empty result is ambiguous. Only in
-        that empty case do we run a cheap ``me``-scoped liveness probe, which
-        raises the standard re-auth ``ClientError`` on a dead session. A genuine
-        empty result for a live session still returns ``[]``, and non-empty
-        results skip the extra request.
+        This is Nextdoor's dedicated classifieds surface — the same
+        ``searchClassifiedV2`` operation the /for_sale_and_free/ grid issues —
+        so every organic row carries a real direct listing URL and price.
+        ``query`` is the grid's own keyword box (empty string browses
+        everything). ``sort_order`` must be a ``CLASSIFIED_SORT_MAP`` server
+        value; an unrecognized value fails loudly (no silent fallback).
+
+        The grid is cursor-paginated at ~20 nodes per page, so pages are
+        fetched until ``limit`` records are collected or the server reports no
+        next page. All pages of one call share a single ``requestId``, exactly
+        as the web app does when a reader scrolls the grid.
         """
-        data = self._graphql("getDynamicSearchBarSuggestions", {"query": query})
-        suggestions = _optional_list(data, "dynamicSearchBarSuggestions")
-        if not suggestions:
+        if sort_order not in CLASSIFIED_SORT_MAP.values():
+            valid = ", ".join(sorted(CLASSIFIED_SORT_MAP.values()))
+            raise ClientError(
+                f"Unknown classified sortOrder '{sort_order}'. Valid values: {valid}."
+            )
+
+        request_id = str(uuid.uuid4())
+        rows: List[dict] = []
+        cursor: Optional[str] = None
+        while True:
+            args = {
+                "query": query,
+                "requestId": request_id,
+                "enableSpellCorrection": False,
+                "searchTrackingContext": CLASSIFIED_TRACKING_CONTEXT,
+                "filters": {
+                    "isBuyForGood": False,
+                    "isDiscounted": False,
+                    "isFree": False,
+                    "sortOrder": sort_order,
+                },
+            }
+            if cursor is not None:
+                args["cursor"] = cursor
+
+            data = self._graphql("searchClassifiedV2", {"classifiedSearchArgs": args})
+            feed = required_path(data, ["searchClassifiedFeed"], dict)
+            views = _optional_list(feed, "searchResultView")
+            if not views:
+                break
+
+            grid = required_path(views[0], ["searchResultItemsV2"], dict)
+            edges = _optional_list(grid, "edges")
+            if not edges:
+                break
+            rows.extend(
+                normalize_classified_item(required_path(edge, ["node"], dict))
+                for edge in edges
+            )
+
+            page_info = required_path(grid, ["pageInfo"], dict)
+            if len(rows) >= limit or not page_info.get("hasNextPage"):
+                break
+            cursor = required_path(page_info, ["endCursor"], str)
+
+        if not rows:
             self._assert_session_authenticated()
-        return [normalize_search_suggestion(item) for item in suggestions]
+        return rows[:limit]
+
+    @cached
+    def get_classified(self, classified_id: str) -> dict:
+        """Return one For Sale & Free listing by its id.
+
+        ``classified_id`` is the UUID that appears in the listing URL and in
+        ``classifieds list`` output. This runs the same ``ClassifiedFeedItem``
+        operation the listing detail page issues.
+        """
+        data = self._graphql(
+            "ClassifiedFeedItem",
+            {
+                "pagedCommentsMode": "DETAILS",
+                "useEdgesV2": False,
+                "classifiedId": classified_id,
+                "timeZone": NEXTDOOR_TIME_ZONE,
+            },
+        )
+        classified = required_path(data, ["classifiedFeedItem", "classified"], dict)
+        return normalize_classified_detail(classified)
+
+    @cached
+    def search(self, query: str, limit: int = 25) -> List[dict]:
+        """Return global search results (shape: ``normalize_search_result``).
+
+        This is Nextdoor's real content search — the ``search`` operation the
+        /search/ page issues — which returns one result view per content type
+        (For Sale & Free listings, neighbors, events, businesses, posts), each
+        with its own direct URL. ``excludeFirstSection`` is False so the
+        top-ranked section is included; the web app splits it into a separate
+        request purely to render that section sooner.
+
+        Nextdoor answers this operation with HTTP 200 and empty result views
+        even when the session is logged out (no ``me`` field, no GraphQL error,
+        no login wall), so an empty result is ambiguous. Only in that empty case
+        do we run a cheap ``me``-scoped liveness probe, which raises the
+        standard re-auth ``ClientError`` on a dead session.
+
+        The operation exposes no paging or sort arguments, so ``limit`` caps
+        the flattened result list client-side.
+        """
+        session_id = str(uuid.uuid4())
+        data = self._graphql(
+            "search",
+            {
+                "excludeFirstSection": False,
+                "mainSearchArgs": {
+                    "query": query,
+                    "requestId": str(uuid.uuid4()),
+                    "searchSessionId": session_id,
+                    "clientContextId": session_id,
+                    "enableSpellCorrection": True,
+                    "searchTrackingContext": SEARCH_TRACKING_CONTEXT,
+                },
+            },
+        )
+        feed = required_path(data, ["searchFeedV2"], dict)
+
+        rows: List[dict] = []
+        for view in _optional_list(feed, "searchResultView"):
+            section = view.get("type")
+            # Grid views (For Sale & Free) hold their edges under
+            # ``searchResultItemsV2``; list views use ``searchResultItems``.
+            # Each view carries exactly one of the two.
+            for container_key in ("searchResultItemsV2", "searchResultItems"):
+                container = _optional_dict(view, container_key)
+                if container is None:
+                    continue
+                rows.extend(
+                    normalize_search_result(section, required_path(edge, ["node"], dict))
+                    for edge in _optional_list(container, "edges")
+                )
+
+        if not rows:
+            self._assert_session_authenticated()
+        return rows[:limit]
 
 
 _client: Optional[NextdoorClient] = None

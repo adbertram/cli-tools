@@ -3,7 +3,9 @@
 ## DESCRIPTION
 
 A command-line interface for Nextdoor's GraphQL API, authenticated with a saved
-browser session.
+browser session. Covers the neighborhood feed, the For Sale & Free classifieds
+(with direct listing URLs and prices), global content search, notifications, and
+the current user profile.
 
 Use this CLI when you need scriptable, JSON-first access to Nextdoor from agents, automation, or terminal workflows.
 
@@ -32,6 +34,12 @@ nextdoor feed --limit 10
 
 # Show table output
 nextdoor feed --limit 10 --table
+
+# Browse the For Sale & Free classifieds with direct listing URLs
+nextdoor classifieds list --limit 20 --table
+
+# Search Nextdoor content
+nextdoor search "lego" --limit 10 --table
 
 # Get current user profile
 nextdoor me --table
@@ -96,11 +104,20 @@ nextdoor feed --sort newest --desc --limit 25
 nextdoor feed --sort relevance --limit 25
 
 # Filter feed
-nextdoor feed --filter "type:eq:post"
+nextdoor feed --filter "type:eq:POST"
 
 # Restrict output fields
-nextdoor feed --properties "id,title"
+nextdoor feed --properties "id,title,url"
+
+# Only feed items that are For Sale & Free listings (they carry a price)
+nextdoor feed --limit 50 --filter "type:eq:POST" --properties "title,price,url"
 ```
+
+Every POST row carries `url`, the post's real permalink. Nextdoor permalinks are
+opaque short slugs that exist only in the API response
+(`https://nextdoor.com/p/Wg398DknXZ_z?view=detail`) — they are **not** derivable
+from the numeric `id`, so the CLI never synthesizes one. PROMO (ad) rows have no
+permalink and report `url: null`.
 
 #### Feed sorting
 
@@ -123,6 +140,59 @@ so the ordering is done by the server, not re-sorted client-side.
 - The feed is heterogeneous: POST items are chronological under `RECENT_POSTS`,
   while PROMO (ad) items are interleaved by the server and carry no timestamp.
 
+### Classifieds (`nextdoor classifieds`)
+
+Nextdoor's dedicated "For Sale & Free" section
+(<https://nextdoor.com/for_sale_and_free/>), backed by the same
+`searchClassifiedV2` GraphQL operation the web grid issues. Every organic row
+carries a **direct listing URL** and the listing price.
+
+```bash
+# Browse listings, newest first (default)
+nextdoor classifieds list --limit 25
+
+# Table output
+nextdoor classifieds list --limit 25 --table
+
+# Keyword-search the classifieds
+nextdoor classifieds list "lego" --limit 25
+
+# Nextdoor's own "Most Relevant" ordering
+nextdoor classifieds list --sort relevance --limit 25
+
+# Oldest-first over the fetched pages
+nextdoor classifieds list --sort newest --desc --limit 25
+
+# Only real listings (drop the sponsored grid slots)
+nextdoor classifieds list --filter "type:eq:ORGANIC"
+
+# Only discounted listings (they carry a struck-through original price)
+nextdoor classifieds list --limit 100 --filter "original_price:notnull"
+
+# Restrict output fields
+nextdoor classifieds list --properties "title,price,url"
+
+# Full detail for one listing (the UUID from `list` or the listing URL)
+nextdoor classifieds get e0a5a7da-7c11-410a-b185-930cca2a1818
+nextdoor classifieds get e0a5a7da-7c11-410a-b185-930cca2a1818 --table
+```
+
+The grid is cursor-paginated at ~20 nodes per page; `--limit` transparently
+follows the server's `endCursor` until it has enough rows.
+
+#### Classifieds sorting
+
+| `--sort` | Server order | Natural direction | Notes |
+|----------|--------------|-------------------|-------|
+| `newest` (default) | `SORT_BY_TIME` | Most recently listed first | The site's "Newest" menu option. |
+| `relevance` | `SORT_BY_DISTANCE_AND_DATE` | Nextdoor's ranking | The site's "Most Relevant" default. `--desc` is rejected. |
+
+Both are genuine server-side sorts sent via
+`classifiedSearchArgs.filters.sortOrder`. `--desc` with `newest` reverses the
+fetched pages client-side (Nextdoor exposes no oldest-first order). Nextdoor's
+classifieds API has **no price sort**, so `--sort price` is rejected rather than
+silently returning arbitrary order.
+
 ### Notifications
 
 ```bash
@@ -139,10 +209,24 @@ nextdoor me --table
 
 ### Search
 
+Nextdoor's real content search (the `search` GraphQL operation behind
+<https://nextdoor.com/search/>). It returns results from every content section —
+For Sale & Free listings, neighbors, events, businesses and posts — each with a
+direct URL.
+
 ```bash
-# Search Nextdoor suggestions
-nextdoor search "widget" --limit 10 --table
+# Search everything
+nextdoor search "lego" --limit 25 --table
+
+# Only For Sale & Free listings
+nextdoor search "lego" --limit 50 --filter "section:eq:CLASSIFIED"
+
+# Only posts
+nextdoor search "roof repair" --filter "type:eq:post" --properties "title,url"
 ```
+
+The `search` operation accepts no sort or paging arguments, so the command
+exposes no `--sort`/`--desc`; `--limit` caps the flattened result list.
 
 ## Output Formats
 
@@ -164,14 +248,45 @@ nextdoor feed --limit 2
 ```json
 [
   {
-    "id": 489235186,
+    "id": "497961402",
     "type": "POST",
-    "title": "🐱 Kittens Looking for Loving Homes 🐱"
+    "post_type": "USER",
+    "title": "Yard sale 805 e Iowa st happening now til noon",
+    "price": null,
+    "author": "Dee Franey",
+    "created_at": "2026-07-25T13:26:26.453000+00:00",
+    "url": "https://nextdoor.com/p/Wg398DknXZ_z?view=detail",
+    "body": "Lots of items, come take a look."
   },
   {
-    "id": 6658602269397747960,
+    "id": "7126943074266908920",
     "type": "PROMO",
-    "title": "Homeaglow"
+    "post_type": null,
+    "title": "Mad City Showers",
+    "price": null,
+    "author": null,
+    "created_at": null,
+    "url": null,
+    "body": null
+  }
+]
+```
+
+```bash
+nextdoor classifieds list --limit 1
+```
+
+```json
+[
+  {
+    "id": "e0a5a7da-7c11-410a-b185-930cca2a1818",
+    "type": "ORGANIC",
+    "title": "Pokemon Card Tins Collection",
+    "price": "$150",
+    "original_price": null,
+    "subtitle": "9 hr ago · 8.7 mi · Evansville",
+    "image_url": "https://us1-photo.nextdoor.com/post_photos/fc/0c/fc0c10ef47365f4aeba0911d9dff05f6.jpeg",
+    "url": "https://nextdoor.com/for_sale_and_free/e0a5a7da-7c11-410a-b185-930cca2a1818/?init_source=search"
   }
 ]
 ```
@@ -180,6 +295,7 @@ nextdoor feed --limit 2
 
 ```bash
 nextdoor feed --limit 5 --table
+nextdoor classifieds list --limit 5 --table
 ```
 
 ## Options Reference
@@ -188,19 +304,19 @@ nextdoor feed --limit 5 --table
 |--------|-------|-------------|
 | `--table` | `-t` | Display data as a table |
 | `--limit` | `-l` | Maximum number of results |
-| `--sort` | `-s` | Feed sort field: `newest` (default) or `relevance` (feed only) |
-| `--desc` | `-d` | Reverse the sort's natural direction (feed only) |
+| `--sort` | `-s` | Sort field: `newest` (default) or `relevance` (`feed`, `classifieds list`) |
+| `--desc` | `-d` | Reverse the sort's natural direction (`feed`, `classifieds list`) |
 | `--filter` | `-f` | Filter results using `field:op:value` syntax |
 | `--properties` | `-p` | Restrict output to selected fields |
 | `--version` | `-v` | Show version and exit |
 | `--no-cache` |  | Bypass cached read responses for this execution |
 
-`--sort`/`--desc` apply to the `feed` command, where a meaningful ordering
-exists. The `search` command returns typeahead autocomplete *suggestions*
-(plain strings ranked by Nextdoor's own relevance), not dated listings — there
-is no timestamp or chronological order to sort by, so it intentionally exposes
-no `--sort`/`--desc`. `notifications` (dashboard badges) and `me` (user profile)
-are not listing collections and take no sort options either.
+`--sort`/`--desc` apply to `feed` and `classifieds list`, the two commands whose
+upstream operations accept a server-side sort argument. Nextdoor's global
+`search` operation takes no sort or paging arguments — results come back grouped
+by its own relevance ranking — so `search` intentionally exposes no
+`--sort`/`--desc`. `notifications` (dashboard badges) and `me` (user profile) are
+not listing collections and take no sort options either.
 
 ## Configuration
 
@@ -267,13 +383,20 @@ nextdoor --no-cache feed --limit 10
 ### List Feed and Filter with jq
 
 ```bash
-nextdoor feed --properties "id,title" | jq '.[].id'
+nextdoor feed --properties "id,title,url" | jq '.[].url'
 ```
 
 ### Export Feed to JSON File
 
 ```bash
 nextdoor feed --limit 200 > feed.json
+```
+
+### Collect Newest Classifieds With Verified Listing URLs
+
+```bash
+nextdoor classifieds list --limit 100 --filter "type:eq:ORGANIC" \
+  --properties "title,price,url" > listings.json
 ```
 
 ## Output Contract
@@ -284,20 +407,69 @@ matching default table column order; both are defined together in
 `nextdoor_cli/client.py` so they cannot drift.
 
 `feed` — personalized feed items (GraphQL `PersonalizedFeed`). Items are
-heterogeneous (POST, PROMO ads, ...):
+heterogeneous (POST, PROMO ads, ...), so a field is `null` when the item
+genuinely does not carry it:
 
 | Field | Description |
 |-------|-------------|
 | `id` | Item `contentId` |
 | `type` | `feedItemType` (e.g. `POST`, `PROMO`) |
-| `title` | POST → `post.subject`; PROMO → sponsor name; other types → `null` |
+| `post_type` | POST subtype (`USER`, `NEWS_ARTICLE`); `null` for PROMO |
+| `title` | Classified post → `post.classified.title`; plain post → `post.subject`; PROMO → sponsor name |
+| `price` | Listing price when the post is a For Sale & Free classified; otherwise `null` |
+| `author` | `post.author.displayName` |
+| `created_at` | ISO-8601 UTC timestamp from `post.createdAt.epochMillis` |
+| `url` | Absolute post permalink from `post.detailLink.href` (an opaque slug, never derived from `id`); `null` for PROMO |
+| `body` | Classified description, or the post body |
 
-`search` — search-bar suggestions (GraphQL `getDynamicSearchBarSuggestions`).
-The API returns a list of plain strings, each wrapped as a record:
+`classifieds list` — For Sale & Free listings (GraphQL `searchClassifiedV2`):
 
 | Field | Description |
 |-------|-------------|
-| `suggestion` | Suggestion text |
+| `id` | Listing `contentId` (UUID) |
+| `type` | Grid node type: `ORGANIC` for real listings, `CLASSIFIEDS_GAM_ITEM`/`CLASSIFIEDS_NAMPLUS_ITEM` for sponsored slots |
+| `title` | Listing title |
+| `price` | Current price display (`$150`, `FREE`); `null` when the listing shows no price |
+| `original_price` | Struck-through pre-discount price; `null` when not discounted |
+| `subtitle` | Nextdoor's own summary line, e.g. `9 hr ago · 8.7 mi · Evansville` |
+| `image_url` | Primary listing photo |
+| `url` | **Direct listing URL** |
+
+Sponsored grid slots carry no listing identity, so all of their listing fields
+are `null`. Filter them out with `--filter "type:eq:ORGANIC"`.
+
+`classifieds get <id>` — one listing's full detail (GraphQL
+`ClassifiedFeedItem`), returned as a JSON object:
+
+| Field | Description |
+|-------|-------------|
+| `id` | Listing UUID |
+| `title` | Listing title |
+| `price` | Raw numeric price string (e.g. `150`); `null` when the listing has no price |
+| `original_price` | Pre-discount price; `null` when not discounted |
+| `currency` | ISO currency code (e.g. `USD`) |
+| `status` | Listing status (e.g. `ACTIVE`) |
+| `is_sold` | Whether the seller marked it sold |
+| `category` | Named Nextdoor category (e.g. `Toys & games`) |
+| `seller` | Seller display name |
+| `distance_miles` | Distance from your neighborhood |
+| `location` | Nextdoor location name |
+| `created_at` / `expires_at` | ISO-8601 UTC timestamps |
+| `photo_urls` | All listing photos |
+| `url` | Canonical listing URL from Nextdoor's own `shareText` |
+| `description` | Full listing description |
+
+`search` — global content search (GraphQL `search`):
+
+| Field | Description |
+|-------|-------------|
+| `id` | Result `contentId` |
+| `section` | Result view: `CLASSIFIED`, `USER`, `LOCAL_EVENT`, `BUSINESS`, `POST` |
+| `type` | Item `contentType` (`classified`, `user`, `localEvent`, `business`, `post`); `null` for sponsored slots |
+| `title` | Result title (price split off for classified results) |
+| `price` | Listing price for classified results; `null` otherwise |
+| `subtitle` | Nextdoor's own summary line for the result |
+| `url` | Direct URL to the listing, profile, event, page or post |
 
 `notifications` — dashboard badge/shortcut entries (GraphQL `dashboardBadges`):
 

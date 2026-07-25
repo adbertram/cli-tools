@@ -263,6 +263,97 @@
         }
       }
     },
+    "classifieds": {
+      "help": "Browse the For Sale & Free classifieds",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one For Sale & Free listing with its full description and details.",
+          "arguments": [
+            {
+              "name": "classified_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Listing ID (the UUID in the listing URL)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List For Sale & Free listings with their direct listing URLs.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "QUERY",
+              "required": false,
+              "help": "Optional keyword to search listings (default: browse all)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of listings",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (Nextdoor's 'Most Relevant' order)",
+              "short": "-s",
+              "default": "newest"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched pages)",
+              "short": "-d"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "feed": {
       "help": "View the feed (default: newest first).",
       "arguments": [],
@@ -369,7 +460,7 @@
       ]
     },
     "search": {
-      "help": "Search Nextdoor suggestions.",
+      "help": "Search Nextdoor content (listings, neighbors, events, businesses, posts). Results are grouped by Nextdoor's own relevance ranking; the operation accepts no sort or paging arguments, so there is no --sort and --limit caps the returned rows.",
       "arguments": [
         {
           "name": "query",
@@ -379,6 +470,14 @@
         }
       ],
       "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of results",
+          "short": "-l",
+          "default": "25"
+        },
         {
           "name": "--filter",
           "type": "TEXT",
@@ -403,6 +502,6 @@
       ]
     }
   },
-  "total_commands": 16,
-  "discovered_at": "2026-07-24T19:29:53Z"
+  "total_commands": 18,
+  "discovered_at": "2026-07-25T15:09:29Z"
 }

@@ -14,6 +14,8 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 
 from . import __version__
 from .client import (
+    CLASSIFIED_COLUMNS,
+    CLASSIFIED_SORT_MAP,
     FEED_COLUMNS,
     FEED_SORT_MAP,
     NOTIFICATION_COLUMNS,
@@ -37,26 +39,26 @@ def _property_fields(properties: Optional[str]) -> Optional[List[str]]:
     return fields or None
 
 
-def _resolve_feed_sort(sort: str, desc: bool) -> str:
-    """Validate ``--sort``/``--desc`` for the feed and return the server sort value.
+def _resolve_sort(sort_map: dict, sort: str, desc: bool) -> str:
+    """Validate ``--sort``/``--desc`` and return the matching server sort value.
 
-    Implements the Source-CLI Sort Standard for the feed:
-    ``newest`` (the default, natural direction = newest-first) maps to
-    Nextdoor's chronological ``RECENT_POSTS`` server sort; ``relevance`` maps to
-    the algorithmic ``FOR_YOU`` feed. Unknown values fail fast with a clear error
-    (no silent fallback). ``relevance`` has no reverse direction, so ``--desc``
-    with it is rejected. For ``newest``, ``--desc`` (oldest-first) is applied by
-    the caller as a client-side reversal of the fetched page.
+    Implements the Source-CLI Sort Standard for both listing surfaces:
+    ``newest`` (the default, natural direction = newest-first) maps to the
+    source's chronological server sort; ``relevance`` maps to its algorithmic
+    order. Unknown values fail fast with a clear error (no silent fallback).
+    ``relevance`` has no reverse direction, so ``--desc`` with it is rejected.
+    For ``newest``, ``--desc`` (oldest-first) is applied by the caller as a
+    client-side reversal of the fetched page.
     """
     key = sort.lower()
-    if key not in FEED_SORT_MAP:
-        valid = ", ".join(FEED_SORT_MAP)
+    if key not in sort_map:
+        valid = ", ".join(sort_map)
         raise typer.BadParameter(f"Invalid --sort '{sort}'. Valid values: {valid}.")
     if key == "relevance" and desc:
         raise typer.BadParameter(
             "--desc is not supported with '--sort relevance' (relevance order has no reverse)."
         )
-    return FEED_SORT_MAP[key]
+    return sort_map[key]
 
 
 def _validate(filters: Optional[List[str]]) -> None:
@@ -155,7 +157,7 @@ def feed(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """View the feed (default: newest first)."""
-    sort_order = _resolve_feed_sort(sort, desc)
+    sort_order = _resolve_sort(FEED_SORT_MAP, sort, desc)
 
     def fetch(client):
         rows = client.get_feed(limit, sort_order=sort_order)
@@ -197,13 +199,19 @@ def notifications(
 @command
 def search(
     query: str = typer.Argument(..., help="Search query"),
+    limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of results"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """Search Nextdoor suggestions."""
+    """Search Nextdoor content (listings, neighbors, events, businesses, posts).
+
+    Results are grouped by Nextdoor's own relevance ranking; the operation
+    accepts no sort or paging arguments, so there is no --sort and --limit caps
+    the returned rows.
+    """
     _list(
-        lambda client: client.search(query),
+        lambda client: client.search(query, limit),
         filter,
         table,
         properties,
@@ -212,6 +220,57 @@ def search(
     )
 
 
+classifieds_app = typer.Typer(help="Browse the For Sale & Free classifieds")
+
+
+@classifieds_app.command("list")
+@command
+def classifieds_list(
+    query: str = typer.Argument("", help="Optional keyword to search listings (default: browse all)"),
+    limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of listings"),
+    sort: str = typer.Option(
+        "newest",
+        "--sort",
+        "-s",
+        help="Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (Nextdoor's 'Most Relevant' order).",
+    ),
+    desc: bool = typer.Option(
+        False,
+        "--desc",
+        "-d",
+        help="Reverse the sort's natural order (newest -> oldest-first, over the fetched pages).",
+    ),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """List For Sale & Free listings with their direct listing URLs."""
+    sort_order = _resolve_sort(CLASSIFIED_SORT_MAP, sort, desc)
+
+    def fetch(client):
+        rows = client.list_classifieds(query, limit, sort_order=sort_order)
+        return list(reversed(rows)) if desc else rows
+
+    _list(fetch, filter, table, properties, CLASSIFIED_COLUMNS, "No listings found.")
+
+
+@classifieds_app.command("get")
+@command
+def classifieds_get(
+    classified_id: str = typer.Argument(..., help="Listing ID (the UUID in the listing URL)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get one For Sale & Free listing with its full description and details."""
+    _render_record(
+        lambda client: client.get_classified(classified_id),
+        table,
+        properties,
+        "No listing found.",
+    )
+
+
+app.add_typer(classifieds_app, name="classifieds")
 app.add_typer(create_auth_app(get_config, tool_name="nextdoor"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 
