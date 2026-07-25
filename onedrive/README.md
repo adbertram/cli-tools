@@ -47,9 +47,22 @@ onedrive items upload DRIVE_ID ./local-file.pdf /Documents/file.pdf
 
 # 5. Download a file
 onedrive items download DRIVE_ID /Documents/file.pdf ./downloaded.pdf
+
+# 6. Download a OneDrive or SharePoint sharing URL
+onedrive shares download 'https://tenant.sharepoint.com/:w:/s/site/...' ./shared.docx --profile PROFILE
 ```
 
 ## Commands
+
+### Sharing URLs
+
+Resolve an authenticated OneDrive or SharePoint sharing URL with Microsoft Graph and download its file content:
+
+```bash
+onedrive shares download SHARE_URL LOCAL_PATH --profile PROFILE
+```
+
+This command uses the supported `/shares/u!<base64url-without-padding>/driveItem` and `/content` endpoints. It does not use anonymous-download or browser fallbacks.
 
 ### Authentication
 

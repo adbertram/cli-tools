@@ -1,8 +1,8 @@
 {
   "tool": "onedrive",
   "description": "OneDrive for Business CLI via Microsoft Graph API",
-  "discovered_at": "2026-06-20T19:52:21Z",
-  "total_commands": 27,
+  "discovered_at": "2026-07-13T22:46:59Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -41,13 +41,13 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Use to clear cached authentication tokens when switching accounts or troubleshooting auth issues.",
           "arguments": [],
           "options": [
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `onedrive auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -176,6 +176,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -191,7 +223,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Use to verify authentication is working before running other commands. Use --table/-t for formatted output. Returns account info if authenticated.",
           "arguments": [],
           "options": [
@@ -359,7 +391,6 @@
     },
     "folders": {
       "help": "Manage folders",
-      "usage_instructions": "Folder management — create folders, get folder metadata, create sharing links, and invite people to folders. Some commands use drive ID as positional arg, others use --drive/-d option. Use `folders get` to check if a folder exists (exits with code 1 if not found).",
       "arguments": [],
       "options": [
         {
@@ -432,13 +463,6 @@
         },
         "create-link": {
           "help": "Create a sharing link for a folder. Creates a shareable link that grants access to the folder. Returns the Permission resource with the sharing link URL. Link types: - view: Read-only access (default) - edit: Read-write access - embed: Embeddable link (OneDrive Personal only) Link scopes: - anonymous: Anyone with the link (may be disabled by admin) - organization: Only members of your organization - users: Specific users (requires additional invite step)",
-          "examples": [
-            "onedrive folders share \"Documents/Reports\"",
-            "onedrive folders share \"Shared/Project\" --type edit",
-            "onedrive folders share \"Public\" --scope anonymous",
-            "onedrive folders share \"Temp\" --expiration 2025-12-31T23:59:59Z",
-            "onedrive folders share \"Reports\" --properties \"link.webUrl\""
-          ],
           "usage_instructions": "Use to create a shareable link for a folder. PATH is required (e.g., 'Documents/Reports'). Use --type/-t for link type: view (default), edit, or embed. Use --scope/-s for access scope: anonymous, organization, or users. Use --expiration/-e for time-limited links (ISO 8601 format). Use --drive/-d to specify drive.",
           "arguments": [
             {
@@ -788,10 +812,10 @@
               "help": "The drive ID to list items from"
             },
             {
-              "name": "path",
-              "type": "PATH",
+              "name": "[path]",
+              "type": "TEXT",
               "required": false,
-              "help": "Folder path (default: root)"
+              "help": "TEXT  Folder path (default: root)"
             }
           ],
           "options": [
@@ -1156,6 +1180,47 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "shares": {
+      "help": "Resolve and download sharing URLs",
+      "usage_instructions": "Resolve authenticated OneDrive or SharePoint sharing URLs through Microsoft Graph. Use `shares download` with the complete sharing URL and a local destination path.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "download": {
+          "help": "Resolve a sharing URL through Microsoft Graph and download the file.",
+          "usage_instructions": "Download a file from a OneDrive or SharePoint sharing URL. Pass SHARE_URL and LOCAL_PATH as positional arguments and use --profile to select the authenticated profile. The command uses only Microsoft Graph /shares/{shareId}/driveItem and /content endpoints.",
+          "arguments": [
+            {
+              "name": "share_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "OneDrive or SharePoint sharing URL"
+            },
+            {
+              "name": "local_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Local path to save the file"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",

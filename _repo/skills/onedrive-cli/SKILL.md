@@ -25,6 +25,7 @@ onedrive <command-group> <action> [arguments] [options]
 | Get file details | `onedrive items get DRIVE_ID /path/to/file` |
 | Upload a file | `onedrive items upload DRIVE_ID ./local.pdf /Remote/path.pdf` |
 | Download a file | `onedrive items download DRIVE_ID /Remote/file.pdf ./local.pdf` |
+| Download a sharing URL | `onedrive shares download SHARE_URL ./local.docx --profile PROFILE` |
 | Create a folder | `onedrive folders create DRIVE_ID "Folder Name"` |
 | Share a file | `onedrive link create DRIVE_ID ITEM_ID --scope anonymous` |
 </quick_start>
@@ -41,6 +42,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **folders** -- Manage folders (create, get, create-link, invite)
 - **items** -- Manage files and folders (list, get, upload, download, delete)
 - **link** -- Manage sharing links (create, list, update, get, delete)
+- **shares** -- Resolve and download OneDrive or SharePoint sharing URLs through Microsoft Graph
 </principle>
 </essential_principles>
 
