@@ -14,6 +14,7 @@ import signal
 import shutil
 import subprocess
 import time
+import fcntl
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -94,6 +95,7 @@ class PlaywrightBrowserService:
         self._page = None
         self._opened = False
         self._user_data_dir: Optional[Path] = None
+        self._lifecycle_lock_file = None
 
     @staticmethod
     def _safe_url_for_log(url: str) -> str:
@@ -196,6 +198,32 @@ class PlaywrightBrowserService:
         for pid in pids:
             self._terminate_session_pid(pid)
 
+    def _acquire_profile_lifecycle_lock(self) -> None:
+        """Serialize browser ownership for this exact persistent profile."""
+        if self._lifecycle_lock_file is not None:
+            return
+        if self._user_data_dir is None:
+            raise PlaywrightServiceError("Cannot lock a browser profile before it is resolved.")
+        lock_path = self._user_data_dir.parent / f".{self._user_data_dir.name}.lifecycle.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = open(lock_path, "a+")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            lock_file.close()
+            raise
+        self._lifecycle_lock_file = lock_file
+
+    def _release_profile_lifecycle_lock(self) -> None:
+        """Release this service's persistent-profile ownership lock."""
+        if self._lifecycle_lock_file is None:
+            return
+        try:
+            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._lifecycle_lock_file.close()
+            self._lifecycle_lock_file = None
+
     @staticmethod
     def _command_user_data_dir(command: str) -> Optional[str]:
         return command_user_data_dir(command)
@@ -211,6 +239,32 @@ class PlaywrightBrowserService:
             "Playwright profile is already in use by Chrome process(es) "
             f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
         )
+
+    def _cleanup_stale_profile_locks(self) -> None:
+        """Remove singleton artifacts only after proving no profile owner exists."""
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
+        if pids:
+            raise PlaywrightServiceError(
+                "Playwright profile is already in use by Chrome process(es) "
+                f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+            )
+        if self._user_data_dir is None:
+            return
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort"):
+            path = self._user_data_dir / name
+            if not path.exists() and not path.is_symlink():
+                continue
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                raise PlaywrightServiceError(
+                    f"Failed to remove stale browser lock file {path}: {exc}"
+                ) from exc
 
     def browser_open(
         self,
@@ -240,28 +294,30 @@ class PlaywrightBrowserService:
         profile_dir = Path(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir
-        self._raise_if_profile_in_use()
+        self._acquire_profile_lifecycle_lock()
 
-        launch_args = [
-            "--restore-last-session",
-            "--disable-blink-features=AutomationControlled",
-            "--disable-features=AutomationControlled,Translate",
-        ]
-        if user_agent:
-            launch_args.append(f"--user-agent={user_agent}")
-
-        width_height = _parse_window_size(window_size)
-        kwargs: dict[str, Any] = {
-            "headless": not headed,
-            "executable_path": self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary(),
-            "args": launch_args,
-            "timeout": self.default_timeout * 1000,
-        }
-        if width_height is not None:
-            kwargs["viewport"] = {"width": width_height[0], "height": width_height[1]}
-
-        self._playwright = sync_playwright().start()
         try:
+            self._cleanup_stale_profile_locks()
+
+            launch_args = [
+                "--restore-last-session",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=AutomationControlled,Translate",
+            ]
+            if user_agent:
+                launch_args.append(f"--user-agent={user_agent}")
+
+            width_height = _parse_window_size(window_size)
+            kwargs: dict[str, Any] = {
+                "headless": not headed,
+                "executable_path": self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary(),
+                "args": launch_args,
+                "timeout": self.default_timeout * 1000,
+            }
+            if width_height is not None:
+                kwargs["viewport"] = {"width": width_height[0], "height": width_height[1]}
+
+            self._playwright = sync_playwright().start()
             self._context = self._playwright.chromium.launch_persistent_context(
                 str(profile_dir),
                 **kwargs,
@@ -284,6 +340,7 @@ class PlaywrightBrowserService:
                 if self._playwright is not None:
                     self._playwright.stop()
                     self._playwright = None
+                self._release_profile_lifecycle_lock()
             raise PlaywrightServiceError(f"Failed to open Playwright browser: {exc}") from exc
 
     def browser_close(self) -> Dict[str, Any]:
@@ -302,8 +359,11 @@ class PlaywrightBrowserService:
                 if playwright is not None:
                     playwright.stop()
             finally:
-                if cleanup_owned_profile:
-                    self._cleanup_stale_profile_processes()
+                try:
+                    if cleanup_owned_profile:
+                        self._cleanup_stale_profile_processes()
+                finally:
+                    self._release_profile_lifecycle_lock()
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
@@ -415,6 +475,19 @@ class PlaywrightBrowserService:
         if not present:
             return None
         return _ServiceElement(self, css=selector)
+
+    def fill(self, selector: str, text: str) -> None:
+        """Fill the first element matching ``selector`` with ``text``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.fill(selector, text)`` API expect this method on the
+        page object. Resolves ``selector`` against the live DOM and reuses the
+        same fill behavior as the element/locator wrappers, mirroring
+        :meth:`BrowserHarnessService.fill` so both browser backends expose the
+        same page-level surface.
+        """
+        self._require_open()
+        _ServiceElement(self, css=selector).fill(text)
 
     def aria_snapshot(self, selector: str = "body", *, timeout: int = 5000) -> str:
         self._require_open()

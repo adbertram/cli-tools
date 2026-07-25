@@ -1,4 +1,5 @@
 import sys
+import threading
 import types
 
 import pytest
@@ -84,6 +85,100 @@ def test_playwright_service_restores_persistent_browser_session(tmp_path, monkey
     assert "--restore-last-session" in kwargs["args"]
 
 
+def test_playwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    playwright = _FakePlaywright()
+    fake_sync_module = types.SimpleNamespace(
+        sync_playwright=lambda: _FakeSyncPlaywright(playwright)
+    )
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_module)
+    monkeypatch.setattr(module, "_chrome_binary", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    monkeypatch.setattr(
+        PlaywrightBrowserService,
+        "_cleanup_stale_profile_processes",
+        lambda self: None,
+    )
+    lock_events = []
+    monkeypatch.setattr(
+        module.fcntl,
+        "flock",
+        lambda _fd, operation: lock_events.append(operation),
+    )
+
+    service = PlaywrightBrowserService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    service.browser_open(persistent_profile_dir=profile)
+
+    assert lock_events == [module.fcntl.LOCK_EX]
+    assert service._lifecycle_lock_file is not None
+    assert (tmp_path / ".chromium-profile.lifecycle.lock").is_file()
+
+    service.browser_close()
+
+    assert lock_events == [module.fcntl.LOCK_EX, module.fcntl.LOCK_UN]
+    assert service._lifecycle_lock_file is None
+
+
+def test_playwright_service_serializes_concurrent_owners_of_same_profile(tmp_path):
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    profile = tmp_path / "chromium-profile"
+    first = PlaywrightBrowserService("first-owner")
+    second = PlaywrightBrowserService("second-owner")
+    first._user_data_dir = profile
+    second._user_data_dir = profile
+    first._acquire_profile_lifecycle_lock()
+
+    second_acquired = threading.Event()
+
+    def acquire_second_owner():
+        second._acquire_profile_lifecycle_lock()
+        second_acquired.set()
+
+    thread = threading.Thread(target=acquire_second_owner)
+    thread.start()
+
+    assert not second_acquired.wait(timeout=0.1)
+    first._release_profile_lifecycle_lock()
+    assert second_acquired.wait(timeout=1)
+
+    second._release_profile_lifecycle_lock()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_playwright_service_releases_profile_lifecycle_lock_after_failed_launch(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService, PlaywrightServiceError
+
+    class _FailingChromium:
+        def launch_persistent_context(self, *_args, **_kwargs):
+            raise RuntimeError("launch failed")
+
+    playwright = _FakePlaywright()
+    playwright.chromium = _FailingChromium()
+    fake_sync_module = types.SimpleNamespace(
+        sync_playwright=lambda: _FakeSyncPlaywright(playwright)
+    )
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_module)
+    monkeypatch.setattr(module, "_chrome_binary", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+    lock_events = []
+    monkeypatch.setattr(
+        module.fcntl,
+        "flock",
+        lambda _fd, operation: lock_events.append(operation),
+    )
+
+    service = PlaywrightBrowserService("sample-browser-session")
+    with pytest.raises(PlaywrightServiceError, match="launch failed"):
+        service.browser_open(persistent_profile_dir=tmp_path / "chromium-profile")
+
+    assert lock_events == [module.fcntl.LOCK_EX, module.fcntl.LOCK_UN]
+    assert service._lifecycle_lock_file is None
+
+
 def test_playwright_service_session_process_pids_match_profile_only(tmp_path, monkeypatch):
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
 
@@ -106,6 +201,40 @@ def test_playwright_service_session_process_pids_match_profile_only(tmp_path, mo
     assert service._session_process_pids() == [101, 102]
 
 
+def test_playwright_service_removes_stale_singleton_artifacts(tmp_path, monkeypatch):
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    service = PlaywrightBrowserService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    (profile / "SingletonLock").symlink_to("old-host-99999")
+    (profile / "SingletonCookie").write_text("stale")
+    service._user_data_dir = profile
+    monkeypatch.setattr(service, "_session_process_pids", lambda: [])
+
+    service._cleanup_stale_profile_locks()
+
+    assert not (profile / "SingletonLock").is_symlink()
+    assert not (profile / "SingletonCookie").exists()
+
+
+def test_playwright_service_preserves_locks_for_live_profile_owner(tmp_path, monkeypatch):
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService, PlaywrightServiceError
+
+    service = PlaywrightBrowserService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    lock = profile / "SingletonLock"
+    lock.symlink_to("host-13510")
+    service._user_data_dir = profile
+    monkeypatch.setattr(service, "_session_process_pids", lambda: [13510])
+
+    with pytest.raises(PlaywrightServiceError, match="13510"):
+        service._cleanup_stale_profile_locks()
+
+    assert lock.is_symlink()
+
+
 def test_playwright_service_browser_close_terminates_leftover_profile_processes(tmp_path, monkeypatch):
     from cli_tools_shared.browser import playwright_service as module
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
@@ -126,6 +255,7 @@ def test_playwright_service_browser_close_terminates_leftover_profile_processes(
         processes.clear()
 
     monkeypatch.setattr(service, "_list_process_table", lambda: list(processes))
+    monkeypatch.setattr(service, "_pid_running", lambda pid: any(row.pid == pid for row in processes))
     monkeypatch.setattr(module.os, "kill", fake_kill)
 
     service.browser_close()
@@ -174,6 +304,7 @@ def test_playwright_service_data_delete_terminates_matching_profile_processes(tm
         processes.clear()
 
     monkeypatch.setattr(service, "_list_process_table", lambda: list(processes))
+    monkeypatch.setattr(service, "_pid_running", lambda pid: any(row.pid == pid for row in processes))
     monkeypatch.setattr(module.os, "kill", fake_kill)
 
     service.data_delete()

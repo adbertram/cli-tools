@@ -16,10 +16,13 @@ CLI tools subclass :class:`BrowserAutomation` and declare class-level hooks::
 """
 
 import base64
+import binascii
 import hashlib
+import hmac
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import time
@@ -78,6 +81,27 @@ def _safe_daemon_key(session: str) -> str:
     return f"bh-{hashlib.sha256(session.encode()).hexdigest()[:8]}"
 
 
+def _generate_totp_code(secret: str, *, timestamp: Optional[float] = None) -> str:
+    """Generate the current six-digit RFC 6238 code for a Base32 seed."""
+    normalized = re.sub(r"\s+", "", secret).upper()
+    if not normalized:
+        raise BrowserAutomationError(
+            "Browser-login TOTP secret is not valid Base32."
+        )
+    normalized += "=" * ((8 - len(normalized) % 8) % 8)
+    try:
+        key = base64.b32decode(normalized, casefold=True)
+    except (binascii.Error, ValueError, TypeError) as exc:
+        raise BrowserAutomationError(
+            "Browser-login TOTP secret is not valid Base32."
+        ) from exc
+    counter = int((time.time() if timestamp is None else timestamp) // 30)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+    return f"{value % 1_000_000:06d}"
+
+
 class BrowserAutomation:
     """Base class for browser automation in CLI tools.
 
@@ -98,6 +122,16 @@ class BrowserAutomation:
     AUTH_SUCCESS_URL = ""        # URL pattern indicating successful login
     AUTH_SUCCESS_SELECTOR = ""   # CSS/locator selector visible when authenticated
     AUTH_LOGIN_FORM_SELECTOR = ""  # CSS/locator selector for login-form elements; ABSENT → authenticated
+    AUTH_LOGIN_USERNAME_SELECTOR = ""  # Selector for an approved non-interactive username field
+    AUTH_LOGIN_PASSWORD_SELECTOR = ""  # Selector for an approved non-interactive password field
+    AUTH_LOGIN_SUBMIT_SELECTOR = ""  # Selector for an approved non-interactive submit control
+    AUTH_LOGIN_ERROR_SELECTOR = ""  # Selector visible when submitted credentials are rejected
+    AUTH_LOGIN_USERNAME_SECRET = ""  # CLI-tools secret-manager name
+    AUTH_LOGIN_PASSWORD_SECRET = ""  # CLI-tools secret-manager name
+    AUTH_LOGIN_TOTP_SELECTOR = ""  # Selector for a TOTP challenge input
+    AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = ""  # Selector for the TOTP submit control
+    AUTH_LOGIN_TOTP_SECRET = ""  # CLI-tools secret-manager Base32 seed name
+    AUTH_LOGIN_AUTOMATION_TIMEOUT = 30  # Seconds to reach authenticated state after submit
     AUTH_UNAVAILABLE_SELECTOR = ""  # CSS/locator selector — if visible, authenticated but not available
     AUTH_STORAGE_KEY = ""        # localStorage key; True if key exists and has a value
     LOGIN_TIMEOUT = 300          # Seconds to wait for manual login
@@ -230,8 +264,8 @@ class BrowserAutomation:
                 sys.stderr.write(
                     "Browser auth is running without an interactive terminal "
                     f"({e}).\n"
-                    "Complete login in the opened browser window, then close "
-                    "that browser window to capture the session.\n"
+                    "Continuing with the browser completion signal configured "
+                    "for this login flow.\n"
                 )
                 return False
             sys.stderr.write(
@@ -272,7 +306,12 @@ class BrowserAutomation:
             return AuthResult(authenticated=result, available=available, live_check=True)
         except Exception as e:
             logger.debug("is_authenticated: live check failed: %s", e)
-            return AuthResult(authenticated=False, available=False, live_check=True)
+            if isinstance(e, BrowserAutomationError):
+                raise
+            raise BrowserAutomationError(
+                f"Browser authentication check unavailable: {e}",
+                cause=e,
+            ) from e
         finally:
             self.close()
 
@@ -310,7 +349,12 @@ class BrowserAutomation:
             logger.debug("authenticate: browser open FAILED: %s", e)
             raise BrowserAutomationError(f"Failed to open browser: {e}") from e
 
-        self._prompt_enter_eof_safe()
+        confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
+        if not confirmed:
+            print_info(
+                "No interactive terminal is available; verifying the browser "
+                "session directly."
+            )
 
         self._service = svc
         self._page = svc
@@ -319,16 +363,26 @@ class BrowserAutomation:
         page = svc
         try:
             page.wait_for_timeout(2000)
+            if not confirmed and not self._check_auth(page):
+                self._complete_noninteractive_login(page)
             if has_hook:
                 logger.debug("authenticate: running post-auth hook")
                 self._on_authenticated(page)
+            if self.AUTH_CHECK_URL:
+                # Verify against the same ground truth `is_authenticated()` uses.
+                # The headed browser can be left on any post-login landing page
+                # (or a redirect target with a query string), so checking the
+                # current page would report a false negative.
+                logger.debug("authenticate: navigating to AUTH_CHECK_URL for final verification")
+                page.goto(self.AUTH_CHECK_URL)
+                if not self.AUTH_COOKIE_PATTERNS:
+                    page.wait_for_timeout(2000)
             if not self._check_auth(page):
                 raise BrowserAutomationError("Browser session is not authenticated after login.")
         finally:
             self.close()
 
         persisted = self.is_authenticated()
-        self.close()
         if not persisted:
             raise BrowserAutomationError(
                 "Browser session did not persist after reopening. "
@@ -338,6 +392,116 @@ class BrowserAutomation:
         self._auth_verified_at = time.time()
         logger.debug("authenticate: complete")
         print_success("Authentication complete.")
+
+    def _complete_noninteractive_login(self, page) -> None:
+        """Submit explicitly configured browser credentials without a terminal."""
+        settings = (
+            self.AUTH_LOGIN_USERNAME_SELECTOR,
+            self.AUTH_LOGIN_PASSWORD_SELECTOR,
+            self.AUTH_LOGIN_SUBMIT_SELECTOR,
+            self.AUTH_LOGIN_USERNAME_SECRET,
+            self.AUTH_LOGIN_PASSWORD_SECRET,
+        )
+        if not any(settings):
+            return
+        if not all(settings):
+            raise BrowserAutomationError(
+                "Non-interactive browser login is partially configured; username/password "
+                "selectors, submit selector, and both secret names are required."
+            )
+
+        totp_settings = (
+            self.AUTH_LOGIN_TOTP_SELECTOR,
+            self.AUTH_LOGIN_TOTP_SUBMIT_SELECTOR,
+            self.AUTH_LOGIN_TOTP_SECRET,
+        )
+        if any(totp_settings) and not all(totp_settings):
+            raise BrowserAutomationError(
+                "Non-interactive browser TOTP is partially configured; input selector, "
+                "submit selector, and secret name are required."
+            )
+
+        controls = (
+            ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
+            ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
+            ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
+        )
+        for label, locator in controls:
+            if locator.count() != 1 or not locator.first.is_visible():
+                raise BrowserAutomationError(
+                    f"Non-interactive browser login requires one visible {label} control."
+                )
+        if not controls[2][1].first.is_enabled():
+            raise BrowserAutomationError(
+                "Non-interactive browser login submit control is disabled."
+            )
+
+        from .config import read_cli_tool_secret, secret_manager_set_command
+
+        username = read_cli_tool_secret(self.AUTH_LOGIN_USERNAME_SECRET)
+        password = read_cli_tool_secret(self.AUTH_LOGIN_PASSWORD_SECRET)
+        if username is None:
+            raise BrowserAutomationError(
+                "Missing browser-login username secret. Set it with: "
+                f"{secret_manager_set_command(self.AUTH_LOGIN_USERNAME_SECRET)}"
+            )
+        if password is None:
+            raise BrowserAutomationError(
+                "Missing browser-login password secret. Set it with: "
+                f"{secret_manager_set_command(self.AUTH_LOGIN_PASSWORD_SECRET)}"
+            )
+
+        try:
+            page.fill(self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+            page.fill(self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
+            controls[2][1].first.click()
+        finally:
+            username = None
+            password = None
+
+        deadline = time.time() + self.AUTH_LOGIN_AUTOMATION_TIMEOUT
+        totp_submitted = False
+        while time.time() < deadline:
+            page.wait_for_timeout(1000)
+            if self.AUTH_LOGIN_ERROR_SELECTOR:
+                error = page.locator(self.AUTH_LOGIN_ERROR_SELECTOR)
+                if error.count() and error.first.is_visible():
+                    raise BrowserAutomationError(
+                        "Browser login credentials were rejected by the service."
+                    )
+            if self._check_auth(page):
+                return
+            if all(totp_settings) and not totp_submitted:
+                totp_input = page.locator(self.AUTH_LOGIN_TOTP_SELECTOR)
+                if totp_input.count() == 1 and totp_input.first.is_visible():
+                    totp_submit = page.locator(self.AUTH_LOGIN_TOTP_SUBMIT_SELECTOR)
+                    if totp_submit.count() != 1 or not totp_submit.first.is_visible():
+                        raise BrowserAutomationError(
+                            "Non-interactive browser TOTP requires one visible submit control."
+                        )
+                    if not totp_submit.first.is_enabled():
+                        raise BrowserAutomationError(
+                            "Non-interactive browser TOTP submit control is disabled."
+                        )
+                    totp_secret = read_cli_tool_secret(self.AUTH_LOGIN_TOTP_SECRET)
+                    if totp_secret is None:
+                        raise BrowserAutomationError(
+                            "Missing browser-login TOTP secret. Set the Base32 seed with: "
+                            f"{secret_manager_set_command(self.AUTH_LOGIN_TOTP_SECRET)}"
+                        )
+                    totp_code = None
+                    try:
+                        totp_code = _generate_totp_code(totp_secret)
+                        page.fill(self.AUTH_LOGIN_TOTP_SELECTOR, totp_code)
+                        totp_submit.first.click()
+                        totp_submitted = True
+                    finally:
+                        totp_secret = None
+                        totp_code = None
+        raise BrowserAutomationError(
+            "Non-interactive browser login did not reach an authenticated state "
+            f"within {self.AUTH_LOGIN_AUTOMATION_TIMEOUT} seconds."
+        )
 
     # ---- Automation-free login (MANUAL_LOGIN) ----
 
@@ -520,6 +684,7 @@ class BrowserAutomation:
             if url:
                 logger.debug("get_page: reusing existing page, navigating to %s", url)
                 self._page.goto(url)
+                self._raise_if_auth_failure_page(self._page)
             return self._page
 
         # Check for a prewarmed browser from the credential gate
@@ -534,6 +699,7 @@ class BrowserAutomation:
             logger.debug("get_page: adopted prewarmed browser (skipping launch)")
             if url:
                 self._page.goto(url)
+                self._raise_if_auth_failure_page(self._page)
             return self._page
 
         svc = self._get_service()
@@ -550,6 +716,7 @@ class BrowserAutomation:
             raise BrowserAutomationError(str(e)) from e
 
         self._page = svc
+        self._raise_if_auth_failure_page(self._page)
         logger.debug("get_page: ready")
         return self._page
 
@@ -632,8 +799,30 @@ class BrowserAutomation:
             return result
         return False
 
+    def _raise_if_auth_failure_page(self, page) -> None:
+        if not self.AUTH_FAILURE_URL_PATTERN:
+            return
+        if not self._is_auth_failure_page(page):
+            return
+        safe_url = self._safe_url_for_log(page.url)
+        raise BrowserAutomationError(
+            "Browser session reached an authentication/security challenge at "
+            f"{safe_url}. Re-run auth login for the browser session from an "
+            "interactive shell and complete the verification in the CLI-owned "
+            "browser profile."
+        )
+
     def _check_auth(self, page) -> bool:
         """Check if page indicates authenticated state."""
+        # Explicit service failure walls override cookie presence. Some sites
+        # keep normal tracking/session cookies on captcha or challenge pages.
+        if self.AUTH_FAILURE_URL_PATTERN and self._is_auth_failure_page(page):
+            logger.debug(
+                "_check_auth: on auth-failure page (url=%s), returning False",
+                page.url,
+            )
+            return False
+
         # Token-cookie audience check takes precedence when configured: the only
         # reliable signal for sites that mint a guest token even when logged out.
         if self.AUTH_TOKEN_COOKIE:
@@ -643,20 +832,11 @@ class BrowserAutomation:
         # keep the document load active long enough that URL/title inspection
         # can block the CDP session before cookies are read.
         if self.AUTH_COOKIE_PATTERNS:
-            try:
-                cookies = page.cookie_list()
-                auth_cookies = self._get_auth_cookies(cookies)
-                return len(auth_cookies) > 0
-            except Exception as e:
-                logger.debug("_check_auth: cookie check failed: %s", e)
-                return False
+            cookies = page.cookie_list()
+            auth_cookies = self._get_auth_cookies(cookies)
+            return len(auth_cookies) > 0
 
         url = page.url
-
-        # 0. Explicit auth-failure page check
-        if self._is_auth_failure_page(page):
-            logger.debug("_check_auth: on auth-failure page (url=%s), returning False", url)
-            return False
 
         # 1. Login/auth page check
         if self._is_login_page(page):

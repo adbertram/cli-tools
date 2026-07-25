@@ -290,6 +290,9 @@ class _ServiceElement:
     def is_visible(self, *, timeout: int = None) -> bool:
         return bool(self._eval_on_el(f"if (!el) return false; {_VISIBILITY_JS}"))
 
+    def is_enabled(self) -> bool:
+        return bool(self._eval_on_el("if (!el) return false; return !el.disabled;"))
+
     def count(self) -> int:
         return 1
 

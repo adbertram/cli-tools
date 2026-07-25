@@ -165,8 +165,8 @@ class TestVerifyOutputFields:
         assert result["authenticated"] is False
         browser.is_authenticated.assert_called_once_with()
 
-    def test_browser_session_live_check_raises_returns_unauthenticated(self):
-        """Live check raising must not crash auth status — report False."""
+    def test_browser_session_live_check_raises_reports_unavailable_error(self):
+        """Live check errors are availability failures, not auth negatives."""
         browser = MagicMock()
         browser.is_authenticated.side_effect = RuntimeError("playwright crashed")
         browser.close.return_value = None
@@ -180,7 +180,9 @@ class TestVerifyOutputFields:
         result = AuthVerifier(config).verify()
         block = result["credential_types"]["browser_session"]
         assert block["credentials_saved"] is True
+        assert block["browser_session"] is False
         assert block["browser_available"] is False
+        assert block["browser_error"] == "playwright crashed"
         assert block["authenticated"] is False
         assert result["authenticated"] is False
 

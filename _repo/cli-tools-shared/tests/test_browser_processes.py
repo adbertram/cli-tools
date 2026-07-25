@@ -1,6 +1,7 @@
 from cli_tools_shared.browser.processes import (
     ProcessCommand,
     command_user_data_dir,
+    is_chromium_process_command,
     profile_process_pids,
     protected_process_ids,
     terminate_profile_processes,
@@ -58,6 +59,50 @@ def test_profile_process_pids_reports_no_targets_for_self_matching_wrapper_only(
     ]
 
     assert profile_process_pids(profile, processes=rows, current_pid=200, parent_pid=100) == []
+
+
+def test_profile_process_pids_never_targets_unrelated_wrapper_outside_ancestry(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    rows = [
+        ProcessCommand(50, 1, "S", f"/bin/bash -lc cleanup --user-data-dir={profile}"),
+        ProcessCommand(51, 50, "S", f"node helper.js --user-data-dir={profile}"),
+        ProcessCommand(
+            300,
+            1,
+            "S",
+            f"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir={profile}",
+        ),
+    ]
+
+    assert profile_process_pids(profile, processes=rows, current_pid=200, parent_pid=100) == [300]
+
+
+def test_is_chromium_process_command_checks_executable_not_argument_text(tmp_path):
+    profile = tmp_path / "chromium-profile"
+
+    assert is_chromium_process_command(
+        f"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir={profile}"
+    )
+    assert is_chromium_process_command(f"/usr/bin/chromium --user-data-dir={profile}")
+    assert not is_chromium_process_command(
+        f"/bin/bash -lc 'Google Chrome --user-data-dir={profile}'"
+    )
+    assert not is_chromium_process_command(f"node helper.js --user-data-dir={profile}")
+
+
+def test_profile_process_pids_matches_unquoted_macos_app_bundle_executable(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    command = (
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+        f"--disable-sync --user-data-dir={profile} --remote-debugging-pipe about:blank"
+    )
+
+    assert profile_process_pids(
+        profile,
+        processes=[ProcessCommand(13510, 13509, "Ss", command)],
+        current_pid=200,
+        parent_pid=100,
+    ) == [13510]
 
 
 def test_command_user_data_dir_supports_equals_space_and_quotes(tmp_path):

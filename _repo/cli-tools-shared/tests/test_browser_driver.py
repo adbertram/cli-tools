@@ -180,6 +180,12 @@ def test_browser_open_continues_when_process_table_unavailable_without_profile_l
         def cdp(self, *_args, **_kwargs):
             events.append("cdp")
 
+        def goto_url(self, url):
+            events.append(f"goto:{url}")
+
+        def wait_for_load(self, timeout):
+            events.append(f"load:{timeout}")
+
     service._bh = type("_BH", (), {"h": _Helpers()})()
 
     service.browser_open("https://example.com/dashboard", persistent_profile_dir=persistent)
@@ -191,6 +197,8 @@ def test_browser_open_continues_when_process_table_unavailable_without_profile_l
         "wait:51312",
         "daemon",
         "cdp",
+        "goto:https://example.com/dashboard",
+        f"load:{service.default_timeout}",
         "graceful-close",
         "stop",
         "terminate",
@@ -623,7 +631,7 @@ def test_cleanup_session_lock_raises_when_singletonlock_points_at_live_pid(tmp_p
     # Chrome's SingletonLock is a symlink whose target is "<hostname>-<pid>".
     lock.symlink_to("somehost-12345")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
-    monkeypatch.setattr(service, "_pid_running", lambda pid: pid == 12345)
+    monkeypatch.setattr(driver, "pid_is_running", lambda pid: pid == 12345)
 
     with pytest.raises(BrowserHarnessError, match="12345"):
         service._cleanup_session_lock_files()
@@ -639,7 +647,7 @@ def test_cleanup_session_lock_deletes_when_pid_is_dead(tmp_path, monkeypatch):
     lock = ud / "SingletonLock"
     lock.symlink_to("somehost-99999")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
-    monkeypatch.setattr(service, "_pid_running", lambda pid: False)
+    monkeypatch.setattr(driver, "pid_is_running", lambda pid: False)
 
     service._cleanup_session_lock_files()
 
@@ -654,10 +662,10 @@ def test_cleanup_session_lock_treats_unparseable_target_as_stale(tmp_path, monke
     lock = ud / "SingletonLock"
     lock.symlink_to("garbage")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
-    # _pid_running should NOT be called when parsing fails.
+    # pid_is_running should NOT be called when parsing fails.
     monkeypatch.setattr(
-        service,
-        "_pid_running",
+        driver,
+        "pid_is_running",
         lambda pid: (_ for _ in ()).throw(AssertionError("pid check skipped for unparseable")),
     )
 
@@ -1065,6 +1073,30 @@ def test_service_element_text_queries_delegate_to_live_dom(monkeypatch):
     assert element.get_attribute("data-test") == "value"
     assert element.input_value() == "typed value"
     assert len(calls) == 4
+
+
+@pytest.mark.parametrize(
+    ("evaluation_result", "expected"),
+    [(True, True), (False, False), (None, False)],
+    ids=["enabled", "disabled", "absent"],
+)
+def test_service_element_is_enabled_handles_live_dom_state(
+    monkeypatch, evaluation_result, expected
+):
+    service = BrowserHarnessService("test-session")
+    calls: list[str] = []
+
+    def _evaluate(js, arg=None):
+        calls.append(js)
+        return evaluation_result
+
+    monkeypatch.setattr(service, "evaluate", _evaluate)
+    element = _ServiceElement(service, css="button[type='submit']")
+
+    assert element.is_enabled() is expected
+    assert len(calls) == 1
+    assert "if (!el) return false" in calls[0]
+    assert "return !el.disabled" in calls[0]
 
 
 def test_service_element_supports_scoped_locator_chaining():

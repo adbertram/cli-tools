@@ -10,6 +10,7 @@ Tests covering deleted machinery (``_save_auth_state``, ``_state_file_path``,
 contract and would obstruct the new one.
 """
 
+import base64
 import shutil
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ from cli_tools_shared.auth import (
     AuthResult,
     BrowserAutomation,
     BrowserAutomationError,
+    _generate_totp_code,
     _safe_daemon_key,
 )
 
@@ -49,6 +51,27 @@ class _ManualLoginBrowser(_TestBrowser):
 
 class _LoginUrlBrowser(_TestBrowser):
     AUTH_URL_PATTERN = r"/login"
+
+
+class _CookieAuthFailureBrowser(_TestBrowser):
+    AUTH_FAILURE_URL_PATTERN = r"/captcha"
+    AUTH_COOKIE_PATTERNS = [r"session_id"]
+
+
+class _CredentialBrowser(_LoginUrlBrowser):
+    AUTH_SUCCESS_URL = r"/dashboard$"
+    AUTH_LOGIN_USERNAME_SELECTOR = "#username"
+    AUTH_LOGIN_PASSWORD_SELECTOR = "#password"
+    AUTH_LOGIN_SUBMIT_SELECTOR = "#submit"
+    AUTH_LOGIN_ERROR_SELECTOR = "#login-error"
+    AUTH_LOGIN_USERNAME_SECRET = "test-browser-username"
+    AUTH_LOGIN_PASSWORD_SECRET = "test-browser-password"
+
+
+class _TotpCredentialBrowser(_CredentialBrowser):
+    AUTH_LOGIN_TOTP_SELECTOR = "#authcode"
+    AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = "#totp-submit"
+    AUTH_LOGIN_TOTP_SECRET = "test-browser-totp-secret"
 
 
 class _TestConfig:
@@ -85,6 +108,8 @@ class _Service:
 
     def browser_open(self, *args, **kwargs):
         self.browser_open_calls.append((args, kwargs))
+        if args:
+            self.url = args[0]
         self._opened = True
 
     def goto(self, url):
@@ -209,6 +234,19 @@ def test_get_page_honors_automation_headed_hook(tmp_path, monkeypatch):
     assert kwargs.get("headed") is True
 
 
+def test_get_page_raises_on_auth_failure_page(tmp_path, monkeypatch):
+    browser = _CookieAuthFailureBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    with pytest.raises(
+        BrowserAutomationError,
+        match="authentication/security challenge",
+    ):
+        browser.get_page("https://example.com/splashui/captcha?ru=https%3A%2F%2Fexample.com")
+
+
 def test_authenticate_waits_for_enter(tmp_path, monkeypatch):
     browser = _TestBrowser(_TestConfig(tmp_path))
     service = _Service()
@@ -228,6 +266,217 @@ def test_authenticate_waits_for_enter(tmp_path, monkeypatch):
     assert input_calls == [True]
 
 
+def test_authenticate_without_tty_verifies_browser_session_directly(tmp_path, monkeypatch):
+    browser = _TestBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    def _raise_eof(*_args, **_kwargs):
+        raise EOFError("piped stdin")
+
+    def _raise_tty_error(path, *_args, **_kwargs):
+        if path == "/dev/tty":
+            raise OSError("no tty")
+        raise AssertionError(f"unexpected open path: {path}")
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr("builtins.input", _raise_eof)
+    monkeypatch.setattr("builtins.open", _raise_tty_error)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert service.browser_open_calls
+    assert service.browser_close_calls == 1
+
+
+def test_authenticate_without_tty_submits_configured_browser_credentials(tmp_path, monkeypatch):
+    browser = _CredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    filled = []
+    requested_secrets = []
+
+    class _Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def is_visible(self):
+            return self.selector != "#login-error"
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            service.url = "https://example.com/dashboard"
+
+    service.locator = lambda selector: _Control(selector)
+    service.fill = lambda selector, value: filled.append((selector, value))
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: (_ for _ in ()).throw(EOFError()))
+    real_open = open
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda path, *args, **kwargs: (
+            (_ for _ in ()).throw(OSError("no tty"))
+            if path == "/dev/tty"
+            else real_open(path, *args, **kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.config.read_cli_tool_secret",
+        lambda name: requested_secrets.append(name) or {
+            "test-browser-username": "user@example.com",
+            "test-browser-password": "test-password",
+        }[name],
+    )
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert requested_secrets == ["test-browser-username", "test-browser-password"]
+    assert filled == [
+        ("#username", "user@example.com"),
+        ("#password", "test-password"),
+    ]
+    assert service.url == "https://example.com/dashboard"
+
+
+def test_generate_totp_code_matches_rfc_6238_vector():
+    seed = base64.b32encode(b"12345678901234567890").decode()
+
+    assert _generate_totp_code(seed, timestamp=59) == "287082"
+
+
+def test_authenticate_without_tty_submits_configured_totp(tmp_path, monkeypatch):
+    browser = _TotpCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.phase = "password"
+    filled = []
+
+    class _Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def is_visible(self):
+            if self.selector == "#login-error":
+                return False
+            if self.selector == "#authcode":
+                return service.phase == "totp"
+            return True
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            if self.selector == "#submit":
+                service.phase = "totp"
+                service.url = "https://example.com/login?action=validate_2fa"
+            elif self.selector == "#totp-submit":
+                service.phase = "authenticated"
+                service.url = "https://example.com/dashboard"
+
+    service.locator = lambda selector: _Control(selector)
+    service.fill = lambda selector, value: filled.append((selector, value))
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: (_ for _ in ()).throw(EOFError()))
+    real_open = open
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda path, *args, **kwargs: (
+            (_ for _ in ()).throw(OSError("no tty"))
+            if path == "/dev/tty"
+            else real_open(path, *args, **kwargs)
+        ),
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.config.read_cli_tool_secret",
+        lambda name: {
+            "test-browser-username": "user@example.com",
+            "test-browser-password": "test-password",
+            "test-browser-totp-secret": "JBSWY3DPEHPK3PXP",
+        }[name],
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.auth._generate_totp_code",
+        lambda _secret: "123456",
+    )
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert filled == [
+        ("#username", "user@example.com"),
+        ("#password", "test-password"),
+        ("#authcode", "123456"),
+    ]
+    assert service.url == "https://example.com/dashboard"
+
+
+def test_noninteractive_totp_reports_missing_seed_remediation(tmp_path, monkeypatch):
+    browser = _TotpCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.phase = "password"
+
+    class _Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 1
+
+        def is_visible(self):
+            if self.selector == "#login-error":
+                return False
+            if self.selector == "#authcode":
+                return service.phase == "totp"
+            return True
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            if self.selector == "#submit":
+                service.phase = "totp"
+                service.url = "https://example.com/login?action=validate_2fa"
+
+    service.locator = lambda selector: _Control(selector)
+    service.fill = lambda *_args: None
+    monkeypatch.setattr(browser, "_check_auth", lambda _page: False)
+    monkeypatch.setattr(
+        "cli_tools_shared.config.read_cli_tool_secret",
+        lambda name: {
+            "test-browser-username": "user@example.com",
+            "test-browser-password": "test-password",
+            "test-browser-totp-secret": None,
+        }[name],
+    )
+
+    with pytest.raises(
+        BrowserAutomationError,
+        match="Missing browser-login TOTP secret.*test-browser-totp-secret",
+    ):
+        browser._complete_noninteractive_login(service)
+
+
 def test_authenticate_runs_post_auth_hook_after_enter_confirmation(tmp_path, monkeypatch):
     browser = _HookBrowser(_TestConfig(tmp_path))
     service = _Service()
@@ -239,6 +488,39 @@ def test_authenticate_runs_post_auth_hook_after_enter_confirmation(tmp_path, mon
     browser.authenticate(force=False)
 
     assert browser.authenticated_page is service
+
+
+def test_authenticate_verifies_against_auth_check_url_not_landing_page(tmp_path, monkeypatch):
+    """The headed browser can be left on a post-login landing page whose URL
+    does not match AUTH_SUCCESS_URL. The final verification must navigate to
+    AUTH_CHECK_URL first, the same ground truth `is_authenticated()` uses.
+    """
+    browser = _CredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "")
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert service.goto_calls == ["https://example.com/dashboard"]
+
+
+def test_authenticate_skips_final_navigation_without_auth_check_url(tmp_path, monkeypatch):
+    class _NoCheckUrlBrowser(_TestBrowser):
+        AUTH_CHECK_URL = ""
+
+    browser = _NoCheckUrlBrowser(_TestConfig(tmp_path))
+    service = _Service()
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "")
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=False)
+
+    assert service.goto_calls == []
 
 
 def test_authenticate_requires_reopen_probe_to_pass_before_claiming_success(tmp_path, monkeypatch):
@@ -541,6 +823,10 @@ class _CookieOnlyPage:
         ]
 
 
+class _CookieChallengePage(_CookieOnlyPage):
+    url = "https://example.com/splashui/captcha"
+
+
 def test_bug5_check_auth_returns_true_when_login_form_absent(tmp_path):
     browser = _LoginFormBrowser(_TestConfig(tmp_path))
     page = _FakePage(
@@ -563,6 +849,12 @@ def test_check_auth_cookie_pattern_does_not_require_page_url(tmp_path):
     browser = _CookieBrowser(_TestConfig(tmp_path))
 
     assert browser._check_auth(_CookieOnlyPage()) is True
+
+
+def test_check_auth_failure_page_overrides_cookie_pattern(tmp_path):
+    browser = _CookieAuthFailureBrowser(_TestConfig(tmp_path))
+
+    assert browser._check_auth(_CookieChallengePage()) is False
 
 
 def test_is_authenticated_cookie_pattern_does_not_wait_for_page_load(tmp_path, monkeypatch):
@@ -591,9 +883,13 @@ def test_is_authenticated_closes_browser_after_live_check_failure(tmp_path, monk
     service.cookie_list = _raise_cookie_error
     monkeypatch.setattr(browser, "_get_service", lambda: service)
 
-    result = browser.is_authenticated()
+    with pytest.raises(
+        BrowserAutomationError,
+        match="Browser authentication check unavailable: cookie read failed",
+    ) as exc_info:
+        browser.is_authenticated()
 
-    assert result.authenticated is False
+    assert isinstance(exc_info.value.cause, RuntimeError)
     assert service.browser_close_calls == 1
 
 

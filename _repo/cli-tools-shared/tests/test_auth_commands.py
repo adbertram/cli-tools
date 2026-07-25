@@ -247,6 +247,28 @@ def test_browser_session_login_falls_through_when_live_check_fails(tmp_path):
     assert "Already authenticated" not in result.output
 
 
+def test_browser_session_login_does_not_reclassify_live_check_error(tmp_path):
+    browser = MagicMock()
+    browser.is_authenticated.side_effect = RuntimeError("browser harness unavailable")
+    browser.close.return_value = None
+
+    profile_path = tmp_path / "default" / ".env"
+    profile_path.parent.mkdir(parents=True)
+    profile_path.write_text("ACTIVE=true\n")
+
+    config = _make_config(browser, profile_path)
+    config.has_saved_session.return_value = True
+    app = create_auth_app(lambda profile=None: config, tool_name="tool")
+
+    result = CliRunner().invoke(app, ["login", "--credential-type", "browser_session"])
+
+    assert result.exit_code == 1, result.output
+    browser.login.assert_not_called()
+    browser.close.assert_called_once_with()
+    assert "Error: browser harness unavailable" in result.output
+    assert "Saved session is no longer valid" not in result.output
+
+
 def test_browser_session_login_returns_nonzero_when_browser_auth_fails(tmp_path):
     browser = MagicMock()
     browser.login.return_value = {
@@ -967,6 +989,142 @@ def test_force_custom_login_handler_preserves_profile_credentials(tmp_path, monk
     assert "CLIENT_SECRET='secret://tool-client-secret'" in content
     assert "ACCESS_TOKEN=''" in content
     assert "profile-secret" not in content
+
+
+def test_force_hybrid_login_only_reauthenticates_missing_browser_session(tmp_path, monkeypatch):
+    """A bare forced login must preserve configured static OAuth and open browser auth."""
+    from cli_tools_shared.config import BaseConfig
+
+    browser = MagicMock()
+    browser.login.return_value = {"success": True, "message": "ok"}
+    browser.close.return_value = None
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.OAUTH, CredentialType.BROWSER_SESSION]
+        OAUTH_TOKEN_EXPIRES = False
+        OAUTH_STATIC_REQUIRED_FIELDS = (
+            "CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN", "REFRESH_TOKEN",
+        )
+        AUTH_EXTRA_PROMPTS = [
+            ("ACCESS_TOKEN", "Token Value", False),
+            ("REFRESH_TOKEN", "Token Secret", True),
+        ]
+
+        def get_browser(self):
+            return browser
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\nACTIVE=true\n"
+    )
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    default_dir = base_profiles_dir / "default"
+    default_dir.mkdir(parents=True)
+    (default_dir / ".env").write_text(
+        "ACTIVE=true\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "CLIENT_ID=client-id\n"
+            "CLIENT_SECRET=client-secret\n"
+            "ACCESS_TOKEN=access-token\n"
+            "REFRESH_TOKEN=refresh-token\n",
+        )
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    result = CliRunner().invoke(
+        create_auth_app(get_config, tool_name="tool"),
+        ["login", "--force"],
+        input="",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Enter Token Value" not in result.output
+    assert "Enter Token Secret" not in result.output
+    browser.clear_session.assert_called_once_with()
+    browser.login.assert_called_once_with(force=True)
+    content = (default_dir / ".env").read_text()
+    assert "ACCESS_TOKEN='secret://tool-access-token'" in content
+    assert "REFRESH_TOKEN='secret://tool-refresh-token'" in content
+
+
+def test_force_explicit_oauth_preserves_static_tokens_and_skips_browser(tmp_path, monkeypatch):
+    """Explicit OAuth selection remains OAuth-only for non-expiring token configs."""
+    from cli_tools_shared.config import BaseConfig
+
+    browser = MagicMock()
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.OAUTH, CredentialType.BROWSER_SESSION]
+        OAUTH_TOKEN_EXPIRES = False
+        OAUTH_STATIC_REQUIRED_FIELDS = (
+            "CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN", "REFRESH_TOKEN",
+        )
+        AUTH_EXTRA_PROMPTS = [
+            ("ACCESS_TOKEN", "Token Value", False),
+            ("REFRESH_TOKEN", "Token Secret", True),
+        ]
+
+        def get_browser(self):
+            return browser
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\nACTIVE=true\n"
+    )
+    base_profiles_dir = tmp_path / "data" / "tool" / "authentication_profiles"
+    monkeypatch.setattr(
+        "cli_tools_shared.config.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.profiles.get_profiles_base_dir",
+        lambda name: tmp_path / "data" / name / "authentication_profiles",
+    )
+    default_dir = base_profiles_dir / "default"
+    default_dir.mkdir(parents=True)
+    (default_dir / ".env").write_text(
+        "ACTIVE=true\n"
+        + _canonicalize_secret_profile_body(
+            "tool",
+            "default",
+            "CLIENT_ID=client-id\n"
+            "CLIENT_SECRET=client-secret\n"
+            "ACCESS_TOKEN=access-token\n"
+            "REFRESH_TOKEN=refresh-token\n",
+        )
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    result = CliRunner().invoke(
+        create_auth_app(get_config, tool_name="tool"),
+        ["login", "--force", "--credential-type", "oauth"],
+        input="",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Enter Token Value" not in result.output
+    assert "Enter Token Secret" not in result.output
+    browser.clear_session.assert_not_called()
+    browser.login.assert_not_called()
+    content = (default_dir / ".env").read_text()
+    assert "ACCESS_TOKEN='secret://tool-access-token'" in content
+    assert "REFRESH_TOKEN='secret://tool-refresh-token'" in content
 
 
 def test_profiles_create_requires_auth_type_for_profile_auth_configs(tmp_path, monkeypatch):

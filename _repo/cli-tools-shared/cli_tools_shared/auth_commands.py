@@ -75,6 +75,12 @@ def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
 def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
     """Clear transient login state without removing reusable credentials."""
     fields = combined_ephemeral_fields(credential_types, config=config)
+    if (
+        CredentialType.OAUTH in credential_types
+        and not getattr(config, "OAUTH_TOKEN_EXPIRES", True)
+    ):
+        static_fields = set(getattr(config, "OAUTH_STATIC_REQUIRED_FIELDS", ()))
+        fields = [field for field in fields if field not in static_fields]
     for field_name in dict.fromkeys(fields):
         config._clear(field_name)
 
@@ -84,6 +90,24 @@ def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
             browser.clear_session()
         else:
             config.clear_session()
+
+
+def _missing_credential_types(config) -> list[CredentialType]:
+    """Return credential types that have no configured login state."""
+    missing = []
+    for credential_type in config.CREDENTIAL_TYPES:
+        if credential_type == CredentialType.BROWSER_SESSION:
+            configured = config.has_saved_session()
+        else:
+            if hasattr(config, "_required_fields_for"):
+                required_fields = config._required_fields_for([credential_type])
+            else:
+                from .credentials import combined_required_fields
+                required_fields = combined_required_fields([credential_type], config=config)
+            configured = all(config._get(field) for field in required_fields)
+        if not configured:
+            missing.append(credential_type)
+    return missing
 
 
 def _load_config_for_login(get_config_fn, effective_profile, tool_name: str):
@@ -178,12 +202,8 @@ def _handle_browser_login(config, tool_name: str, force: bool):
             logger.debug("_handle_browser_login: has_saved_session=%s", has_session)
             if has_session:
                 # Live-verify before declaring "already authenticated".
-                try:
-                    live = browser.is_authenticated()
-                    live_ok = bool(live)
-                except Exception as e:
-                    logger.debug("_handle_browser_login: live check raised: %s", e)
-                    live_ok = False
+                live = browser.is_authenticated()
+                live_ok = bool(live)
                 logger.debug("_handle_browser_login: live check=%s", live_ok)
                 if live_ok:
                     print_success(f"Already authenticated ({tool_name} browser session)")
@@ -631,7 +651,11 @@ def create_auth_app(
             resolved_type = _resolve_credential_type(config, credential_type)
 
         # Determine which credential types to process
-        active_types = [resolved_type] if resolved_type else config.CREDENTIAL_TYPES
+        if resolved_type:
+            active_types = [resolved_type]
+        else:
+            missing_types = _missing_credential_types(config)
+            active_types = missing_types or config.CREDENTIAL_TYPES
 
         # Required credential fields sourced from ``secret://`` placeholders live
         # in the CLI-tools secret manager and cannot be entered interactively.

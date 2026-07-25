@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import signal
 import subprocess
 import time
@@ -86,6 +87,32 @@ def command_user_data_dir(command: str) -> str | None:
     return None
 
 
+def is_chromium_process_command(command: str) -> bool:
+    """Return whether ``command`` invokes a Chrome/Chromium executable.
+
+    A profile path in arbitrary shell, Python, or Node command text is not
+    browser ownership evidence. Cleanup may signal only browser executables,
+    never wrappers whose source text happens to contain Chrome launch flags.
+    """
+    # ``ps ... command=`` does not quote macOS app-bundle executable paths, so
+    # shlex sees ``/Applications/Google`` instead of the real executable
+    # ``.../Google Chrome``. Launch flags are the reliable boundary in that
+    # representation. Keep shlex for normally quoted/POSIX command lines.
+    executable_prefix = command.split(" --", 1)[0]
+    if executable_prefix.startswith((
+        "/Applications/Google Chrome",
+        "/Applications/Chromium",
+    )):
+        name = Path(executable_prefix).name.lower()
+    else:
+        try:
+            executable = shlex.split(command, posix=os.name != "nt")[0]
+        except (IndexError, ValueError):
+            return False
+        name = Path(executable).name.lower()
+    return "chrome" in name or "chromium" in name
+
+
 def protected_process_ids(
     processes: Iterable[ProcessCommand],
     *,
@@ -133,7 +160,10 @@ def profile_process_pids(
             continue
         if proc.stat.startswith("Z"):
             continue
-        if command_user_data_dir(proc.command) == profile:
+        if (
+            is_chromium_process_command(proc.command)
+            and command_user_data_dir(proc.command) == profile
+        ):
             pids.append(proc.pid)
     return pids
 
