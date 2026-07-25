@@ -33,7 +33,7 @@ SAMPLE_ROWS = [
 class _FakeClient:
     """Stand-in for the storefront client so command tests never hit the network."""
 
-    def list_products(self, limit: int = 100, collection=None):
+    def list_products(self, limit: int = 100, collection=None, page_delay: float = 0.0):
         return [dict(row) for row in SAMPLE_ROWS][:limit]
 
 
