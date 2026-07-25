@@ -1,4 +1,5 @@
 """Prompt commands for managing AI Builder prompts available as agent tools."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -116,6 +117,7 @@ def format_prompt_for_display(prompt: dict) -> dict:
 
 
 @app.command("list")
+@command
 def prompt_list(
     custom: bool = typer.Option(
         False,
@@ -256,6 +258,7 @@ def prompt_list(
 
 
 @app.command("create")
+@command
 def prompt_create(
     name: str = typer.Argument(
         ...,
@@ -437,6 +440,7 @@ def prompt_create(
 
 
 @app.command("remove")
+@command
 def prompt_remove(
     prompt_id: str = typer.Argument(
         ...,
@@ -491,6 +495,7 @@ def prompt_remove(
 
 
 @app.command("get")
+@command
 def prompt_get(
     prompt_id: str = typer.Argument(
         ...,
@@ -556,6 +561,7 @@ def prompt_get(
 
 
 @app.command("update")
+@command
 def prompt_update(
     prompt_id: str = typer.Argument(
         ...,
@@ -716,6 +722,7 @@ def prompt_update(
 
 
 @app.command("publish")
+@command
 def prompt_publish(
     prompt_id: str = typer.Argument(
         ...,
@@ -753,6 +760,7 @@ def prompt_publish(
 
 
 @app.command("run")
+@command
 def prompt_run(
     prompt_id: str = typer.Argument(
         ...,

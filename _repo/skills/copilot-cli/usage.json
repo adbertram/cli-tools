@@ -1,7 +1,7 @@
 {
   "tool": "copilot",
   "description": "CLI interface for Microsoft Copilot Studio agents via Dataverse API",
-  "discovered_at": "2026-07-01T17:22:34Z",
+  "discovered_at": "2026-07-22T18:43:50Z",
   "total_commands": 180,
   "global_options": [
     {
@@ -1289,7 +1289,7 @@
           ]
         },
         "publish": {
-          "help": "Publish a Copilot Studio agent. Publishing makes the latest changes to your agent available to users. This includes changes to topics, knowledge sources, tools, and settings. Note: Publishing may take a few minutes to complete.",
+          "help": "Publish a Copilot Studio agent. Publishing makes the latest changes to your agent available to users. This includes changes to topics, knowledge sources, tools, and settings. The target environment must have Copilot Studio capacity or an enabled pay-as-you-go billing policy; authoring and attachment commands do not. Note: Publishing may take a few minutes to complete.",
           "examples": [
             "copilot agent publish 12345678-1234-1234-1234-123456789abc"
           ],
@@ -1594,7 +1594,7 @@
               ]
             },
             "update": {
-              "help": "Update a tool's attributes.",
+              "help": "Update a tool's attributes. The description field is especially important as it's used by the AI agent to determine when to use this tool. Make it descriptive and explicit about when the tool should be used. Tool Availability: --available      Agent may use this tool at any time (generative orchestration) --not-available  Only use when explicitly referenced by topics or agents User Confirmation: --confirm        Ask end user for approval before running --no-confirm     Run without asking (default) --confirm-message  Custom confirmation prompt text Input Defaults: --inputs         Set default values for tool inputs as JSON Credential Mode (connector tools only): --credential     'maker-provided' (use maker's auth) or 'end-user' (prompt user)",
               "usage_instructions": "Run `copilot agent tool update --help` for exact arguments and options.",
               "arguments": [
                 {
@@ -2698,7 +2698,7 @@
           ]
         },
         "import": {
-          "help": "Import/update an agent flow's definition from a YAML or JSON file.",
+          "help": "Import/update an agent flow's definition from a YAML or JSON file. Reads a flow definition from a file and updates the specified agent flow. The file can be in either YAML or JSON format (auto-detected). VALIDATION: By default, the YAML is validated before import to catch common errors: - Invalid parameters (e.g., 'fields' parameter that doesn't exist in the API) - Connection reference format issues (connectionName vs connectionReferenceName) - Missing required fields - Expression syntax errors Use --skip-validation to bypass validation (not recommended). Use --warnings-as-errors to treat warnings as errors. Use --dry-run to validate without making changes. Accepts two input formats: 1. Full export format (from 'agent-flow export'): Contains name, workflowid, definition, and connectionReferences fields 2. Definition-only format (from 'agent-flow export --definition-only'): Contains just the flow definition By default, only the flow definition is updated and existing connection references are preserved. Use --include-connections to also update connection references from the file.",
           "examples": [
             "copilot agent-flow import <flow-id> --file flow.yaml",
             "copilot agent-flow import <flow-id> -f flow.json",
@@ -3024,7 +3024,7 @@
               ]
             },
             "list": {
-              "help": "List available scaffold templates.",
+              "help": "List available scaffold templates. Shows all scaffold templates that can be used with 'agent-flow create --scaffold'.",
               "examples": [
                 "copilot agent-flow scaffold list",
                 "copilot agent-flow scaffold list --table"
@@ -3336,7 +3336,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `copilot auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -3497,18 +3497,25 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `copilot cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "config": {
-      "help": "Manage copilot configuration paths, profiles, and migration.",
+      "help": "Manage copilot configuration paths, profiles, and secrets.",
       "usage_instructions": "Run `copilot config --help` for exact arguments and options.",
       "arguments": [],
       "options": [],
       "commands": {
         "path": {
-          "help": "Print a single resolved path (useful for shell scripting).",
+          "help": "Print a single resolved path.",
           "usage_instructions": "Run `copilot config path --help` for exact arguments and options.",
           "arguments": [
             {
@@ -3521,7 +3528,7 @@
           "options": []
         },
         "set-secret": {
-          "help": "Store a secret in the OS keychain for a profile.",
+          "help": "Store a secret in the CLI-tools secret manager for a profile.",
           "usage_instructions": "Run `copilot config set-secret --help` for exact arguments and options.",
           "arguments": [
             {
@@ -3547,7 +3554,7 @@
           ]
         },
         "show": {
-          "help": "Show effective config paths, active profile, and keychain status.",
+          "help": "Show effective config paths and active profile.",
           "usage_instructions": "Run `copilot config show --help` for exact arguments and options.",
           "arguments": [],
           "options": [
@@ -4455,6 +4462,12 @@
               "help": "Comma-separated list of operationIds that use the script (defaults to all operations)"
             },
             {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Read timeout in seconds for the connector-definition write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or 300"
+            },
+            {
               "name": "--expand-tools",
               "type": "bool",
               "required": false,
@@ -4799,6 +4812,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated list of operationIds that use the script"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Read timeout in seconds for the connector-definition write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or 300"
             },
             {
               "name": "--profile",
@@ -6584,7 +6603,7 @@
               ]
             },
             "types": {
-              "help": "List all available solution component types.",
+              "help": "List all available solution component types. Shows the component type codes and names that can be used with the --type filter in other commands.",
               "usage_instructions": "Run `copilot solution component types --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -6804,7 +6823,7 @@
           "options": [],
           "commands": {
             "add": {
-              "help": "Add a custom connector to a solution.",
+              "help": "Add a custom connector to a solution. IMPORTANT: Custom connectors cannot be in the same solution as cloud flows and connection references that use them. You need separate solutions: - Solution 1: Custom connector(s) - Solution 2: Cloud flows + connection references The connector solution must be imported to the target environment before importing the flows solution. To find the connector's Dataverse entity ID, use: copilot custom-connector list --raw Look for the 'connectorid' field in the '_dataverse' section.",
               "examples": [
                 "copilot solution custom-connector add --solution MyConnectorsSolution --connector <connector-id>",
                 "copilot solution custom-connector add --solution-id <solution-guid> --connector <connector-id>",

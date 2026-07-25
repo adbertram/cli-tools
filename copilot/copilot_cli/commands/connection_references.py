@@ -1,4 +1,5 @@
 """Connection reference commands for managing solution-aware connection references."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -65,6 +66,7 @@ def format_connection_reference_for_display(conn_ref: dict, truncate: bool = Fal
 
 
 @app.command("create")
+@command
 def connection_references_create(
     name: str = typer.Option(
         ...,
@@ -169,6 +171,7 @@ def connection_references_create(
 
 
 @app.command("list")
+@command
 def connection_references_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -277,6 +280,7 @@ def connection_references_list(
 
 
 @app.command("get")
+@command
 def connection_references_get(
     connection_ref_id: str = typer.Argument(
         ...,
@@ -326,6 +330,7 @@ def connection_references_get(
 
 
 @app.command("update")
+@command
 def connection_references_update(
     connection_ref_id: str = typer.Argument(
         ...,
@@ -418,6 +423,7 @@ def connection_references_update(
 
 
 @app.command("remove")
+@command
 def connection_references_remove(
     connection_ref_id: str = typer.Argument(
         ...,

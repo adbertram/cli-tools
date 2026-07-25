@@ -1,8 +1,8 @@
-"""Copilot Studio capacity pre-check for a Power Platform environment.
+"""Copilot Studio publish-capacity pre-check for a Power Platform environment.
 
 Single source of truth for the deterministic, fail-fast entitlement gate that
-blocks attaching tools or knowledge to a Copilot Studio agent when the target
-environment has no Copilot Studio capacity.
+blocks publishing a Copilot Studio agent when the target environment has no
+Copilot Studio capacity.
 
 An environment is entitled to attach tools/knowledge when EITHER:
 
@@ -53,7 +53,7 @@ _BILLING_POLICY_ENVIRONMENTS_URL = (
 
 
 class CapacityError(ClientError):
-    """Raised when an environment lacks Copilot Studio capacity for attach."""
+    """Raised when an environment lacks Copilot Studio publish capacity."""
 
     pass
 
@@ -269,12 +269,12 @@ def ensure_tools_and_knowledge_entitled(
     action: str,
     env_display_name: Optional[str] = None,
 ) -> None:
-    """Raise :class:`CapacityError` if the environment cannot attach tools/knowledge.
+    """Raise :class:`CapacityError` if the environment cannot publish an agent.
 
     Args:
         environment_id: The target environment GUID.
         action: Short phrase describing the attempted action (e.g.
-            ``"attach tools"`` / ``"attach knowledge"``), used in the message.
+            ``"publish agent"``), used in the message.
         env_display_name: Optional pre-resolved display name. Resolved via the
             BAP API when omitted.
 
@@ -301,7 +301,7 @@ def _capacity_error_message(display_name: str, guid: str, action: str) -> str:
         f"Cannot {action}.",
         f"Environment '{display_name}' ({guid}) has no Copilot Studio capacity "
         "(Copilot Credits) allocated and is not covered by a pay-as-you-go "
-        "billing policy, so tools and knowledge cannot be attached.",
+        "billing policy, so agents cannot be published.",
         "",
         "To fix this, do one of the following:",
         "  1. Allocate prepaid Copilot Studio capacity to this environment in the "

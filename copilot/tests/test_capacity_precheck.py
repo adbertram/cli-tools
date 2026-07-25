@@ -1,9 +1,9 @@
 """
 Tests for the Copilot Studio capacity pre-check.
 
-Covers the deterministic entitlement gate in ``copilot_cli.capacity`` and its
-enforcement in the attaching agent commands (``agent tool add``,
-``agent knowledge add``, ``agent knowledge azure-ai-search add``):
+Covers the deterministic entitlement gate in ``copilot_cli.capacity`` and
+proves that authoring commands do not consult it. Capacity is enforced only at
+the shared publish boundary.
 
 An environment is entitled to attach tools/knowledge iff
   P1: a Copilot Studio currency (MCSMessages/MCSSessions/VAConversations) has a
@@ -12,9 +12,8 @@ An environment is entitled to attach tools/knowledge iff
 
 A 404 on allocations means "no allocation" (P1 false, not an error). Any other
 non-200/404 on allocations, or any non-200 on a policy's /environments lookup,
-is undeterminable and raises ClientError. The attaching commands must NOT make
-the add/associate call when not entitled. Agent create/update never touch the
-licensing endpoints.
+is undeterminable and raises ClientError. Agent create/update and tool/knowledge
+attachment never touch the licensing endpoints.
 """
 from __future__ import annotations
 
@@ -339,7 +338,7 @@ def test_ensure_raises_capacity_error_with_message(monkeypatch):
     assert ENV_ID in msg
     assert "no Copilot Studio capacity (Copilot Credits) allocated" in msg
     assert "not covered by a pay-as-you-go billing policy" in msg
-    assert "tools and knowledge cannot be attached" in msg
+    assert "agents cannot be published" in msg
     assert "https://admin.powerplatform.microsoft.com" in msg
     assert "Allocate prepaid Copilot Studio capacity" in msg
     assert "Link the environment to a pay-as-you-go billing policy" in msg
@@ -441,9 +440,9 @@ def _wire_command_test(monkeypatch, *, allocations, billing_policies=None,
     return client, hits
 
 
-def test_command_tool_add_blocked_when_not_entitled(monkeypatch):
-    """Case 1: `agent tool add` exits non-zero and never calls add_tool."""
-    client, _ = _wire_command_test(
+def test_command_tool_add_works_without_capacity(monkeypatch):
+    """Tool attachment is an authoring operation and never checks capacity."""
+    client, hits = _wire_command_test(
         monkeypatch, allocations=ALLOC_404, billing_policies=BILLING_EMPTY
     )
     result = runner.invoke(
@@ -451,28 +450,28 @@ def test_command_tool_add_blocked_when_not_entitled(monkeypatch):
         ["tool", "add", "--agentId", "agent-1", "--toolType", "http",
          "--id", "tool-1"],
     )
-    assert result.exit_code != 0
-    assert client.add_tool_called is False
-    assert "Copilot Studio capacity" in result.output
+    assert result.exit_code == 0, result.output
+    assert client.add_tool_called is True
+    assert hits == []
 
 
-def test_command_knowledge_add_blocked_when_not_entitled(monkeypatch):
-    """Case 1: `agent knowledge add` exits non-zero and never associates."""
-    client, _ = _wire_command_test(
+def test_command_knowledge_add_works_without_capacity(monkeypatch):
+    """Knowledge association is an authoring operation and never checks capacity."""
+    client, hits = _wire_command_test(
         monkeypatch, allocations=ALLOC_404, billing_policies=BILLING_EMPTY
     )
     result = runner.invoke(
         agent.app,
         ["knowledge", "add", "agent-1", "--component", "comp-1"],
     )
-    assert result.exit_code != 0
-    assert client.associate_called is False
-    assert "Copilot Studio capacity" in result.output
+    assert result.exit_code == 0, result.output
+    assert client.associate_called is True
+    assert hits == []
 
 
-def test_command_azure_search_add_blocked_when_not_entitled(monkeypatch):
-    """Case 1: azure-ai-search add exits non-zero and never calls the mutation."""
-    client, _ = _wire_command_test(
+def test_command_azure_search_add_works_without_capacity(monkeypatch):
+    """Azure AI Search attachment is authoring and never checks capacity."""
+    client, hits = _wire_command_test(
         monkeypatch, allocations=ALLOC_ZERO, billing_policies=BILLING_EMPTY
     )
     result = runner.invoke(
@@ -481,22 +480,17 @@ def test_command_azure_search_add_blocked_when_not_entitled(monkeypatch):
          "--name", "Docs", "--endpoint", "https://s.search.windows.net",
          "--index", "idx", "--api-key", "k"],
     )
-    assert result.exit_code != 0
-    assert client.azure_search_called is False
+    assert result.exit_code == 0, result.output
+    assert client.azure_search_called is True
+    assert hits == []
 
 
-def test_command_knowledge_upload_blocked_when_not_entitled(monkeypatch, tmp_path):
-    """Case 1: `agent knowledge upload` exits non-zero and performs NO mutation
-    (no create, no delete, no upload) when the environment is not entitled.
-
-    A real file is supplied so the os.path.exists guard passes and execution
-    reaches the capacity gate; otherwise the command would exit on the missing
-    file before the gate (a false pass).
-    """
+def test_command_knowledge_upload_works_without_capacity(monkeypatch, tmp_path):
+    """Knowledge upload is authoring and never checks capacity."""
     upload_file = tmp_path / "guide.docx"
     upload_file.write_bytes(b"fake docx bytes")
 
-    client, _ = _wire_command_test(
+    client, hits = _wire_command_test(
         monkeypatch, allocations=ALLOC_404, billing_policies=BILLING_EMPTY
     )
     result = runner.invoke(
@@ -504,30 +498,24 @@ def test_command_knowledge_upload_blocked_when_not_entitled(monkeypatch, tmp_pat
         ["knowledge", "upload", "agent-1", "--file", str(upload_file),
          "--name", "Style Guide"],
     )
-    assert result.exit_code != 0
-    assert client.create_file_component_called is False
+    assert result.exit_code == 0, result.output
+    assert client.create_file_component_called is True
     assert client.delete_called is False
-    assert client.upload_single_called is False
+    assert client.upload_single_called is True
     assert client.upload_chunked_called is False
-    assert "Copilot Studio capacity" in result.output
+    assert hits == []
 
 
-def test_command_knowledge_upload_force_delete_blocked_when_not_entitled(
+def test_command_knowledge_upload_force_replace_works_without_capacity(
     monkeypatch, tmp_path
 ):
-    """The --force delete of an existing source must NOT run when not entitled.
-
-    An existing same-named source is present, so without the gate `--force`
-    would call client.delete() before failing. The gate must prevent it.
-    """
+    """The authoring-time --force replace never checks capacity."""
     upload_file = tmp_path / "manual.pdf"
     upload_file.write_bytes(b"fake pdf bytes")
 
-    client, _ = _wire_command_test(
+    client, hits = _wire_command_test(
         monkeypatch, allocations=ALLOC_404, billing_policies=BILLING_EMPTY
     )
-    # An existing source with the same name would be force-deleted if the gate
-    # did not run first.
     monkeypatch.setattr(
         client,
         "list_knowledge_sources",
@@ -540,10 +528,10 @@ def test_command_knowledge_upload_force_delete_blocked_when_not_entitled(
         ["knowledge", "upload", "agent-1", "--file", str(upload_file),
          "--name", "Style Guide", "--force"],
     )
-    assert result.exit_code != 0
-    assert client.delete_called is False
-    assert client.create_file_component_called is False
-    assert "Copilot Studio capacity" in result.output
+    assert result.exit_code == 0, result.output
+    assert client.delete_called is True
+    assert client.create_file_component_called is True
+    assert hits == []
 
 
 def test_command_knowledge_upload_proceeds_when_entitled(monkeypatch, tmp_path):
@@ -591,16 +579,17 @@ def test_command_knowledge_add_proceeds_when_entitled_p2(monkeypatch):
     assert client.associate_called is True
 
 
-def test_command_tool_add_undeterminable_raises_nonzero_no_mutation(monkeypatch):
-    """Case 5 (command): 403 allocations -> non-zero exit, add_tool not called."""
-    client, _ = _wire_command_test(monkeypatch, allocations=(403, {"error": "forbidden"}))
+def test_command_tool_add_ignores_indeterminate_licensing(monkeypatch):
+    """Licensing API failures cannot block an authoring-time tool attachment."""
+    client, hits = _wire_command_test(monkeypatch, allocations=(403, {"error": "forbidden"}))
     result = runner.invoke(
         agent.app,
         ["tool", "add", "--agentId", "agent-1", "--toolType", "http",
          "--id", "tool-1"],
     )
-    assert result.exit_code != 0
-    assert client.add_tool_called is False
+    assert result.exit_code == 0, result.output
+    assert client.add_tool_called is True
+    assert hits == []
 
 
 def test_create_and_update_never_touch_licensing(monkeypatch):

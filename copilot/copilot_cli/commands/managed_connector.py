@@ -3,6 +3,7 @@
 Managed connectors are built-in connectors published by Microsoft and third parties.
 These are read-only - you cannot create, modify, or delete them.
 """
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -219,6 +220,7 @@ def extract_operations(
 
 
 @app.command("list")
+@command
 def managed_connector_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -333,6 +335,7 @@ def managed_connector_list(
 
 
 @app.command("get")
+@command
 def managed_connector_get(
     connector_id: str = typer.Argument(
         ...,

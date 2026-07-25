@@ -138,18 +138,38 @@ copilot environment list --table
 copilot solution list --table
 ```
 
-### Capacity requirement for attaching tools and knowledge
+### Custom connector write timeout
 
-Before attaching a tool or knowledge source, the CLI runs a deterministic, fail-fast
-capacity pre-check on the target Power Platform environment. The attach is blocked
-(non-zero exit, no mutation) when the environment has **no Copilot Studio capacity**.
-This guards:
+`custom-connector create` and `custom-connector update` compile the OpenAPI spec
+and any attached C# policy script (`--script`) server-side. Power Platform can take
+well over a minute to apply a connector that has a script, and it keeps applying the
+change even after a client read timeout — so a short timeout makes a
+slow-but-successful write look like a failure (and triggers spurious retries in
+automation such as Ansible).
+
+The read timeout for these two writes defaults to **300 seconds** and is
+configurable. Precedence is `--timeout` flag → `COPILOT_CONNECTOR_WRITE_TIMEOUT`
+environment variable → 300s default. Fast reads (list/get) keep their own short
+timeouts.
 
 ```bash
-copilot agent tool add --agentId <id> --toolType <type> --id <tool-id>
-copilot agent knowledge add <agent-id> --component <component-id>
-copilot agent knowledge upload <agent-id> --file <path> --name <name>
-copilot agent knowledge azure-ai-search add <agent-id> --name ... --endpoint ... --index ... --api-key ...
+# Per-invocation override
+copilot custom-connector update <connector-id> --swagger-file ./api.json \
+  --script ./code.csx --script-operations "CreateTask" --timeout 420
+
+# Environment-wide override (e.g. in a CI/Ansible environment)
+export COPILOT_CONNECTOR_WRITE_TIMEOUT=420
+```
+
+### Capacity requirement for publishing
+
+Tools and knowledge can be added while an agent is being authored without Copilot
+Studio capacity. Before publishing, the CLI runs a deterministic, fail-fast capacity
+pre-check on the target Power Platform environment. Publishing is blocked (non-zero
+exit, no publish mutation) when the environment has **no Copilot Studio capacity**:
+
+```bash
+copilot agent publish <agent-id>
 ```
 
 An environment is entitled when **either** prepaid Copilot Studio capacity (Copilot
@@ -158,8 +178,8 @@ Credits — `MCSMessages`, `MCSSessions`, or `VAConversations`) is allocated to 
 the command exits with an error naming the environment and three fixes: allocate
 prepaid capacity in the [Power Platform admin center](https://admin.powerplatform.microsoft.com)
 (Licensing → Copilot Studio), link a pay-as-you-go billing policy, or use an
-environment that already has capacity. `copilot agent create` / `update` are not
-gated (they take no inline tool/knowledge payload).
+environment that already has capacity. Agent creation, updates, and tool/knowledge
+attachment are authoring operations and are not capacity-gated.
 
 ## Channels
 

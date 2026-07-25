@@ -202,6 +202,7 @@ def scaffold_list(
 
 
 @scaffold_app.command("get")
+@command
 def scaffold_get(
     template_name: str = typer.Argument(..., help="Template name (without .yaml extension)"),
     table: bool = typer.Option(
@@ -254,6 +255,7 @@ def scaffold_get(
 
 
 @runs_app.command("list")
+@command
 def runs_list(
     workflow_id: str = typer.Argument(
         ...,
@@ -345,6 +347,7 @@ def runs_list(
 
 
 @runs_app.command("get")
+@command
 def runs_get(
     workflow_id: str = typer.Argument(
         ...,
@@ -374,6 +377,7 @@ def runs_get(
 
 
 @runs_app.command("cancel")
+@command
 def runs_cancel(
     workflow_id: str = typer.Argument(
         ...,
@@ -514,6 +518,7 @@ def format_agent_flow_for_display(flow: dict, include_triggers: bool = False, tr
 
 
 @app.command("list")
+@command
 def agent_flow_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -618,6 +623,7 @@ def agent_flow_list(
 
 
 @app.command("create")
+@command
 def agent_flow_create(
     name: str = typer.Option(
         ...,
@@ -911,6 +917,7 @@ def agent_flow_create(
 
 
 @app.command("get")
+@command
 def agent_flow_get(
     workflow_id: str = typer.Argument(
         ...,
@@ -986,6 +993,7 @@ def agent_flow_get(
 
 
 @app.command("update")
+@command
 def agent_flow_update(
     workflow_id: str = typer.Argument(
         ...,
@@ -1033,6 +1041,7 @@ def agent_flow_update(
 
 
 @app.command("export")
+@command
 def agent_flow_export(
     workflow_id: str = typer.Argument(
         ...,
@@ -1150,6 +1159,7 @@ def agent_flow_export(
 
 
 @app.command("import")
+@command
 def agent_flow_import(
     workflow_id: str = typer.Argument(
         ...,
@@ -1363,6 +1373,7 @@ def agent_flow_import(
 
 
 @app.command("validate")
+@command
 def agent_flow_validate(
     file: Optional[str] = typer.Argument(
         None,
@@ -1559,6 +1570,7 @@ def format_action_result(action_name: str, action_data: dict) -> dict:
 
 
 @app.command("test")
+@command
 def agent_flow_test(
     workflow_id: str = typer.Argument(
         ...,
@@ -1745,6 +1757,7 @@ def agent_flow_test(
 
 
 @app.command("remove")
+@command
 def agent_flow_remove(
     workflow_id: str = typer.Argument(
         ...,
@@ -1820,6 +1833,7 @@ def agent_flow_remove(
 
 
 @app.command("enable")
+@command
 def agent_flow_enable(
     workflow_id: str = typer.Argument(
         ...,
@@ -1854,6 +1868,7 @@ def agent_flow_enable(
 
 
 @app.command("disable")
+@command
 def agent_flow_disable(
     workflow_id: str = typer.Argument(
         ...,
@@ -2071,6 +2086,7 @@ def _display_run_details(run_data: dict, full_data_to_stderr: bool = False):
 
 
 @app.command("actions")
+@command
 def agent_flow_actions(
     workflow_id: str = typer.Argument(
         ...,

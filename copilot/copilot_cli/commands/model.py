@@ -1,4 +1,5 @@
 """Model commands for managing AI Builder models (msdyn_aimodel)."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -29,6 +30,7 @@ GPT_POWER_PROMPT_TEMPLATE_ID = "edfdb190-3791-45d8-9a6c-8f90a37c278a"
 
 
 @app.command("list")
+@command
 def model_list(
     prompts_only: bool = typer.Option(
         False,
@@ -159,6 +161,7 @@ def model_list(
 
 
 @app.command("get")
+@command
 def model_get(
     model_id: str = typer.Argument(
         ...,
@@ -215,6 +218,7 @@ def model_get(
 
 
 @app.command("enable")
+@command
 def model_enable(
     model_id: str = typer.Argument(
         ...,
@@ -258,6 +262,7 @@ def model_enable(
 
 
 @app.command("disable")
+@command
 def model_disable(
     model_id: str = typer.Argument(
         ...,

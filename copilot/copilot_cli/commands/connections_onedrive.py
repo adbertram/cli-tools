@@ -1,4 +1,5 @@
 """OneDrive for Business diagnostics subcommands."""
+from cli_tools_shared.output import command
 import typer
 import httpx
 from typing import Optional
@@ -39,6 +40,7 @@ def _acquire_token_ropc(tenant_id: str, username: str, password: str) -> str:
 
 
 @app.command("check-drive")
+@command
 def check_drive(
     user_principal_name: str = typer.Argument(
         ...,

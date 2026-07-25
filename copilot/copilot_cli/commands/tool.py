@@ -1,4 +1,5 @@
 """Tool commands for managing all tool types available to Copilot Studio agents."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -164,6 +165,7 @@ def format_unified_tool(tool: dict, tool_type: str) -> dict:
 
 
 @app.command("list")
+@command
 def tool_list(
     tool_type: Optional[str] = typer.Option(
         None,
@@ -434,6 +436,7 @@ def tool_list(
 
 
 @app.command("get")
+@command
 def tool_get(
     tool_id: str = typer.Argument(
         ...,
@@ -561,6 +564,7 @@ def tool_get(
 
 
 @app.command("remove")
+@command
 def tool_remove(
     tool_id: str = typer.Argument(
         ...,
@@ -717,6 +721,7 @@ def tool_remove(
 
 
 @app.command("update")
+@command
 def tool_update(
     tool_id: str = typer.Argument(
         ...,

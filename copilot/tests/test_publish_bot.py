@@ -17,12 +17,14 @@ from typing import Any
 
 import pytest
 
+import copilot_cli.capacity as capacity
 from copilot_cli.client import ClientError, DataverseClient
 
 
 BOT_ID = "12345678-1234-1234-1234-123456789abc"
 BASELINE_OP_END = "2026-03-19T15:10:49.7102985Z"
 NEW_OP_END = "2026-04-11T15:30:00.0000000Z"
+_REAL_ENSURE_CAPACITY = capacity.ensure_tools_and_knowledge_entitled
 
 
 def _make_client() -> DataverseClient:
@@ -30,6 +32,15 @@ def _make_client() -> DataverseClient:
     client = DataverseClient.__new__(DataverseClient)
     client.api_url = "https://example.crm.dynamics.com/api/data/v9.2"
     return client
+
+
+@pytest.fixture(autouse=True)
+def _publish_capacity_entitled(monkeypatch):
+    """Keep publish-status tests focused while exercising the shared gate."""
+    monkeypatch.setattr(capacity, "resolve_environment_id", lambda: "env-1")
+    monkeypatch.setattr(
+        capacity, "ensure_tools_and_knowledge_entitled", lambda *args, **kwargs: None
+    )
 
 
 class _FakeResponse:
@@ -44,6 +55,71 @@ class _FakeResponse:
 
     def json(self) -> Any:
         return self._payload
+
+
+def test_publish_bot_blocks_before_sync_or_post_without_capacity(monkeypatch):
+    client = _make_client()
+
+    monkeypatch.setattr(capacity, "resolve_environment_id", lambda: "env-1")
+    monkeypatch.setattr(
+        capacity, "environment_supports_tools_and_knowledge", lambda env: False
+    )
+    monkeypatch.setattr(
+        capacity, "_resolve_environment_display_name", lambda env: "No Capacity Env"
+    )
+    monkeypatch.setattr(
+        capacity,
+        "ensure_tools_and_knowledge_entitled",
+        _REAL_ENSURE_CAPACITY,
+    )
+    monkeypatch.setattr(
+        client,
+        "get",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError(f"publish sync read must not run: {path}")
+        ),
+    )
+
+    class FakeHttp:
+        def post(self, *args, **kwargs):
+            raise AssertionError("publish POST must not run")
+
+    client._http_client = FakeHttp()
+
+    with pytest.raises(capacity.CapacityError, match="agents cannot be published"):
+        client.publish_bot(BOT_ID)
+
+
+def test_publish_bot_blocks_before_sync_or_post_when_capacity_is_indeterminate(monkeypatch):
+    client = _make_client()
+
+    monkeypatch.setattr(capacity, "resolve_environment_id", lambda: "env-1")
+    monkeypatch.setattr(
+        capacity,
+        "environment_supports_tools_and_knowledge",
+        lambda env: (_ for _ in ()).throw(ClientError("licensing signal unavailable")),
+    )
+    monkeypatch.setattr(
+        capacity,
+        "ensure_tools_and_knowledge_entitled",
+        _REAL_ENSURE_CAPACITY,
+    )
+    monkeypatch.setattr(
+        client,
+        "get",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError(f"publish sync read must not run: {path}")
+        ),
+    )
+
+    class FakeHttp:
+        def post(self, *args, **kwargs):
+            raise AssertionError("publish POST must not run")
+
+    client._http_client = FakeHttp()
+
+    with pytest.raises(ClientError, match="licensing signal unavailable"):
+        client.publish_bot(BOT_ID)
 
 
 def test_publish_bot_raises_when_job_fails_with_unknown_node(monkeypatch):

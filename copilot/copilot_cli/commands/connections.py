@@ -1,4 +1,5 @@
 """Connection commands for managing Power Platform connections."""
+from cli_tools_shared.output import command
 
 import typer
 from typing import Optional, List, Dict, Any
@@ -403,6 +404,7 @@ def format_connection_for_display(
 
 
 @app.command("get")
+@command
 def connections_get(
     connection_id: str = typer.Argument(
         ...,
@@ -466,6 +468,7 @@ def connections_get(
 
 
 @app.command("list")
+@command
 def connections_list(
     connector_id: Optional[str] = typer.Option(
         None,
@@ -621,6 +624,7 @@ def _get_stored_status(props: dict) -> tuple:
 
 
 @app.command("test")
+@command
 def connections_test(
     connector_id: Optional[str] = typer.Option(
         None,
@@ -802,6 +806,7 @@ def connections_test(
 
 
 @app.command("create")
+@command
 def connections_create(
     connector_id: str = typer.Option(
         ...,
@@ -1197,6 +1202,7 @@ def connections_create(
 
 
 @app.command("delete")
+@command
 @app.command("remove")
 def connections_delete(
     connection_id: str = typer.Argument(
@@ -1461,6 +1467,7 @@ def _open_url_wsl_aware(url: str) -> None:
 
 
 @app.command("auth")
+@command
 def connections_auth(
     connection_id: str = typer.Argument(
         ...,
@@ -1725,6 +1732,7 @@ def connections_auth(
 
 
 @app.command("bind")
+@command
 def connections_bind(
     bot_id: str = typer.Argument(
         ...,

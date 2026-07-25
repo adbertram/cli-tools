@@ -19,20 +19,143 @@ app = create_app(
 # Import and register command modules
 
 
+def _resolve_login_identity(az, expected_user, expected_tenant, force):
+    """Ensure the local Azure CLI has an identity matching the profile's
+    AZURE_CLI_EXPECTED_USER / AZURE_TENANT_ID (whichever are set).
+
+    Reuses a cached-but-non-default az account for the expected tenant when
+    one exists (via ``_find_cached_azure_account``) instead of always
+    falling back to an interactive ``az login`` — so switching between
+    copilot CLI profiles that live in different Azure AD tenants never
+    requires ``az account set`` or a fresh login when the right identity is
+    already logged in and cached. ``--force`` always skips that shortcut and
+    forces a fresh login, as its name implies.
+
+    Returns:
+        (actual_user, actual_tenant) once a matching identity is confirmed.
+
+    Raises:
+        SystemExit(1): if a matching identity cannot be established, even
+            after attempting an interactive ``az login``.
+    """
+    import json
+    import subprocess
+    from cli_tools_shared import print_info, print_success, print_error
+    from .client import _find_cached_azure_account
+
+    def _current():
+        """Return (user_name, tenant_id) for the active az account, or (None, None)."""
+        result = subprocess.run(
+            [az, "account", "show", "-o", "json"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return None, None
+        try:
+            account = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return None, None
+        return account.get("user", {}).get("name") or None, account.get("tenantId") or None
+
+    def _build_login_cmd():
+        # Note: do NOT pass --username. Doing so triggers az's legacy ROPC
+        # (username/password) flow, which fails on MFA-enforced tenants
+        # (AADSTS50076). The default browser flow handles MFA correctly,
+        # and post-login _ok(...) enforces the expected user/tenant.
+        cmd = [az, "login"]
+        if expected_tenant:
+            cmd.extend(["--tenant", expected_tenant])
+        return cmd
+
+    def _ok(user, tenant):
+        if user is None:
+            return False
+        if expected_user and user.lower() != expected_user.lower():
+            return False
+        if expected_tenant and (tenant or "").lower() != expected_tenant.lower():
+            return False
+        return True
+
+    # If --force, log out first so the next az login is clean. Target the
+    # profile's own identity when known, rather than whatever happens to be
+    # the machine-wide default — otherwise --force on a non-default cached
+    # profile silently logs out an unrelated account.
+    if force:
+        print_info("Clearing existing Azure CLI session...")
+        logout_cmd = [az, "logout", "--username", expected_user] if expected_user else [az, "logout"]
+        subprocess.run(logout_cmd, capture_output=True)
+
+    actual_user, actual_tenant = _current()
+
+    if not _ok(actual_user, actual_tenant) and not force and expected_tenant:
+        cached = _find_cached_azure_account(az, expected_tenant, expected_user)
+        if cached is not None:
+            actual_user = cached.get("user", {}).get("name")
+            actual_tenant = cached.get("tenantId")
+            print_success(
+                f"Found cached Azure CLI login for tenant (not the machine-wide "
+                f"default): {actual_user}"
+            )
+
+    if not _ok(actual_user, actual_tenant):
+        if expected_user and actual_user:
+            print_info(
+                f"Azure CLI is logged in as '{actual_user}' but this profile "
+                f"requires '{expected_user}'. Switching identities..."
+            )
+        elif expected_user:
+            print_info(
+                f"Azure CLI not logged in — running 'az login' as '{expected_user}'..."
+            )
+        elif expected_tenant:
+            print_info(
+                f"No cached Azure CLI login for tenant '{expected_tenant}' — "
+                f"running 'az login'..."
+            )
+        else:
+            print_info("Azure CLI not logged in — running 'az login'...")
+
+        login_result = subprocess.run(_build_login_cmd())
+        if login_result.returncode != 0:
+            print_error("'az login' failed")
+            raise SystemExit(1)
+
+        actual_user, actual_tenant = _current()
+
+    if not _ok(actual_user, actual_tenant):
+        if expected_user:
+            print_error(
+                f"Azure CLI identity mismatch after login: expected '{expected_user}', "
+                f"got '{actual_user or 'no active account'}'.\n"
+                f"  Run: az login --tenant {expected_tenant or '<tenant-id>'} "
+                f"--username {expected_user}"
+            )
+        elif expected_tenant:
+            print_error(
+                f"Azure CLI tenant mismatch after login: expected tenant "
+                f"'{expected_tenant}', got '{actual_tenant or 'no active account'}'.\n"
+                f"  Run: az login --tenant {expected_tenant}"
+            )
+        else:
+            print_error("Azure CLI is not logged in after 'az login'.")
+        raise SystemExit(1)
+
+    return actual_user, actual_tenant
+
+
 def _copilot_login_handler(config, force):
     """Custom login handler for Azure CLI authentication.
 
-    Enforces the active profile's AZURE_CLI_EXPECTED_USER (when set):
-    if the current ``az`` identity does not match, runs ``az login`` to
-    switch identities and verifies the post-login identity matches.
+    Enforces the active profile's AZURE_CLI_EXPECTED_USER / AZURE_TENANT_ID
+    (when set) via ``_resolve_login_identity``, then verifies saved
+    credentials and does a live Dataverse probe.
 
     Fails loudly (SystemExit, non-zero) when the expected identity cannot
     be obtained — never prints "complete" unless credentials would actually
     pass ``config.has_credentials()``.
     """
-    import json
     import subprocess
-    from cli_tools_shared import print_info, print_success, print_error
+    from cli_tools_shared import print_success, print_error
     from .client import _resolve_az_command
 
     # Resolve Azure CLI binary
@@ -43,77 +166,9 @@ def _copilot_login_handler(config, force):
         print_error("Azure CLI is not installed. Install it: brew install azure-cli")
         raise SystemExit(2)
 
-    expected_user = config.expected_user
-    expected_tenant = config.tenant_id
-
-    def _current_az_user():
-        """Return the active az account user name, or None if not logged in."""
-        result = subprocess.run(
-            [az, "account", "show", "-o", "json"],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            return None
-        try:
-            account = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return None
-        return account.get("user", {}).get("name") or None
-
-    def _build_login_cmd():
-        # Note: do NOT pass --username. Doing so triggers az's legacy ROPC
-        # (username/password) flow, which fails on MFA-enforced tenants
-        # (AADSTS50076). The default browser flow handles MFA correctly,
-        # and post-login _identity_ok(actual_user) enforces the expected user.
-        cmd = [az, "login"]
-        if expected_tenant:
-            cmd.extend(["--tenant", expected_tenant])
-        return cmd
-
-    def _identity_ok(actual):
-        if not expected_user:
-            return actual is not None
-        return actual is not None and actual.lower() == expected_user.lower()
-
-    # If --force, log out first so the next az login is clean
-    if force:
-        print_info("Clearing existing Azure CLI session...")
-        subprocess.run([az, "logout"], capture_output=True)
-
-    actual_user = _current_az_user()
-
-    if not _identity_ok(actual_user):
-        if expected_user and actual_user:
-            print_info(
-                f"Azure CLI is logged in as '{actual_user}' but profile "
-                f"'{config.get_active_profile_name()}' requires '{expected_user}'. "
-                f"Switching identities..."
-            )
-        elif expected_user:
-            print_info(
-                f"Azure CLI not logged in — running 'az login' as '{expected_user}'..."
-            )
-        else:
-            print_info("Azure CLI not logged in — running 'az login'...")
-
-        login_result = subprocess.run(_build_login_cmd())
-        if login_result.returncode != 0:
-            print_error("'az login' failed")
-            raise SystemExit(1)
-
-        actual_user = _current_az_user()
-
-    if not _identity_ok(actual_user):
-        if expected_user:
-            print_error(
-                f"Azure CLI identity mismatch after login: expected '{expected_user}', "
-                f"got '{actual_user or 'no active account'}'.\n"
-                f"  Run: az login --tenant {expected_tenant or '<tenant-id>'} "
-                f"--username {expected_user}"
-            )
-        else:
-            print_error("Azure CLI is not logged in after 'az login'.")
-        raise SystemExit(1)
+    actual_user, _actual_tenant = _resolve_login_identity(
+        az, config.expected_user, config.tenant_id, force
+    )
 
     print_success(f"Azure CLI logged in as: {actual_user}")
 

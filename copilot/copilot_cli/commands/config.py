@@ -8,6 +8,7 @@ Subcommands:
 """
 
 from __future__ import annotations
+from cli_tools_shared.output import command
 
 from typing import Optional
 
@@ -42,6 +43,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("show")
+@command
 def config_show(
     json_output: bool = typer.Option(
         False, "--json", help="Emit JSON instead of a table.",
@@ -80,6 +82,7 @@ def config_show(
 
 
 @app.command("path")
+@command
 def config_path(
     kind: str = typer.Argument(
         ...,
@@ -106,6 +109,7 @@ def config_path(
 
 
 @app.command("set-secret")
+@command
 def config_set_secret(
     key: str = typer.Argument(..., help="Secret name (e.g. AZURE_CLIENT_SECRET)."),
     value: Optional[str] = typer.Option(None, "--value", help="Value to store. Prompted if omitted."),

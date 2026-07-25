@@ -1,4 +1,5 @@
 """Environment commands for managing Power Platform environments."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -87,6 +88,7 @@ def format_environment_for_display(env: dict) -> dict:
 
 
 @app.command("list")
+@command
 def environment_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -191,6 +193,7 @@ def environment_list(
 
 
 @app.command("get")
+@command
 def environment_get(
     environment_id: str = typer.Argument(
         ...,
@@ -239,6 +242,7 @@ def environment_get(
 
 
 @app.command("select")
+@command
 def environment_select(
     environment_id: str = typer.Argument(
         ...,
@@ -319,6 +323,7 @@ def environment_select(
 
 
 @app.command("current")
+@command
 def environment_current(
     table: bool = typer.Option(
         False,
@@ -402,6 +407,7 @@ def environment_current(
 
 
 @app.command("create")
+@command
 def environment_create(
     name: str = typer.Option(
         ...,
@@ -494,6 +500,7 @@ def environment_create(
 
 
 @app.command("delete")
+@command
 def environment_delete(
     environment_id: str = typer.Argument(
         ...,
@@ -600,6 +607,7 @@ def environment_delete(
 
 
 @app.command("rename")
+@command
 def environment_rename(
     environment_id: str = typer.Argument(
         ...,
@@ -662,6 +670,7 @@ def environment_rename(
 
 
 @app.command("locations")
+@command
 def environment_locations(
     table: bool = typer.Option(
         False,
@@ -713,6 +722,7 @@ def environment_locations(
 
 
 @app.command("settings")
+@command
 def environment_settings(
     environment_id: str = typer.Argument(
         ...,
@@ -801,6 +811,7 @@ def _parse_setting_value(value_str: str):
 
 
 @app.command("update")
+@command
 def environment_update(
     environment_id: str = typer.Argument(
         ...,

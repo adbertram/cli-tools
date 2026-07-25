@@ -26,6 +26,18 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 60.0
 DEFAULT_JITTER = 0.1
 
+# Read/HTTP timeout (seconds) for connector-definition writes (the custom
+# connector create POST and update PATCH). These calls compile the OpenAPI spec
+# and any attached .csx policy script server-side, which Power Platform can take
+# well over a minute to apply. The apply keeps running server-side even after a
+# client read timeout, so a short timeout turns a slow-but-successful write into
+# a spurious failure (and triggers redundant retries in callers like Ansible).
+# Override per-environment with COPILOT_CONNECTOR_WRITE_TIMEOUT or per-invocation
+# with the create/update `--timeout` flag. Scoped to these writes only — fast
+# reads (GET/list) keep their own short timeouts.
+DEFAULT_CONNECTOR_WRITE_TIMEOUT = 300.0
+CONNECTOR_WRITE_TIMEOUT_ENV = "COPILOT_CONNECTOR_WRITE_TIMEOUT"
+
 # Power Platform custom connector OAuth identity providers.
 # Each value is a preset that knows the vendor's OAuth dialect (e.g. Google
 # injects access_type=offline, Azure AD expects offline_access scope). Using
@@ -99,6 +111,42 @@ def _validate_oauth_identity_provider(value: Optional[str]) -> None:
             f"Invalid OAuth identity provider '{value}'. "
             f"Valid values: {valid_list}"
         )
+
+
+def _resolve_connector_write_timeout(override: Optional[float] = None) -> float:
+    """Resolve the read/HTTP timeout (seconds) for connector-definition writes.
+
+    Precedence (single resolution path, not a fallback):
+        1. Explicit ``override`` (the create/update ``--timeout`` flag)
+        2. ``COPILOT_CONNECTOR_WRITE_TIMEOUT`` environment variable
+        3. :data:`DEFAULT_CONNECTOR_WRITE_TIMEOUT`
+
+    An unset env var is a normal state that yields the default. A present but
+    non-numeric or non-positive value is a configuration error and raises
+    ``ClientError`` — it is never silently swapped for the default.
+    """
+    if override is not None:
+        if override <= 0:
+            raise ClientError(
+                f"Connector write timeout must be greater than 0 seconds, got {override}."
+            )
+        return float(override)
+
+    raw = os.environ.get(CONNECTOR_WRITE_TIMEOUT_ENV)
+    if raw is None or raw.strip() == "":
+        return DEFAULT_CONNECTOR_WRITE_TIMEOUT
+
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ClientError(
+            f"Invalid {CONNECTOR_WRITE_TIMEOUT_ENV}={raw!r}: must be a number of seconds."
+        )
+    if value <= 0:
+        raise ClientError(
+            f"Invalid {CONNECTOR_WRITE_TIMEOUT_ENV}={raw!r}: must be greater than 0 seconds."
+        )
+    return value
 
 
 class DataverseClient:
@@ -1268,6 +1316,14 @@ beginDialog:
                 publish job fails with a diagnostic error, or if the job
                 does not complete within poll_timeout.
         """
+        from .capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="publish agent"
+        )
         baseline_operation_end, _ = self._read_publish_sync_state(bot_id)
 
         url = f"{self.api_url}/bots({bot_id})/Microsoft.Dynamics.CRM.PvaPublish"
@@ -5017,6 +5073,7 @@ schemaName: {schema_name}
         oauth_identity_provider: Optional[str] = None,
         script_file: Optional[str] = None,
         script_operations: Optional[list[str]] = None,
+        timeout: Optional[float] = None,
     ) -> dict:
         """
         Create a custom connector in the current environment via Power Apps API.
@@ -5039,6 +5096,9 @@ schemaName: {schema_name}
             script_file: Path to C# script file (.csx) for custom code (optional)
             script_operations: List of operation IDs that use the script (optional,
                 defaults to all operations if script_file is provided)
+            timeout: Read/HTTP timeout (seconds) for the connector-definition
+                write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or
+                DEFAULT_CONNECTOR_WRITE_TIMEOUT when not provided.
 
         Returns:
             dict: Created connector details including connector_id
@@ -5047,6 +5107,7 @@ schemaName: {schema_name}
             ClientError: If creation fails
         """
         _validate_oauth_identity_provider(oauth_identity_provider)
+        write_timeout = _resolve_connector_write_timeout(timeout)
         import re
 
         # Get environment ID
@@ -5155,8 +5216,9 @@ schemaName: {schema_name}
         }
 
         try:
-            # Use longer timeout for connector creation (involves script compilation)
-            response = self._http_client.post(url, headers=headers, json=payload, timeout=180.0)
+            # Use a generous timeout for connector creation: the write compiles the
+            # OpenAPI spec (and any script) server-side. See _resolve_connector_write_timeout.
+            response = self._http_client.post(url, headers=headers, json=payload, timeout=write_timeout)
             response.raise_for_status()
             result = response.json()
 
@@ -5174,6 +5236,7 @@ schemaName: {schema_name}
                     script_file=script_file,
                     script_operations=script_operations,
                     environment_id=environment_id,
+                    timeout=write_timeout,
                 )
 
             return {
@@ -5208,6 +5271,7 @@ schemaName: {schema_name}
         oauth_identity_provider: Optional[str] = None,
         script_file: Optional[str] = None,
         script_operations: Optional[list[str]] = None,
+        timeout: Optional[float] = None,
     ) -> dict:
         """
         Update an existing custom connector via Power Apps API.
@@ -5228,6 +5292,9 @@ schemaName: {schema_name}
                 (oauth2|aad|google|github|facebook). Optional.
             script_file: Path to C# script file (.csx) for custom code (optional)
             script_operations: List of operation IDs that use the script (optional)
+            timeout: Read/HTTP timeout (seconds) for the connector-definition
+                write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or
+                DEFAULT_CONNECTOR_WRITE_TIMEOUT when not provided.
 
         Returns:
             dict: Updated connector details
@@ -5236,6 +5303,7 @@ schemaName: {schema_name}
             ClientError: If update fails
         """
         _validate_oauth_identity_provider(oauth_identity_provider)
+        write_timeout = _resolve_connector_write_timeout(timeout)
         # Get environment ID
         if not environment_id:
             config = get_config()
@@ -5444,7 +5512,11 @@ schemaName: {schema_name}
         }
 
         try:
-            response = self._http_client.patch(update_url, headers=headers, params=params, json=payload, timeout=60.0)
+            # Use a generous timeout: applying the OpenAPI spec + any .csx policy
+            # script server-side can take well over a minute, and the apply
+            # continues even after a client read timeout. See
+            # _resolve_connector_write_timeout.
+            response = self._http_client.patch(update_url, headers=headers, params=params, json=payload, timeout=write_timeout)
             response.raise_for_status()
 
             # PATCH returns 204 No Content on success
@@ -10861,12 +10933,71 @@ def _is_az_cli_installed() -> bool:
     return shutil.which("az") is not None
 
 
+def _find_cached_azure_account(az: str, tenant_id: str, expected_user: Optional[str] = None) -> Optional[dict]:
+    """Find a cached az account matching a tenant (and optionally a user).
+
+    Reads the full local Azure CLI account cache via ``az account list`` —
+    every previously logged-in identity, not just whichever one is currently
+    the machine-wide default — so switching between profiles that live in
+    different Azure AD tenants never requires ``az account set`` or a fresh
+    ``az login`` when the right identity is already cached. Returns ``None``
+    (never raises for cache-read failures) so callers fall back to today's
+    default-account behavior/error.
+    """
+    result = subprocess.run(
+        [az, "account", "list", "-o", "json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        accounts = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(accounts, list):
+        return None
+
+    tenant_lower = tenant_id.lower()
+    matches = [a for a in accounts if (a.get("tenantId") or "").lower() == tenant_lower]
+    if expected_user:
+        user_lower = expected_user.lower()
+        matches = [a for a in matches if ((a.get("user") or {}).get("name") or "").lower() == user_lower]
+    if not matches:
+        return None
+    for account in matches:
+        if account.get("isDefault"):
+            return account
+    return matches[0]
+
+
+def _default_az_user(az: str) -> str:
+    """Return the machine-wide default az account's user name.
+
+    Raises ``subprocess.CalledProcessError`` (propagated to the caller)
+    exactly like the inline call this was extracted from — callers that want
+    a soft failure must catch it themselves.
+    """
+    result = subprocess.run(
+        [az, "account", "show", "--query", "user.name", "-o", "tsv"],
+        capture_output=True, text=True, check=True,
+    )
+    return result.stdout.strip()
+
+
 def get_access_token_from_azure_cli(resource: str) -> str:
     """
     Get an access token using Azure CLI.
 
     Validates that the current Azure CLI user matches the profile's
     AZURE_CLI_EXPECTED_USER before acquiring a token.
+
+    When the profile sets AZURE_TENANT_ID, resolves the token against that
+    tenant's cached az account (via ``az account list``) instead of
+    whichever account is the machine-wide default — so switching between
+    profiles in different Azure AD tenants never requires ``az account set``
+    or a fresh ``az login`` when the right identity is already logged in and
+    cached. Profiles without AZURE_TENANT_ID keep validating against the
+    default account, as before.
 
     Args:
         resource: The resource URL to get a token for
@@ -10876,7 +11007,7 @@ def get_access_token_from_azure_cli(resource: str) -> str:
 
     Raises:
         CredentialError: If token acquisition fails or the active Azure CLI
-            identity does not match the profile's expected user. Subclass of
+            identity does not match the profile's expected user/tenant. Subclass of
             ClientError, so existing ``except ClientError`` callers still catch
             it; the more specific type lets the shared error handler map auth
             failures to exit code 2 (consistent with ``copilot auth status``).
@@ -10889,30 +11020,45 @@ def get_access_token_from_azure_cli(resource: str) -> str:
 
     try:
         az = _resolve_az_command()
-
-        # Validate Azure CLI user matches profile expectation
         config = get_config()
         expected_user = config.expected_user
-        if expected_user:
-            user_result = subprocess.run(
-                [az, "account", "show", "--query", "user.name", "-o", "tsv"],
-                capture_output=True, text=True, check=True,
-            )
-            actual_user = user_result.stdout.strip()
+        tenant_id = config.tenant_id
+
+        subscription_id = None
+        if tenant_id:
+            account = _find_cached_azure_account(az, tenant_id, expected_user)
+            if account is not None:
+                subscription_id = account["id"]
+            elif expected_user:
+                actual_user = _default_az_user(az)
+                raise CredentialError(
+                    f"Azure CLI is logged in as '{actual_user}' but profile "
+                    f"'{config.get_active_profile_name()}' requires '{expected_user}'.\n\n"
+                    f"  Run: az login --tenant {tenant_id}\n\n"
+                    f"  Then authenticate as {expected_user}."
+                )
+            else:
+                raise CredentialError(
+                    f"No cached Azure CLI login found for tenant '{tenant_id}' "
+                    f"required by profile '{config.get_active_profile_name()}'.\n\n"
+                    f"  Run: az login --tenant {tenant_id}"
+                )
+        elif expected_user:
+            # Legacy behavior: no AZURE_TENANT_ID on this profile — validate
+            # against whichever account is currently the machine default.
+            actual_user = _default_az_user(az)
             if actual_user.lower() != expected_user.lower():
                 raise CredentialError(
                     f"Azure CLI is logged in as '{actual_user}' but profile "
                     f"'{config.get_active_profile_name()}' requires '{expected_user}'.\n\n"
-                    f"  Run: az login --tenant {config.tenant_id or '<tenant-id>'}\n\n"
+                    f"  Run: az login --tenant <tenant-id>\n\n"
                     f"  Then authenticate as {expected_user}."
                 )
 
-        result = subprocess.run(
-            [az, "account", "get-access-token", "--resource", resource, "--query", "accessToken", "-o", "tsv"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        cmd = [az, "account", "get-access-token", "--resource", resource, "--query", "accessToken", "-o", "tsv"]
+        if subscription_id:
+            cmd += ["--subscription", subscription_id]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise CredentialError(

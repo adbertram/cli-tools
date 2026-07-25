@@ -1,4 +1,5 @@
 """Operations subcommands for connections — list, get, and invoke connector operations."""
+from cli_tools_shared.output import command
 import json
 import typer
 from typing import Optional, List
@@ -80,6 +81,7 @@ def _extract_operations_from_swagger(swagger: dict) -> list:
 
 
 @app.command("list")
+@command
 def list_operations(
     connection_id: Optional[str] = typer.Option(
         None,
@@ -197,6 +199,7 @@ def list_operations(
 
 
 @app.command("get")
+@command
 def get_operation(
     operation_id: str = typer.Argument(..., help="Operation ID (e.g., ListAccountSummaries)"),
 ):
@@ -233,6 +236,7 @@ def get_operation(
 
 
 @app.command("invoke")
+@command
 def invoke_operation(
     operation_id: str = typer.Argument(..., help="Operation ID to invoke"),
     param: Optional[List[str]] = typer.Option(

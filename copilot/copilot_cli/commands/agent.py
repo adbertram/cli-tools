@@ -1,4 +1,5 @@
 """Agent commands for Copilot CLI."""
+from cli_tools_shared.output import command
 
 import inspect
 import typer
@@ -261,6 +262,7 @@ def format_transcript_content(content: str) -> str:
 
 
 @app.command("list")
+@command
 def list_agents(
     table: bool = typer.Option(
         False,
@@ -386,6 +388,7 @@ def list_agents(
 
 
 @app.command("get")
+@command
 def get_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     include_components: bool = typer.Option(
@@ -465,6 +468,7 @@ def get_agent(
 
 
 @app.command("remove")
+@command
 def remove_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     force: bool = typer.Option(
@@ -584,6 +588,7 @@ def _delete_agent_components(client, agent_id: str) -> None:
 
 
 @app.command("publish")
+@command
 def publish_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -592,6 +597,8 @@ def publish_agent(
 
     Publishing makes the latest changes to your agent available to users.
     This includes changes to topics, knowledge sources, tools, and settings.
+    The target environment must have Copilot Studio capacity or an enabled
+    pay-as-you-go billing policy; authoring and attachment commands do not.
 
     Note: Publishing may take a few minutes to complete.
 
@@ -620,6 +627,7 @@ def publish_agent(
 
 
 @app.command("update")
+@command
 def update_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     name: Optional[str] = typer.Option(
@@ -878,6 +886,7 @@ def update_agent(
 
 
 @app.command("create")
+@command
 def create_agent(
     name: str = typer.Option(
         ...,
@@ -1170,6 +1179,7 @@ def _coerce_power_platform_cloud(value, power_platform_cloud_enum):
 
 
 @app.command("prompt")
+@command
 def prompt_agent(
     agent_id: str = typer.Argument(
         ...,
@@ -2146,6 +2156,7 @@ def format_knowledge_source(source: dict) -> dict:
 
 
 @knowledge_app.command("list")
+@command
 def knowledge_list(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2255,6 +2266,7 @@ def knowledge_list(
 
 
 @knowledge_app.command("remove")
+@command
 def knowledge_remove(
     component_id: str = typer.Argument(
         ..., help="The knowledge source component's unique identifier (GUID)"
@@ -2310,6 +2322,7 @@ def knowledge_remove(
 
 
 @knowledge_app.command("add")
+@command
 def knowledge_add(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2350,14 +2363,6 @@ def knowledge_add(
 
     try:
         client = get_client()
-        # Capacity pre-check: block attaching knowledge to an environment with
-        # no Copilot Studio capacity, before any mutation.
-        from ..capacity import (
-            ensure_tools_and_knowledge_entitled,
-            resolve_environment_id,
-        )
-
-        ensure_tools_and_knowledge_entitled(resolve_environment_id(), action="attach knowledge")
         client.associate_knowledge_with_agent(resolved_agent_id, component_id)
         print_success(f"Knowledge source associated with agent successfully.")
     except Exception as e:
@@ -2366,6 +2371,7 @@ def knowledge_add(
 
 
 @knowledge_app.command("upload")
+@command
 def knowledge_upload(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2439,16 +2445,6 @@ def knowledge_upload(
             mime_type = "application/octet-stream"
 
         client = get_client()
-
-        # Capacity pre-check: block creating/replacing a knowledge source on an
-        # environment with no Copilot Studio capacity, before any mutation
-        # (including the --force delete of an existing source).
-        from ..capacity import (
-            ensure_tools_and_knowledge_entitled,
-            resolve_environment_id,
-        )
-
-        ensure_tools_and_knowledge_entitled(resolve_environment_id(), action="attach knowledge")
 
         # Check if a knowledge source with this name already exists for the agent
         existing_sources = client.list_knowledge_sources(resolved_agent_id, source_type="file")
@@ -2535,6 +2531,7 @@ def knowledge_upload(
 
 
 @knowledge_app.command("get")
+@command
 def knowledge_get(
     component_id: str = typer.Argument(
         ...,
@@ -2564,6 +2561,7 @@ def knowledge_get(
 
 
 @knowledge_app.command("download")
+@command
 def knowledge_download(
     component_id: str = typer.Argument(
         ...,
@@ -2627,6 +2625,7 @@ azure_search_app = typer.Typer(help="Manage Azure AI Search knowledge sources")
 
 
 @azure_search_app.command("add")
+@command
 def azure_search_add(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2705,14 +2704,6 @@ def azure_search_add(
 
     try:
         client = get_client()
-        # Capacity pre-check: block attaching knowledge to an environment with
-        # no Copilot Studio capacity, before any mutation.
-        from ..capacity import (
-            ensure_tools_and_knowledge_entitled,
-            resolve_environment_id,
-        )
-
-        ensure_tools_and_knowledge_entitled(resolve_environment_id(), action="attach knowledge")
         component_id = client.add_azure_ai_search_knowledge_source(
             bot_id=resolved_agent_id,
             name=name,
@@ -2753,6 +2744,7 @@ def _is_guid(value: str) -> bool:
 
 
 @transcript_app.command("list")
+@command
 def transcript_list(
     agent: Optional[str] = typer.Option(
         None,
@@ -2855,6 +2847,7 @@ def transcript_list(
 
 
 @transcript_app.command("get")
+@command
 def transcript_get(
     transcript_id: str = typer.Argument(
         ...,
@@ -2940,6 +2933,7 @@ def format_topic_for_display(topic: dict) -> dict:
 
 
 @topic_app.command("list")
+@command
 def topic_list(
     agent_id: str = typer.Option(
         ...,
@@ -3047,6 +3041,7 @@ def topic_list(
 
 
 @topic_app.command("enable")
+@command
 def topic_enable(
     topic_id: str = typer.Argument(
         ...,
@@ -3076,6 +3071,7 @@ def topic_enable(
 
 
 @topic_app.command("delete")
+@command
 @topic_app.command("remove")
 def topic_delete(
     topic_id: str = typer.Argument(
@@ -3121,6 +3117,7 @@ def topic_delete(
 
 
 @topic_app.command("disable")
+@command
 def topic_disable(
     topic_id: str = typer.Argument(
         ...,
@@ -3163,6 +3160,7 @@ def topic_disable(
 
 
 @topic_app.command("get")
+@command
 def topic_get(
     topic_id: str = typer.Argument(
         ...,
@@ -3232,6 +3230,7 @@ def topic_get(
 
 
 @topic_app.command("create")
+@command
 def topic_create(
     agent_id: str = typer.Option(
         ...,
@@ -3335,6 +3334,7 @@ def topic_create(
 
 
 @topic_app.command("update")
+@command
 def topic_update(
     topic_id: str = typer.Argument(
         ...,
@@ -3497,6 +3497,7 @@ def format_trigger_for_display(trigger: dict) -> dict:
 
 
 @trigger_app.command("list")
+@command
 def trigger_list(
     agent_id: str = typer.Option(
         ...,
@@ -3595,6 +3596,7 @@ def trigger_list(
 
 
 @trigger_app.command("get")
+@command
 def trigger_get(
     trigger_id: str = typer.Argument(
         ...,
@@ -3642,6 +3644,7 @@ def trigger_get(
 
 
 @trigger_app.command("enable")
+@command
 def trigger_enable(
     trigger_id: str = typer.Argument(
         ...,
@@ -3671,6 +3674,7 @@ def trigger_enable(
 
 
 @trigger_app.command("disable")
+@command
 def trigger_disable(
     trigger_id: str = typer.Argument(
         ...,
@@ -3700,6 +3704,7 @@ def trigger_disable(
 
 
 @trigger_app.command("delete")
+@command
 @trigger_app.command("remove")
 def trigger_delete(
     trigger_id: str = typer.Argument(
@@ -3839,6 +3844,7 @@ def format_tool_for_display(tool: dict, truncate: bool = False) -> dict:
 
 
 @tool_app.command("list")
+@command
 def tool_list(
     agent_id: str = typer.Option(
         ...,
@@ -3954,6 +3960,7 @@ def tool_list(
 
 
 @tool_app.command("get")
+@command
 def tool_get(
     component_id: str = typer.Argument(
         ...,
@@ -4225,6 +4232,7 @@ def tool_get(
 
 
 @tool_app.command("add")
+@command
 def tool_add(
     agent_id: str = typer.Option(
         ...,
@@ -4414,15 +4422,6 @@ def tool_add(
     try:
         client = get_client()
 
-        # Capacity pre-check: block attaching tools to an environment with no
-        # Copilot Studio capacity, before any mutation.
-        from ..capacity import (
-            ensure_tools_and_knowledge_entitled,
-            resolve_environment_id,
-        )
-
-        ensure_tools_and_knowledge_entitled(resolve_environment_id(), action="attach tools")
-
         component_id = client.add_tool(
             bot_id=agent_id,
             tool_type=tool_type,
@@ -4453,6 +4452,7 @@ def tool_add(
 
 
 @tool_app.command("remove")
+@command
 def tool_remove(
     component_id: str = typer.Argument(
         ...,
@@ -4488,6 +4488,7 @@ def tool_remove(
 
 
 @tool_app.command("update")
+@command
 def tool_update(
     component_id: str = typer.Argument(
         ...,
@@ -4691,6 +4692,7 @@ analytics_app = typer.Typer(help="Manage Application Insights telemetry for agen
 
 
 @analytics_app.command("list")
+@command
 def analytics_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of agents to return"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -4782,6 +4784,7 @@ def analytics_list(
 
 
 @analytics_app.command("get")
+@command
 def analytics_get(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -4820,6 +4823,7 @@ def analytics_get(
 
 
 @analytics_app.command("enable")
+@command
 def analytics_enable(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     connection_string: str = typer.Option(
@@ -4886,6 +4890,7 @@ def analytics_enable(
 
 
 @analytics_app.command("disable")
+@command
 def analytics_disable(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     force: bool = typer.Option(
@@ -4933,6 +4938,7 @@ def analytics_disable(
 
 
 @analytics_app.command("update")
+@command
 def analytics_update(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     log_activities: Optional[bool] = typer.Option(
@@ -5032,6 +5038,7 @@ def _convert_timespan(timespan: str) -> str:
 
 
 @analytics_app.command("query")
+@command
 def analytics_query(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     timespan: str = typer.Option(
@@ -5186,6 +5193,7 @@ AUTH_MODE_NAMES = {
 
 
 @auth_app.command("get")
+@command
 def auth_get(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -5230,6 +5238,7 @@ def auth_get(
 
 
 @auth_app.command("set")
+@command
 def auth_set(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     mode: Optional[int] = typer.Option(
@@ -5306,6 +5315,7 @@ def auth_set(
 
 
 @auth_app.command("list")
+@command
 def auth_list(
     table: bool = typer.Option(
         False,
@@ -5792,6 +5802,7 @@ def _match_hint_to_model(model_name: str, hints: dict) -> Optional[dict]:
 
 
 @model_app.command("list")
+@command
 def model_list(
     table: bool = typer.Option(
         False,
@@ -5885,6 +5896,7 @@ def model_list(
 
 
 @model_app.command("get")
+@command
 def model_get(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or model name"),
 ):
@@ -6019,6 +6031,7 @@ def model_get(
 
 
 @model_app.command("set")
+@command
 def model_set(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID)"),
     model: str = typer.Argument(
@@ -6200,6 +6213,7 @@ def _resolve_agent_id(client, agent_id: str) -> tuple[str, dict]:
 
 
 @channel_app.command("get-token")
+@command
 def channel_get_token(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     table: bool = typer.Option(
@@ -6248,6 +6262,7 @@ def channel_get_token(
 
 
 @channel_app.command("list")
+@command
 def channel_list(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     limit: int = typer.Option(
@@ -6343,6 +6358,7 @@ def channel_list(
 
 
 @channel_app.command("get")
+@command
 def channel_get(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     channel_name: str = typer.Argument(..., help="Channel name (e.g., 'directline', 'msteams')"),
