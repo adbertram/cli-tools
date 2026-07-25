@@ -40,11 +40,11 @@ def test_seller_group_commands_are_oauth_only():
         "return-policies",
         "shipping-labels",
         "shipping-quote",
-        "store",
         "templates",
     }
     for group in oauth_only_groups:
         assert credentials[group] == ["oauth_authorization_code"]
+    assert credentials["store"] == ["oauth_authorization_code", "browser_session"]
 
 
 def test_seller_listings_commands_are_oauth_only():
@@ -67,5 +67,9 @@ def test_seller_listings_commands_are_oauth_only():
 
 
 def test_marketplace_listing_search_requires_no_auth():
-    """Top-level marketplace search uses a browser, but not a logged-in session."""
-    assert _load_command_credentials("search") == {"search": ["no_auth"]}
+    """Top-level marketplace search & item-detail use a browser, but not a
+    logged-in session (eBay /sch and /itm pages are public)."""
+    assert _load_command_credentials("search") == {
+        "search": ["no_auth"],
+        "get": ["no_auth"],
+    }

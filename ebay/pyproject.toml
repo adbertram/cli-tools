@@ -17,6 +17,11 @@ dependencies = [
     "playwright>=1.40.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 ebay = "ebay_cli.main:app"
 

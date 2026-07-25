@@ -28,6 +28,10 @@ ebay seller orders list
 # Search public sold/completed marketplace listings
 ebay listings search "LEGO 75357" --sold --limit 5
 
+# Discover ACTIVE (live, purchasable) listings + item detail
+ebay listings search "LEGO bulk lot" --active --format bin --limit 5
+ebay listings get 127992747834
+
 # Get details for a specific order
 ebay seller orders get 12-12345-12345
 ```
@@ -115,13 +119,70 @@ ebay categories tree 183448 --flat
 
 ### Marketplace Search
 
-Marketplace search uses browser automation to scrape eBay's public sold and
-completed listing pages. It does not require a logged-in browser session.
+Marketplace search uses the shared stealth browser to scrape eBay's public
+search pages. It does **not** require a logged-in browser session — the pages
+under `/sch/i.html` and `/itm/<id>` are public. `listings search` searches
+COMPLETED/sold comps by default; pass `--active` to discover live, purchasable
+listings (BIN + auction). `listings get` fetches detail for a single active
+item.
 
 ```bash
+# Completed/sold comps (default)
 ebay listings search "LEGO 75357" --sold --limit 5
 ebay listings search "LEGO bulk" --table
+
+# ACTIVE (live, purchasable) listings — newest first
+ebay listings search "LEGO bulk lot" --active --format bin --sort newest --limit 5
+
+# ACTIVE auctions ending soonest (shows time_left + bids)
+ebay listings search "LEGO minifigure" --active --format auction --sort ending
+
+# Detail for one active listing by item ID
+ebay listings get 127992747834
+ebay listings get 127992747834 --table
 ```
+
+`--active` searches live listings and reports `status: "active"`, plus
+`time_left` (and `bids` for auctions with bids). `--format` filters active
+results to `bin` (Buy It Now), `auction`, or `all` (default). `--sold` and
+`--format` apply to their respective modes only and are rejected if combined
+with the wrong mode. `listings get` returns price, currency, condition,
+availability, shipping, and (for auctions) current bid / time-left, parsed from
+the item page's schema.org `Product` JSON-LD with DOM fallbacks.
+
+#### Sorting
+
+`ebay listings search` follows the Source-CLI Sort Standard: `--sort/-s <field>`
+(default `newest`) plus `--desc/-d` to reverse a field's natural direction. The
+meaning of `newest` depends on the mode:
+
+| `--sort` | `--desc` | Active `_sop` | Completed `_sop` | Meaning |
+|----------|----------|---------------|------------------|---------|
+| `newest` (default) | — | `10` (Time: newly listed) | `13` (Time: ended recently) | Newly listed (active) / most recently ended (completed) |
+| `price` | no | `15` (Price + Shipping: lowest first) | `15` | Cheapest first |
+| `price` | yes | `16` (Price + Shipping: highest first) | `16` | Priciest first |
+| `ending` | — | `1` (Time: ending soonest) | `1` | Sorted by listing end time |
+
+```bash
+# Newest sold/ended comps first (default)
+ebay listings search "LEGO 75357" --sold
+
+# Newest active listings first
+ebay listings search "LEGO 75357" --active
+
+# Cheapest first (either mode)
+ebay listings search "LEGO 75357" --sort price
+```
+
+**Recency-sort exception (completed comps):** for COMPLETED search
+(`LH_Complete=1`), eBay has no "newly listed" order for ended listings, so the
+canonical `newest` sort maps to "Time: ended recently" (`_sop=13`) — the most
+recently ended/sold items first. For ACTIVE search, `newest` maps to eBay's true
+"newly listed" order (`_sop=10`). Because eBay exposes only one time-based
+direction per order, `--desc` is supported **only** with `--sort price`;
+`newest --desc` and `ending --desc` are rejected with a clear error. An unknown
+`--sort` value also fails fast (non-zero exit) listing the valid values — there
+is no silent fallback.
 
 ### Seller Commands
 
@@ -511,7 +572,7 @@ ebay seller locations get LOCATION_KEY --table
 
 #### Store
 
-Manage your eBay store settings and categories.
+Manage your eBay store settings, categories, and Time Away schedule.
 
 ```bash
 # List all store categories
@@ -524,9 +585,24 @@ ebay seller store categories list --filter "categoryName:ilike:%lego%"
 # Get a specific store category by ID
 ebay seller store categories get 12345
 ebay seller store categories get 12345 --table
+
+# Check Time Away settings
+ebay seller store time-away get
+ebay seller store time-away get --table
+
+# Schedule Time Away
+ebay seller store time-away enable 7/21/26 --yes
+ebay seller store time-away enable 7/21/26 --start-date 7/10/26 --mode pause-sales --yes
+ebay seller store time-away enable 7/21/26 --dry-run
+
+# Cancel Time Away
+ebay seller store time-away disable --yes
+ebay seller store time-away disable --dry-run
 ```
 
 **Available fields:** categoryId, categoryName, level, order, path
+
+`time-away enable` supports `--mode allow-sales` to keep listings purchasable or `--mode pause-sales` to pause fixed-price sales. Time Away commands require the saved browser session credential.
 
 ### Cache
 

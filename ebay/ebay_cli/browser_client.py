@@ -1,8 +1,21 @@
-"""Browser-based eBay client for marketplace search.
+"""Browser-based eBay client for marketplace search and item detail.
 
-Uses Playwright to scrape eBay search results for completed/sold listings,
-which are not available via the public API (Terapeak partner restriction).
+Uses the shared stealth persistent-Chromium browser (``cli_tools_shared``)
+to scrape eBay search results and item pages, which are not available via
+the public Sell API:
+
+* ``search_completed`` — completed/sold comps (``LH_Complete=1``).
+* ``search_active`` — active, purchasable listings (BIN + auction) with
+  price, current bid, time-left, shipping, and item URL.
+* ``get_item`` — detail for a single active ``/itm/<id>`` page, parsed from
+  the page's schema.org ``Product`` JSON-LD plus DOM supplements.
+
+eBay's ``/sch/i.html`` and ``/itm/<id>`` pages are public, so search and
+item-detail navigate directly with the persisted/warmed profile and raise a
+clear error only if eBay actually walls the page (CAPTCHA or sign-in
+redirect). They do not require a live My-eBay login.
 """
+import json
 import re
 from typing import Any, Optional
 from urllib.parse import urlencode
@@ -11,21 +24,27 @@ from cli_tools_shared.output import print_info, print_warning
 
 from .browser import BrowserError, EbayBrowser
 from .config import get_config
+from .models.item_detail import ItemDetail
 from .models.search_result import SearchResult
 
 
-# CSS selectors for eBay search results page (2026 su-item-card layout)
+# CSS selectors for eBay search results page (2026 s-card layout).
+# eBay replaced the earlier "su-item-card" card markup with "s-card" (verified
+# 2026-07-23 by inspecting live search-result HTML -- see
+# tests/test_browser_search_extractor.py and sources.md for details).
 SELECTORS = {
     "results_container": ".srp-river-main",
-    "item": "div.su-item-card.s-item-card[data-listingid]",
-    "title": "a.su-item-card__title",
-    "price": ".su-item-card__price",
-    "caption": ".signal",
-    "condition": ".su-item-card__subtitle",
-    "link": "a.su-item-card__title[href*='/itm/']",
-    "image": ".su-image img",
+    "results_heading": ".srp-controls__count-heading",
+    "item": "li.s-card[data-listingid]",
+    "title": ".s-card__title",
+    "price": ".s-card__price",
+    "caption": ".s-card__caption",
+    "condition": ".s-card__subtitle",
+    "image": ".s-card__image",
     "attributes_primary": ".su-card-container__attributes__primary .su-styled-text",
+    "attributes_primary_rows": ".su-card-container__attributes__primary .s-card__attribute-row",
     "attributes_secondary": ".su-card-container__attributes__secondary .su-styled-text",
+    "attribute_row": ".s-card__attribute-row",
     "next_page": "a.pagination__next",
 }
 
@@ -42,8 +61,82 @@ SEARCH_CONDITION_HELP = (
     + ", or eBay condition ID)"
 )
 
-# JavaScript to extract search results from the page
-EXTRACT_JS = """(selectors) => {
+# Listing-format filters for active search (--format).
+LISTING_FORMATS = ("bin", "auction", "all")
+LISTING_FORMAT_HELP = (
+    "Active-listing format: bin (Buy It Now), auction, or all (default all)"
+)
+
+# Source-CLI Sort Standard -> eBay `_sop` sort-order codes.
+#
+# The meaning of the canonical `newest` field differs by listing state:
+#
+#   * COMPLETED comps: eBay orders already-ended listings by "ended recently";
+#     it has no "newly listed" order for ended listings. So `newest` maps to
+#     "Time: ended recently" (_sop=13) -- most recently ended/sold first. This
+#     is the documented recency-sort exception for comps.
+#   * ACTIVE listings: `newest` maps to eBay's true "newly listed" order
+#     (_sop=10) -- exactly what an incremental newest-first crawler wants.
+#
+# eBay exposes a single directional `_sop` for each time-based order and a low/
+# high pair for price, so each map is keyed by (field, descending). Combinations
+# eBay cannot produce (a descending twin for `newest`/`ending`) are absent on
+# purpose and rejected fail-fast rather than silently reordered.
+#
+# _sop reference: 10 = Time: newly listed, 13 = Time: ended recently,
+# 15 = Price+Shipping lowest first, 16 = Price+Shipping highest first,
+# 1 = Time: ending soonest.
+SORT_SOP_COMPLETED = {
+    ("newest", False): "13",
+    ("price", False): "15",
+    ("price", True): "16",
+    ("ending", False): "1",
+}
+SORT_SOP_ACTIVE = {
+    ("newest", False): "10",
+    ("price", False): "15",
+    ("price", True): "16",
+    ("ending", False): "1",
+}
+
+VALID_SORT_FIELDS = ("newest", "price", "ending")
+
+DEFAULT_SORT = "newest"
+
+
+def resolve_sop(sort: str, desc: bool, active: bool = False) -> str:
+    """Resolve a canonical (``--sort``, ``--desc``) pair to an eBay ``_sop`` code.
+
+    ``active`` selects the active-listing sort map (``newest`` -> newly listed)
+    versus the completed-comps map (``newest`` -> ended recently).
+
+    Fail-fast, no silent fallback: an unknown ``--sort`` field, or a ``--desc``
+    direction eBay's search cannot produce, raises ``ValueError`` with a clear,
+    actionable message.
+    """
+    field = sort.lower()
+    if field not in VALID_SORT_FIELDS:
+        valid = ", ".join(VALID_SORT_FIELDS)
+        raise ValueError(f"Invalid --sort '{sort}'. Valid values: {valid}")
+    sop_map = SORT_SOP_ACTIVE if active else SORT_SOP_COMPLETED
+    try:
+        return sop_map[(field, desc)]
+    except KeyError:
+        raise ValueError(
+            f"eBay {'active' if active else 'completed'}-listing search has no "
+            f"descending order for --sort {field}; --desc is only supported with "
+            f"--sort price."
+        )
+
+# JavaScript to extract search results from the page.
+#
+# Input is an object: {selectors, active}. When ``active`` is true the row
+# status is forced to 'active' (there is no sold/ended caption on live
+# listings) and ``time_left`` is read from the primary attribute rows;
+# otherwise the completed-comps sold/unsold + date semantics apply.
+EXTRACT_JS = """(params) => {
+    const selectors = params.selectors;
+    const activeMode = !!params.active;
     const cards = document.querySelectorAll(selectors.item);
     const results = [];
     const seenItemIds = new Set();
@@ -77,17 +170,42 @@ EXTRACT_JS = """(selectors) => {
         ));
     }
 
+    // Active listings show remaining time in one of the primary attribute
+    // rows, e.g. "6d 4h", "4h 32m", "23m", "1m (Today 3:52PM)". Distinguish
+    // it from the price/shipping/format rows and from a BIN card's listing
+    // date ("Jul-24 15:33", which starts with a month name, not a digit).
+    function parseTimeLeft(rowText) {
+        const t = (rowText || '').replace(/\\s+/g, ' ').trim();
+        if (!t || t.includes('$')) return null;
+        const low = t.toLowerCase();
+        if (low.includes('delivery') || low.includes('shipping') ||
+            low.includes('located') || low.includes('offer') ||
+            low.includes('buy it now') || low.includes('bid')) return null;
+        if (/^\\d+\\s*[dhms]\\b/.test(t) ||
+            /\\b\\d+\\s*d\\s*\\d+\\s*h\\b/.test(t) ||
+            /\\bends?\\b/i.test(t) ||
+            /\\((today|tomorrow)\\b/i.test(low)) {
+            return t;
+        }
+        return null;
+    }
+
     for (const card of cards) {
         const titleEl = card.querySelector(selectors.title);
         if (!titleEl) continue;
-        const title = cleanText(titleEl);
+        // The title node wraps a "New Listing" badge and a visually-hidden
+        // "Opens in a new window or tab" a11y span around the real title
+        // text, so pull the primary styled-text span rather than the whole
+        // node's textContent.
+        const titleTextEl = titleEl.querySelector('span.su-styled-text.primary') || titleEl;
+        const title = cleanText(titleTextEl);
         if (title === 'Shop on eBay' || title === 'Results matching fewer words') continue;
 
         const itemId = card.getAttribute('data-listingid') || '';
         if (!itemId || seenItemIds.has(itemId)) continue;
         seenItemIds.add(itemId);
 
-        const linkEl = card.querySelector(selectors.link);
+        const linkEl = titleEl.closest('a');
         const url = linkEl ? linkEl.href : '';
 
         const priceEl = card.querySelector(selectors.price);
@@ -98,8 +216,8 @@ EXTRACT_JS = """(selectors) => {
         const captionEl = card.querySelector(selectors.caption);
         const captionText = cleanText(captionEl);
         const isSold = captionText.toLowerCase().includes('sold');
-        const status = isSold ? 'sold' : 'unsold';
-        const dateSold = normalizeDate(captionText);
+        const status = activeMode ? 'active' : (isSold ? 'sold' : 'unsold');
+        const dateSold = activeMode ? null : normalizeDate(captionText);
 
         const condEl = card.querySelector(selectors.condition);
         const condition = cleanText(condEl) || null;
@@ -110,6 +228,7 @@ EXTRACT_JS = """(selectors) => {
         let format = null;
         let bids = null;
         let seller = null;
+        let timeLeft = null;
 
         for (const attrEl of attributeEls) {
             const text = cleanText(attrEl);
@@ -131,14 +250,34 @@ EXTRACT_JS = """(selectors) => {
             }
         }
 
+        if (activeMode) {
+            const attrRows = card.querySelectorAll(selectors.attributes_primary_rows);
+            for (const row of attrRows) {
+                // Join the row's styled-text spans with a space; adjacent spans
+                // ("1m" + "(Today 4:15PM)") concatenate without whitespace in
+                // textContent otherwise.
+                const spans = row.querySelectorAll('.su-styled-text');
+                const rowText = spans.length
+                    ? Array.from(spans).map((s) => cleanText(s)).filter(Boolean).join(' ')
+                    : cleanText(row);
+                const candidate = parseTimeLeft(rowText);
+                if (candidate) { timeLeft = candidate; break; }
+            }
+        }
+
         const bidsMatch = fullText.match(/(\\d+)\\s*bid/i);
         if (bidsMatch) {
             bids = parseInt(bidsMatch[1], 10);
             format = 'Auction';
         }
 
-        const sellerEl = card.querySelector(selectors.attributes_secondary);
-        const sellerText = cleanText(sellerEl);
+        // Seller name and feedback percentage now live in separate spans
+        // within the first attribute row of the secondary attributes block,
+        // so join that row's text before matching rather than reading a
+        // single span.
+        const secondaryContainer = card.querySelector('.su-card-container__attributes__secondary');
+        const sellerRow = secondaryContainer ? secondaryContainer.querySelector(selectors.attribute_row) : null;
+        const sellerText = cleanText(sellerRow);
         const sellerMatch = sellerText.match(/^(\\S+)\\s+[\\d.]+%\\s+positive/);
         if (sellerMatch) {
             seller = sellerMatch[1];
@@ -160,6 +299,7 @@ EXTRACT_JS = """(selectors) => {
                 shipping_price: shippingPrice,
                 status: status,
                 date_sold: dateSold,
+                time_left: timeLeft,
                 condition: condition,
                 format: format,
                 bids: bids,
@@ -173,12 +313,273 @@ EXTRACT_JS = """(selectors) => {
     return results;
 }"""
 
+# JavaScript to inspect the loaded search page before trusting an empty
+# extraction. Distinguishes a genuine zero-result search (eBay's own "0
+# results for ..." heading) from a page that didn't load as expected --
+# a CAPTCHA/interstitial, a sign-in redirect, or a DOM structure eBay has
+# changed out from under our selectors.
+PAGE_STATE_JS = """(selectors) => {
+    const heading = document.querySelector(selectors.results_heading);
+    const headingText = heading ? heading.textContent.replace(/\\s+/g, ' ').trim() : null;
+    const bodyText = document.body ? document.body.innerText.replace(/\\s+/g, ' ').trim().slice(0, 1000) : '';
+    return {
+        url: location.href,
+        title: document.title,
+        container_exists: !!document.querySelector(selectors.results_container),
+        heading_text: headingText,
+        zero_results: !!headingText && /^0\\s+results/i.test(headingText),
+        body_text_snippet: bodyText,
+    };
+}"""
+
+# JavaScript to extract a single item's detail from its /itm/<id> page.
+# Returns the raw schema.org JSON-LD blocks plus DOM supplements (bid count,
+# time-left, quantity, seller) and page-state flags (ended/captcha).
+ITEM_DETAIL_JS = """() => {
+    const jsonld = [];
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try { jsonld.push(JSON.parse(s.textContent)); } catch (e) {}
+    }
+    const q = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? el.textContent.replace(/\\s+/g, ' ').trim() : null;
+    };
+    const bodyText = document.body ? document.body.innerText : '';
+    const low = bodyText.toLowerCase();
+    return {
+        url: location.href,
+        doc_title: document.title,
+        dom_title: q('h1.x-item-title__mainTitle .ux-textspans')
+            || q('.x-item-title__mainTitle')
+            || q('h1 .ux-textspans'),
+        price_primary: q('.x-price-primary .ux-textspans') || q('.x-price-primary'),
+        bin_price: q('.x-bin-price__content .ux-textspans') || q('.x-bin-price__content'),
+        bid_count: q('.x-bid-count .ux-textspans') || q('.x-bid-count'),
+        time_left: q('.ux-timer__text') || q('.x-timeleft .ux-timer') || q('.x-timeleft'),
+        timer_text: q('.ux-timer__text') || q('.ux-timer'),
+        shipping_dom: q('.ux-labels-values--shipping .ux-labels-values__values .ux-textspans')
+            || q('.d-shipping-minview .ux-textspans'),
+        condition: q('.x-item-condition-text .ux-textspans')
+            || q('.x-item-condition-value .ux-textspans'),
+        quantity: q('.x-quantity__availability .ux-textspans') || q('.x-quantity__availability'),
+        seller: q('.x-sellercard-atf__info__about-seller a .ux-textspans')
+            || q('.x-store-information__header .ux-textspans')
+            || q('.x-sellercard-atf__info a'),
+        image: (document.querySelector(
+            '.ux-image-carousel-item img, .ux-image-magnify__container img, img.ux-image-carousel-item__image'
+        ) || {}).src || null,
+        has_bid: !!document.querySelector('.x-bid-count, [data-testid="x-bid-action"]')
+            || /place bid/i.test(bodyText),
+        has_best_offer: /make (an )?offer/i.test(bodyText),
+        ended_banner: /this listing (has ended|was ended)|listing (has )?ended|is no longer available|no longer available/i.test(low)
+            || /^ended\\b/i.test((q('.ux-timer__text') || q('.ux-timer') || '').trim()),
+        error_page: /discover error|the listing you'?re looking for/i.test(low),
+        captcha: /splashui\\/captcha|are you a human|please verify yourself|hcaptcha|recaptcha/i.test(
+            (location.href + ' ' + document.title + ' ' + bodyText.slice(0, 600)).toLowerCase()
+        ),
+    };
+}"""
+
+
+# ---- schema.org condition mapping ----
+_SCHEMA_CONDITION = {
+    "NewCondition": "New",
+    "UsedCondition": "Used",
+    "RefurbishedCondition": "Refurbished",
+    "DamagedCondition": "For parts or not working",
+}
+
+
+def _numeric_price(text: Optional[str]) -> Optional[str]:
+    """Pull a numeric price string (no currency symbol / suffix) from text."""
+    if not text:
+        return None
+    match = re.search(r"[\d,]+(?:\.\d{2})?", text)
+    return match.group(0).replace(",", "") if match else None
+
+
+def _detect_currency(text: Optional[str]) -> Optional[str]:
+    """Detect a currency code from a price string's symbol."""
+    if not text:
+        return None
+    if "£" in text:
+        return "GBP"
+    if "€" in text:
+        return "EUR"
+    if "$" in text:
+        return "USD"
+    return None
+
+
+def _parse_shipping_dom(text: Optional[str]) -> Optional[str]:
+    """Parse a shipping cost from the item page's shipping DOM value.
+
+    Examples: 'US $6.25 USPS Ground Advantage' -> '6.25', 'Free shipping' ->
+    '0.00'.
+    """
+    if not text:
+        return None
+    if "free" in text.lower():
+        return "0.00"
+    return _numeric_price(text)
+
+
+def _iter_jsonld_objects(blocks):
+    """Yield every dict object contained in the JSON-LD blocks (flattened)."""
+    for block in blocks:
+        items = block if isinstance(block, list) else [block]
+        for item in items:
+            if isinstance(item, dict):
+                yield item
+
+
+def _find_product(blocks) -> Optional[dict]:
+    for obj in _iter_jsonld_objects(blocks):
+        if obj.get("@type") == "Product":
+            return obj
+    return None
+
+
+def _first_offer(product: dict) -> Optional[dict]:
+    offers = product.get("offers")
+    if isinstance(offers, list):
+        return offers[0] if offers else None
+    if isinstance(offers, dict):
+        return offers
+    return None
+
+
+def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
+    """Build an :class:`ItemDetail` from :data:`ITEM_DETAIL_JS` page data.
+
+    Prefers the schema.org ``Product`` JSON-LD for price/currency/condition/
+    availability/shipping and supplements with DOM values (bids, time-left,
+    quantity, seller). Raises :class:`BrowserError` for a CAPTCHA wall or a
+    removed/invalid item.
+    """
+    if data.get("captcha"):
+        raise BrowserError(
+            "eBay item page is blocked by a CAPTCHA/security-verification page. "
+            f"url={data.get('url')!r}"
+        )
+
+    product = _find_product(data.get("jsonld") or [])
+    offer = _first_offer(product) if product else None
+
+    title = (product or {}).get("name") or data.get("dom_title")
+    if data.get("error_page") or (not title and not offer):
+        raise BrowserError(
+            f"eBay item {item_id} was not found or the listing was removed. "
+            f"url={data.get('url')!r} title={data.get('doc_title')!r}"
+        )
+
+    # ---- price / currency ----
+    currency = "USD"
+    price = None
+    availability = None
+    condition = data.get("condition")
+    shipping_price = None
+    brand = None
+    image_url = data.get("image")
+
+    if offer:
+        price = _numeric_price(offer.get("price"))
+        currency = offer.get("priceCurrency") or "USD"
+        avail = offer.get("availability")
+        if avail:
+            availability = str(avail).rsplit("/", 1)[-1]
+        cond = offer.get("itemCondition")
+        if cond and not condition:
+            condition = _SCHEMA_CONDITION.get(str(cond).rsplit("/", 1)[-1])
+        ship = offer.get("shippingDetails")
+        if isinstance(ship, list) and ship:
+            rate = ship[0].get("shippingRate") if isinstance(ship[0], dict) else None
+            if isinstance(rate, dict):
+                shipping_price = _numeric_price(rate.get("value"))
+
+    if price is None:
+        price = _numeric_price(data.get("price_primary"))
+
+    # DOM fallbacks when the page had no (or partial) Product JSON-LD. eBay
+    # serves the Product JSON-LD inconsistently, so the DOM is the reliable
+    # source for shipping/currency/availability.
+    if not offer:
+        detected = _detect_currency(data.get("price_primary"))
+        if detected:
+            currency = detected
+    if shipping_price is None:
+        shipping_price = _parse_shipping_dom(data.get("shipping_dom"))
+    if availability is None:
+        if data.get("ended_banner"):
+            availability = "SoldOut"
+        elif data.get("quantity"):
+            availability = "InStock"
+
+    if product:
+        brand_obj = product.get("brand")
+        if isinstance(brand_obj, dict):
+            brand = brand_obj.get("name")
+        elif isinstance(brand_obj, str):
+            brand = brand_obj
+        images = product.get("image")
+        if not image_url and isinstance(images, list) and images:
+            first_img = images[0]
+            image_url = first_img.get("url") if isinstance(first_img, dict) else first_img
+        elif not image_url and isinstance(images, str):
+            image_url = images
+
+    # ---- format / bids / auction vs BIN ----
+    bids = None
+    if data.get("bid_count"):
+        bid_match = re.search(r"\d+", data["bid_count"])
+        if bid_match:
+            bids = int(bid_match.group(0))
+
+    is_auction = bool(data.get("has_bid")) or bids is not None
+    current_bid = None
+    bin_price = None
+    if is_auction:
+        fmt = "Auction"
+        current_bid = price
+    elif data.get("has_best_offer"):
+        fmt = "Best Offer"
+        bin_price = price
+    else:
+        fmt = "Buy It Now"
+        bin_price = price or _numeric_price(data.get("bin_price"))
+
+    ended = bool(data.get("ended_banner")) or (
+        availability in {"SoldOut", "OutOfStock", "Discontinued"}
+    )
+
+    return ItemDetail(
+        item_id=item_id,
+        title=title,
+        price=price,
+        currency=currency,
+        format=fmt,
+        bin_price=bin_price,
+        current_bid=current_bid,
+        bids=bids,
+        time_left=data.get("time_left"),
+        shipping_price=shipping_price,
+        condition=condition,
+        availability=availability,
+        ended=ended,
+        quantity=data.get("quantity"),
+        seller=data.get("seller"),
+        brand=brand,
+        url=f"https://www.ebay.com/itm/{item_id}",
+        image_url=image_url,
+    )
+
 
 class EbayBrowserClient:
-    """Browser-based eBay client for marketplace search."""
+    """Browser-based eBay client for marketplace search and item detail."""
 
     BASE_URL = "https://www.ebay.com"
     SEARCH_PATH = "/sch/i.html"
+    ITEM_PATH = "/itm"
 
     def __init__(self, profile: Optional[str] = None, config: Optional[Any] = None):
         self.config = config or get_config(profile=profile)
@@ -205,10 +606,37 @@ class EbayBrowserClient:
         return False
 
     def ensure_authenticated(self):
-        """Ensure browser session is authenticated."""
+        """Ensure the browser session is authenticated (My-eBay login).
+
+        Retained for callers that genuinely need a logged-in session. Public
+        search and item-detail do NOT call this: eBay's ``/sch`` and ``/itm``
+        pages are public, so they navigate directly and rely on
+        :meth:`_raise_for_search_blocker` to surface a sign-in/CAPTCHA wall.
+        """
         if not self.browser.is_authenticated():
             raise BrowserError(
                 "No browser session found. Run 'ebay auth login --credential-type browser_session' first."
+            )
+
+    @staticmethod
+    def _raise_for_search_blocker(state: dict) -> None:
+        """Raise if the search page landed on a CAPTCHA/interstitial/sign-in
+        page instead of real results, rather than letting that silently look
+        like zero results."""
+        lowered = f"{state['url']} {state['title']} {state['body_text_snippet']}".lower()
+        if "splashui/captcha" in lowered or "hcaptcha" in lowered or "recaptcha" in lowered:
+            raise BrowserError(
+                f"eBay search is blocked by a CAPTCHA/security-verification page. url={state['url']} title={state['title']!r}"
+            )
+        if "signin.ebay.com" in lowered or "/signin" in lowered:
+            raise BrowserError(
+                "eBay search redirected to sign-in instead of showing results. "
+                f"Run 'ebay auth login --credential-type browser_session'. url={state['url']} title={state['title']!r}"
+            )
+        if not state["container_exists"]:
+            raise BrowserError(
+                "eBay search results container was not found on the page -- the page "
+                f"did not load as expected. url={state['url']} title={state['title']!r}"
             )
 
     def search_completed(
@@ -220,87 +648,179 @@ class EbayBrowserClient:
         category: Optional[str] = None,
         condition: Optional[str] = None,
         limit: int = 50,
+        sop: str = "13",
     ) -> list[SearchResult]:
-        """Search eBay completed listings.
+        """Search eBay completed/sold listings (comps)."""
+        return self._search(
+            keywords=keywords,
+            active=False,
+            sold_only=sold_only,
+            min_price=min_price,
+            max_price=max_price,
+            category=category,
+            condition=condition,
+            limit=limit,
+            sop=sop,
+        )
 
-        Args:
-            keywords: Search keywords
-            sold_only: If True, only return sold items (not unsold)
-            min_price: Minimum price filter
-            max_price: Maximum price filter
-            category: eBay category ID
-            condition: Item condition filter
-            limit: Maximum number of results to return
+    def search_active(
+        self,
+        keywords: str,
+        listing_format: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        category: Optional[str] = None,
+        condition: Optional[str] = None,
+        limit: int = 50,
+        sop: str = "10",
+    ) -> list[SearchResult]:
+        """Search eBay ACTIVE (live, purchasable) listings."""
+        return self._search(
+            keywords=keywords,
+            active=True,
+            listing_format=listing_format,
+            min_price=min_price,
+            max_price=max_price,
+            category=category,
+            condition=condition,
+            limit=limit,
+            sop=sop,
+        )
 
-        Returns:
-            List of SearchResult objects
+    def _search(
+        self,
+        keywords: str,
+        active: bool,
+        sold_only: bool = False,
+        listing_format: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        category: Optional[str] = None,
+        condition: Optional[str] = None,
+        limit: int = 50,
+        sop: str = "13",
+    ) -> list[SearchResult]:
+        """Shared search over active or completed listings.
+
+        Navigates the public search page directly (no login pre-gate) and
+        relies on :meth:`_raise_for_search_blocker` to surface a
+        CAPTCHA/sign-in wall.
         """
-        self.ensure_authenticated()
-
-        all_results = []
+        all_results: list[SearchResult] = []
         page_num = 1
         max_pages = (limit // 240) + 2  # 240 items per page max
 
         while len(all_results) < limit and page_num <= max_pages:
             url = self._build_search_url(
                 keywords=keywords,
+                active=active,
                 sold_only=sold_only,
+                listing_format=listing_format,
                 min_price=min_price,
                 max_price=max_price,
                 category=category,
                 condition=condition,
                 page=page_num,
+                sop=sop,
             )
 
             print_info(f"Fetching page {page_num}...")
 
-            # Navigate to search results
-            page = self.browser.get_page()
-            page.goto(url, wait_until="domcontentloaded")
+            # Navigate directly to the public search page (no My-eBay pre-hop):
+            # get_page(url) opens the browser at this URL on the first call and
+            # navigates there on subsequent pages.
+            page = self.browser.get_page(url)
             page.wait_for_timeout(2000)  # Let results load
 
-            # Extract results via JavaScript
-            raw_results = page.evaluate(EXTRACT_JS, SELECTORS)
+            raw_results = page.evaluate(EXTRACT_JS, {"selectors": SELECTORS, "active": active})
 
             if not raw_results:
-                break
+                state = page.evaluate(PAGE_STATE_JS, SELECTORS)
+                self._raise_for_search_blocker(state)
+                if state["zero_results"]:
+                    # eBay itself reports zero matches -- a legitimate empty
+                    # search, not a scraping failure.
+                    break
+                raise BrowserError(
+                    "eBay search returned no extractable listings even though the page "
+                    "does not report zero results. This means the search-results DOM "
+                    "no longer matches the expected selectors (eBay likely changed its "
+                    f"markup). url={state['url']} title={state['title']!r} "
+                    f"heading={state['heading_text']!r} "
+                    f"container_exists={state['container_exists']}"
+                )
 
-            # Convert to SearchResult models
             for raw in raw_results:
                 if len(all_results) >= limit:
                     break
                 all_results.append(SearchResult(**raw))
 
-            # Check if there's a next page
             next_btn = page.locator(SELECTORS["next_page"])
             if next_btn.count() == 0:
                 break
 
             page_num += 1
-            # Brief delay between pages
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(1000)  # Brief delay between pages
 
         return all_results[:limit]
+
+    def get_item(self, item_id: str) -> ItemDetail:
+        """Fetch detail for a single active eBay listing by item ID.
+
+        Navigates the public ``/itm/<id>`` page directly and parses the
+        schema.org ``Product`` JSON-LD plus DOM supplements. Raises
+        :class:`BrowserError` on a CAPTCHA wall or a removed/invalid item.
+        """
+        item_id = str(item_id).strip()
+        if not item_id or not item_id.isdigit():
+            raise BrowserError(f"Invalid eBay item ID: {item_id!r}")
+
+        # Open the browser directly at the public item page. Navigating there
+        # from another eBay page (e.g. the My-eBay summary) suppresses the
+        # server-rendered Product JSON-LD, so a fresh open is what yields the
+        # structured price/condition/availability/shipping data.
+        url = f"{self.BASE_URL}{self.ITEM_PATH}/{item_id}"
+        page = self.browser.get_page(url)
+        page.wait_for_timeout(3000)
+
+        data = page.evaluate(ITEM_DETAIL_JS)
+        return parse_item_detail(item_id, data)
 
     def _build_search_url(
         self,
         keywords: str,
+        active: bool = False,
         sold_only: bool = False,
+        listing_format: Optional[str] = None,
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         category: Optional[str] = None,
         condition: Optional[str] = None,
         page: int = 1,
+        sop: str = "13",
     ) -> str:
-        """Build eBay search URL with filters."""
+        """Build an eBay search URL with filters.
+
+        Completed comps (``active=False``) constrain to ``LH_Complete=1`` and
+        optionally ``LH_Sold=1``. Active search (``active=True``) drops those
+        and optionally constrains listing format via ``LH_BIN``/``LH_Auction``.
+        """
         params = {
             "_nkw": keywords,
-            "LH_Complete": "1",  # Completed listings
             "_ipg": "240",  # Items per page (max)
+            "_sop": sop,  # Sort order (see resolve_sop)
         }
 
-        if sold_only:
-            params["LH_Sold"] = "1"
+        if active:
+            fmt = (listing_format or "all").lower()
+            if fmt == "bin":
+                params["LH_BIN"] = "1"
+            elif fmt == "auction":
+                params["LH_Auction"] = "1"
+        else:
+            params["LH_Complete"] = "1"  # Completed listings
+            if sold_only:
+                params["LH_Sold"] = "1"
 
         if min_price is not None:
             params["_udlo"] = str(min_price)

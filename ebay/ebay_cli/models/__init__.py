@@ -84,6 +84,9 @@ from .location import (
 # Search
 from .search_result import SearchResult
 
+# Item detail (active listing /itm/<id>)
+from .item_detail import ItemDetail
+
 # Template
 from .template import (
     Template,
@@ -153,6 +156,8 @@ __all__ = [
     "LocationStatus",
     # Search
     "SearchResult",
+    # Item detail
+    "ItemDetail",
     # Template
     "Template",
     "TemplateContent",

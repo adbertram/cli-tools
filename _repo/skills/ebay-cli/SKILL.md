@@ -27,7 +27,13 @@ ebay <command-group> <action> [arguments] [options]
 | Publish listing | `ebay seller listings publish OFFER_ID` |
 | Upload image | `ebay seller images upload FILE_PATH` |
 | List messages | `ebay seller messages list --table` |
+| Enable Time Away | `ebay seller store time-away enable <end_date> --yes` |
+| Disable Time Away | `ebay seller store time-away disable --yes` |
 | Search categories | `ebay categories list "keyword"` |
+| Search completed/sold comps | `ebay listings search "<q>" --sold --limit 5` |
+| Discover ACTIVE listings | `ebay listings search "<q>" --active --format bin --sort newest` |
+| Active auctions (time-left/bids) | `ebay listings search "<q>" --active --format auction --sort ending` |
+| Active item detail | `ebay listings get <item_id>` |
 </quick_start>
 
 <essential_principles>
@@ -42,6 +48,10 @@ Top-level (admin/agnostic):
 - **auth** — Manage eBay API authentication (OAuth)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **categories** — Search and browse marketplace categories
+- **listings** — Marketplace search & item detail (browser-scraped, no login):
+  `listings search` (COMPLETED comps by default; `--active` for live BIN/auction
+  listings with price/current bid/time-left/URL) and `listings get <item_id>`
+  (active item detail)
 
 Under `ebay seller`:
 - **orders** — View orders and fulfillment details
@@ -56,7 +66,7 @@ Under `ebay seller`:
 - **images** — Upload and manage listing images
 - **locations** — Manage merchant/inventory locations
 - **messages** — Manage seller messages and buyer inquiries
-- **store** — Manage eBay store settings
+- **store** — Manage eBay store settings, categories, and Time Away
 </principle>
 </essential_principles>
 
