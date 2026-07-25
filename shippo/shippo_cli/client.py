@@ -423,9 +423,20 @@ class ShippoClient:
                 value_currency="USD",
                 origin_country=from_country.upper(),
             )
+            # USPS requires an EEL/PFC export-compliance citation on the customs
+            # declaration or the label purchase fails with
+            # 'customs_declaration.eel_pfc must not be empty'. For shipments under
+            # $2,500 that need no EEI filing, NOEEI_30_36 applies to Canada and
+            # NOEEI_30_37_a to everywhere else (per the SDK enum's own guidance).
+            eel_pfc = (
+                components.CustomsDeclarationEelPfcEnum.NOEEI_30_36
+                if to_country.upper() == "CA"
+                else components.CustomsDeclarationEelPfcEnum.NOEEI_30_37_A
+            )
             customs_declaration = components.CustomsDeclarationCreateRequest(
                 contents_type=components.CustomsDeclarationContentsTypeEnum.MERCHANDISE,
                 non_delivery_option=components.CustomsDeclarationNonDeliveryOptionEnum.RETURN,
+                eel_pfc=eel_pfc,
                 certify=True,
                 certify_signer=customs_signer or from_name,
                 items=[customs_item],
