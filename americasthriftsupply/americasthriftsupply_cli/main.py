@@ -14,8 +14,14 @@ from cli_tools_shared.filters import (
 from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
 from . import __version__
-from .client import get_client
+from .client import DEFAULT_PAGE_DELAY, get_client
 from .config import get_config
+
+PAGE_DELAY_HELP = (
+    "Seconds to wait between consecutive live page requests during a crawl. "
+    "Only applies when more than one page is fetched; cached pages never wait. "
+    "Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl."
+)
 
 
 PRODUCT_COLUMNS = ["id", "handle", "title", "product_type", "price_usd", "available", "variant_count", "url"]
@@ -134,6 +140,7 @@ def list_products(
         "-c",
         help="Restrict to one collection handle (server-side), e.g. 'mystery-box' or 'lego'",
     ),
+    page_delay: float = typer.Option(DEFAULT_PAGE_DELAY, "--page-delay", min=0.0, help=PAGE_DELAY_HELP),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
@@ -147,11 +154,15 @@ def list_products(
     The Shopify JSON endpoints ignore ?sort_by=, so --sort/--desc order the
     returned result set (up to --limit) client-side. Default 'newest' returns
     the newest-listed products first.
+
+    Crawls larger than one page (--limit above 250) are paced by --page-delay
+    and each page is cached as it arrives, so a rate-limited crawl resumes from
+    the first uncached page on the next run.
     """
     sort_field = _resolve_sort(sort)
     _validate(filter)
     try:
-        rows = get_client().list_products(limit=limit, collection=collection)
+        rows = get_client().list_products(limit=limit, collection=collection, page_delay=page_delay)
     except ClientError as exc:
         print_error(str(exc))
         raise typer.Exit(1)
@@ -182,13 +193,14 @@ def get_product(
 def list_collections(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of collections to return"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
+    page_delay: float = typer.Option(DEFAULT_PAGE_DELAY, "--page-delay", min=0.0, help=PAGE_DELAY_HELP),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List storefront collections (categories), e.g. 'mystery-box', 'lego'."""
     _validate(filter)
     try:
-        rows = get_client().list_collections(limit=limit)
+        rows = get_client().list_collections(limit=limit, page_delay=page_delay)
     except ClientError as exc:
         print_error(str(exc))
         raise typer.Exit(1)

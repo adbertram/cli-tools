@@ -17,7 +17,8 @@ import time
 from typing import Dict, List, Optional
 
 import requests
-from cli_tools_shared.data_cache import cached
+from cli_tools_shared.config import get_cache_ttl, is_cache_enabled
+from cli_tools_shared.data_cache import cache_dir_for, cached, get_cache_hit
 from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
@@ -27,7 +28,63 @@ DEFAULT_BASE_DELAY = 2.0
 DEFAULT_MAX_DELAY = 65.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
-MAX_PAGE_SIZE = 250
+PAGE_SIZE = 250
+
+# Seconds to wait between two consecutive *live* page requests during a crawl.
+# The storefront rate-limits bursts (HTTP 429 `local_rate_limited`), so paging
+# is paced explicitly. A single-page request never waits, so this costs nothing
+# for the common `--limit <= 250` case.
+DEFAULT_PAGE_DELAY = 5.0
+
+# Pace suggested in the rate-limit error when the current pace was not enough.
+SUGGESTED_RETRY_PAGE_DELAY = 30.0
+
+
+class PagedCrawlError(ClientError):
+    """A multi-page crawl hit a terminal error, with resume context attached.
+
+    Carries how far the crawl got, whether the completed pages were persisted,
+    and how to resume, so a rate-limited full-catalog crawl reports something
+    actionable instead of a bare ``HTTP 429: local_rate_limited``.
+    """
+
+    def __init__(
+        self,
+        cause: ClientError,
+        endpoint: str,
+        resource: str,
+        pages_fetched: int,
+        items_fetched: int,
+        page_delay: float,
+        cache_dir,
+        cache_enabled: bool,
+    ):
+        self.cause = cause
+        self.endpoint = endpoint
+        self.pages_fetched = pages_fetched
+        self.items_fetched = items_fetched
+        self.page_delay = page_delay
+
+        if cache_enabled:
+            persistence = (
+                f"Those {pages_fetched} page(s) are cached at {cache_dir} - re-run the same command "
+                f"to resume from page {pages_fetched + 1} without re-requesting them "
+                f"(cache TTL {get_cache_ttl()}s)."
+            )
+        else:
+            persistence = (
+                "Response caching is disabled (--no-cache / CACHE_ENABLED=false), so no page was "
+                "persisted and a re-run restarts at page 1. Drop --no-cache to make crawls resumable."
+            )
+
+        super().__init__(
+            f"{cause}\n"
+            f"Crawl of {endpoint} stopped after {pages_fetched} page(s) yielding {items_fetched} {resource}.\n"
+            f"{persistence}\n"
+            f"Retry with a slower pace, e.g. --page-delay {SUGGESTED_RETRY_PAGE_DELAY:g} "
+            f"(current: {page_delay:g}s). Run 'americasthriftsupply cache clear' to discard cached "
+            f"pages and start over."
+        )
 
 
 def _variant_prices(variants: List[dict]) -> List[float]:
@@ -176,29 +233,71 @@ class AmericasthriftsupplyClient:
     def _make_request(self, method: str, endpoint: str, params: Optional[Dict] = None) -> Dict:
         return self._request_json(method, f"{self.base_url}{endpoint}", params=params)
 
-    def _paginate_products(self, endpoint: str, limit: int) -> List[dict]:
-        """Page through a Shopify products.json-shaped endpoint until `limit`
-        products are collected or the store has no more pages."""
-        products: List[dict] = []
+    @cached
+    def _fetch_page(self, endpoint: str, page: int) -> dict:
+        """Fetch one page of a Shopify listing endpoint.
+
+        This is the cache unit for every crawl: each page is written to the
+        response cache as soon as it arrives, so a crawl that dies partway
+        through (rate limit, network) leaves its completed pages on disk and the
+        next run resumes at the first uncached page. The page size is fixed at
+        ``PAGE_SIZE`` so the cache key depends only on the endpoint and the page
+        number, making a page reusable across runs with different ``--limit``.
+        """
+        return self._make_request("GET", endpoint, params={"limit": PAGE_SIZE, "page": page})
+
+    def _paginate(self, endpoint: str, key: str, resource: str, limit: int, page_delay: float) -> List[dict]:
+        """Page through a Shopify listing endpoint until `limit` items are
+        collected or the store has no more pages.
+
+        `page_delay` seconds are slept between consecutive *live* requests; a
+        page served from cache costs no request and therefore no wait.
+        """
+        items: List[dict] = []
         page = 1
-        while len(products) < limit:
-            page_size = min(MAX_PAGE_SIZE, limit - len(products))
-            response = self._make_request(method="GET", endpoint=endpoint, params={"limit": page_size, "page": page})
-            batch = response.get("products", [])
+        pages_fetched = 0
+        previous_page_was_live = False
+
+        while len(items) < limit:
+            if previous_page_was_live and page_delay > 0:
+                time.sleep(page_delay)
+            try:
+                response = self._fetch_page(endpoint, page)
+            except ClientError as exc:
+                raise PagedCrawlError(
+                    cause=exc,
+                    endpoint=endpoint,
+                    resource=resource,
+                    pages_fetched=pages_fetched,
+                    items_fetched=len(items),
+                    page_delay=page_delay,
+                    cache_dir=cache_dir_for(self),
+                    cache_enabled=is_cache_enabled(),
+                ) from exc
+            previous_page_was_live = get_cache_hit() is False
+            if key not in response:
+                raise ClientError(f"Unexpected response from {endpoint}: missing '{key}'")
+
+            batch = response[key]
+            pages_fetched += 1
             if not batch:
                 break
-            products.extend(batch)
-            if len(batch) < page_size:
+            items.extend(batch)
+            if len(batch) < PAGE_SIZE:
                 break
             page += 1
-        return products[:limit]
+        return items[:limit]
 
-    @cached
-    def list_products(self, limit: int = 100, collection: Optional[str] = None) -> List[dict]:
+    def list_products(
+        self,
+        limit: int = 100,
+        collection: Optional[str] = None,
+        page_delay: float = DEFAULT_PAGE_DELAY,
+    ) -> List[dict]:
         """List products from the full catalog, or from one collection when
         `collection` (a collection handle, e.g. 'mystery-box') is given."""
         endpoint = f"/collections/{collection}/products.json" if collection else "/products.json"
-        raw_products = self._paginate_products(endpoint, limit)
+        raw_products = self._paginate(endpoint, "products", "products", limit, page_delay)
         return [normalize_product(product, self.base_url) for product in raw_products]
 
     @cached
@@ -207,22 +306,10 @@ class AmericasthriftsupplyClient:
         raw = self._request_json("GET", f"{self.base_url}/products/{handle}.js")
         return normalize_product_detail(raw, self.base_url)
 
-    @cached
-    def list_collections(self, limit: int = 100) -> List[dict]:
+    def list_collections(self, limit: int = 100, page_delay: float = DEFAULT_PAGE_DELAY) -> List[dict]:
         """List storefront collections (categories)."""
-        collections: List[dict] = []
-        page = 1
-        while len(collections) < limit:
-            page_size = min(MAX_PAGE_SIZE, limit - len(collections))
-            response = self._make_request("GET", "/collections.json", params={"limit": page_size, "page": page})
-            batch = response.get("collections", [])
-            if not batch:
-                break
-            collections.extend(batch)
-            if len(batch) < page_size:
-                break
-            page += 1
-        return [normalize_collection(c, self.base_url) for c in collections[:limit]]
+        raw = self._paginate("/collections.json", "collections", "collections", limit, page_delay)
+        return [normalize_collection(collection, self.base_url) for collection in raw]
 
     @cached
     def get_collection(self, handle: str) -> dict:

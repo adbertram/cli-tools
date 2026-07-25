@@ -65,6 +65,16 @@ def _get_cache_dir(instance: Any) -> Path:
     return cache_dir
 
 
+def cache_dir_for(instance: Any) -> Path:
+    """Return the on-disk cache directory `@cached` uses for `instance`.
+
+    Public accessor so a CLI can tell the user where completed work was
+    persisted (e.g. a resumable multi-page crawl) without duplicating the
+    storage layout.
+    """
+    return _get_cache_dir(instance)
+
+
 def _cache_allowed_for_instance(instance: Any) -> bool:
     """Return whether cached data may be served for this instance."""
     config = getattr(instance, "config", None)
