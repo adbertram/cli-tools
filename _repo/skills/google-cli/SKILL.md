@@ -54,6 +54,15 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **sheets** -- Google Sheets (list, get, read, create, append, update)
 </principle>
 
+<principle name="Authentication Profile Resolution">
+Google profile names are CLI-managed identifiers, not Google account email
+addresses. Before passing `--profile`, run `google auth profiles list` and use
+an exact existing `.name`; use `google auth status --profile PROFILE` when the
+authenticated account must be verified. For normal commands, omit `--profile`
+to use the active profile. Never derive a profile name or profile directory
+from an email address.
+</principle>
+
 <principle name="Sheets Range Selection">
 For newly imported workbooks, do not assume the first tab is named `Sheet1`.
 Use unqualified A1 ranges such as `A1:D10` for first-sheet reads, or run
@@ -75,6 +84,14 @@ message text, use `google gmail read MESSAGE_ID`. Use
 `google gmail get MESSAGE_ID --include-body` only when metadata and decoded body
 are both needed. Do not use `--properties` with `google gmail get`; `get`
 supports `--table`, `--raw`, `--include-body`, and `--profile`.
+</principle>
+
+<principle name="Gmail Label Reads">
+`google gmail labels list MESSAGE_ID` lists labels on one Gmail message; it is
+not a global label directory and `MESSAGE_ID` is required. Its JSON root is an
+object with `.message_id` and a `.labels` array, so parse `.labels[]` after
+verifying `.labels` is an array. Do not pipe that output to `jq '.[] | ...'`.
+For a known label id, use `google gmail labels get LABEL_ID`.
 </principle>
 
 <principle name="Gmail Draft IDs">

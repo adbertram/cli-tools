@@ -103,6 +103,17 @@ This stores the reusable OAuth client values in the CLI-tools secret manager, wr
 google auth status
 ```
 
+Profile names are CLI-managed identifiers and are not inferred from Google
+account email addresses. List the exact configured names before selecting one:
+
+```bash
+google auth profiles list
+google auth status --profile <profile-name>
+```
+
+Omit `--profile` on normal commands to use the active profile. If a profile is
+needed explicitly, pass an exact name returned by `google auth profiles list`.
+
 **Log out (remove saved token):**
 
 ```bash
