@@ -1097,13 +1097,15 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
     session_id = session_path.stem
     subagents = []
 
-    # Track Task tool calls from main session (these create subagents)
+    # Track Task/Agent tool calls from main session (these create subagents).
+    # "Agent" is the current tool name; "Task" is the legacy name in older sessions.
     task_calls = {}
 
     for entry in iter_session_lines(session_path):
         entry_type = entry.get('type', '')
+        timestamp = entry.get('timestamp', '')
 
-        # Find Task tool calls
+        # Find Task/Agent tool calls
         if entry_type == 'assistant':
             message = entry.get('message', {})
             content = message.get('content', '')
@@ -1111,7 +1113,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get('type') == 'tool_use':
-                        if block.get('name') == 'Task':
+                        if block.get('name') in ('Task', 'Agent'):
                             tool_id = block.get('id', '')
                             tool_input = block.get('input', {})
                             task_calls[tool_id] = {
@@ -1120,6 +1122,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
                                 'project': project_name,
                                 'timestamp': timestamp,
                                 'type': tool_input.get('subagent_type', 'unknown'),
+                                'name': tool_input.get('name'),
                                 'prompt': tool_input.get('prompt', ''),
                                 'description': tool_input.get('description', ''),
                                 'model': tool_input.get('model'),
@@ -1264,6 +1267,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             'project': project_name,
             'timestamp': data['timestamp'],
             'type': 'unknown',
+            'name': None,
             'prompt': prompt_prefix,
             'description': '',
             'model': None,

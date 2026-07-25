@@ -669,6 +669,7 @@ class ClaudeCodeSessionsClient:
                     project=sa['project'],
                     timestamp=sa['timestamp'],
                     type=sa['type'],
+                    name=sa.get('name'),
                     prompt=sa['prompt'],
                     description=sa.get('description'),
                     model=sa.get('model'),

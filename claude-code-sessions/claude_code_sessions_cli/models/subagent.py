@@ -27,6 +27,7 @@ class SubagentSummary(CLIModel):
     project: str
     timestamp: str
     type: str
+    name: Optional[str] = None
     prompt: str
     description: Optional[str] = None
     model: Optional[str] = None
