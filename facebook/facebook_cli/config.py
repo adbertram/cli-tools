@@ -1,6 +1,7 @@
 """Configuration management for Facebook CLI."""
 from pathlib import Path
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -20,6 +21,14 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
+
+    @property
+    def browser_user_agent(self) -> str:
+        """Use the installed real-Chrome UA for headed and headless sessions."""
+        override = self._get("BROWSER_USER_AGENT")
+        if override:
+            return override
+        return derive_real_chrome_user_agent()
 
     @property
     def cache_dir(self) -> Path:

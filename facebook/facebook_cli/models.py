@@ -18,6 +18,7 @@ class MarketplaceListing(CLIModel):
     url: str
     location: Optional[str] = None
     description: Optional[str] = None
+    availability: Optional[str] = None
     image_urls: Optional[List[str]] = Field(default=None, exclude=True)
     local_images: Optional[List[str]] = None
 

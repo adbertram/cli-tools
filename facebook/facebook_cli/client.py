@@ -59,6 +59,10 @@ GROUP_POST_THREAD_STOP_MARKERS = [
 ]
 
 
+class GroupDiscussionPreloadMissing(ClientError):
+    """Facebook omitted the Relay request metadata needed for feed GraphQL."""
+
+
 class FacebookClient:
     """Client that uses BrowserAutomation to automate Facebook."""
 
@@ -247,6 +251,78 @@ class FacebookClient:
                 f"Facebook served a login form for {surface} at {current_url}. "
                 f"(requested: {requested_url}). Run 'facebook auth login --force' to authenticate."
             )
+
+    @staticmethod
+    def _page_has_c_user(page) -> bool:
+        """Return True when the persistent profile still carries Facebook's ``c_user`` cookie.
+
+        ``c_user`` is the single authentication cookie this CLI already treats as
+        the source of truth: ``browser.py`` declares it in
+        ``AUTH_COOKIE_PATTERNS = ["c_user"]`` and ``_facebook_http_client``
+        requires it (``required_cookies=["c_user"]``). It is present only for a
+        live logged-in session; when the session breaks, the profile drops it
+        (see the CLI's Known Issue #1). This reads the cookie through the shared
+        ``BrowserHarnessService.cookie_list()`` CDP accessor (``Network.getAllCookies``)
+        rather than ``document.cookie`` so a future httpOnly hardening on
+        Facebook's side would not blind the check.
+        """
+        cookies = page.cookie_list()
+        if not isinstance(cookies, list):
+            raise ClientError(
+                "Facebook cookie probe returned a non-list cookie payload while "
+                f"checking Marketplace authentication: {type(cookies).__name__}."
+            )
+        for cookie in cookies:
+            if not isinstance(cookie, dict):
+                continue
+            if cookie.get("name") == "c_user" and str(cookie.get("value") or "").strip():
+                return True
+        return False
+
+    @staticmethod
+    def _page_has_login_form(page) -> bool:
+        """Return True when a Facebook login/challenge form is present in the DOM."""
+        present = page.evaluate(
+            """() => !!document.querySelector('input[name="email"], input[name="pass"]')"""
+        )
+        return bool(present)
+
+    def _assert_marketplace_authenticated(self, page, requested_url: str, surface: str) -> None:
+        """Fail fast when Facebook serves a login-walled Marketplace page.
+
+        Public Marketplace URLs render for logged-out visitors, but Facebook
+        increasingly answers them with a login wall (an empty results shell plus
+        a login dialog/redirect). Extraction against that shell silently returns
+        ``[]`` / ``Unknown``, which hides a broken session. This assertion turns
+        that into a loud, actionable failure.
+
+        Detection is based on AUTH STATE, never on result count, so a genuine
+        empty-but-authenticated search passes cleanly:
+          - PRIMARY: the ``c_user`` cookie (see :meth:`_page_has_c_user`).
+          - SECONDARY corroboration: a ``/login`` / ``/checkpoint`` /
+            ``two_step_verification`` redirect URL, or a rendered login form.
+
+        The session is authenticated only when ``c_user`` is present AND the page
+        is neither on a login redirect nor showing a login form. Otherwise it
+        raises ``ClientError`` with the exact re-auth remediation.
+        """
+        current_url = getattr(page, "url", "") or ""
+        login_redirect = any(
+            token in current_url
+            for token in ("/login", "/checkpoint", "two_step_verification")
+        )
+        has_c_user = self._page_has_c_user(page)
+        has_login_form = self._page_has_login_form(page)
+        if has_c_user and not login_redirect and not has_login_form:
+            return
+        raise ClientError(
+            f"Facebook served a login-walled Marketplace page for {surface} at "
+            f"{current_url or requested_url} (requested: {requested_url}; "
+            f"c_user cookie present: {has_c_user}; login redirect: {login_redirect}; "
+            f"login form present: {has_login_form}). "
+            "The saved browser session is expired or logged out. "
+            "Run 'facebook auth login --force' to re-authenticate."
+        )
 
     def _group_post_ref_parts(self, post_ref: str) -> Dict[str, str]:
         """Return canonical URL, group ID, and stable post ID for a group post ref."""
@@ -542,19 +618,10 @@ class FacebookClient:
         last_comment_count = 0
         while time.monotonic() < deadline:
             post = self.get_group_post(f"{group_id}/posts/{post_id}")
-            # Facebook's Relay payload can embed the story under a different
-            # internal post_id than the one visible in the permalink URL.  When
-            # that happens, _full_group_post_from_html falls back to the first
-            # Story node in the payload (safe because we navigated to the
-            # canonical single-post permalink), so post.post_id may differ from
-            # the URL post_id.  The page identity is already guaranteed by the
-            # URL we navigated to, so skip the equality guard in that case.
             if post.post_id != post_id:
-                logger.debug(
-                    "_wait_for_comment_on_exact_post: Relay post_id %s differs "
-                    "from URL post_id %s; using Relay post_id for comment search",
-                    post.post_id,
-                    post_id,
+                raise ClientError(
+                    "Fetched group post ID did not match requested post ID during "
+                    f"comment verification: requested={post_id}, fetched={post.post_id}."
                 )
 
             comments = list(self._iter_comment_tree(post.comments))
@@ -625,14 +692,20 @@ class FacebookClient:
         return result if isinstance(result, list) else []
 
     def _extract_detail_page_info(self, page) -> Dict:
-        """Extract title, price, location, and description from a listing detail page.
+        """Extract title, price, location, description, and raw availability signals.
+
+        The availability signals are intentionally raw (booleans) so the
+        Sold/Pending/Available decision stays in pure Python
+        (:meth:`_derive_availability`). That keeps the live-DOM marker tuning a
+        single-place change.
 
         Returns:
-            Dict with title, price, location, description keys.
+            Dict with title, price, location, description keys plus the raw
+            availability signals soldText, pendingText, priceRendered.
         """
         js = (
             '() => { const main = document.querySelector(\'[role="main"]\');'
-            ' if (main == null) return {title:"",price:"",location:"",description:""};'
+            ' if (main == null) return {title:"",price:"",location:"",description:"",soldText:false,pendingText:false,priceRendered:false};'
             ' const h1 = main.querySelector("h1");'
             ' const title = h1 ? (h1.innerText || "").trim() : "";'
             ' const text = main.innerText || "";'
@@ -659,12 +732,57 @@ class FacebookClient:
             '   if (lm) desc = desc.substring(0, desc.length - lm[0].length).trim();'
             '   description = desc;'
             ' }'
-            ' return {title: title, price: price, location: location, description: description}; }'
+            ' const lowerText = (text || "").toLowerCase();'
+            # Conservative sold/removed markers. Facebook shows a banner such as
+            # "This item is no longer available" once a listing is sold/removed.
+            # These exact phrases are placeholders the live session tunes against
+            # a real sold item; the Python mapping in _derive_availability is the
+            # source of truth, so tuning stays a single-place change.
+            ' const soldText = lowerText.indexOf("no longer available") !== -1'
+            '   || lowerText.indexOf("this item is sold") !== -1'
+            '   || lowerText.indexOf("marked as sold") !== -1;'
+            # Conservative pending marker.
+            ' const pendingText = lowerText.indexOf("sale pending") !== -1;'
+            # A real price string was extracted above; empty when Facebook did
+            # not render a listing price (e.g. a login/removed shell).
+            ' const priceRendered = price !== "";'
+            ' return {title: title, price: price, location: location, description: description,'
+            '   soldText: soldText, pendingText: pendingText, priceRendered: priceRendered}; }'
         )
         result = page.evaluate(js)
         if isinstance(result, dict):
             return result
-        return {"title": "", "price": "", "location": "", "description": ""}
+        return {
+            "title": "", "price": "", "location": "", "description": "",
+            "soldText": False, "pendingText": False, "priceRendered": False,
+        }
+
+    @staticmethod
+    def _derive_availability(signals: Dict) -> Optional[str]:
+        """Map raw detail-page availability signals to an availability string.
+
+        This is the single source of truth for the Sold/Pending/Available
+        classification, so the live-DOM markers extracted in
+        :meth:`_extract_detail_page_info` can be tuned without touching the
+        decision logic. Conservative precedence:
+          1. a sold/removed banner        -> "Sold"
+          2. a pending marker             -> "Pending"
+          3. a real price/listing rendered -> "Available"
+          4. otherwise                    -> None (could not determine)
+
+        Args:
+            signals: Dict carrying the raw booleans ``soldText``, ``pendingText``,
+                and ``priceRendered`` (extra keys such as title/price are ignored).
+        """
+        if not isinstance(signals, dict):
+            return None
+        if signals.get("soldText"):
+            return "Sold"
+        if signals.get("pendingText"):
+            return "Pending"
+        if signals.get("priceRendered"):
+            return "Available"
+        return None
 
     def _scroll_collect(
         self,
@@ -735,7 +853,11 @@ class FacebookClient:
         """Navigate to a Marketplace URL and scroll to collect listings."""
         print_info(status_msg)
         page = self._get_page(url)
+        # An authenticated session can still show a transient login/upsell
+        # dialog, so dismiss it first; the c_user check below then decides auth
+        # state independently of any transient dialog.
         self._dismiss_marketplace_login_dialog(page)
+        self._assert_marketplace_authenticated(page, url, f"Marketplace ({status_msg})")
 
         def _extract(p):
             snapshot = self._snapshot(p)
@@ -753,13 +875,23 @@ class FacebookClient:
         min_price: Optional[int] = None,
         max_price: Optional[int] = None,
         limit: int = 50,
+        sort_by: Optional[str] = None,
     ) -> List[MarketplaceListing]:
-        """Search Facebook Marketplace for listings."""
+        """Search Facebook Marketplace for listings.
+
+        Args:
+            sort_by: Facebook Marketplace ``sortBy`` URL value
+                (e.g. ``creation_time_descend`` for newest-first,
+                ``price_ascend`` / ``price_descend``). When None, Facebook
+                applies its own default ordering.
+        """
         params = [f"query={query}"]
         if min_price is not None:
             params.append(f"minPrice={min_price}")
         if max_price is not None:
             params.append(f"maxPrice={max_price}")
+        if sort_by is not None:
+            params.append(f"sortBy={sort_by}")
 
         url = f"{MARKETPLACE_BASE}/{location}/search/?{'&'.join(params)}"
         return self._paginated_fetch(
@@ -772,9 +904,18 @@ class FacebookClient:
         self,
         location: str = DEFAULT_LOCATION,
         limit: int = 50,
+        sort_by: Optional[str] = None,
     ) -> List[MarketplaceListing]:
-        """Browse Facebook Marketplace 'Today's picks' for a location."""
+        """Browse Facebook Marketplace 'Today's picks' for a location.
+
+        Args:
+            sort_by: Facebook Marketplace ``sortBy`` URL value applied to the
+                category feed. When None, Facebook applies its own default
+                ordering.
+        """
         url = f"{MARKETPLACE_BASE}/{location}/"
+        if sort_by is not None:
+            url = f"{url}?sortBy={sort_by}"
         return self._paginated_fetch(
             url=url,
             status_msg=f"Browsing Marketplace in {location}...",
@@ -800,7 +941,11 @@ class FacebookClient:
         print_info(f"Getting listing {item_id}...")
 
         page = self._get_page(url)
+        # Dismiss any transient login/upsell dialog, then assert auth by cookie
+        # state before extracting so a login-walled page fails loudly instead of
+        # returning an "Unknown" listing.
         self._dismiss_marketplace_login_dialog(page)
+        self._assert_marketplace_authenticated(page, url, f"Marketplace item {item_id}")
 
         info = self._extract_detail_page_info(page)
         listing = MarketplaceListing(
@@ -810,6 +955,7 @@ class FacebookClient:
             url=f"/marketplace/item/{item_id}/",
             location=info.get("location") or None,
             description=info.get("description") or None,
+            availability=self._derive_availability(info),
         )
 
         if include_images:
@@ -1448,6 +1594,14 @@ class FacebookClient:
 
         build_started = time.monotonic()
         data = self._group_post_from_story_node(group_id, story_node)
+        # The Relay Story may use an internal ID that differs from the public
+        # permalink ID.  This parser is scoped to the canonical URL supplied by
+        # the caller, so preserve that requested public identity in the output.
+        # Downstream exact-post checks can then reject genuinely wrong results
+        # instead of weakening their identity guard for Relay's internal ID.
+        data["post_id"] = post_id
+        data["url"] = url
+        data["thread_url"] = url
         data["comments"] = comments
         data["comment_count"] = self._count_comments(comments)
         data["image_urls"] = self._extract_story_image_urls(story_node)
@@ -1585,7 +1739,7 @@ class FacebookClient:
         candidates = sorted(set(re.findall(r'"queryName":"([^"]*Group[^"]*)"', body)))[:12]
         title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
         title = html.unescape(re.sub(r"\s+", " ", title_match.group(1))).strip() if title_match else None
-        raise ClientError(
+        raise GroupDiscussionPreloadMissing(
             "Facebook group discussion Relay preloader variables were not found. "
             f"Page title: {title!r}. Candidate group queries: {candidates}. "
             f"Decoded variable keys near discussion query: {decoded_variable_keys[:8]}"
@@ -2122,55 +2276,123 @@ class FacebookClient:
         page = self._get_page(url, settle_ms=5000)
         self._assert_authenticated_page(page, url, "group feed")
 
-        items: List[Dict] = []
+        collected: List[Dict] = []
+        seen_post_ids: set[str] = set()
         scrolls = 0
-        max_scrolls = 5
-        while scrolls < max_scrolls:
-            items = self._extract_group_posts(page)
-            if len(items) >= limit:
+        no_progress_scrolls = 0
+        max_scrolls = 10
+        while True:
+            added = 0
+            for item in self._extract_group_posts(page):
+                post_id = item.get("post_id")
+                if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
+                    continue
+                seen_post_ids.add(post_id)
+                collected.append(item)
+                added += 1
+                if len(collected) >= limit:
+                    break
+            if len(collected) >= limit or scrolls >= max_scrolls:
                 break
-            page.evaluate("window.scrollBy(0, Math.max(document.body.scrollHeight, 1200))")
+
+            # Facebook's virtualized group feed only loads another batch after a
+            # trusted user-input scroll. JavaScript window.scrollBy reaches the
+            # bottom but does not trigger the loader, and rendered batches replace
+            # earlier DOM nodes, so keep a deduplicated accumulator across batches.
+            page.keyboard_press("End")
             scrolls += 1
             page.wait_for_timeout(2500)
+            no_progress_scrolls = 0 if added else no_progress_scrolls + 1
+            if no_progress_scrolls >= 2:
+                break
 
-        if not items:
+        if not collected:
             return []
-        print_info(f"Loaded {len(items[:limit])} post(s) after {scrolls} scroll(s)")
-        return [GroupPost(**p) for p in items[:limit]]
+        print_info(f"Loaded {len(collected[:limit])} post(s) after {scrolls} scroll(s)")
+        return [GroupPost(**p) for p in collected[:limit]]
 
     def list_group_posts(self, group_id: str, limit: int = 20, full_threads: bool = False) -> List[GroupPost]:
         """List posts from a Facebook Group via GraphQL (no browser scroll limit)."""
         url = f"{GROUPS_BASE}/{group_id}/"
         print_info(f"Fetching up to {limit} posts from group {group_id}...")
         body = self._fetch_authenticated_facebook_bootstrap_html(url)
-        posts_data: List[Dict] = []
-        seen_post_ids: set[str] = set()
-        next_cursor: Optional[str] = None
-        has_next_page = True
-        page_count = 0
-        max_pages = 5
-        while len(posts_data) < limit and has_next_page and page_count < max_pages:
-            requested_count = limit - len(posts_data)
-            page_posts, has_next_page, next_cursor = self._graphql_group_discussion_posts(
-                group_id,
-                body,
-                count=requested_count,
-                after=next_cursor,
-            )
-            page_count += 1
-            added_this_page = 0
-            for post in page_posts:
-                post_id = post.get("post_id")
-                if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
-                    continue
-                seen_post_ids.add(post_id)
-                posts_data.append(post)
-                added_this_page += 1
+        try:
+            self._extract_group_discussion_request(body, group_id)
+        except GroupDiscussionPreloadMissing:
+            # Facebook can serve an authenticated group page without the Relay
+            # discussion query preload. The rendered feed is the owning fallback
+            # for that response shape; auth is checked again by that browser path.
+            print_info("Group discussion preload missing; reading the rendered group feed instead")
+            posts = self._list_group_post_summaries(group_id, limit)
+        else:
+            posts_data: List[Dict] = []
+            seen_post_ids: set[str] = set()
+            next_cursor: Optional[str] = None
+            has_next_page = True
+            page_count = 0
+            max_pages = 12
+            # A healthy follow-up page always adds at least one new post: we
+            # request one extra story (remaining + 1) precisely to absorb the
+            # single inclusive-boundary post Facebook repeats as the first edge.
+            # So a *full* page that adds zero new posts is not the 1-post overlap
+            # — it is a stalled cursor handing back an already-seen window. Stop
+            # after a small bounded run of these instead of paging (and burning
+            # GraphQL calls) until the socket read times out.
+            max_consecutive_zero_add_pages = 2
+            consecutive_zero_add_pages = 0
+            while len(posts_data) < limit and has_next_page and page_count < max_pages:
+                remaining = limit - len(posts_data)
+                cursor_before = next_cursor
+                # Facebook's group feed cursor is inclusive of the boundary post:
+                # a follow-up page fetched with after=end_cursor repeats the
+                # previous page's last post as its first edge. Request one extra
+                # story past what is missing so that duplicate boundary post does
+                # not consume the whole page and stall an otherwise-fillable feed.
+                requested_count = remaining + 1 if cursor_before is not None else remaining
+                page_posts, has_next_page, next_cursor = self._graphql_group_discussion_posts(
+                    group_id,
+                    body,
+                    count=requested_count,
+                    after=cursor_before,
+                )
+                page_count += 1
+                _added = 0
+                for post in page_posts:
+                    post_id = post.get("post_id")
+                    if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
+                        continue
+                    seen_post_ids.add(post_id)
+                    posts_data.append(post)
+                    _added += 1
+                    if len(posts_data) >= limit:
+                        break
+                import sys as _s
+                print(f"[PAGDBG2] page={page_count} req={requested_count} returned={len(page_posts)} added={_added} total={len(posts_data)} has_next={has_next_page} cur_adv={next_cursor != cursor_before} cur_present={bool(next_cursor)}", file=_s.stderr)
+                # Enough posts collected to satisfy the requested limit: return
+                # immediately rather than paging for a boundary post we will slice
+                # off anyway.
                 if len(posts_data) >= limit:
                     break
-            if not next_cursor or added_this_page == 0:
-                break
-        posts = [GroupPost(**p) for p in posts_data[:limit]]
+                # Stop when Facebook reports no further pages, returns no cursor,
+                # or the cursor stops advancing (which would otherwise refetch the
+                # same window forever).
+                if not next_cursor or next_cursor == cursor_before:
+                    break
+                # Stall guard: a non-empty page that adds no new posts while the
+                # cursor keeps advancing is Facebook handing back an already-seen
+                # window. The inclusive-boundary overlap only ever repeats ONE
+                # post, so a full zero-add page is not that overlap — it is a
+                # stalled feed. Page past a small bounded run of these in case a
+                # single batch legitimately collides, then stop and return what we
+                # have instead of looping until the socket read times out and
+                # burning GraphQL calls that aggravate the rate limit.
+                if page_posts and _added == 0:
+                    consecutive_zero_add_pages += 1
+                    if consecutive_zero_add_pages >= max_consecutive_zero_add_pages:
+                        break
+                else:
+                    consecutive_zero_add_pages = 0
+            posts = [GroupPost(**p) for p in posts_data[:limit]]
         if not full_threads:
             return posts
 

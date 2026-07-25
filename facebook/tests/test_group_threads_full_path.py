@@ -204,6 +204,7 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
 
     assert [post.post_id for post in posts] == ["1001", "1002"]
     assert sorted(requested_urls) == [
+        ("https://www.facebook.com/groups/2318028917/", tuple(client_mod.GROUP_DISCUSSION_BOOTSTRAP_MARKERS)),
         ("https://www.facebook.com/groups/2318028917/posts/1001/", tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS)),
         ("https://www.facebook.com/groups/2318028917/posts/1002/", tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS)),
     ]
@@ -231,16 +232,18 @@ def test_get_group_extracts_rendered_metadata(monkeypatch):
     assert group.member_count == "47.2K members"
 
 
-def test_list_group_post_summaries_uses_rendered_feed_with_bounded_scroll(monkeypatch):
+def test_list_group_post_summaries_uses_trusted_scroll_and_accumulates_virtualized_batches(monkeypatch):
     monkeypatch.setattr(client_mod, "get_config", lambda: object())
 
     class FakePage:
         def __init__(self):
             self.scrolls = 0
+            self.keys = []
             self.waits = []
 
-        def evaluate(self, script):
-            assert "window.scrollBy" in script
+        def keyboard_press(self, key):
+            assert key == "End"
+            self.keys.append(key)
             self.scrolls += 1
 
         def wait_for_timeout(self, ms):
@@ -258,13 +261,19 @@ def test_list_group_post_summaries_uses_rendered_feed_with_bounded_scroll(monkey
     def fake_assert(page_arg, url, surface):
         checked.append((page_arg, url, surface))
 
-    calls = []
-
-    def fake_extract(page_arg):
-        calls.append(page_arg)
-        if page.scrolls == 0:
-            return []
-        return [
+    batches = [
+        [
+            {
+                "post_id": "1001",
+                "title": None,
+                "author": "Ada",
+                "text": "First",
+                "body": "First",
+                "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
+                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
+            }
+        ],
+        [
             {
                 "post_id": "1001",
                 "title": None,
@@ -283,20 +292,40 @@ def test_list_group_post_summaries_uses_rendered_feed_with_bounded_scroll(monkey
                 "url": "https://www.facebook.com/groups/2318028917/posts/1002/",
                 "thread_url": "https://www.facebook.com/groups/2318028917/posts/1002/",
             },
-        ]
+        ],
+        [
+            {
+                "post_id": "1003",
+                "title": None,
+                "author": "Linus",
+                "text": "Third",
+                "body": "Third",
+                "url": "https://www.facebook.com/groups/2318028917/posts/1003/",
+                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1003/",
+            },
+            {
+                "post_id": "1004",
+                "title": None,
+                "author": "Margaret",
+                "text": "Fourth",
+                "body": "Fourth",
+                "url": "https://www.facebook.com/groups/2318028917/posts/1004/",
+                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1004/",
+            },
+        ],
+    ]
 
     monkeypatch.setattr(client, "_get_page", fake_get_page)
     monkeypatch.setattr(client, "_assert_authenticated_page", fake_assert)
-    monkeypatch.setattr(client, "_extract_group_posts", fake_extract)
+    monkeypatch.setattr(client, "_extract_group_posts", lambda page_arg: batches[min(page_arg.scrolls, 2)])
 
-    posts = client._list_group_post_summaries("2318028917", 2)
+    posts = client._list_group_post_summaries("2318028917", 4)
 
     assert requested == [("https://www.facebook.com/groups/2318028917/", 5000)]
     assert checked == [(page, "https://www.facebook.com/groups/2318028917/", "group feed")]
-    assert calls == [page, page]
-    assert page.scrolls == 1
-    assert page.waits == [2500]
-    assert [post.post_id for post in posts] == ["1001", "1002"]
+    assert page.keys == ["End", "End"]
+    assert page.waits == [2500, 2500]
+    assert [post.post_id for post in posts] == ["1001", "1002", "1003", "1004"]
 
 
 def test_extract_group_discussion_request_uses_dynamic_doc_id(monkeypatch):
@@ -314,6 +343,45 @@ def test_extract_group_discussion_request_uses_dynamic_doc_id(monkeypatch):
 
     assert document_id == "999888777"
     assert variables["groupID"] == "2318028917"
+
+
+def test_list_group_posts_falls_back_when_bootstrap_omits_discussion_preload(monkeypatch):
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    client = client_mod.FacebookClient()
+    body = (
+        "<title>Facebook</title>"
+        '["CurrentUserInitialData",[],{"USER_ID":"user-1"}]'
+        '["LSD",[],{"token":"lsd-token"}]'
+        '{"queryID":"27020042980986584"}'
+    )
+    rendered_posts = [
+        GroupPost(
+            post_id=str(1000 + index),
+            author="Seller",
+            text=f"Rendered post {index}",
+            url=f"https://www.facebook.com/groups/2318028917/posts/{1000 + index}/",
+            thread_url=f"https://www.facebook.com/groups/2318028917/posts/{1000 + index}/",
+        )
+        for index in range(10)
+    ]
+    requested = []
+
+    monkeypatch.setattr(client, "_fetch_authenticated_facebook_bootstrap_html", lambda url: body)
+    monkeypatch.setattr(
+        client,
+        "_list_group_post_summaries",
+        lambda group_id, limit: requested.append((group_id, limit)) or rendered_posts[:limit],
+    )
+    monkeypatch.setattr(
+        client,
+        "_graphql_group_discussion_posts",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GraphQL must not run without preload variables")),
+    )
+
+    posts = client.list_group_posts("2318028917", limit=10)
+
+    assert requested == [("2318028917", 10)]
+    assert [post.post_id for post in posts] == [str(1000 + index) for index in range(10)]
 
 
 def test_group_discussion_graphql_allows_empty_dtsg_for_read_only_query(monkeypatch):
@@ -474,6 +542,71 @@ def test_list_group_posts_fills_underfilled_first_page_with_cursor(monkeypatch):
     assert calls[0]["regular_stories_count"] == 10
     assert calls[1]["regular_stories_count"] == 1
     assert calls[1]["cursor"] == "cursor-1"
+
+
+def test_list_group_posts_stops_when_advancing_cursor_only_repeats_seen_posts(monkeypatch):
+    # Regression: Facebook can return a full page of ALREADY-SEEN posts on every
+    # follow-up page while still advancing end_cursor and reporting
+    # has_next_page=True. Before the stall guard this looped until the socket
+    # read timed out, burning GraphQL calls that aggravate the rate limit. The
+    # paginator must detect the zero-add stall and return what it has.
+    monkeypatch.setattr(client_mod, "get_config", lambda: object())
+    calls = []
+
+    def fake_server_define(body, name):
+        assert body == "bootstrap"
+        return {
+            "CurrentUserInitialData": {"USER_ID": "user-1"},
+            "DTSGInitialData": {},
+            "LSD": {"token": "lsd-token"},
+        }[name]
+
+    def story(post_id):
+        return {
+            "node": {
+                "__typename": "Story",
+                "post_id": post_id,
+                "comet_sections": {
+                    "message": {
+                        "__typename": "CometFeedStoryDefaultMessageRenderingStrategy",
+                        "story": {"message": {"text": f"Body {post_id}"}},
+                    },
+                    "timestamp": {"story": {"url": f"https://example.com/{post_id}"}},
+                },
+            }
+        }
+
+    # Every page returns the SAME five posts, but end_cursor keeps advancing and
+    # has_next_page never goes false — a genuinely stalled feed.
+    seen_batch = [story(str(1000 + index)) for index in range(5)]
+
+    class FakeRelayGraphQLClient:
+        def __init__(self, http):
+            assert http == "http-client"
+
+        def execute(self, request, headers=None):
+            fields = request.form_fields()
+            variables = json.loads(fields["variables"])
+            calls.append(variables)
+            # Advance the cursor on every call so `next_cursor == cursor_before`
+            # never trips; only the zero-add stall guard can stop the loop.
+            page_info = {"has_next_page": True, "end_cursor": f"cursor-{len(calls)}"}
+            return ({"data": {"group": {"group_feed": {"edges": seen_batch, "page_info": page_info}}}},)
+
+    client = client_mod.FacebookClient()
+    monkeypatch.setattr(client, "_fetch_authenticated_facebook_bootstrap_html", lambda url: "bootstrap")
+    monkeypatch.setattr(client, "_facebook_server_define", fake_server_define)
+    monkeypatch.setattr(client, "_extract_group_discussion_request", lambda body, group_id: ({"groupID": group_id}, "doc-1"))
+    monkeypatch.setattr(client, "_facebook_http_client", lambda: "http-client")
+    monkeypatch.setattr(client_mod, "RelayGraphQLClient", FakeRelayGraphQLClient)
+
+    posts = client.list_group_posts("2318028917", limit=10)
+
+    # Returns the 5 posts it actually saw, as a successful partial result.
+    assert [post.post_id for post in posts] == [str(1000 + index) for index in range(5)]
+    # Page 1 adds 5, pages 2 and 3 add 0 (2 consecutive zero-add pages) -> stop.
+    # Without the guard this would loop up to max_pages (12) or until timeout.
+    assert len(calls) == 3
 
 
 def test_extract_group_discussion_posts_uses_streamed_story_nodes_when_graphql_has_field_errors(monkeypatch):

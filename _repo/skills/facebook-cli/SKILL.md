@@ -70,7 +70,17 @@ Facebook strips Markdown (`**bold**`, `[label](url)`) when rendering comments â€
 
 ## Known Issues
 
-### 1. Group comment posting fails: "Expected one target article for post <id>, found 0"
+### 1. Authentication expires shortly after a successful headed login
+
+**Symptom:** `facebook auth login` succeeds and commands work initially, but later the same day `facebook auth status` reports unauthenticated and the persistent cookie database no longer contains Facebook's authenticated `c_user` cookie.
+
+**Cause:** Login used normal headed Chrome's `Chrome/<version>` User-Agent, while subsequent autonomous commands used headless Chrome's default `HeadlessChrome/<version>` User-Agent against the same persistent profile. That abrupt fingerprint change is a Facebook risk signal and can invalidate the server-side session even though the on-disk profile is reused correctly.
+
+**Fix:** `facebook_cli.config.Config.browser_user_agent` now derives the normal Chrome User-Agent from the installed Chrome binary and supplies it to both headed and headless browser launches. This preserves one browser fingerprint across login and command reuse without forcing routine automation into a visible browser. `BROWSER_USER_AGENT` remains an explicit override.
+
+**Verification:** The focused auth test asserts the Facebook config returns a non-headless real-Chrome User-Agent. A browser boundary test launches the actual headless browser against a local HTTP endpoint and confirms both `User-Agent` and `sec-ch-ua` advertise Google Chrome without a `Headless` token. After reauthentication, verify the live service path with `facebook auth status` and a read-only Facebook command.
+
+### 2. Group comment posting fails: "Expected one target article for post <id>, found 0"
 
 **Symptom:** `facebook groups posts comment <group>/posts/<id> -m "..."` aborts during composer activation with `Error: Failed to activate comment composer: Expected one target article for post <id>, found 0`. Nothing is typed or submitted. The READ path (`facebook groups posts get ...`) on the same post still works, so auth/session is healthy â€” only the comment-WRITE locator is broken.
 

@@ -104,6 +104,12 @@ facebook marketplace list --location chicago
 facebook marketplace list --query "LEGO"
 facebook marketplace list --query "couch" --min-price 50 --max-price 500
 
+# Sorting (Source-CLI Sort Standard)
+facebook marketplace list --query "LEGO"                 # newest first (default)
+facebook marketplace list --query "LEGO" --sort newest   # explicit newest first
+facebook marketplace list --query "LEGO" --sort price     # price low -> high
+facebook marketplace list --query "LEGO" --sort price --desc  # price high -> low
+
 # Output formatting
 facebook marketplace list --table
 facebook marketplace list --limit 20
@@ -115,6 +121,27 @@ facebook marketplace get 123456789
 facebook marketplace get 123456789 --table
 facebook marketplace get 123456789 --properties title,price,location
 ```
+
+#### Sorting
+
+`marketplace list` follows the Source-CLI Sort Standard via the `--sort`/`-s`
+and `--desc`/`-d` options, mapped to Facebook Marketplace's `sortBy` URL
+parameter:
+
+| `--sort` | `--desc` | Facebook `sortBy` | Order |
+|----------|----------|-------------------|-------|
+| `newest` (default) | no | `creation_time_descend` | Most recently listed first |
+| `price` | no | `price_ascend` | Price low → high |
+| `price` | yes | `price_descend` | Price high → low |
+
+- **Default is `newest`**, so a bare search returns the most recently listed
+  items first — what incremental "newest-first" crawlers depend on.
+- **Unknown `--sort` values are rejected** with a clear error listing the valid
+  values and a non-zero exit code (no silent fallback).
+- **Recency-sort exception:** Facebook Marketplace has no oldest-first ordering
+  (the sort menu offers only newest-first for date listed), so `--sort newest
+  --desc` is rejected with a clear error instead of silently returning arbitrary
+  order.
 
 ### Messenger
 
@@ -269,6 +296,13 @@ Supported operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `startswi
 Non-auth configuration is stored in `~/.local/share/cli-tools/facebook/.env`.
 Browser-auth profiles live under
 `~/.local/share/cli-tools/facebook/authentication_profiles/<profile>/`.
+
+Facebook login runs in normal headed Chrome, while routine commands reuse the
+same persistent profile headlessly. The CLI derives a normal Chrome User-Agent
+from the installed Chrome version for both modes so Facebook sees one consistent
+browser fingerprint instead of `Chrome` during login and `HeadlessChrome`
+during automation. Set `BROWSER_USER_AGENT` only when an explicit override is
+required.
 
 Example root config:
 
