@@ -84,6 +84,21 @@ def main():
         set_display_mode(display_id, matching_mode(display_id, width, height))
         return
 
+    if action == "move_cursor":
+        if len(sys.argv) != 4:
+            raise SystemExit("move_cursor requires x and y")
+        point = Quartz.CGPointMake(int(sys.argv[2]), int(sys.argv[3]))
+        event = Quartz.CGEventCreateMouseEvent(
+            None,
+            Quartz.kCGEventMouseMoved,
+            point,
+            Quartz.kCGMouseButtonLeft,
+        )
+        if event is None:
+            raise SystemExit("CGEventCreateMouseEvent failed")
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+        return
+
     raise SystemExit(f"Unsupported display helper action: {action}")
 
 
@@ -94,6 +109,7 @@ DEFAULT_RESOLUTION = "1920x1080"
 DEFAULT_RECORDING_LEAD_SECONDS = 1.0
 DEFAULT_SLIDE_PAUSE_SECONDS = 0.75
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
+CAPTURE_OVERLAY_SETTLE_SECONDS = 2.0
 DEFAULT_CUE_MARKER = "||"
 # Hard subprocess wall-clock bound on every PowerPoint-targeting osascript. The
 # in-AppleScript ``with timeout`` only bounds Apple-event waits once the script is
@@ -124,13 +140,15 @@ INTER_SLIDE_ACTIONS = [{
     "key": "space",
     "reason": "next slide",
 }]
+POWERPOINT_DISCARD_DIALOG_BUTTONS = ["Don't Save", "Discard", "Cancel"]
 # Benign PowerPoint startup/first-run dialogs the recorder auto-dismisses (data,
 # not control flow). Per Adam's standing rule the agent always auto-dismisses
 # demo/recording-related macOS dialogs and never asks, so a recognized startup
 # sheet is cleared automatically rather than surfaced as an error. Each entry is
-# matched case-insensitively: a dialog matches when any of its ``title_contains``
-# substrings appears in the window/sheet title OR any of its ``text_contains``
-# substrings appears in the dialog's static text. ``dismiss_button`` lists the
+# matched case-insensitively: a dialog matches an optional exact ``title_equals``
+# value, any of its ``title_contains`` substrings in the window/sheet title, OR
+# any of its ``text_contains`` substrings in the dialog's static text.
+# ``dismiss_button`` lists the
 # benign default buttons to click in priority order; when none are present the
 # generic_dismisser presses ``escape`` (the safe default). An UNKNOWN blocking
 # dialog matches no entry and is never clicked — open_deck() raises instead.
@@ -151,7 +169,14 @@ POWERPOINT_STARTUP_DIALOGS = [
         "name": "Document Recovery",
         "title_contains": ["Document Recovery", "Recovered"],
         "text_contains": ["Document Recovery", "recovered", "AutoRecover", "wants to recover"],
-        "dismiss_button": ["Close", "Don't Save", "Discard", "Cancel"],
+        "dismiss_button": ["Close", *POWERPOINT_DISCARD_DIALOG_BUTTONS],
+    },
+    {
+        "name": "Save",
+        "title_equals": ["Save"],
+        "title_contains": [],
+        "text_contains": [],
+        "dismiss_button": POWERPOINT_DISCARD_DIALOG_BUTTONS,
     },
     {
         "name": "Update",
@@ -1085,14 +1110,28 @@ def force_slideshow_fullscreen():
     ])
 
 
-def assert_slideshow_present():
+def park_slideshow_cursor():
     screen_width, screen_height = screen_point_size()
+    run_macos_display_helper("move_cursor", screen_width - 64, screen_height // 2)
+
+
+def set_slideshow_pointer_automatic():
     execute_ui_actions([{
-        "action": "fullscreen_window",
+        "action": "keystroke_command",
+        "text": "u",
+    }])
+
+
+def settle_capture_overlay():
+    park_slideshow_cursor()
+    time.sleep(CAPTURE_OVERLAY_SETTLE_SECONDS)
+
+
+def assert_slideshow_present():
+    execute_ui_actions([{
+        "action": "assert_window",
         "process": "Microsoft PowerPoint",
         "contains": "Slide Show",
-        "screen_width": screen_width,
-        "screen_height": screen_height,
     }])
 
 
@@ -1291,8 +1330,11 @@ def frontmost_powerpoint_dialog():
 
 
 def dialog_matches_catalog_entry(entry, title, text):
-    title_lower = title.lower()
+    title_lower = title.strip().lower()
     text_lower = text.lower()
+    for expected_title in entry.get("title_equals", []):
+        if expected_title.strip().lower() == title_lower:
+            return True
     for needle in entry["title_contains"]:
         if needle.lower() in title_lower:
             return True
@@ -1506,6 +1548,8 @@ def start_slideshow(config):
         },
     ])
     force_slideshow_fullscreen()
+    set_slideshow_pointer_automatic()
+    park_slideshow_cursor()
     time.sleep(config["slideshow_start_seconds"])
 
 
@@ -1725,6 +1769,7 @@ def record(config):
             str(raw_video_path),
         ], stdin=subprocess.PIPE)
         ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        settle_capture_overlay()
 
         started_at = time.monotonic()
         audio_process = subprocess.Popen(["afplay", str(narration_path)])
@@ -1774,6 +1819,8 @@ def record(config):
             "-hide_banner",
             "-loglevel",
             "error",
+            "-ss",
+            str(CAPTURE_OVERLAY_SETTLE_SECONDS),
             "-i",
             str(raw_video_path),
             "-i",
@@ -1782,6 +1829,12 @@ def record(config):
             "libx264",
             "-vf",
             video_filter,
+            # Narration mp3s are recorded/generated hot (Pluralsight flagged peaks distorting into
+            # red on delivered videos, measured -1.4 dBFS on a raw slide capture). Pluralsight's
+            # delivery window is -12..-6 dBFS peak; -6dB of flat gain reduction here keeps the mux
+            # inside that window without re-normalizing (leaves relative dynamics untouched).
+            "-af",
+            "volume=-6dB",
             "-c:a",
             "aac",
             "-shortest",

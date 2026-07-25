@@ -183,8 +183,12 @@ class RecordTests(unittest.TestCase):
     def setUp(self):
         self.demo_prep_patcher = mock.patch.object(record, "run_demo_environment_recording_prep")
         self.demo_environment_prep = self.demo_prep_patcher.start()
+        self.capture_overlay_settle_original = record.settle_capture_overlay
+        self.capture_overlay_settle_patcher = mock.patch.object(record, "settle_capture_overlay")
+        self.capture_overlay_settle = self.capture_overlay_settle_patcher.start()
 
     def tearDown(self):
+        self.capture_overlay_settle_patcher.stop()
         self.demo_prep_patcher.stop()
 
     def test_public_cli_uses_default_resolution(self):
@@ -543,6 +547,25 @@ Input #0, avfoundation, from '3':
         self.assertIn("CGConfigureDisplayWithDisplayMode", record.MACOS_DISPLAY_HELPER)
         self.assertIn("CGCompleteDisplayConfiguration", record.MACOS_DISPLAY_HELPER)
         self.assertNotIn("CGDisplaySetDisplayMode", record.MACOS_DISPLAY_HELPER)
+
+    def test_macos_display_helper_moves_cursor_with_quartz(self):
+        quartz = SimpleNamespace(
+            CGMainDisplayID=mock.Mock(return_value=1),
+            CGPointMake=mock.Mock(return_value=(1919, 540)),
+            CGEventCreateMouseEvent=mock.Mock(return_value="mouse-event"),
+            CGEventPost=mock.Mock(),
+            kCGEventMouseMoved=5,
+            kCGMouseButtonLeft=0,
+            kCGHIDEventTap=0,
+        )
+
+        with mock.patch.dict(record.sys.modules, {"Quartz": quartz}), \
+                mock.patch.object(record.sys, "argv", ["helper", "move_cursor", "1919", "540"]):
+            exec(record.MACOS_DISPLAY_HELPER, {})
+
+        quartz.CGPointMake.assert_called_once_with(1919, 540)
+        quartz.CGEventCreateMouseEvent.assert_called_once_with(None, 5, (1919, 540), 0)
+        quartz.CGEventPost.assert_called_once_with(0, "mouse-event")
 
     def test_word_count_supports_unicode_transcripts(self):
         offsets = record.cue_offsets_from_word_ratio("Slide unicode", ["你好", "世界"], 2.0)
@@ -1328,6 +1351,11 @@ Input #0, avfoundation, from '3':
         def fake_close_slideshow_and_deck(config, state):
             events.append("close_powerpoint")
 
+        self.capture_overlay_settle.side_effect = lambda: events.extend([
+            "park_after_capture",
+            ("settle_overlay", record.CAPTURE_OVERLAY_SETTLE_SECONDS),
+        ])
+
         with mock.patch.object(record, "prepare", return_value={
             "narration_audio": "/tmp/narration.wav",
             "actions": [],
@@ -1344,7 +1372,12 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
 
-        self.assertEqual(events, ["close_powerpoint", "mux"])
+        self.assertEqual(events, [
+            "park_after_capture",
+            ("settle_overlay", record.CAPTURE_OVERLAY_SETTLE_SECONDS),
+            "close_powerpoint",
+            "mux",
+        ])
 
     def test_final_mux_scales_to_requested_resolution_without_padding_or_crop(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1373,6 +1406,11 @@ Input #0, avfoundation, from '3':
             record.record(config)
 
         mux_command = commands[0]
+        self.assertEqual(
+            mux_command[mux_command.index("-ss") + 1],
+            str(record.CAPTURE_OVERLAY_SETTLE_SECONDS),
+        )
+        self.assertLess(mux_command.index("-ss"), mux_command.index("-i"))
         self.assertIn("-vf", mux_command)
         self.assertEqual(mux_command[mux_command.index("-vf") + 1], "scale=1920:1080")
         self.assertNotIn("pad", mux_command)
@@ -1483,6 +1521,23 @@ Input #0, avfoundation, from '3':
             {"title": "Sign in", "text": "Use your account"},
         )
 
+    def test_save_dialog_matches_exact_title_without_matching_save_as(self):
+        save_entry = record.match_startup_dialog({"title": "Save", "text": "Save"})
+
+        self.assertEqual(save_entry["name"], "Save")
+        self.assertEqual(save_entry["dismiss_button"], ["Don't Save", "Discard", "Cancel"])
+        self.assertIsNone(record.match_startup_dialog({"title": "Save As", "text": ""}))
+
+    def test_auto_dismiss_save_dialog_uses_safe_discard_buttons(self):
+        dialog = {"title": "Save", "text": "Save"}
+        with mock.patch.object(record, "frontmost_powerpoint_dialog", return_value=dialog), \
+                mock.patch.object(record, "capture_osascript") as capture_osascript:
+            self.assertEqual(record.try_auto_dismiss_startup_dialog(), "Save")
+
+        rendered = "\n".join(capture_osascript.call_args.args)
+        self.assertLess(rendered.index('button "Don\'t Save"'), rendered.index('button "Discard"'))
+        self.assertLess(rendered.index('button "Discard"'), rendered.index('button "Cancel"'))
+
     def test_frontmost_dialog_probe_is_non_fatal_on_bare_false(self):
         # The bare ``false`` from the failing live run must yield None (no raise).
         with mock.patch.object(record, "capture", return_value="false"), \
@@ -1543,6 +1598,65 @@ Input #0, avfoundation, from '3':
         rendered = "\n".join(run_osascript.call_args.args)
         self.assertIn("set starting slide of slideShowSettings to 3", rendered)
         self.assertIn("set ending slide of slideShowSettings to 5", rendered)
+
+    def test_park_slideshow_cursor_uses_right_edge_midpoint(self):
+        with mock.patch.object(record, "screen_point_size", return_value=(1920, 1080)), \
+                mock.patch.object(record, "run_macos_display_helper") as helper:
+            record.park_slideshow_cursor()
+
+        helper.assert_called_once_with("move_cursor", 1856, 540)
+
+    def test_settle_capture_overlay_reparks_then_waits(self):
+        with mock.patch.object(record, "park_slideshow_cursor") as park, \
+                mock.patch.object(record.time, "sleep") as sleep:
+            self.capture_overlay_settle_original()
+
+        park.assert_called_once_with()
+        sleep.assert_called_once_with(record.CAPTURE_OVERLAY_SETTLE_SECONDS)
+
+    def test_assert_slideshow_present_is_read_only(self):
+        with mock.patch.object(record, "execute_ui_actions") as execute:
+            record.assert_slideshow_present()
+
+        execute.assert_called_once_with([{
+            "action": "assert_window",
+            "process": "Microsoft PowerPoint",
+            "contains": "Slide Show",
+        }])
+
+    def test_set_slideshow_pointer_automatic_uses_powerpoint_command_u_shortcut(self):
+        with mock.patch.object(record, "execute_ui_actions") as execute:
+            record.set_slideshow_pointer_automatic()
+
+        execute.assert_called_once_with([{
+            "action": "keystroke_command",
+            "text": "u",
+        }])
+
+    def test_start_slideshow_sets_pointer_automatic_then_parks_before_settle_delay(self):
+        config = {
+            "items": [{"identity": {"value": 3}}, {"identity": {"value": 5}}],
+            "slideshow_start_seconds": 2.0,
+        }
+        events = []
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "frontmost_powerpoint_dialog", return_value=None), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "execute_ui_actions"), \
+                mock.patch.object(record, "force_slideshow_fullscreen",
+                                  side_effect=lambda: events.append("fullscreen")), \
+                mock.patch.object(record, "set_slideshow_pointer_automatic",
+                                  side_effect=lambda: events.append("pointer_automatic")), \
+                mock.patch.object(record, "park_slideshow_cursor",
+                                  side_effect=lambda: events.append("park_cursor")), \
+                mock.patch.object(record.time, "sleep",
+                                  side_effect=lambda seconds: events.append(("settle_delay", seconds))):
+            record.start_slideshow(config)
+
+        self.assertEqual(
+            events,
+            ["fullscreen", "pointer_automatic", "park_cursor", ("settle_delay", 2.0)],
+        )
 
     def test_client_returns_recording_result_model(self):
         client = PowerPointSlideRecorderClient.__new__(PowerPointSlideRecorderClient)
