@@ -22,7 +22,6 @@ from cli_tools_shared._debug_logging import get_debug_logger
 
 from .config import get_config
 from .models import FACEBOOK_BASE_URL, MarketplaceListing, Group, GroupPost, Comment
-from .parsers import extract_listings_from_snapshot
 
 logger = get_debug_logger("cli_tools.facebook.client")
 
@@ -57,6 +56,184 @@ GROUP_DISCUSSION_BOOTSTRAP_MARKERS = [
 GROUP_POST_THREAD_STOP_MARKERS = [
     "CometFeedStorySeoLLMCommentSummarySection_story",
 ]
+
+# Facebook's own Marketplace search-results container. Captured live 2026-07-25:
+# it is present on the search surface for BOTH a populated result set and a
+# genuinely empty one, so its presence alone never means "there are results".
+MARKETPLACE_RESULTS_CONTAINER_SELECTOR = '[aria-label="Collection of Marketplace items"]'
+
+# Inspect a loaded Marketplace list/search page before trusting an empty
+# extraction. The only signal that means "this search legitimately has zero
+# matches" is Facebook rendering its own results container together with the
+# "No listings found for ... within N miles" heading (captured live 2026-07-25).
+# Anything else -- missing page body, missing container, listing tiles present
+# that the extractor could not parse, or a container that never settled -- is a
+# broken read and must fail loudly instead of returning [].
+MARKETPLACE_PAGE_STATE_JS = """(selector) => {
+    const main = document.querySelector('[role="main"]');
+    const headings = Array.from(
+        document.querySelectorAll('[role="main"] h1, [role="main"] h2, [role="main"] h3')
+    ).map((h) => (h.innerText || '').replace(/\\s+/g, ' ').trim()).filter(Boolean);
+    const emptyHeading = headings.find((t) => /^No listings found\\b/i.test(t)) || null;
+    const container = document.querySelector(selector);
+    return {
+        url: location.href,
+        title: document.title,
+        main_exists: main != null,
+        container_exists: container != null,
+        item_link_count: document.querySelectorAll('a[href*="/marketplace/item/"]').length,
+        headings: headings.slice(0, 10),
+        empty_heading: emptyHeading,
+        no_results: container != null && emptyHeading != null,
+    };
+}"""
+
+# Extract listings from a Marketplace list/search page, tile by tile.
+#
+# This reads each tile's DOM directly instead of parsing the flattened
+# accessibility-tree name, because Facebook serves TWO tile variants (both
+# captured live 2026-07-25):
+#
+#   1. aria-labelled:   "Arcade 1Up, $300, Newburgh, IN, listing 1356224139807798"
+#   2. content-derived: "Just listed $400 Legos. Collection with instruction
+#                        books Boonville, IN"
+#
+# Variant 2 carries no delimiters at all, and on a discounted tile the current
+# and struck-through prices are flattened together ("$50$60"), so any string
+# parse of the accessible name is ambiguous or lossy -- variant 2 previously
+# yielded ZERO parsed listings, which is what made an intermittently healthy
+# search return []. The per-tile DOM is identical for both variants: a span
+# whose own text is the current price (carrying the struck-through original
+# price as a nested span), followed by the title span and then the location
+# span.
+#
+# ``unparsed`` reports tiles that rendered text but no usable price/title so the
+# caller can fail loudly instead of under-reporting search results. Tiles that
+# have not painted any text yet (scroll skeletons) are neither parsed nor
+# reported.
+LIST_PAGE_LISTINGS_JS = r"""() => {
+    const PRICE = /^(?:[A-Z]{0,3}\$[\d,]+(?:\.\d{2})?|Free|FREE)$/;
+    const ownText = (el) => {
+        let text = "";
+        for (const node of el.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+        }
+        return text.trim();
+    };
+    const rows = [];
+    const unparsed = [];
+    const seen = new Set();
+    for (const anchor of document.querySelectorAll('a[href*="/marketplace/item/"]')) {
+        const match = anchor.href.match(/\/marketplace\/item\/(\d+)\//);
+        if (match == null || seen.has(match[1])) continue;
+        const itemId = match[1];
+        seen.add(itemId);
+
+        let price = "";
+        let originalPrice = "";
+        const labels = [];
+        for (const span of anchor.querySelectorAll('span')) {
+            const own = ownText(span);
+            if (!own) continue;
+            if (PRICE.test(own)) {
+                // The first price span is the tile's current price; a nested
+                // price span inside it is the struck-through original. Later
+                // price spans are that nested element visited on its own.
+                if (price !== "") continue;
+                price = own;
+                for (const child of span.children) {
+                    const childText = (child.textContent || "").trim();
+                    if (PRICE.test(childText)) { originalPrice = childText; break; }
+                }
+                continue;
+            }
+            // Title and location always follow the price span; badges that
+            // precede it ("Just listed") are not listing fields.
+            if (price !== "") labels.push(own);
+        }
+
+        if (price === "" || labels.length === 0) {
+            const tileText = (anchor.innerText || "").trim();
+            if (tileText !== "") unparsed.push({item_id: itemId, text: tileText.slice(0, 200)});
+            continue;
+        }
+        rows.push({
+            item_id: itemId,
+            title: labels[0],
+            price: price,
+            original_price: originalPrice || null,
+            location: labels.length > 1 ? labels[1] : null,
+            url: "/marketplace/item/" + itemId + "/",
+        });
+    }
+    return {rows: rows, unparsed: unparsed};
+}"""
+
+# Extract the listing's CURRENT price from a Marketplace detail page.
+#
+# On a price-dropped listing Facebook renders the current price and the
+# struck-through original price inside the SAME price element, as a leading
+# text node followed by a nested element (captured live 2026-07-25):
+#
+#   <span dir="auto">$15<span class="..."><span class="...">$20</span></span></span>
+#
+# Reading that element's text (or innerText line) yields "$15$20", which the
+# price normalizer then parses as 1520.0. This extractor instead reads the price
+# element's OWN direct text nodes for the current price and treats a nested
+# price element as the original (pre-drop) price. That split is structural, so
+# it does not depend on Facebook's obfuscated CSS class names.
+DETAIL_PAGE_PRICE_JS = r"""() => {
+    const empty = {price: "", originalPrice: ""};
+    const main = document.querySelector('[role="main"]');
+    if (main == null) return empty;
+    const h1 = main.querySelector('h1');
+    if (h1 == null) return empty;
+    const PRICE = /^(?:[A-Z]{0,3}\$[\d,]+(?:\.\d{2})?|Free|FREE)$/;
+    const ownText = (el) => {
+        let text = "";
+        for (const node of el.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
+        }
+        return text.trim();
+    };
+    const walker = document.createTreeWalker(main, NodeFilter.SHOW_ELEMENT);
+    let passedTitle = false;
+    let el;
+    while ((el = walker.nextNode()) !== null) {
+        if (!passedTitle) {
+            if (el === h1) passedTitle = true;
+            continue;
+        }
+        if (h1.contains(el)) continue;
+        const current = ownText(el);
+        if (!PRICE.test(current)) continue;
+        let original = "";
+        for (const child of el.children) {
+            const childText = (child.textContent || "").trim();
+            if (PRICE.test(childText)) { original = childText; break; }
+        }
+        return {price: current, originalPrice: original};
+    }
+    return empty;
+}"""
+
+# Extract the image URLs belonging to the listing's OWN media gallery.
+#
+# Facebook tags every image in a listing's gallery -- the hero image and each
+# thumbnail -- with alt="Product photo of <listing title>" (captured live
+# 2026-07-25). Sidebar advertisement creatives (which are served from the same
+# scontent CDN and live in a [role="group"][aria-label="Video player"] slot) and
+# the recommended-listing grid carry different alt text, so scoping to that alt
+# keeps scraped advertisements out of a listing's images.
+DETAIL_PAGE_IMAGES_JS = """() => {
+    const main = document.querySelector('[role="main"]');
+    if (main == null) return [];
+    const imgs = Array.from(main.querySelectorAll('img[alt^="Product photo of"]'));
+    const urls = imgs
+        .filter((i) => i.naturalWidth > 100 && i.closest('a[href*="/marketplace/item/"]') == null)
+        .map((i) => i.src);
+    return [...new Set(urls)];
+}"""
 
 
 class GroupDiscussionPreloadMissing(ClientError):
@@ -658,41 +835,45 @@ class FacebookClient:
 
     # --- Marketplace helper methods ---
 
-    def _extract_list_page_image_urls(self, page) -> Dict[str, List[str]]:
-        """Extract image URLs for each listing on a list/search results page.
-
-        Returns:
-            Dict mapping item_id -> list of image URLs.
-        """
-        js = (
-            '() => { const r = {}; document.querySelectorAll(\'a[href*="/marketplace/item/"]\').forEach(a => {'
-            ' const m = a.href.match(/\\/marketplace\\/item\\/(\\d+)\\//); if (m == null) return;'
-            ' const id = m[1]; if (r[id]) return;'
-            ' const imgs = [...a.querySelectorAll(\'img[src*="scontent"]\')];'
-            ' const urls = imgs.map(i => i.src).filter(Boolean);'
-            ' if (urls.length) r[id] = urls; }); return r; }'
-        )
-        result = page.evaluate(js)
-        return result if isinstance(result, dict) else {}
-
     def _extract_detail_page_image_urls(self, page) -> List[str]:
-        """Extract image URLs from a listing detail page.
+        """Extract the listing's own gallery image URLs from a detail page.
+
+        Scoped to the listing's media gallery (see :data:`DETAIL_PAGE_IMAGES_JS`)
+        so sidebar advertisement creatives are never saved as listing images.
 
         Returns:
             Deduplicated list of image URLs.
         """
-        js = (
-            '() => { const main = document.querySelector(\'[role="main"]\') || document;'
-            ' const imgs = [...main.querySelectorAll(\'img[src*="scontent"]\')];'
-            ' const urls = imgs.filter(i => i.naturalWidth > 100'
-            ' && i.closest(\'a[href*="/marketplace/item/"]\') == null).map(i => i.src);'
-            ' return [...new Set(urls)]; }'
-        )
-        result = page.evaluate(js)
-        return result if isinstance(result, list) else []
+        result = page.evaluate(DETAIL_PAGE_IMAGES_JS)
+        if not isinstance(result, list):
+            raise ClientError(
+                "Facebook listing image extractor returned a non-list result: "
+                f"{type(result).__name__}."
+            )
+        return result
+
+    def _extract_detail_page_price(self, page) -> Dict:
+        """Extract the current and original (pre-drop) price from a detail page.
+
+        Returns:
+            Dict with ``price`` (the current/active price) and ``originalPrice``
+            (the struck-through pre-drop price, empty when the listing has not
+            been discounted). Both are raw display strings.
+        """
+        result = page.evaluate(DETAIL_PAGE_PRICE_JS)
+        if not isinstance(result, dict):
+            raise ClientError(
+                "Facebook listing price extractor returned a non-object result: "
+                f"{type(result).__name__}."
+            )
+        return result
 
     def _extract_detail_page_info(self, page) -> Dict:
         """Extract title, price, location, description, and raw availability signals.
+
+        Price extraction is delegated to :meth:`_extract_detail_page_price`,
+        which targets the price element itself so a struck-through pre-drop
+        price cannot be concatenated into the current price.
 
         The availability signals are intentionally raw (booleans) so the
         Sold/Pending/Available decision stays in pure Python
@@ -700,23 +881,17 @@ class FacebookClient:
         single-place change.
 
         Returns:
-            Dict with title, price, location, description keys plus the raw
-            availability signals soldText, pendingText, priceRendered.
+            Dict with title, price, originalPrice, location, description keys
+            plus the raw availability signals soldText, pendingText,
+            priceRendered.
         """
         js = (
             '() => { const main = document.querySelector(\'[role="main"]\');'
-            ' if (main == null) return {title:"",price:"",location:"",description:"",soldText:false,pendingText:false,priceRendered:false};'
+            ' if (main == null) return {title:"",location:"",description:"",soldText:false,pendingText:false};'
             ' const h1 = main.querySelector("h1");'
             ' const title = h1 ? (h1.innerText || "").trim() : "";'
             ' const text = main.innerText || "";'
             ' const lines = text.split("\\n").map(l => l.trim()).filter(Boolean);'
-            ' let price = "";'
-            ' for (let i = 0; i < lines.length; i++) {'
-            '   if (lines[i] === title && i + 1 < lines.length) {'
-            '     const next = lines[i+1];'
-            '     if (next.match(/^\\$[\\d,]+/) || next === "Free" || next === "FREE") { price = next; break; }'
-            '   }'
-            ' }'
             ' let location = "";'
             ' const locLine = lines.find(l => l.startsWith("Listed in "));'
             ' if (locLine) location = locLine.replace("Listed in ", "");'
@@ -743,19 +918,22 @@ class FacebookClient:
             '   || lowerText.indexOf("marked as sold") !== -1;'
             # Conservative pending marker.
             ' const pendingText = lowerText.indexOf("sale pending") !== -1;'
-            # A real price string was extracted above; empty when Facebook did
-            # not render a listing price (e.g. a login/removed shell).
-            ' const priceRendered = price !== "";'
-            ' return {title: title, price: price, location: location, description: description,'
-            '   soldText: soldText, pendingText: pendingText, priceRendered: priceRendered}; }'
+            ' return {title: title, location: location, description: description,'
+            '   soldText: soldText, pendingText: pendingText}; }'
         )
         result = page.evaluate(js)
-        if isinstance(result, dict):
-            return result
-        return {
-            "title": "", "price": "", "location": "", "description": "",
-            "soldText": False, "pendingText": False, "priceRendered": False,
-        }
+        if not isinstance(result, dict):
+            raise ClientError(
+                "Facebook listing detail extractor returned a non-object result: "
+                f"{type(result).__name__}."
+            )
+        price = self._extract_detail_page_price(page)
+        result["price"] = price.get("price") or ""
+        result["originalPrice"] = price.get("originalPrice") or ""
+        # A real price string was extracted; empty when Facebook did not render
+        # a listing price (e.g. a login/removed shell).
+        result["priceRendered"] = result["price"] != ""
+        return result
 
     @staticmethod
     def _derive_availability(signals: Dict) -> Optional[str]:
@@ -849,6 +1027,98 @@ class FacebookClient:
         except Exception:
             logger.debug("_dismiss_marketplace_login_dialog: close button not actionable")
 
+    def _extract_list_page_listings(self, page) -> List[Dict]:
+        """Extract listing records from a Marketplace list/search page.
+
+        Raises:
+            ClientError: One or more rendered listing tiles carried text but no
+                usable price/title, which means Facebook changed its tile
+                markup. Dropping them silently would under-report results.
+        """
+        result = page.evaluate(LIST_PAGE_LISTINGS_JS)
+        if not isinstance(result, dict):
+            raise ClientError(
+                "Facebook Marketplace listing extractor returned a non-object result: "
+                f"{type(result).__name__}."
+            )
+        unparsed = result.get("unparsed") or []
+        if unparsed:
+            raise ClientError(
+                f"{len(unparsed)} Facebook Marketplace listing tile(s) rendered without a "
+                "recognizable price and title. Facebook changed its tile markup and the "
+                f"CLI extractor needs updating. Samples: {unparsed[:3]}"
+            )
+        rows = result.get("rows")
+        if not isinstance(rows, list):
+            raise ClientError("Facebook Marketplace listing extractor returned no rows array.")
+        return rows
+
+    def _marketplace_page_state(self, page) -> Dict:
+        """Read Facebook's own view of a Marketplace list/search page."""
+        state = page.evaluate(MARKETPLACE_PAGE_STATE_JS, MARKETPLACE_RESULTS_CONTAINER_SELECTOR)
+        if not isinstance(state, dict):
+            raise ClientError(
+                "Facebook Marketplace page-state probe returned a non-object result: "
+                f"{type(state).__name__}."
+            )
+        return state
+
+    def _wait_for_marketplace_results(self, page, timeout_ms: int = 20000) -> Dict:
+        """Wait until Facebook renders listing tiles or its own zero-result message.
+
+        Extraction used to start after a fixed settle delay, so a slow render
+        produced an empty accessibility snapshot that looked exactly like a
+        genuine empty search. This waits on the real readiness condition
+        instead: at least one Marketplace item link, or Facebook's own
+        "No listings found" state.
+        """
+        deadline = time.monotonic() + (timeout_ms / 1000)
+        while True:
+            state = self._marketplace_page_state(page)
+            if state.get("item_link_count") or state.get("no_results"):
+                return state
+            if time.monotonic() >= deadline:
+                return state
+            page.wait_for_timeout(500)
+
+    @staticmethod
+    def _raise_for_empty_marketplace_results(state: Dict, surface: str) -> None:
+        """Fail loudly on an empty extraction unless Facebook itself reported zero results.
+
+        A genuine zero-result search is the ONLY empty outcome Facebook vouches
+        for: its results container rendered AND it printed the
+        "No listings found for ..." heading. Every other empty outcome means the
+        read is broken -- the page never rendered, the results container never
+        appeared, the page was blocked, or Facebook changed the listing markup
+        the extractor depends on.
+        """
+        if state.get("no_results"):
+            return
+
+        detail = (
+            f"url={state.get('url')!r} title={state.get('title')!r} "
+            f"page_body_rendered={state.get('main_exists')} "
+            f"results_container_rendered={state.get('container_exists')} "
+            f"listing_tiles={state.get('item_link_count')} "
+            f"headings={state.get('headings')}"
+        )
+        if not state.get("main_exists"):
+            raise ClientError(
+                f"Facebook never rendered a Marketplace page body for {surface}. "
+                f"The page did not load. {detail}"
+            )
+        if state.get("item_link_count"):
+            raise ClientError(
+                f"Facebook rendered {state['item_link_count']} Marketplace listing tiles for "
+                f"{surface}, but the accessibility-tree extractor parsed none of them. "
+                f"Facebook changed its listing markup and the CLI parser needs updating. {detail}"
+            )
+        raise ClientError(
+            f"Facebook returned no Marketplace listings for {surface} and did not report a "
+            "zero-result search. The results never settled, the page was blocked, or "
+            f"Facebook changed its markup. {detail}"
+        )
+
     def _paginated_fetch(self, url: str, status_msg: str, limit: int) -> List[MarketplaceListing]:
         """Navigate to a Marketplace URL and scroll to collect listings."""
         print_info(status_msg)
@@ -859,11 +1129,19 @@ class FacebookClient:
         self._dismiss_marketplace_login_dialog(page)
         self._assert_marketplace_authenticated(page, url, f"Marketplace ({status_msg})")
 
-        def _extract(p):
-            snapshot = self._snapshot(p)
-            return extract_listings_from_snapshot(snapshot)
+        state = self._wait_for_marketplace_results(page)
+        if state.get("no_results"):
+            print_info(f"Facebook reported no listings: {state.get('empty_heading')}")
+            return []
 
-        items = self._scroll_collect(page, _extract, "item_id", limit, "listing")
+        items = self._scroll_collect(
+            page, self._extract_list_page_listings, "item_id", limit, "listing"
+        )
+        if not items:
+            self._raise_for_empty_marketplace_results(
+                self._marketplace_page_state(page), f"Marketplace ({status_msg})"
+            )
+            return []
         return [MarketplaceListing(**d) for d in items]
 
     # --- Marketplace methods ---
@@ -952,6 +1230,7 @@ class FacebookClient:
             item_id=item_id,
             title=info.get("title") or "Unknown",
             price=info.get("price") or "Unknown",
+            original_price=info.get("originalPrice") or None,
             url=f"/marketplace/item/{item_id}/",
             location=info.get("location") or None,
             description=info.get("description") or None,
@@ -2366,8 +2645,12 @@ class FacebookClient:
                     _added += 1
                     if len(posts_data) >= limit:
                         break
-                import sys as _s
-                print(f"[PAGDBG2] page={page_count} req={requested_count} returned={len(page_posts)} added={_added} total={len(posts_data)} has_next={has_next_page} cur_adv={next_cursor != cursor_before} cur_present={bool(next_cursor)}", file=_s.stderr)
+                logger.debug(
+                    "list_group_posts: page=%d requested=%d returned=%d added=%d total=%d "
+                    "has_next=%s cursor_advanced=%s",
+                    page_count, requested_count, len(page_posts), _added, len(posts_data),
+                    has_next_page, next_cursor != cursor_before,
+                )
                 # Enough posts collected to satisfy the requested limit: return
                 # immediately rather than paging for a boundary post we will slice
                 # off anyway.
