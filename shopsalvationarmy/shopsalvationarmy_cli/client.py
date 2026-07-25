@@ -560,11 +560,15 @@ class ShopSalvationArmyClient:
                         if time_text:
                             time_left = time_text.strip()
 
-            # Extract condition/description
+            # Extract condition/description. The full text is returned: listings
+            # put their structured spec fields ("Brand:", "Model:", "Includes:",
+            # "Condition:") at the end of the description, so truncating here
+            # would drop the data consumers need. Display-side shortening belongs
+            # to the --table renderer, not the parser.
             description = ""
             desc_elem = soup.find("div", class_=lambda x: x and "description" in x.lower() if x else False)
             if desc_elem:
-                description = desc_elem.get_text(strip=True)[:500]
+                description = desc_elem.get_text(strip=True)
 
             local_pickup_price = None
             for item in soup.find_all("li", class_="list-group-item"):

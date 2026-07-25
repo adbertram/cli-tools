@@ -96,6 +96,30 @@ def test_visible_closed_message_marks_listing_ended():
     assert item["auction_status"] == "ended"
 
 
+def test_long_description_is_not_truncated_and_keeps_trailing_spec_fields():
+    # Listings put their structured spec fields at the END of the description,
+    # so any parser-side truncation silently destroys the Model:/Includes: data.
+    filler = "LEGO Technic set in sealed retail packaging. " * 20
+    spec_tail = (
+        "Brand:LEGO"
+        "Model:Technic Car Lot (42169, 42151, 42173)"
+        "Includes:LEGO Technic NEOM McLaren Formula E Team (42169)"
+        "Condition:New"
+    )
+    item = parse_item(
+        f"""
+        <h1>LEGO Technic Lot</h1>
+        <div class="detail__description">{filler}{spec_tail}</div>
+        """
+    )
+
+    description = item["description"]
+    assert description == f"{filler}{spec_tail}".strip()
+    assert len(description) > 500
+    assert "Model:Technic Car Lot (42169, 42151, 42173)" in description
+    assert description.endswith("Condition:New")
+
+
 def test_search_commands_are_public_no_auth_commands():
     assert COMMAND_CREDENTIALS == {
         "categories": ["no_auth"],
