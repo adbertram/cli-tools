@@ -22,12 +22,13 @@ def extract_field(item: Any, field: str):
     return value
 
 
-def apply_properties(items: List[Any], properties: Optional[str]) -> List[Any]:
-    """Select explicit fields from output rows."""
+def apply_properties(items: List[Any], properties: Optional[str]) -> List[dict]:
+    """Normalize output rows to dictionaries and select explicit fields."""
+    normalized = [model_to_dict(item) for item in items]
     if properties is None:
-        return items
+        return normalized
     fields = [field.strip() for field in properties.split(",")]
-    return [{field: extract_field(item, field) for field in fields} for item in items]
+    return [{field: extract_field(item, field) for field in fields} for item in normalized]
 
 
 def properties_columns(properties: Optional[str], default_columns: List[str]) -> List[str]:

@@ -1,8 +1,14 @@
 """ElevenLabs API client with exponential retry."""
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import hashlib
+import json
+import os
 import random
+import subprocess
+import tempfile
 import time
+from urllib.parse import quote
 
 import requests
 from cli_tools_shared.exceptions import ClientError
@@ -34,6 +40,68 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+HISTORY_MEDIA_TIMEOUT_SECONDS = 30
+
+
+def _history_audio_magic(content_type: str, content: bytes) -> str:
+    """Require content-type-appropriate container magic before decoder use."""
+    mpeg = lambda value: value.startswith(b"ID3") or (
+        len(value) >= 2 and value[0] == 0xFF and value[1] & 0xE0 == 0xE0
+    )
+    checks = {
+        "audio/mpeg": ("mpeg", mpeg),
+        "audio/mp3": ("mpeg", mpeg),
+        "audio/wav": ("wav", lambda value: len(value) >= 12 and value[:4] == b"RIFF" and value[8:12] == b"WAVE"),
+        "audio/x-wav": ("wav", lambda value: len(value) >= 12 and value[:4] == b"RIFF" and value[8:12] == b"WAVE"),
+        "audio/ogg": ("ogg", lambda value: value.startswith(b"OggS")),
+        "audio/flac": ("flac", lambda value: value.startswith(b"fLaC")),
+        "audio/mp4": ("mp4", lambda value: len(value) >= 12 and value[4:8] == b"ftyp"),
+        "audio/x-m4a": ("mp4", lambda value: len(value) >= 12 and value[4:8] == b"ftyp"),
+    }
+    if content_type == "application/octet-stream":
+        for magic_name, check in checks.values():
+            if check(content):
+                return magic_name
+        raise ClientError("ElevenLabs history audio octet-stream has no supported audio magic")
+    contract = checks.get(content_type)
+    if contract is None:
+        raise ClientError(f"ElevenLabs history audio Content-Type has no media validator: {content_type}")
+    magic_name, check = contract
+    if not check(content):
+        raise ClientError(f"ElevenLabs history audio failed {magic_name} magic validation for {content_type}")
+    return magic_name
+
+
+def _validate_history_audio_file(path: Path, content_type: str, content: bytes) -> Dict[str, Any]:
+    magic = _history_audio_magic(content_type, content)
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
+            capture_output=True, text=True, check=True, timeout=HISTORY_MEDIA_TIMEOUT_SECONDS,
+        )
+        payload = json.loads(probe.stdout)
+        streams = payload.get("streams") if isinstance(payload, dict) else None
+        audio_streams = [item for item in streams or [] if isinstance(item, dict) and item.get("codec_type") == "audio"]
+        if len(audio_streams) != 1 or len(streams or []) != 1:
+            raise ClientError("ElevenLabs history audio must contain exactly one audio stream")
+        raw_duration = audio_streams[0].get("duration") or (payload.get("format") or {}).get("duration")
+        duration = float(str(raw_duration))
+        if duration <= 0:
+            raise ClientError("ElevenLabs history audio duration must be positive")
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-xerror", "-i", str(path), "-map", "0:a:0", "-f", "null", "-"],
+            capture_output=True, text=True, check=True, timeout=HISTORY_MEDIA_TIMEOUT_SECONDS,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise ClientError(f"ElevenLabs history audio media validation failed: {exc}") from exc
+    return {
+        "magic": magic,
+        "codec_name": audio_streams[0].get("codec_name"),
+        "duration_seconds": duration,
+        "stream_count": 1,
+        "ffprobe": True,
+        "full_decode": True,
+    }
 
 
 class ElevenlabsClient:
@@ -259,6 +327,122 @@ class ElevenlabsClient:
         """Get current user subscription and quota state."""
         response = self._make_json_request("GET", "/v1/user/subscription")
         return create_subscription(response)
+
+    @staticmethod
+    def _validate_history_item(value: Any, context: str) -> Dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ClientError(f"{context} must be a JSON object")
+        history_item_id = value.get("history_item_id")
+        if not isinstance(history_item_id, str) or not history_item_id.strip():
+            raise ClientError(f"{context} is missing non-empty history_item_id")
+        if "state" not in value:
+            raise ClientError(f"{context} is missing state")
+        return value
+
+    def list_history(
+        self,
+        limit: int = 100,
+        page_size: int = 100,
+        start_after_history_item_id: Optional[str] = None,
+        voice_id: Optional[str] = None,
+        search: Optional[str] = None,
+        source: Optional[str] = None,
+        filters: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """List generated history using the official cursor-based endpoint."""
+        if filters:
+            validate_filters(filters)
+        params: Dict[str, Any] = {"page_size": min(page_size, limit)}
+        if start_after_history_item_id is not None:
+            params["start_after_history_item_id"] = start_after_history_item_id
+        if voice_id is not None:
+            params["voice_id"] = voice_id
+        if search is not None:
+            params["search"] = search
+        if source is not None:
+            params["source"] = source
+
+        items: List[Dict[str, Any]] = []
+        while len(items) < limit:
+            response = self._make_json_request("GET", "/v1/history", params=params)
+            if not isinstance(response, dict):
+                raise ClientError("ElevenLabs history list response must be a JSON object")
+            page = response.get("history")
+            has_more = response.get("has_more")
+            cursor = response.get("last_history_item_id")
+            if not isinstance(page, list):
+                raise ClientError("ElevenLabs history list response history must be an array")
+            if not isinstance(has_more, bool):
+                raise ClientError("ElevenLabs history list response has_more must be a boolean")
+            validated = [self._validate_history_item(item, "ElevenLabs history list item") for item in page]
+            if filters:
+                validated = apply_filters(validated, filters)
+            items.extend(validated)
+            if len(items) >= limit or not has_more:
+                break
+            if not isinstance(cursor, str) or not cursor.strip():
+                raise ClientError("ElevenLabs history response has_more=true but last_history_item_id is empty")
+            params["start_after_history_item_id"] = cursor
+            params["page_size"] = min(page_size, limit - len(items))
+        return items[:limit]
+
+    def get_history_item(self, history_item_id: str) -> Dict[str, Any]:
+        """Get one exact generated history item."""
+        requested = history_item_id.strip()
+        if not requested:
+            raise ClientError("History item ID cannot be empty")
+        response = self._make_json_request("GET", f"/v1/history/{quote(requested, safe='')}")
+        item = self._validate_history_item(response, "ElevenLabs history get response")
+        if item["history_item_id"] != requested:
+            raise ClientError(
+                f"ElevenLabs history identity mismatch: requested {requested}, returned {item['history_item_id']}"
+            )
+        return item
+
+    def download_history_audio(self, history_item_id: str, output_path: Path) -> Dict[str, Any]:
+        """Atomically download audio for one exact generated history item."""
+        requested = history_item_id.strip()
+        if not requested:
+            raise ClientError("History item ID cannot be empty")
+        response = self._request(
+            "GET", f"/v1/history/{quote(requested, safe='')}/audio", accept="audio/*"
+        )
+        if response.status_code != 200:
+            raise ClientError(f"ElevenLabs history audio expected HTTP 200, got {response.status_code}")
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if not content_type or not (content_type.startswith("audio/") or content_type == "application/octet-stream"):
+            raise ClientError(f"ElevenLabs history audio returned unexpected Content-Type: {content_type or '<missing>'}")
+        content = response.content
+        if not content:
+            raise ClientError("ElevenLabs history audio returned an empty body")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_name: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=f".{output_path.name}.", suffix=".tmp",
+                dir=output_path.parent, delete=False,
+            ) as temporary:
+                temporary_name = temporary.name
+                temporary.write(content)
+                temporary.flush()
+            media = _validate_history_audio_file(Path(temporary_name), content_type, content)
+            with open(temporary_name, "rb") as temporary:
+                os.fsync(temporary.fileno())
+            os.replace(temporary_name, output_path)
+            temporary_name = None
+        finally:
+            if temporary_name is not None:
+                Path(temporary_name).unlink(missing_ok=True)
+        return {
+            "history_item_id": requested,
+            "output_path": str(output_path),
+            "content_type": content_type,
+            "size_bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "http_status": response.status_code,
+            "media": media,
+        }
 
     def create_speech(
         self,

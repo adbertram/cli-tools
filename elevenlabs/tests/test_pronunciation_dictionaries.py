@@ -198,7 +198,17 @@ def test_pronunciation_dictionaries_list_get_update(monkeypatch):
 
     monkeypatch.setattr("requests.request", fake_request)
 
-    list_result = runner.invoke(app, ["pronunciation-dictionaries", "list", "--page-size", "10"])
+    list_result = runner.invoke(
+        app,
+        [
+            "pronunciation-dictionaries",
+            "list",
+            "--limit",
+            "10",
+            "--filter",
+            "name:eq:Terms",
+        ],
+    )
     get_result = runner.invoke(app, ["pronunciation-dictionaries", "get", "dict-1"])
     update_result = runner.invoke(
         app,
@@ -208,7 +218,22 @@ def test_pronunciation_dictionaries_list_get_update(monkeypatch):
     assert list_result.exit_code == 0, list_result.output
     assert get_result.exit_code == 0, get_result.output
     assert update_result.exit_code == 0, update_result.output
-    assert json.loads(list_result.output)["next_cursor"] is None
+    assert json.loads(list_result.output) == [
+        {
+            "id": "dict-1",
+            "name": "Terms",
+            "latest_version_id": "version-1",
+            "latest_version_rules_num": 1,
+            "version_id": None,
+            "version_rules_num": None,
+            "permission_on_resource": None,
+            "created_by": None,
+            "creation_time_unix": None,
+            "archived_time_unix": None,
+            "description": None,
+            "rules": None,
+        }
+    ]
     assert requests[0]["method"] == "GET"
     assert requests[0]["params"] == {
         "page_size": 10,

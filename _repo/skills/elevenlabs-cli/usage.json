@@ -1,8 +1,8 @@
 {
   "tool": "elevenlabs",
   "description": "CLI interface for ElevenLabs API",
-  "discovered_at": "2026-06-20T19:45:00Z",
-  "total_commands": 27,
+  "discovered_at": "2026-07-13T23:41:46Z",
+  "total_commands": 31,
   "global_options": [
     {
       "name": "--version",
@@ -27,7 +27,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Run `elevenlabs auth login` to configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. Common options: `--profile/-p`, `--force/-F`, `--credential-type/-c`.",
           "arguments": [],
           "options": [
             {
@@ -41,7 +40,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -122,7 +121,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `elevenlabs auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
               "arguments": [],
               "options": [
@@ -167,6 +166,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -252,6 +283,152 @@
           "usage_instructions": "Run `elevenlabs cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
           "options": []
+        }
+      }
+    },
+    "history": {
+      "help": "Inspect and download generated history",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "download": {
+          "help": "Download audio for one exact generated history item atomically.",
+          "arguments": [
+            {
+              "name": "history_item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "History item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Destination audio path",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one exact generated history item.",
+          "arguments": [
+            {
+              "name": "history_item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "History item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List generated history items.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]        Maximum history items to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [1<=x<=1000]  Items requested per API page",
+              "default": "100"
+            },
+            {
+              "name": "--start-after-history-item-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "History item cursor to start after"
+            },
+            {
+              "name": "--voice-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Server-side voice ID filter"
+            },
+            {
+              "name": "--search",
+              "type": "TEXT",
+              "required": false,
+              "help": "Server-side history search",
+              "short": "-s"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Server-side generation source filter"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },

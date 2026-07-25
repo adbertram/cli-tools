@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import typer
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from .common import apply_properties, key_value_rows, properties_columns
@@ -83,6 +83,7 @@ def print_item(item, table: bool, properties: Optional[str]):
 
 
 @app.command("list")
+@command
 def pronunciation_dictionaries_list(
     limit: int = typer.Option(30, "--limit", "-l", min=1, max=100, help="Maximum dictionaries to return"),
     cursor: Optional[str] = typer.Option(None, "--cursor", help="Pagination cursor"),
@@ -123,6 +124,7 @@ def pronunciation_dictionaries_list(
 
 
 @app.command("get")
+@command
 def pronunciation_dictionaries_get(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -137,6 +139,7 @@ def pronunciation_dictionaries_get(
 
 
 @app.command("create-from-rules")
+@command
 def pronunciation_dictionaries_create_from_rules(
     name: str = typer.Option(..., "--name", "-n", help="Pronunciation dictionary name"),
     alias_rule: Optional[List[str]] = typer.Option(
@@ -168,6 +171,7 @@ def pronunciation_dictionaries_create_from_rules(
 
 
 @app.command("create-from-file")
+@command
 def pronunciation_dictionaries_create_from_file(
     name: str = typer.Option(..., "--name", "-n", help="Pronunciation dictionary name"),
     file: Path = typer.Option(..., "--file", "-f", exists=True, file_okay=True, dir_okay=False, help="PLS file path"),
@@ -190,6 +194,7 @@ def pronunciation_dictionaries_create_from_file(
 
 
 @app.command("update")
+@command
 def pronunciation_dictionaries_update(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Pronunciation dictionary name"),
@@ -210,6 +215,7 @@ def pronunciation_dictionaries_update(
 
 
 @app.command("set-rules")
+@command
 def pronunciation_dictionaries_set_rules(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     alias_rule: Optional[List[str]] = typer.Option(
@@ -236,6 +242,7 @@ def pronunciation_dictionaries_set_rules(
 
 
 @app.command("add-rules")
+@command
 def pronunciation_dictionaries_add_rules(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     alias_rule: Optional[List[str]] = typer.Option(
@@ -262,6 +269,7 @@ def pronunciation_dictionaries_add_rules(
 
 
 @app.command("remove-rules")
+@command
 def pronunciation_dictionaries_remove_rules(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     rule_string: List[str] = typer.Option(..., "--rule-string", help="Rule string_to_replace value to remove"),
@@ -279,6 +287,7 @@ def pronunciation_dictionaries_remove_rules(
 
 
 @app.command("download")
+@command
 def pronunciation_dictionaries_download(
     pronunciation_dictionary_id: str = typer.Argument(..., help="Pronunciation dictionary ID"),
     version_id: str = typer.Argument(..., help="Pronunciation dictionary version ID"),

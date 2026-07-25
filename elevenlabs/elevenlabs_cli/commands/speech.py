@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from .common import key_value_rows
@@ -17,6 +17,7 @@ app = typer.Typer(help="Generate speech audio", no_args_is_help=True)
 
 
 @app.command("create")
+@command
 def speech_create(
     voice_id: str = typer.Argument(..., help="Voice ID"),
     text: str = typer.Argument(..., help="Text to convert to speech"),
