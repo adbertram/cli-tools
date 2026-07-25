@@ -26,9 +26,10 @@ from cli_tools_shared.filters import (
     apply_properties_filter,
     validate_filters,
 )
+from cli_tools_shared.output import command
 
 from ..client import ClientError, get_client
-from ..output import handle_error, print_error, print_json, print_status, print_success, print_table
+from ..output import handle_error, print_error, print_json, print_status, print_success, print_table, print_warning
 
 DEFAULT_AGENT_PROFILE = "manus-1.6"
 VALID_AGENT_PROFILES = ("manus-1.6", "manus-1.6-lite", "manus-1.6-max")
@@ -69,6 +70,86 @@ def _load_optional_json(raw_value: Optional[str], file_path: Optional[str], labe
     if not isinstance(value, dict):
         raise ClientError(f"{label} must be a JSON object.")
     return value
+
+
+# Manus API v2 structured_output_schema only supports a restricted subset of JSON
+# Schema (documented at https://open.manus.ai/docs/v2/structured-output): basic type
+# declarations, properties/required/additionalProperties, items, enum, description,
+# anyOf, and $ref/$defs. Any of the validation-constraint keywords below cause the
+# API to reject the whole task-creation request with a generic
+# `400 invalid_argument: "unexpected error from node server"` that gives no hint
+# which keyword was the problem. Confirmed by live repro against the API on 2026-07-07.
+UNSUPPORTED_STRUCTURED_OUTPUT_SCHEMA_KEYWORDS = frozenset(
+    {
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "pattern",
+        "format",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "minProperties",
+        "maxProperties",
+        "allOf",
+        "oneOf",
+        "not",
+        "if",
+        "then",
+        "else",
+    }
+)
+
+
+def _strip_unsupported_schema_keywords(node: Any, path: str, removed: list[str]) -> Any:
+    """Recursively strip JSON Schema keywords the Manus API rejects.
+
+    Returns a new structure; does not mutate `node`. Appends `"<path>.<keyword>"`
+    to `removed` for every keyword stripped so the caller can warn the user.
+    """
+    if isinstance(node, dict):
+        cleaned: dict[str, Any] = {}
+        for key, value in node.items():
+            child_path = f"{path}.{key}" if path else key
+            if key in UNSUPPORTED_STRUCTURED_OUTPUT_SCHEMA_KEYWORDS:
+                removed.append(child_path)
+                continue
+            cleaned[key] = _strip_unsupported_schema_keywords(value, child_path, removed)
+        return cleaned
+    if isinstance(node, list):
+        return [
+            _strip_unsupported_schema_keywords(item, f"{path}[{index}]", removed)
+            for index, item in enumerate(node)
+        ]
+    return node
+
+
+def _sanitize_structured_output_schema(schema: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """Strip JSON Schema keywords unsupported by the Manus structured_output_schema
+    API before submission, warning the user about anything removed.
+
+    The Manus API rejects the entire task-creation request (not just the offending
+    field) when any unsupported keyword is present, so silently submitting the
+    schema as-is would fail the whole task. Stripping is safer than failing, but the
+    request shape does change, so every removal is surfaced via a stderr warning
+    rather than done silently.
+    """
+    if schema is None:
+        return None
+    removed: list[str] = []
+    cleaned = _strip_unsupported_schema_keywords(schema, "", removed)
+    if removed:
+        print_warning(
+            "Structured output schema contains keyword(s) unsupported by the Manus API "
+            "and were removed before submission: " + ", ".join(sorted(removed)) + ". "
+            "Move any constraint into the field's \"description\" instead if the model "
+            "needs to respect it."
+        )
+    return cleaned
 
 
 def _validate_choice(name: str, value: Optional[str], allowed: tuple[str, ...]) -> None:
@@ -196,6 +277,7 @@ def _download_message_attachments(messages: list[dict[str, Any]], output_dir: Pa
 
 
 @app.command("create")
+@command
 def task_create(
     prompt: Optional[str] = typer.Argument(None, help="Prompt text for the initial task message."),
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", "-f", help="Read prompt text from a file."),
@@ -256,10 +338,12 @@ def task_create(
             enable_skills=enable_skill,
             force_skills=force_skill,
         )
-        schema = _load_optional_json(
-            structured_output_schema,
-            structured_output_schema_file,
-            "structured output schema",
+        schema = _sanitize_structured_output_schema(
+            _load_optional_json(
+                structured_output_schema,
+                structured_output_schema_file,
+                "structured output schema",
+            )
         )
 
         if wait:
@@ -325,10 +409,12 @@ def _send_task_message(
         enable_skills=enable_skill,
         force_skills=force_skill,
     )
-    schema = _load_optional_json(
-        structured_output_schema,
-        structured_output_schema_file,
-        "structured output schema",
+    schema = _sanitize_structured_output_schema(
+        _load_optional_json(
+            structured_output_schema,
+            structured_output_schema_file,
+            "structured output schema",
+        )
     )
 
     if wait:
@@ -353,6 +439,7 @@ def _send_task_message(
 
 
 @app.command("send")
+@command
 def task_send(
     task_id: str = typer.Argument(..., help="Task ID to send the message to."),
     prompt: Optional[str] = typer.Argument(None, help="Follow-up prompt text."),
@@ -412,6 +499,7 @@ def task_send(
 
 
 @app.command("continue")
+@command
 def task_continue(
     task_id: str = typer.Argument(..., help="Task ID to continue."),
     prompt: Optional[str] = typer.Argument(None, help="Follow-up prompt text."),
@@ -462,6 +550,7 @@ def task_continue(
 
 
 @app.command("get")
+@command
 def task_get(
     task_id: str = typer.Argument(..., help="Task ID to retrieve."),
     table: bool = typer.Option(False, "--table", "-t", help="Display the task as a formatted table."),
@@ -480,6 +569,7 @@ def task_get(
 
 
 @app.command("wait")
+@command
 def task_wait(
     task_id: str = typer.Argument(..., help="Task ID to wait for."),
     timeout: float = typer.Option(900.0, "--timeout", help="Max seconds to wait."),
@@ -508,6 +598,7 @@ def task_wait(
 
 
 @app.command("list")
+@command
 def task_list(
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of tasks to return."),
     table: bool = typer.Option(False, "--table", "-t", help="Display tasks as a formatted table."),
@@ -562,6 +653,7 @@ def task_list(
 
 
 @app.command("messages")
+@command
 def task_messages(
     task_id: str = typer.Argument(..., help="Task ID to list messages for."),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of messages to return."),
@@ -642,6 +734,7 @@ def task_messages(
 
 
 @app.command("update")
+@command
 def task_update(
     task_id: str = typer.Argument(..., help="Task ID to update."),
     title: Optional[str] = typer.Option(None, "--title", help="New title for the task."),
@@ -691,6 +784,7 @@ def task_update(
 
 
 @app.command("stop")
+@command
 def task_stop(task_id: str = typer.Argument(..., help="Task ID to stop.")):
     """Stop a running task."""
     try:
@@ -702,6 +796,7 @@ def task_stop(task_id: str = typer.Argument(..., help="Task ID to stop.")):
 
 
 @app.command("delete")
+@command
 def task_delete(task_id: str = typer.Argument(..., help="Task ID to delete.")):
     """Delete a task."""
     try:
@@ -713,6 +808,7 @@ def task_delete(task_id: str = typer.Argument(..., help="Task ID to delete.")):
 
 
 @app.command("confirm")
+@command
 def task_confirm(
     task_id: str = typer.Argument(..., help="Task ID with the pending action."),
     event_id: str = typer.Argument(..., help="Waiting event ID from task messages."),

@@ -30,7 +30,7 @@ manus <command-group> <action> [arguments] [options]
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 
-`manus task create` performs a `usage.availableCredits` preflight and fails before creating a task when `total_credits <= 0`.
+`manus task create` checks `usage.availableCredits` and fails before submission when the authoritative `total_credits` field is present and at or below zero. It does not treat `max_refresh_credits` (the next refresh grant cap) or `pro_monthly_credits` (the plan quota) as current spendable balance. When the live response omits `total_credits`, `task.create` remains the admission authority because Manus does not publish a reliable per-task cost estimate. Only a 429 with `error.code: rate_limited` is retried; `resource_exhausted` credit failures return immediately.
 </quick_start>
 
 <essential_principles>
@@ -47,6 +47,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Wait Semantics">
 `task create`, `task send`, and `task wait` with `--wait` (the default) poll until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id`, for example `messageAskUser`). A `waiting` status without a confirmation event (queued task that has not started running) is non-terminal; the CLI keeps polling. Do not add manual `task get` polling loops around `--wait`. On `--timeout` expiry the command exits non-zero with a timeout error.
+</principle>
+
+<principle name="Structured Output Schema Constraints">
+`--structured-output-schema` / `--structured-output-schema-file` only accept the restricted JSON Schema subset documented at `https://open.manus.ai/docs/v2/structured-output` (basic `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `description`, `anyOf`, `$ref`/`$defs`). Validation-constraint keywords -- `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `pattern`, `format`, `minLength`, `maxLength`, `minItems`, `maxItems`, `uniqueItems`, `minProperties`, `maxProperties`, `allOf`, `oneOf`, `not`, `if`/`then`/`else` -- are rejected by the API with a generic `400 invalid_argument: "unexpected error from node server"` that gives no hint which keyword caused it (confirmed by live repro against the API). The CLI strips these keywords automatically before submission and prints a `Warning:` line naming what it removed; it does not silently change schema shape. If a field needs a bound communicated to the model, put it in that field's `description` (e.g. `"description": "Integer, must be 0 or greater"`) instead of a constraint keyword.
 </principle>
 
 <principle name="Preserve Producer Status">

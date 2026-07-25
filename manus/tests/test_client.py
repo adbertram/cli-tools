@@ -1,5 +1,7 @@
-import requests
 from pathlib import Path
+
+import pytest
+import requests
 
 from manus_cli import client as client_module
 from manus_cli import config as config_module
@@ -189,6 +191,84 @@ def test_available_credits_accepts_current_root_level_api_shape(monkeypatch):
     monkeypatch.setattr(requests, "request", fake_request)
 
     assert client.available_credits()["total_credits"] == -5
+
+
+def test_available_credits_does_not_treat_refresh_grant_as_spendable_balance(monkeypatch):
+    client = make_client(monkeypatch)
+
+    def fake_request(method, url, **kwargs):
+        return FakeResponse({"ok": True, "max_refresh_credits": 300, "pro_monthly_credits": 8000})
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    assert client.available_credits() == {
+        "ok": True,
+        "max_refresh_credits": 300,
+        "pro_monthly_credits": 8000,
+    }
+
+
+def test_create_task_does_not_retry_credit_limit_resource_exhausted(monkeypatch):
+    client = make_client(monkeypatch)
+    calls = []
+    sleeps = []
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if url.endswith("/v2/usage.availableCredits"):
+            return FakeResponse({"ok": True, "max_refresh_credits": 300, "pro_monthly_credits": 8000})
+        return FakeResponse(
+            {
+                "ok": False,
+                "request_id": "req-credit-limit",
+                "error": {"code": "resource_exhausted", "message": "credit limit exceeded"},
+            },
+            status_code=429,
+        )
+
+    monkeypatch.setattr(requests, "request", fake_request)
+    monkeypatch.setattr(client_module.time, "sleep", lambda delay: sleeps.append(delay))
+
+    with pytest.raises(client_module.ClientError) as exc_info:
+        client.create_task(message={"content": "hello"}, agent_profile="manus-1.6")
+
+    assert str(exc_info.value) == (
+        "Task creation failed (429): resource_exhausted: credit limit exceeded"
+    )
+    assert [url.removeprefix("https://api.manus.ai") for _, url, _ in calls] == [
+        "/v2/usage.availableCredits",
+        "/v2/task.create",
+    ]
+    assert sleeps == []
+
+
+def test_request_retries_documented_rate_limited_response(monkeypatch):
+    client = make_client(monkeypatch)
+    responses = [
+        FakeResponse(
+            {
+                "ok": False,
+                "request_id": "req-rate-limit",
+                "error": {
+                    "code": "rate_limited",
+                    "message": "Rate limit exceeded. Please retry after a short backoff.",
+                },
+            },
+            status_code=429,
+        ),
+        FakeResponse({"ok": True, "data": []}),
+    ]
+    sleeps = []
+
+    def fake_request(method, url, **kwargs):
+        return responses.pop(0)
+
+    monkeypatch.setattr(requests, "request", fake_request)
+    monkeypatch.setattr(client_module.time, "sleep", lambda delay: sleeps.append(delay))
+
+    assert client.list_tasks() == {"ok": True, "data": []}
+    assert sleeps == [30]
+    assert responses == []
 
 
 def test_wait_for_task_returns_task_and_messages_on_stopped_status(monkeypatch):

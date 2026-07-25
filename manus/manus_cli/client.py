@@ -35,20 +35,33 @@ class ManusClient:
         }
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request with exponential backoff retry on 429 rate limits."""
+        """Retry only the API's documented rate_limited response."""
         url = path if path.startswith("http") else f"{self.base_url}{path}"
         kwargs.setdefault("timeout", 60)
+
+        response = requests.request(method, url, **kwargs)
         for attempt, delay in enumerate(_RATE_LIMIT_DELAYS):
-            response = requests.request(method, url, **kwargs)
-            if response.status_code != 429:
+            if not self._is_rate_limited(response):
                 return response
             print(
                 f"Rate limit hit, retrying in {delay}s... (attempt {attempt + 1}/{len(_RATE_LIMIT_DELAYS)})",
                 file=sys.stderr,
             )
             time.sleep(delay)
+            response = requests.request(method, url, **kwargs)
 
-        return requests.request(method, url, **kwargs)
+        return response
+
+    @staticmethod
+    def _is_rate_limited(response: requests.Response) -> bool:
+        """Return whether a 429 is the documented transient rate limit."""
+        if response.status_code != 429:
+            return False
+        try:
+            error = response.json().get("error")
+        except (AttributeError, ValueError):
+            return False
+        return isinstance(error, dict) and error.get("code") == "rate_limited"
 
     def _error_text(self, response: requests.Response) -> str:
         """Extract the most useful error text from a failed response."""
@@ -56,6 +69,13 @@ class ManusClient:
             payload = response.json()
         except ValueError:
             return response.text.strip() or response.reason or "Unknown API error"
+
+        error = payload.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            message = error.get("message")
+            if isinstance(code, str) and code and isinstance(message, str) and message:
+                return f"{code}: {message}"
 
         for key in ("message", "error", "detail"):
             value = payload.get(key)
@@ -138,19 +158,21 @@ class ManusClient:
         return self._request_json("Task list", "GET", "/v2/task.list", params=params)
 
     def available_credits(self) -> dict[str, Any]:
-        """Return the caller's current spendable Manus credit balance."""
+        """Return current credit fields without inventing a spendable balance."""
         payload = self._request_json("Available credits", "GET", "/v2/usage.availableCredits")
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
         if not isinstance(data, dict):
             raise ClientError("Available credits failed: API response did not include a credit balance object")
-        if not isinstance(data.get("total_credits"), int):
+        total_credits = data.get("total_credits")
+        if total_credits is not None and not isinstance(total_credits, int):
             raise ClientError("Available credits failed: API response did not include integer total_credits")
         return data
 
     def assert_credits_available(self) -> dict[str, Any]:
-        """Fail before task creation when the account has no spendable credits."""
+        """Fail when the API provides an authoritative exhausted balance."""
         data = self.available_credits()
-        if data["total_credits"] <= 0:
+        total_credits = data.get("total_credits")
+        if total_credits is not None and total_credits <= 0:
             raise ClientError(
                 "Manus account has 0 available credits. "
                 "Upgrade or add credits before creating a task: "

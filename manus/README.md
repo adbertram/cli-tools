@@ -34,7 +34,7 @@ manus auth logout
 
 Create a new task. By default the CLI polls `task.listMessages` until the task stops, errors, or pauses for a confirmable user action, then returns the task plus recent messages. A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues until `--timeout` expires.
 
-Before creating a task, the CLI checks `usage.availableCredits` and fails before task creation when `total_credits <= 0`.
+Before creating a task, the CLI checks `usage.availableCredits` and fails before submission when the authoritative `total_credits` field is present and at or below zero. It does not treat `max_refresh_credits` or `pro_monthly_credits` as spendable balance. When `total_credits` is omitted, the task-creation response decides admission: documented `rate_limited` responses retry, while `resource_exhausted` credit failures return immediately.
 
 ```bash
 manus task create "Write a Python function for Fibonacci sequence"
