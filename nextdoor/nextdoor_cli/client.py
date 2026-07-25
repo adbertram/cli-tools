@@ -54,6 +54,18 @@ FEED_COLUMNS = ("id", "type", "title")
 SEARCH_COLUMNS = ("suggestion",)
 NOTIFICATION_COLUMNS = ("id", "label", "badges")
 
+# Maps the CLI sort vocabulary (Source-CLI Sort Standard) to Nextdoor's
+# server-side ``PersonalizedFeed`` sort values. This is a GENUINE server-side
+# recency sort: the captured feed response advertises these in its own
+# ``sortOrderOptions`` and the query accepts the choice via
+# ``mainFeedArgs.sortOrder``.
+#   newest    -> RECENT_POSTS (chronological, most recent first) — the default
+#   relevance -> FOR_YOU      (Nextdoor's algorithmic "For you" feed)
+# main.py imports this map so the CLI vocabulary and the server values can never
+# drift. ``newest`` is the required default per the sort standard.
+FEED_SORT_MAP = {"newest": "RECENT_POSTS", "relevance": "FOR_YOU"}
+FEED_DEFAULT_SORT_ORDER = FEED_SORT_MAP["newest"]
+
 
 def _feed_item_title(raw: dict) -> Optional[str]:
     """Pull the human-readable title from a heterogeneous feed item.
@@ -138,6 +150,40 @@ def _error_message(err) -> str:
     if isinstance(err, dict) and isinstance(err.get("message"), str):
         return err["message"]
     return str(err)
+
+
+def _feed_query_variables(limit: int, sort_order: str) -> dict:
+    """Build the ``PersonalizedFeed`` GraphQL variables for one feed page.
+
+    Shared by ``get_feed`` (the real feed request) and
+    ``_assert_session_authenticated`` (a cheap ``me``-scoped liveness probe) so
+    the query shape lives in exactly one place. ``sort_order`` must already be a
+    valid ``FEED_SORT_MAP`` server value; the caller owns that validation.
+    """
+    return {
+        "pagedCommentsMode": "FEED",
+        "useEdgesV2": False,
+        "includeModerationInfo": False,
+        "mainFeedArgs": {
+            "pageSize": limit,
+            "nextPage": None,
+            "supportedFeatures": {
+                "rollupTypes": ["CAROUSEL", "LIST", "GRID"],
+                "rollupItemTypes": [
+                    "IMAGE_CARD",
+                    "LIST_CARD",
+                    "POST",
+                    "PUBLISHER_DISCOVERY",
+                    "ONBOARDING_CAROUSEL_CARD",
+                    "LOCAL_EVENT_CARD",
+                ],
+                "numCommentsForNewsPosts": 2,
+                "isStickyCommentPreviewEnabled": False,
+            },
+            "sortOrder": sort_order,
+        },
+        "timeZone": "America/Chicago",
+    }
 
 
 class NextdoorClient:
@@ -311,33 +357,22 @@ class NextdoorClient:
     # ---- Public operations ----
 
     @cached
-    def get_feed(self, limit: int = 10) -> List[dict]:
-        """Return personalized feed items (documented shape: id, type, title)."""
-        variables = {
-            "pagedCommentsMode": "FEED",
-            "useEdgesV2": False,
-            "includeModerationInfo": False,
-            "mainFeedArgs": {
-                "pageSize": limit,
-                "nextPage": None,
-                "supportedFeatures": {
-                    "rollupTypes": ["CAROUSEL", "LIST", "GRID"],
-                    "rollupItemTypes": [
-                        "IMAGE_CARD",
-                        "LIST_CARD",
-                        "POST",
-                        "PUBLISHER_DISCOVERY",
-                        "ONBOARDING_CAROUSEL_CARD",
-                        "LOCAL_EVENT_CARD",
-                    ],
-                    "numCommentsForNewsPosts": 2,
-                    "isStickyCommentPreviewEnabled": False,
-                },
-                "sortOrder": "FOR_YOU",
-            },
-            "timeZone": "America/Chicago",
-        }
-        data = self._graphql("PersonalizedFeed", variables)
+    def get_feed(self, limit: int = 10, sort_order: str = FEED_DEFAULT_SORT_ORDER) -> List[dict]:
+        """Return feed items (documented shape: id, type, title).
+
+        ``sort_order`` is a Nextdoor server-side feed sort value (one of
+        ``FEED_SORT_MAP`` values): ``RECENT_POSTS`` for newest-first
+        (chronological) or ``FOR_YOU`` for the algorithmic feed. The value is
+        sent to the server via ``mainFeedArgs.sortOrder`` — this is a real
+        server-side sort, not a client-side re-order. An unrecognized value
+        fails loudly (no silent fallback).
+        """
+        if sort_order not in FEED_SORT_MAP.values():
+            valid = ", ".join(sorted(FEED_SORT_MAP.values()))
+            raise ClientError(
+                f"Unknown feed sortOrder '{sort_order}'. Valid values: {valid}."
+            )
+        data = self._graphql("PersonalizedFeed", _feed_query_variables(limit, sort_order))
         feed = required_path(data, ["me", "personalizedFeed"], dict)
         items = _optional_list(feed, "feedItems")
         return [normalize_feed_item(item) for item in items]
@@ -363,11 +398,34 @@ class NextdoorClient:
         shortcuts = _optional_list(me, "shortcuts")
         return [normalize_notification(item) for item in shortcuts]
 
+    def _assert_session_authenticated(self) -> None:
+        """Fail loudly with the standard re-auth message if the session is logged out.
+
+        Some operations (``search``) query top-level fields that Nextdoor answers
+        with HTTP 200 + an empty list even when the session is logged out, so they
+        cannot self-detect an expired session. This runs one cheap ``me``-scoped
+        probe; ``_graphql`` raises the standard re-auth ``ClientError`` when
+        ``data.me`` is null. It is intentionally NOT ``@cached`` so a dead session
+        always re-raises.
+        """
+        self._graphql("PersonalizedFeed", _feed_query_variables(1, FEED_DEFAULT_SORT_ORDER))
+
     @cached
     def search(self, query: str) -> List[dict]:
-        """Return dynamic search-bar suggestions for ``query``."""
+        """Return dynamic search-bar suggestions for ``query``.
+
+        Nextdoor answers ``getDynamicSearchBarSuggestions`` with HTTP 200 and an
+        empty list even when the session is logged out (no ``me`` field, no
+        GraphQL error, no login wall), so an empty result is ambiguous. Only in
+        that empty case do we run a cheap ``me``-scoped liveness probe, which
+        raises the standard re-auth ``ClientError`` on a dead session. A genuine
+        empty result for a live session still returns ``[]``, and non-empty
+        results skip the extra request.
+        """
         data = self._graphql("getDynamicSearchBarSuggestions", {"query": query})
         suggestions = _optional_list(data, "dynamicSearchBarSuggestions")
+        if not suggestions:
+            self._assert_session_authenticated()
         return [normalize_search_suggestion(item) for item in suggestions]
 
 

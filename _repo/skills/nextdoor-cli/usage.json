@@ -6,7 +6,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
           "options": [
             {
@@ -196,7 +196,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
           "options": [
             {
@@ -250,14 +250,21 @@
       "options": [],
       "commands": {
         "clear": {
-          "help": "Remove all cached responses.",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "feed": {
-      "help": "View personalized feed.",
+      "help": "View the feed (default: newest first).",
       "arguments": [],
       "options": [
         {
@@ -267,6 +274,21 @@
           "help": "Maximum number of items",
           "short": "-l",
           "default": "10"
+        },
+        {
+          "name": "--sort",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (algorithmic feed)",
+          "short": "-s",
+          "default": "newest"
+        },
+        {
+          "name": "--desc",
+          "type": "bool",
+          "required": false,
+          "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched page)",
+          "short": "-d"
         },
         {
           "name": "--filter",
@@ -382,5 +404,5 @@
     }
   },
   "total_commands": 16,
-  "discovered_at": "2026-06-24T22:05:03Z"
+  "discovered_at": "2026-07-24T19:29:53Z"
 }

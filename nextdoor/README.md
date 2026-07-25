@@ -80,11 +80,20 @@ nextdoor auth profiles delete PROFILE_NAME
 ### Feed
 
 ```bash
-# View feed
+# View feed (default sort is newest-first)
 nextdoor feed --limit 25
 
 # View feed with table output
 nextdoor feed --limit 25 --table
+
+# Explicit newest-first (chronological)
+nextdoor feed --sort newest --limit 25
+
+# Oldest-first over the fetched page
+nextdoor feed --sort newest --desc --limit 25
+
+# Nextdoor's algorithmic "For you" feed
+nextdoor feed --sort relevance --limit 25
 
 # Filter feed
 nextdoor feed --filter "type:eq:post"
@@ -92,6 +101,27 @@ nextdoor feed --filter "type:eq:post"
 # Restrict output fields
 nextdoor feed --properties "id,title"
 ```
+
+#### Feed sorting
+
+The `feed` command follows the Source-CLI Sort Standard with a **server-side
+recency sort**. Nextdoor's `PersonalizedFeed` query accepts a `sortOrder`
+argument (its own `sortOrderOptions` advertise a chronological "Recent" order),
+so the ordering is done by the server, not re-sorted client-side.
+
+| `--sort` | Server order | Natural direction | Notes |
+|----------|--------------|-------------------|-------|
+| `newest` (default) | `RECENT_POSTS` | Most recent post first | The default; what incremental "newest-first" crawlers rely on. |
+| `relevance` | `FOR_YOU` | Nextdoor's algorithmic ranking | Optional. `--desc` is rejected (relevance has no reverse). |
+
+- `--sort`/`-s` selects the field; the default is `newest`.
+- `--desc`/`-d` reverses the natural direction. For `newest`, `--desc` yields
+  oldest-first **over the fetched page** (Nextdoor exposes no server-side
+  oldest-first order, so the fetched page is reversed client-side).
+- An unrecognized `--sort` value fails fast with a clear error listing the valid
+  values and a non-zero exit code — there is no silent fallback.
+- The feed is heterogeneous: POST items are chronological under `RECENT_POSTS`,
+  while PROMO (ad) items are interleaved by the server and carry no timestamp.
 
 ### Notifications
 
@@ -158,10 +188,19 @@ nextdoor feed --limit 5 --table
 |--------|-------|-------------|
 | `--table` | `-t` | Display data as a table |
 | `--limit` | `-l` | Maximum number of results |
+| `--sort` | `-s` | Feed sort field: `newest` (default) or `relevance` (feed only) |
+| `--desc` | `-d` | Reverse the sort's natural direction (feed only) |
 | `--filter` | `-f` | Filter results using `field:op:value` syntax |
 | `--properties` | `-p` | Restrict output to selected fields |
 | `--version` | `-v` | Show version and exit |
 | `--no-cache` |  | Bypass cached read responses for this execution |
+
+`--sort`/`--desc` apply to the `feed` command, where a meaningful ordering
+exists. The `search` command returns typeahead autocomplete *suggestions*
+(plain strings ranked by Nextdoor's own relevance), not dated listings — there
+is no timestamp or chronological order to sort by, so it intentionally exposes
+no `--sort`/`--desc`. `notifications` (dashboard badges) and `me` (user profile)
+are not listing collections and take no sort options either.
 
 ## Configuration
 

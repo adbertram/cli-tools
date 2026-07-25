@@ -15,6 +15,7 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 from . import __version__
 from .client import (
     FEED_COLUMNS,
+    FEED_SORT_MAP,
     NOTIFICATION_COLUMNS,
     SEARCH_COLUMNS,
     get_client,
@@ -34,6 +35,28 @@ def _property_fields(properties: Optional[str]) -> Optional[List[str]]:
         return None
     fields = [field.strip() for field in properties.split(",") if field.strip()]
     return fields or None
+
+
+def _resolve_feed_sort(sort: str, desc: bool) -> str:
+    """Validate ``--sort``/``--desc`` for the feed and return the server sort value.
+
+    Implements the Source-CLI Sort Standard for the feed:
+    ``newest`` (the default, natural direction = newest-first) maps to
+    Nextdoor's chronological ``RECENT_POSTS`` server sort; ``relevance`` maps to
+    the algorithmic ``FOR_YOU`` feed. Unknown values fail fast with a clear error
+    (no silent fallback). ``relevance`` has no reverse direction, so ``--desc``
+    with it is rejected. For ``newest``, ``--desc`` (oldest-first) is applied by
+    the caller as a client-side reversal of the fetched page.
+    """
+    key = sort.lower()
+    if key not in FEED_SORT_MAP:
+        valid = ", ".join(FEED_SORT_MAP)
+        raise typer.BadParameter(f"Invalid --sort '{sort}'. Valid values: {valid}.")
+    if key == "relevance" and desc:
+        raise typer.BadParameter(
+            "--desc is not supported with '--sort relevance' (relevance order has no reverse)."
+        )
+    return FEED_SORT_MAP[key]
 
 
 def _validate(filters: Optional[List[str]]) -> None:
@@ -115,12 +138,30 @@ def _render_record(fetch, table: bool, properties: Optional[str], empty: str) ->
 @command
 def feed(
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of items"),
+    sort: str = typer.Option(
+        "newest",
+        "--sort",
+        "-s",
+        help="Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (algorithmic feed).",
+    ),
+    desc: bool = typer.Option(
+        False,
+        "--desc",
+        "-d",
+        help="Reverse the sort's natural order (newest -> oldest-first, over the fetched page).",
+    ),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """View personalized feed."""
-    _list(lambda client: client.get_feed(limit), filter, table, properties, FEED_COLUMNS, "No feed items found.")
+    """View the feed (default: newest first)."""
+    sort_order = _resolve_feed_sort(sort, desc)
+
+    def fetch(client):
+        rows = client.get_feed(limit, sort_order=sort_order)
+        return list(reversed(rows)) if desc else rows
+
+    _list(fetch, filter, table, properties, FEED_COLUMNS, "No feed items found.")
 
 
 @app.command("me")

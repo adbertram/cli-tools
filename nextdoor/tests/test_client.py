@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 import pytest
+import typer
+from typer.testing import CliRunner
 
 import requests
 
@@ -21,13 +23,16 @@ from cli_tools_shared.http_session import (
 )
 
 from nextdoor_cli import client as client_module
+from nextdoor_cli import main as main_module
 from nextdoor_cli.client import (
+    FEED_SORT_MAP,
     NextdoorClient,
     normalize_feed_item,
     normalize_notification,
     normalize_search_suggestion,
     _is_login_wall,
 )
+from nextdoor_cli.main import _resolve_feed_sort, app
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -433,6 +438,77 @@ def test_search_normalizes_suggestions(monkeypatch):
     assert rows == [{"suggestion": "Gardeners"}, {"suggestion": "Plumber"}]
 
 
+# ---- Search expired-session detection ---------------------------------------
+#
+# getDynamicSearchBarSuggestions is a top-level field: Nextdoor answers it with
+# HTTP 200 + an empty list even when logged out (no me field, no GraphQL error,
+# no login wall), so an empty result is ambiguous. search() disambiguates by
+# running a me-scoped PersonalizedFeed liveness probe ONLY when the suggestion
+# list is empty; _graphql raises the standard re-auth error when data.me is null.
+
+
+def test_search_logged_out_empty_raises_reauth_error(monkeypatch):
+    # Logged out: suggestions empty AND the me-scoped probe returns data.me ==
+    # null. search() must surface the standard re-auth ClientError, not [].
+    client = _make_client(monkeypatch)
+
+    def fake_request(method, url, json=None):
+        operation = json["operationName"]
+        if operation == "getDynamicSearchBarSuggestions":
+            return _FakeResponse(json_body={"data": {"dynamicSearchBarSuggestions": []}})
+        if operation == "PersonalizedFeed":
+            return _FakeResponse(json_body={"data": {"me": None, "requestId": "x"}})
+        raise AssertionError(f"unexpected operation {operation}")
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    with pytest.raises(ClientError) as exc:
+        client.search("lego")
+    assert "not authenticated" in str(exc.value).lower()
+    assert "nextdoor auth login --force" in str(exc.value)
+
+
+def test_search_logged_in_genuine_empty_returns_empty(monkeypatch):
+    # Logged in but no matches: suggestions empty, but the probe confirms a live
+    # session (me not null), so search returns [] without raising.
+    client = _make_client(monkeypatch)
+
+    def fake_request(method, url, json=None):
+        operation = json["operationName"]
+        if operation == "getDynamicSearchBarSuggestions":
+            return _FakeResponse(json_body={"data": {"dynamicSearchBarSuggestions": []}})
+        if operation == "PersonalizedFeed":
+            return _FakeResponse(
+                json_body={"data": {"me": {"personalizedFeed": {"feedItems": []}}}}
+            )
+        raise AssertionError(f"unexpected operation {operation}")
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    assert client.search("zzz-no-such-thing") == []
+
+
+def test_search_non_empty_skips_liveness_probe(monkeypatch):
+    # Non-empty suggestions: the me-scoped probe must NOT run (no second request).
+    client = _make_client(monkeypatch)
+    operations = []
+
+    def fake_request(method, url, json=None):
+        operation = json["operationName"]
+        operations.append(operation)
+        if operation == "getDynamicSearchBarSuggestions":
+            return _FakeResponse(
+                json_body={"data": {"dynamicSearchBarSuggestions": ["Gardeners", "Plumber"]}}
+            )
+        raise AssertionError(f"probe must not run for non-empty results: {operation}")
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    rows = client.search("garden")
+    assert rows == [{"suggestion": "Gardeners"}, {"suggestion": "Plumber"}]
+    assert operations == ["getDynamicSearchBarSuggestions"]
+
+
 # ---- Retry wiring (shared RequestsRetryPolicy) ------------------------------
 
 
@@ -475,3 +551,142 @@ def test_request_wraps_persistent_network_error(monkeypatch):
     with pytest.raises(ClientError) as exc:
         client._graphql("getMe")
     assert "Nextdoor request failed after retries" in str(exc.value)
+
+
+# ---- Source-CLI Sort Standard (feed) ----------------------------------------
+#
+# Nextdoor's PersonalizedFeed query exposes a genuine SERVER-SIDE recency sort:
+# the captured response advertises RECENT_POSTS in its own sortOrderOptions and
+# the query accepts the choice via mainFeedArgs.sortOrder. So '--sort newest'
+# maps to RECENT_POSTS server-side (the default); '--sort relevance' maps to the
+# algorithmic FOR_YOU feed. Unknown values fail fast; '--desc' reverses the
+# fetched page.
+
+
+def test_resolve_feed_sort_default_newest_maps_to_recent_posts():
+    assert _resolve_feed_sort("newest", desc=False) == "RECENT_POSTS"
+
+
+def test_resolve_feed_sort_is_case_insensitive():
+    assert _resolve_feed_sort("NEWEST", desc=False) == "RECENT_POSTS"
+
+
+def test_resolve_feed_sort_relevance_maps_to_for_you():
+    assert _resolve_feed_sort("relevance", desc=False) == "FOR_YOU"
+
+
+def test_resolve_feed_sort_newest_desc_still_recent_posts():
+    # --desc keeps the same server sort (RECENT_POSTS); the caller reverses the
+    # fetched page for oldest-first.
+    assert _resolve_feed_sort("newest", desc=True) == "RECENT_POSTS"
+
+
+def test_resolve_feed_sort_rejects_unknown_value():
+    with pytest.raises(typer.BadParameter) as exc:
+        _resolve_feed_sort("bogus", desc=False)
+    message = str(exc.value)
+    assert "Invalid --sort 'bogus'" in message
+    # The error lists the valid vocabulary (fail-fast, no silent fallback).
+    for value in FEED_SORT_MAP:
+        assert value in message
+
+
+def test_resolve_feed_sort_relevance_desc_rejected():
+    with pytest.raises(typer.BadParameter) as exc:
+        _resolve_feed_sort("relevance", desc=True)
+    assert "desc is not supported" in str(exc.value).lower()
+
+
+def test_get_feed_sends_recent_posts_sort_order_by_default(monkeypatch):
+    client = _make_client(monkeypatch)
+    captured = {}
+
+    def fake_graphql(operation, variables=None):
+        captured["operation"] = operation
+        captured["variables"] = variables
+        return {"me": {"personalizedFeed": {"feedItems": []}}}
+
+    monkeypatch.setattr(client, "_graphql", fake_graphql)
+
+    client.get_feed(limit=5)
+    assert captured["operation"] == "PersonalizedFeed"
+    assert captured["variables"]["mainFeedArgs"]["sortOrder"] == "RECENT_POSTS"
+
+    client.get_feed(limit=5, sort_order="FOR_YOU")
+    assert captured["variables"]["mainFeedArgs"]["sortOrder"] == "FOR_YOU"
+
+
+def test_get_feed_rejects_unknown_sort_order(monkeypatch):
+    client = _make_client(monkeypatch)
+    # Guard fires before any network call; no _graphql stub needed.
+    with pytest.raises(ClientError) as exc:
+        client.get_feed(sort_order="NOT_A_REAL_ORDER")
+    assert "sortOrder" in str(exc.value)
+
+
+class _FakeFeedClient:
+    """A stand-in client that records the sort_order and returns fixed rows."""
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.calls = []
+
+    def get_feed(self, limit, sort_order="RECENT_POSTS"):
+        self.calls.append({"limit": limit, "sort_order": sort_order})
+        return list(self._rows)
+
+    def close(self):
+        pass
+
+
+def _fake_feed_rows():
+    # Server returns RECENT_POSTS order: newest first.
+    return [
+        {"id": 3, "type": "POST", "title": "newest"},
+        {"id": 2, "type": "POST", "title": "middle"},
+        {"id": 1, "type": "POST", "title": "oldest"},
+    ]
+
+
+def test_feed_command_default_is_newest_first(monkeypatch):
+    fake = _FakeFeedClient(_fake_feed_rows())
+    monkeypatch.setattr(main_module, "get_client", lambda: fake)
+
+    result = CliRunner().invoke(app, ["feed"])
+    assert result.exit_code == 0
+    rows = json.loads(result.stdout)
+    assert [r["id"] for r in rows] == [3, 2, 1]
+    # Default sort resolves to the server-side chronological order.
+    assert fake.calls == [{"limit": 10, "sort_order": "RECENT_POSTS"}]
+
+
+def test_feed_command_desc_reverses_to_oldest_first(monkeypatch):
+    fake = _FakeFeedClient(_fake_feed_rows())
+    monkeypatch.setattr(main_module, "get_client", lambda: fake)
+
+    result = CliRunner().invoke(app, ["feed", "--desc"])
+    assert result.exit_code == 0
+    rows = json.loads(result.stdout)
+    assert [r["id"] for r in rows] == [1, 2, 3]
+    # --desc still uses the RECENT_POSTS server sort; reversal is client-side.
+    assert fake.calls[0]["sort_order"] == "RECENT_POSTS"
+
+
+def test_feed_command_relevance_uses_for_you(monkeypatch):
+    fake = _FakeFeedClient(_fake_feed_rows())
+    monkeypatch.setattr(main_module, "get_client", lambda: fake)
+
+    result = CliRunner().invoke(app, ["feed", "--sort", "relevance"])
+    assert result.exit_code == 0
+    assert fake.calls[0]["sort_order"] == "FOR_YOU"
+
+
+def test_feed_command_bogus_sort_exits_nonzero_without_client(monkeypatch):
+    def _no_client():
+        raise AssertionError("client must not be built for an invalid --sort")
+
+    monkeypatch.setattr(main_module, "get_client", _no_client)
+
+    result = CliRunner().invoke(app, ["feed", "--sort", "bogus"])
+    assert result.exit_code != 0
+    assert "Invalid --sort 'bogus'" in result.output
