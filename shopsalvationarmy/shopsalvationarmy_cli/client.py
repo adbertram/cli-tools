@@ -21,6 +21,24 @@ class ShopSalvationArmyClient:
     BASE_URL = "https://www.shopthesalvationarmy.com"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+    # Canonical, direction-aware sort vocabulary (Source-CLI Sort Standard),
+    # keyed by (field, descending) and mapped to the site's SortFilterOptions
+    # code. The natural direction is the desc=False entry; --desc selects the
+    # reversed entry:
+    #   newest  natural -> newest listings first (code 1); --desc -> oldest (2)
+    #   price   natural -> low to high (code 3);            --desc -> high to low (4)
+    #   ending  natural -> ending soonest first (code 0);   --desc -> unsupported
+    # The site also defines codes 5-9 (title A-Z / Z-A, listing id low/high,
+    # activity) but those are intentionally NOT exposed on the CLI sort surface.
+    SORT_CODES = {
+        ("newest", False): "1",
+        ("newest", True): "2",
+        ("price", False): "3",
+        ("price", True): "4",
+        ("ending", False): "0",
+    }
+    VALID_SORTS = ("newest", "price", "ending")
+
     # Categories available on the site
     CATEGORIES = {
         "art": "C160710",
@@ -116,11 +134,13 @@ class ShopSalvationArmyClient:
         query: str = "",
         category: Optional[str] = None,
         page: int = 1,
-        sort: str = "ending",
+        sort: str = "newest",
+        desc: bool = False,
         listing_type: Optional[str] = None,
         status: str = "active",
         price_min: Optional[float] = None,
         price_max: Optional[float] = None,
+        limit: Optional[int] = None,
     ) -> Dict:
         """
         Search Shop The Salvation Army listings.
@@ -129,20 +149,25 @@ class ShopSalvationArmyClient:
             query: Search keywords (optional)
             category: Category name or ID (optional)
             page: Page number (starts at 0 for the API, but we use 1-based)
-            sort: Sort option (ending, newest, oldest, price_low, price_high)
+            sort: Canonical sort field (newest, price, ending); default newest
+            desc: Reverse the sort field's natural direction
             listing_type: Filter by type (auction, fixed_price)
             status: Listing status (active, completed, any)
             price_min: Minimum price filter
             price_max: Maximum price filter
+            limit: Maximum number of items to return from this page
 
         Returns:
             Dict with items and metadata
+
+        Raises:
+            ClientError: If ``sort``/``desc`` is not a valid canonical combination
         """
         # Build search URL
         params = {
             "ViewStyle": "grid",
             "StatusFilter": self._get_status_filter(status),
-            "SortFilterOptions": self._get_sort_param(sort),
+            "SortFilterOptions": self._get_sort_param(sort, desc),
             "page": page - 1,  # API uses 0-based pagination
         }
 
@@ -181,6 +206,8 @@ class ShopSalvationArmyClient:
         # Parse the HTML response
         soup = BeautifulSoup(response.text, "html.parser")
         items = self._parse_search_results(soup)
+        if limit is not None:
+            items = items[:limit]
 
         return {
             "items": items,
@@ -277,21 +304,29 @@ class ShopSalvationArmyClient:
             })
         return categories
 
-    def _get_sort_param(self, sort: str) -> str:
-        """Convert sort option to site sort parameter."""
-        sort_map = {
-            "ending": "0",      # Ending soonest
-            "newest": "1",      # Newest listings
-            "oldest": "2",      # Oldest listings
-            "price_low": "3",   # Price: lowest first
-            "price_high": "4",  # Price: highest first
-            "title_az": "5",    # Title A-Z
-            "title_za": "6",    # Title Z-A
-            "id_low": "7",      # Listing ID: low to high
-            "id_high": "8",     # Listing ID: high to low
-            "activity": "9",    # Activity: highest
-        }
-        return sort_map.get(sort, "0")
+    def _get_sort_param(self, sort: str, desc: bool = False) -> str:
+        """Resolve a canonical sort field (+ optional --desc) to the site sort code.
+
+        Fail-fast: unknown fields and unsupported field/direction combinations
+        raise a clear error instead of silently falling back to a default.
+
+        Raises:
+            ClientError: If ``sort`` is not in the canonical vocabulary, or the
+                field/direction combination has no site equivalent (e.g.
+                ``ending --desc``).
+        """
+        key = sort.lower()
+        if key not in self.VALID_SORTS:
+            valid = ", ".join(self.VALID_SORTS)
+            raise ClientError(f"Invalid --sort '{sort}'. Valid values: {valid}")
+        code = self.SORT_CODES.get((key, desc))
+        if code is None:
+            raise ClientError(
+                "Shop The Salvation Army has no 'latest ending' sort order; "
+                "'--sort ending' cannot be combined with --desc. Use '--sort ending' "
+                "for soonest-ending-first."
+            )
+        return code
 
     def _get_status_filter(self, status: str) -> str:
         """Convert status option to site status filter."""
@@ -407,6 +442,33 @@ class ShopSalvationArmyClient:
         if not match:
             return None
         return float(match.group(1).replace(",", ""))
+
+    def _parse_image_urls(self, soup: BeautifulSoup) -> List[str]:
+        """Extract this listing's photo URLs from the image gallery.
+
+        The per-listing gallery lives in the ``#AllImages`` section. Each photo is
+        an anchor whose ``href`` points at the full-resolution ``_largesize`` image
+        (the lightbox target); the anchor also wraps a ``_thumbcrop`` thumbnail.
+        The anchor ``href`` is used so the returned URLs are full resolution and
+        scoped to this listing only, excluding the site logo, tracking pixels,
+        footer banner, and the unrelated "similar listings" gallery.
+        """
+        gallery = soup.find(id="AllImages")
+        if gallery is None:
+            return []
+
+        image_urls: List[str] = []
+        seen: set = set()
+        for anchor in gallery.find_all("a", href=True):
+            href = anchor["href"].strip()
+            if not href:
+                continue
+            absolute = urllib.parse.urljoin(self.BASE_URL, href)
+            if absolute in seen:
+                continue
+            seen.add(absolute)
+            image_urls.append(absolute)
+        return image_urls
 
     def _parse_item_page(self, soup: BeautifulSoup, item_id: str) -> Dict:
         """Parse Shop The Salvation Army item detail page."""
@@ -544,9 +606,12 @@ class ShopSalvationArmyClient:
                     "carriers": carriers,
                 }
 
+            image_urls = self._parse_image_urls(soup)
+
             return {
                 "id": item_id,
                 "title": title,
+                "image_urls": image_urls,
                 "current_price": current_price,
                 "winning_bid": winning_bid,
                 "buy_it_now_price": buy_it_now_price,

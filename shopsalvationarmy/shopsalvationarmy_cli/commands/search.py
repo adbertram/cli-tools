@@ -1,8 +1,9 @@
 """Search commands for ShopSalvationArmy CLI."""
 from typing import Dict, List, Optional
 import typer
-from ..client import ShopSalvationArmyClient, ClientError, get_client
-from ..output import print_json, print_table, print_error, print_status, handle_error
+from ..client import get_client, ClientError
+from ..output import print_json, print_table, print_status
+from cli_tools_shared.output import command
 
 app = typer.Typer(help="Search Shop The Salvation Army listings")
 DEFAULT_SHIPPING_ZIP = "47725"
@@ -20,16 +21,24 @@ def _get_lowest_shipping_rate(shipping_rates: List[Dict]) -> Optional[Dict]:
 
 
 @app.command("query")
+@command
 def search_query(
     query: str = typer.Argument("", help="Search keywords (leave empty for all items)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     category: Optional[str] = typer.Option(None, "--category", "-c", help="Category filter (art, jewelry, clothing, etc.)"),
     sort: str = typer.Option(
-        "ending",
+        "newest",
         "--sort",
         "-s",
-        help="Sort by: ending, newest, oldest, price_low, price_high",
+        help="Sort field: newest (default), price, ending",
+    ),
+    desc: bool = typer.Option(
+        False,
+        "--desc",
+        "-d",
+        help="Reverse the sort field's natural direction (e.g. price high->low). Not supported with 'ending'.",
     ),
     listing_type: Optional[str] = typer.Option(
         None,
@@ -45,100 +54,95 @@ def search_query(
     price_max: Optional[float] = typer.Option(None, "--max-price", help="Maximum price filter"),
 ):
     """Search for items on Shop The Salvation Army."""
-    try:
-        client = get_client(require_auth=False)
+    client = get_client(require_auth=False)
 
-        search_desc = f"Searching Shop The Salvation Army"
-        if category:
-            search_desc += f" in {category}"
-        if query:
-            search_desc += f" for '{query}'"
-        print_status(f"{search_desc}...")
+    search_desc = "Searching Shop The Salvation Army"
+    if category:
+        search_desc += f" in {category}"
+    if query:
+        search_desc += f" for '{query}'"
+    print_status(f"{search_desc}...")
 
-        result = client.search(
-            query=query,
-            category=category,
-            page=page,
-            sort=sort,
-            listing_type=listing_type,
-            status=status,
-            price_min=price_min,
-            price_max=price_max,
+    result = client.search(
+        query=query,
+        category=category,
+        page=page,
+        sort=sort,
+        desc=desc,
+        listing_type=listing_type,
+        status=status,
+        price_min=price_min,
+        price_max=price_max,
+        limit=limit,
+    )
+
+    items = result.get("items", [])
+
+    if table:
+        if not items:
+            print("No results found.")
+            raise typer.Exit(0)
+
+        # Format items for table display
+        table_data = []
+        for item in items:
+            table_data.append({
+                "id": item.get("id", ""),
+                "title": _truncate(item.get("title", ""), 50),
+                "price": item.get("price", "N/A"),
+                "bids": item.get("bids", "") or "",
+                "time_left": item.get("time_left", "") or "",
+            })
+
+        print_status(f"Found {len(items)} items on page {page}")
+        print_table(
+            table_data,
+            ["id", "title", "price", "bids", "time_left"],
+            ["ID", "Title", "Price", "Bids", "Time Left"],
         )
-
-        items = result.get("items", [])
-
-        if table:
-            if not items:
-                print("No results found.")
-                raise typer.Exit(0)
-
-            # Format items for table display
-            table_data = []
-            for item in items:
-                table_data.append({
-                    "id": item.get("id", ""),
-                    "title": _truncate(item.get("title", ""), 50),
-                    "price": item.get("price", "N/A"),
-                    "bids": item.get("bids", "") or "",
-                    "time_left": item.get("time_left", "") or "",
-                })
-
-            print_status(f"Found {len(items)} items on page {page}")
-            print_table(
-                table_data,
-                ["id", "title", "price", "bids", "time_left"],
-                ["ID", "Title", "Price", "Bids", "Time Left"],
-            )
-        else:
-            # JSON output - include metadata
-            print_json(result)
-
-    except ClientError as e:
-        print_error(str(e))
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    else:
+        # JSON output - include metadata
+        print_json(result)
 
 
 @app.command("categories")
+@command
 def list_categories():
     """List available categories."""
-    try:
-        client = get_client(require_auth=False)
-        categories = client.list_categories()
+    client = get_client(require_auth=False)
+    categories = client.list_categories()
 
-        # Display as table
-        print_table(
-            categories,
-            ["name", "id"],
-            ["Category", "ID"],
-        )
-
-    except ClientError as e:
-        print_error(str(e))
-        raise typer.Exit(1)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    # Display as table
+    print_table(
+        categories,
+        ["name", "id"],
+        ["Category", "ID"],
+    )
 
 
 @app.command("get")
+@command
 def search_get(
     item_id: str = typer.Argument(..., help="Item listing ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """Get details for a specific item."""
-    try:
-        client = get_client(require_auth=False)
+    client = get_client(require_auth=False)
 
-        print_status(f"Fetching item {item_id}...")
+    print_status(f"Fetching item {item_id}...")
 
-        item = client.get_item(item_id)
-        has_bin = item.get("buy_it_now_price") is not None and item.get("buy_it_now_price") > 0
-        item["available"] = item.get("auction_status", "active") != "ended" or has_bin
-        if item.get("shipping_params"):
+    item = client.get_item(item_id)
+    has_bin = item.get("buy_it_now_price") is not None and item.get("buy_it_now_price") > 0
+    item["available"] = item.get("auction_status", "active") != "ended" or has_bin
+    if item.get("shipping_params"):
+        # The shipping quote is an OPTIONAL secondary request. A failed or
+        # unparseable quote must NOT abort the whole `get` -- the item detail
+        # (title, price, availability, images, url) was already retrieved
+        # successfully. Surface the failure via shipping_quote_status and leave
+        # the shipping numeric fields at their null defaults; never fabricate
+        # shipping numbers. The item fetch itself (client.get_item above) still
+        # fails fast if the ITEM detail request fails.
+        try:
             shipping_rates = client.calculate_shipping(
                 item_id=item_id,
                 zip_code=DEFAULT_SHIPPING_ZIP,
@@ -148,57 +152,59 @@ def search_get(
                 carrier=DEFAULT_SHIPPING_CARRIER,
                 shipping_params=item["shipping_params"],
             )
-            lowest = _get_lowest_shipping_rate(shipping_rates)
-            if lowest:
-                shipping_cost = lowest.get("shipmentCost", 0)
-                handling_cost = lowest.get("otherCost", 0)
-                shipping_total = shipping_cost + handling_cost
-                item["shipping_quote_status"] = "quoted"
-                item["shipping_cost"] = shipping_cost
-                item["handling_cost"] = handling_cost
-                item["shipping_total"] = shipping_total
-                item["shipping_price"] = shipping_total
-                item["shipping_service"] = lowest.get("serviceName")
-                item["shipping_carrier"] = lowest.get("carrierCode", DEFAULT_SHIPPING_CARRIER.upper())
-                item_price = item.get("buy_it_now_price") if has_bin else item.get("current_price")
-                if item_price is not None:
-                    item["total_price"] = round(item_price + shipping_total, 2)
+        except ClientError:
+            shipping_rates = None
+            item["shipping_quote_status"] = "unavailable"
 
-        if table:
-            # Format key details for table
-            table_data = [{
-                "field": "Item ID",
-                "value": str(item.get("id", "")),
-            }, {
-                "field": "Title",
-                "value": item.get("title", ""),
-            }, {
-                "field": "Price",
-                "value": item.get("price", "N/A"),
-            }, {
-                "field": "Bids",
-                "value": item.get("bids", "") or "N/A",
-            }, {
-                "field": "Time Left",
-                "value": item.get("time_left", "") or "N/A",
-            }, {
-                "field": "Description",
-                "value": _truncate(item.get("description", ""), 100),
-            }, {
-                "field": "URL",
-                "value": item.get("url", ""),
-            }]
-            print_table(table_data, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(item)
+        lowest = _get_lowest_shipping_rate(shipping_rates) if shipping_rates else None
+        if lowest:
+            shipping_cost = lowest.get("shipmentCost", 0)
+            handling_cost = lowest.get("otherCost", 0)
+            shipping_total = shipping_cost + handling_cost
+            item["shipping_quote_status"] = "quoted"
+            item["shipping_cost"] = shipping_cost
+            item["handling_cost"] = handling_cost
+            item["shipping_total"] = shipping_total
+            item["shipping_price"] = shipping_total
+            item["shipping_service"] = lowest.get("serviceName")
+            item["shipping_carrier"] = lowest.get("carrierCode", DEFAULT_SHIPPING_CARRIER.upper())
+            item_price = item.get("buy_it_now_price") if has_bin else item.get("current_price")
+            if item_price is not None:
+                item["total_price"] = round(item_price + shipping_total, 2)
+        elif item.get("shipping_quote_status") != "unavailable":
+            # Quote request succeeded but returned no usable rate.
+            item["shipping_quote_status"] = "unavailable"
 
-    except ClientError as e:
-        print_error(str(e))
-        raise typer.Exit(1)
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        # Format key details for table
+        table_data = [{
+            "field": "Item ID",
+            "value": str(item.get("id", "")),
+        }, {
+            "field": "Title",
+            "value": item.get("title", ""),
+        }, {
+            "field": "Price",
+            "value": item.get("price", "N/A"),
+        }, {
+            "field": "Bids",
+            "value": item.get("bids", "") or "N/A",
+        }, {
+            "field": "Time Left",
+            "value": item.get("time_left", "") or "N/A",
+        }, {
+            "field": "Description",
+            "value": _truncate(item.get("description", ""), 100),
+        }, {
+            "field": "Images",
+            "value": str(len(item.get("image_urls", []))),
+        }, {
+            "field": "URL",
+            "value": item.get("url", ""),
+        }]
+        print_table(table_data, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(item)
 
 
 def _truncate(text: str, max_length: int) -> str:

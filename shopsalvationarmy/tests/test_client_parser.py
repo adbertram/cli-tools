@@ -1,7 +1,60 @@
+import pytest
 from bs4 import BeautifulSoup
 
-from shopsalvationarmy_cli.client import ShopSalvationArmyClient
+from shopsalvationarmy_cli.client import ClientError, ShopSalvationArmyClient
 from shopsalvationarmy_cli.commands.search import COMMAND_CREDENTIALS
+
+
+def make_client() -> ShopSalvationArmyClient:
+    return ShopSalvationArmyClient(require_auth=False, config=object())
+
+
+def test_sort_maps_canonical_fields_and_desc_to_site_codes():
+    client = make_client()
+
+    # newest is the default and natural = newest-first (site code 1);
+    # --desc reverses to oldest (code 2).
+    assert client._get_sort_param("newest") == "1"
+    assert client._get_sort_param("newest", desc=True) == "2"
+
+    # price natural = low -> high (code 3); --desc = high -> low (code 4).
+    assert client._get_sort_param("price") == "3"
+    assert client._get_sort_param("price", desc=True) == "4"
+
+    # ending natural = soonest ending first (code 0).
+    assert client._get_sort_param("ending") == "0"
+
+
+def test_sort_field_lookup_is_case_insensitive():
+    client = make_client()
+    assert client._get_sort_param("NEWEST") == "1"
+    assert client._get_sort_param("Price", desc=True) == "4"
+
+
+def test_unknown_sort_value_raises_clear_error():
+    client = make_client()
+    with pytest.raises(ClientError) as exc:
+        client._get_sort_param("bogus")
+    message = str(exc.value)
+    assert "bogus" in message
+    # Error must list the valid canonical values (fail-fast, no silent fallback).
+    assert "newest" in message
+    assert "price" in message
+    assert "ending" in message
+
+
+def test_removed_directional_aliases_are_no_longer_accepted():
+    client = make_client()
+    for removed in ("oldest", "price_low", "price_high", "title_az", "id_high", "activity"):
+        with pytest.raises(ClientError):
+            client._get_sort_param(removed)
+
+
+def test_ending_desc_is_rejected_without_site_equivalent():
+    client = make_client()
+    with pytest.raises(ClientError) as exc:
+        client._get_sort_param("ending", desc=True)
+    assert "ending" in str(exc.value).lower()
 
 
 def parse_item(html: str) -> dict:
