@@ -12,6 +12,7 @@ from cli_tools_shared.output import (  # noqa: F401
     console,
     _format_cell_value,
     _serialize_for_json,
+    command,
     print_json,
     print_table,
     print_output,

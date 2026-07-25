@@ -66,7 +66,7 @@ shopgoodwill search query "vintage watch"
 # Filter by price
 shopgoodwill search query "laptop" --min-price 50 --max-price 200
 
-# Sort options: ending, bids, price, newest
+# Sort field (default: newest = newest-listed first); --desc reverses it
 shopgoodwill search query "furniture" --sort price --desc
 
 # Pagination
@@ -147,16 +147,43 @@ ID          Title                                     Price    Bids  Ends       
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--page` | `-p` | Page number (default: 1) |
+| `--page` | `-p` | Page number (default: 1). Not applied to `--sort newest`. |
 | `--limit` | `-l` | Results per page, max 40 (default: 40) |
 | `--min-price` | | Minimum price filter |
 | `--max-price` | | Maximum price filter |
-| `--sort` | `-s` | Sort by: `ending`, `bids`, `price`, `newest` |
-| `--desc` | `-d` | Sort in descending order |
+| `--sort` | `-s` | Sort field (default: `newest`). Valid: `newest`, `price`, `ending`, `bids` |
+| `--desc` | `-d` | Reverse the sort field's natural direction |
 | `--buy-now` | | Only show buy-now items |
 | `--shipping` | | Only show items that ship |
 | `--pickup` | | Only show pickup-only items |
 | `--closed` | | Include closed auctions |
+
+### Sort Fields
+
+Sorting follows the Source-CLI Sort Standard. `--sort` selects a field; each field
+has a natural direction, and `--desc` reverses it. The default is `newest`, which
+returns the most recently listed items first (what incremental crawlers rely on).
+An unknown `--sort` value is rejected with an error listing the valid values and a
+non-zero exit — there is no silent fallback.
+
+| Field | Natural (no `--desc`) | With `--desc` |
+|-------|-----------------------|---------------|
+| `newest` (default) | most recently listed first | oldest listed first |
+| `price` | low → high | high → low |
+| `ending` | soonest ending first | latest ending first |
+| `bids` | fewest bids first | most bids first |
+
+`ending`, `bids`, and `price` map to ShopGoodwill's real integer sort columns
+(`EndingDate=1`, `NumberofBids=3`, `BidPrice=4`) plus a descending flag, matching
+the site's own sort dropdown.
+
+**`newest` is a best-effort client-side refine (Sort Standard Rule 5).**
+ShopGoodwill exposes no true listing-date sort column — its "Newly Listed" option
+is really *ending-date descending*, which only approximates recency because auction
+durations vary. So `--sort newest` fetches the "Newly Listed" window (a few pages,
+~100 items) and then sorts that window client-side by each item's real `startTime`
+(listing date) so results are genuinely newest-listed-first. `--page` is not applied
+to `newest` (the window is always taken from the freshest listings).
 
 ## Configuration
 

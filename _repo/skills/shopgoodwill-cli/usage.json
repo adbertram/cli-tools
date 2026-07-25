@@ -1,8 +1,8 @@
 {
   "tool": "shopgoodwill",
   "description": "CLI interface for ShopGoodwill",
-  "discovered_at": "2026-06-15T23:26:18Z",
-  "total_commands": 13,
+  "discovered_at": "2026-07-24T19:19:10Z",
+  "total_commands": 14,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,7 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `shopgoodwill auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -251,7 +283,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `shopgoodwill cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -346,15 +385,15 @@
               "name": "--sort",
               "type": "TEXT",
               "required": false,
-              "help": "Sort by: ending, bids, price, newest",
+              "help": "Sort field: newest (default), price, ending, bids. --desc reverses each field's natural order",
               "short": "-s",
-              "default": "ending"
+              "default": "newest"
             },
             {
               "name": "--desc",
               "type": "bool",
               "required": false,
-              "help": "Sort descending",
+              "help": "Reverse the sort field's natural direction",
               "short": "-d"
             },
             {

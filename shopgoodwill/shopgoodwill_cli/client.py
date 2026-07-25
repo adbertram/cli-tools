@@ -133,8 +133,8 @@ class ShopGoodwillClient:
         category_level: int = 0,
         low_price: Optional[float] = None,
         high_price: Optional[float] = None,
-        sort_by: str = "EndingSoonest",
-        sort_order: str = "a",
+        sort_column: int = 1,
+        sort_descending: bool = False,
         closed_auctions: bool = False,
         buy_now_only: bool = False,
         pickup_only: bool = False,
@@ -146,13 +146,19 @@ class ShopGoodwillClient:
         Args:
             query: Search text
             page: Page number (starts at 1)
-            page_size: Number of results per page (max 40)
+            page_size: Number of results per page (max 40; the API caps here)
             category_id: Category ID to filter by (0 = all)
             category_level: Category level for filtering
             low_price: Minimum price filter
             high_price: Maximum price filter
-            sort_by: Sort field (EndingSoonest, BidCount, Price, etc.)
-            sort_order: Sort order ('a' = ascending, 'd' = descending)
+            sort_column: Integer sort column the API honors, verified from the live
+                site's sort dropdown: 1 = EndingDate, 3 = NumberofBids, 4 = BidPrice.
+                (The legacy string column names were silently ignored by the API.)
+            sort_descending: Sort direction. The site's "Newly Listed" option is
+                sortColumn 1 + sort_descending True (latest-ending first); "Ending
+                Soonest" is sortColumn 1 + False. ShopGoodwill exposes no true
+                listing-date column, so recency is refined client-side (see
+                search_recency_window).
             closed_auctions: Include closed auctions
             buy_now_only: Only show buy-now items
             pickup_only: Only show pickup items
@@ -165,8 +171,8 @@ class ShopGoodwillClient:
             "searchText": query,
             "page": page,
             "pageSize": min(page_size, 40),
-            "sortColumn": sort_by,
-            "sortOrder": sort_order,
+            "sortColumn": sort_column,
+            "sortDescending": sort_descending,
             "categoryId": category_id,
             "categoryLevel": category_level,
             "lowPrice": low_price if low_price is not None else 0,
@@ -198,6 +204,56 @@ class ShopGoodwillClient:
             raise ClientError("Search returned no results structure")
 
         return result
+
+    # ShopGoodwill has no true listing-date sort column; its "Newly Listed"
+    # option is EndingDate-descending, which only approximates recency (auction
+    # durations vary). For --sort newest we fetch that ordering across pages to
+    # build a window, then sort by startTime (the real listing date). ~100 items
+    # is enough for an incremental newest-first crawl (Sort Standard Rule 5).
+    RECENCY_WINDOW = 100
+    _RECENCY_MAX_PAGES = 5  # bound API calls (5 * 40 = 200 items)
+
+    def search_recency_window(
+        self,
+        query: str,
+        limit: int,
+        sort_descending: bool = True,
+        **search_kwargs,
+    ) -> tuple:
+        """Build a listing-date-ordered result window for --sort newest.
+
+        Fetches ShopGoodwill's "Newly Listed" ordering (sortColumn 1) across pages
+        until the window holds at least max(limit, RECENCY_WINDOW) items (or the
+        result set is exhausted), then sorts by startTime. reverse=sort_descending
+        yields newest-first for natural newest and oldest-first for --desc.
+
+        Returns:
+            (items_sorted_by_start_time, total_count)
+        """
+        target = max(limit, self.RECENCY_WINDOW)
+        collected: List[Dict] = []
+        total_count = 0
+
+        for page in range(1, self._RECENCY_MAX_PAGES + 1):
+            result = self.search(
+                query=query,
+                page=page,
+                page_size=40,
+                sort_column=1,
+                sort_descending=sort_descending,
+                **search_kwargs,
+            )
+            search_results = result.get("searchResults", {})
+            items = search_results.get("items", [])
+            total_count = search_results.get("itemCount", total_count)
+            if not items:
+                break
+            collected.extend(items)
+            if len(collected) >= target or len(collected) >= total_count:
+                break
+
+        collected.sort(key=lambda it: it.get("startTime") or "", reverse=sort_descending)
+        return collected, total_count
 
     def get_item(self, item_id: int) -> Dict:
         """
