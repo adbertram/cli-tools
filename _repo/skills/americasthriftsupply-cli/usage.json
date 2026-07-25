@@ -1,0 +1,189 @@
+{
+  "tool": "americasthriftsupply",
+  "description": "CLI interface for americasthriftsupply",
+  "discovered_at": "2026-07-24T19:19:30Z",
+  "total_commands": 5,
+  "global_options": [],
+  "commands": {
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "collections": {
+      "help": "Browse storefront collections (categories)",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get detail for one collection by handle.",
+          "arguments": [
+            {
+              "name": "handle",
+              "type": "TEXT",
+              "required": true,
+              "help": "Collection handle, e.g. 'mystery-box'"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List storefront collections (categories), e.g. 'mystery-box', 'lego'.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of collections to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "products": {
+      "help": "Browse the product catalog",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get full detail (price, live availability, variants, images) for one product.",
+          "arguments": [
+            {
+              "name": "handle",
+              "type": "TEXT",
+              "required": true,
+              "help": "Product handle, e.g. 'lego-mystery-box'"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List (and search via --filter) products in the catalog. The storefront has no full-text search JSON endpoint, so text search is done client-side with --filter, e.g.: americasthriftsupply products list --filter \"title:ilike:%lego%\" The Shopify JSON endpoints ignore ?sort_by=, so --sort/--desc order the returned result set (up to --limit) client-side. Default 'newest' returns the newest-listed products first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: 'newest' (default) or 'price'. Natural direction unless --desc",
+              "short": "-s",
+              "default": "newest"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort field's natural direction (newest->oldest; price low->high becomes high->low)",
+              "short": "-d"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of products to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value), e.g. 'title:ilike:%mystery%' or 'price_usd:lte:30'",
+              "short": "-f"
+            },
+            {
+              "name": "--collection",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to one collection handle (server-side), e.g. 'mystery-box' or 'lego'",
+              "short": "-c"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `americasthriftsupply` CLI. Run `americasthriftsupply --help` to discover command groups and `--help` on any subcommand for its options."
+}
