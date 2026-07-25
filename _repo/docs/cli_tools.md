@@ -8,10 +8,12 @@
 | `airtable` | The `airtable` CLI provides a command-line interface for Airtable API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `amazon` | The `amazon` CLI provides a command-line interface for Amazon (browser automation). Use it when you need repeatable access to amazon workflows that are only available through a signed-in website. |
 | `amazon-associates` | The `amazon-associates` CLI provides a command-line interface for AmazonAssociates (browser automation). Use it when you need repeatable access to amazon-associates workflows that are only available through a signed-in website. |
+| `americasthriftsupply` | America's Thrift Supply Shopify storefront catalog - browse LEGO mystery boxes and other liquidation products |
 | `apple` | The `apple` CLI provides a command-line interface for Apple purchase and subscription history. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `asana` | The `asana` CLI provides a command-line interface for Asana API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ata-blog` | The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, WordPress publishing, Raptive ad settings, and Rank Math schema markup. |
 | `atlassian` | The `atlassian` CLI provides a command-line interface for Atlassian (browser automation). Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website. |
+| `auctionzip` | AuctionZip auction search and lot detail via a Cloudflare-cleared browser session (Invaluable-powered) |
 | `awin` | The `awin` CLI provides a command-line interface for Awin API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `brickfreedom` | The `brickfreedom` CLI provides a command-line interface for Brickfreedom (browser automation). Use it when you need repeatable access to brickfreedom workflows that are only available through a signed-in website. |
 | `bricklink` |  |
@@ -22,11 +24,13 @@
 | `clickbank` | The `clickbank` CLI provides a command-line interface for Clickbank API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cliclick` | The `cliclick` CLI wraps cliclick with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `cloudflare` | The `cloudflare` CLI provides a command-line interface for Cloudflare API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `codex-helper` | Codex local app-server helper commands |
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `copilot` | The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `coursecraft` | CourseCraft CLI manages CourseCraft Airtable records for courses, modules, clips, demos, slides, slide templates, voice recordings, and Descript exports. Use it when course-building workflows need a scriptable way to read or update CourseCraft content without editing Airtable directly. |
 | `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
+| `depop` | Depop resale marketplace - search listings via the internal presentation search API (Cloudflare-cleared browser session) |
 | `descript` | The `descript` CLI provides a command-line interface for Descript API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `dev_to` | The `dev_to` CLI provides a command-line interface for the DEV Community API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `doordash` | The `doordash` CLI provides a command-line interface for Doordash (browser automation). Use it when you need repeatable access to doordash workflows that are only available through a signed-in website. |
