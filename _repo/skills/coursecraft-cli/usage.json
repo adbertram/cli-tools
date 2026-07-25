@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-24T23:27:50Z",
+  "discovered_at": "2026-07-25T14:43:21Z",
   "total_commands": 56,
   "global_options": [
     {
@@ -1996,7 +1996,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required: 'CourseCraft' for feedback Adam gives directly, 'Pluralsight Feedback Sheet' for rows imported from a Pluralsight review sheet.",
+          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required and records provenance: 'User' (Adam in the CourseCraft app), 'CourseCraft' (the CLI / agent pipeline), 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'. Only EXACTLY 'Pluralsight' is counted by the Modules 'Open Pluralsight Feedback Count' gate -- the '- CQA' and '- VCP' variants are not, so use plain 'Pluralsight' for a row that must hold a module in the feedback phase.",
           "arguments": [],
           "options": [
             {
@@ -2057,7 +2057,7 @@
               "name": "--feedback-source",
               "type": "bool",
               "required": true,
-              "help": "<Pluralsight Feedback Sheet|CourseCraft>  Where this feedback entered the workflow: 'CourseCraft' or 'Pluralsight Feedback Sheet'. Required"
+              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - VCP|CourseCraft|User>  Where this feedback came from: 'User' (Adam in the app), 'CourseCraft' (CLI/agent pipeline), 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'. Required"
             },
             {
               "name": "--processing-status",
@@ -2311,7 +2311,7 @@
               "name": "--feedback-source",
               "type": "bool",
               "required": false,
-              "help": "<Pluralsight Feedback Sheet|CourseCraft>  Where this feedback entered the workflow: 'CourseCraft' or 'Pluralsight Feedback Sheet'"
+              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - VCP|CourseCraft|User>  Where this feedback came from: 'User', 'CourseCraft', 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'"
             },
             {
               "name": "--processing-status",
