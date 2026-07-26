@@ -687,6 +687,13 @@ def require_path(path, description):
 
 
 def resolve_coursecraft_repo_root(start_path=None):
+    """Find the CourseCraft repo root that owns the demo-environment automation module.
+
+    ``start_path`` is the recorder's ``--coursecraft-repo-root``. When it is omitted the
+    search starts at the current working directory, which is the only implicit input the
+    recorder takes; the failure names that flag so a caller outside the repo tree does not
+    have to guess which directory the message is about.
+    """
     path = Path.cwd() if start_path is None else Path(start_path).expanduser()
     if path.is_file():
         path = path.parent
@@ -694,21 +701,25 @@ def resolve_coursecraft_repo_root(start_path=None):
     for candidate in [path, *path.parents]:
         if (candidate / "course-pipeline.json").is_file():
             return candidate
-    raise FileNotFoundError(f"CourseCraft repo root not found from: {path}")
+    raise FileNotFoundError(
+        f"CourseCraft repo root not found from: {path} "
+        "(no course-pipeline.json in that directory or any parent). "
+        "Pass --coursecraft-repo-root PATH, or run the command from inside the CourseCraft repo."
+    )
 
 
-def resolve_demo_environment_automation_module_path():
-    return resolve_coursecraft_repo_root() / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+def resolve_demo_environment_automation_module_path(coursecraft_repo_root=None):
+    return resolve_coursecraft_repo_root(coursecraft_repo_root) / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
 
 
 def powershell_single_quoted(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def run_demo_environment_recording_prep():
+def run_demo_environment_recording_prep(coursecraft_repo_root=None):
     pwsh_path = require_path(DEMO_ENVIRONMENT_PWSH_PATH, "PowerShell executable for demo environment prep")
     module_path = require_path(
-        resolve_demo_environment_automation_module_path(),
+        resolve_demo_environment_automation_module_path(coursecraft_repo_root),
         "Demo environment automation manifest",
     )
     script = "\n".join([
@@ -1050,6 +1061,9 @@ def build_config(args):
     items = load_items(args.items)
     requested_slide_numbers(items)
     prepared_items = validate_items(items, args.cue_marker)
+    coursecraft_repo_root = None
+    if args.coursecraft_repo_root is not None:
+        coursecraft_repo_root = str(Path(args.coursecraft_repo_root).expanduser().resolve())
     return {
         "deck_path": str(deck_path),
         "items": prepared_items,
@@ -1065,6 +1079,7 @@ def build_config(args):
         "slide_pause_seconds": args.slide_pause_seconds,
         "slideshow_start_seconds": args.slideshow_start_seconds,
         "cue_marker": args.cue_marker,
+        "coursecraft_repo_root": coursecraft_repo_root,
     }
 
 
@@ -1867,7 +1882,7 @@ def record(config):
             config["ffmpeg_video_input"],
         )
 
-        run_demo_environment_recording_prep()
+        run_demo_environment_recording_prep(config["coursecraft_repo_root"])
 
         # Measure the live click steps BEFORE anything is captured. The probe opens the
         # deck and plays the requested range once, so PowerPoint state is recorded first
