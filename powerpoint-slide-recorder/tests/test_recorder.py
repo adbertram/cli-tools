@@ -4,7 +4,6 @@ import json
 import subprocess
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -47,6 +46,7 @@ def slide_config(root, **overrides):
                 "value": 1,
             },
             "segments": ["first", "second"],
+            "cue_count": 1,
             "audio_path": audio,
         }],
         "output_path": "/tmp/out.mp4",
@@ -63,72 +63,6 @@ def slide_config(root, **overrides):
     }
     config.update(overrides)
     return config
-
-
-def write_deck(root, slide_animation_counts):
-    deck = root / "deck.pptx"
-    namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
-
-    with zipfile.ZipFile(deck, "w") as archive:
-        for slide_number, animation_count in slide_animation_counts.items():
-            click_effects = "".join(
-                f'<p:par><p:cTn id="{index + 2}" nodeType="clickEffect"/></p:par>'
-                for index in range(animation_count)
-            )
-            slide_xml = (
-                f'<p:sld xmlns:p="{namespace}">'
-                "<p:cSld/>"
-                "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
-                f"<p:childTnLst>{click_effects}</p:childTnLst>"
-                "</p:cTn></p:par></p:tnLst></p:timing>"
-                "</p:sld>"
-            )
-            archive.writestr(f"ppt/slides/slide{slide_number}.xml", slide_xml)
-
-    return deck
-
-
-def write_layout_animation_deck(root, slide_layout_animation_counts):
-    """Build a deck whose slide XML has no timing but whose layout defines the clicks.
-
-    Mirrors Pluralsight-templated decks: each ``slide{N}.xml`` carries no
-    ``<p:timing>`` at all, and the click-build animations live on the referenced
-    slideLayout. Each slide gets its own layout part so per-slide counts differ.
-    """
-    deck = root / "layout-deck.pptx"
-    presentation_namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
-    relationships_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
-
-    with zipfile.ZipFile(deck, "w") as archive:
-        for slide_number, animation_count in slide_layout_animation_counts.items():
-            slide_xml = f'<p:sld xmlns:p="{presentation_namespace}"><p:cSld/></p:sld>'
-            archive.writestr(f"ppt/slides/slide{slide_number}.xml", slide_xml)
-
-            layout_name = f"slideLayout{slide_number}.xml"
-            rels_xml = (
-                f'<Relationships xmlns="{relationships_namespace}">'
-                f'<Relationship Id="rId1" '
-                f'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
-                f'Target="../slideLayouts/{layout_name}"/>'
-                "</Relationships>"
-            )
-            archive.writestr(f"ppt/slides/_rels/slide{slide_number}.xml.rels", rels_xml)
-
-            click_effects = "".join(
-                f'<p:par><p:cTn id="{index + 2}" nodeType="clickEffect"/></p:par>'
-                for index in range(animation_count)
-            )
-            layout_xml = (
-                f'<p:sldLayout xmlns:p="{presentation_namespace}">'
-                "<p:cSld/>"
-                "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
-                f"<p:childTnLst>{click_effects}</p:childTnLst>"
-                "</p:cTn></p:par></p:tnLst></p:timing>"
-                "</p:sldLayout>"
-            )
-            archive.writestr(f"ppt/slideLayouts/{layout_name}", layout_xml)
-
-    return deck
 
 
 class DemoEnvironmentPrepTests(unittest.TestCase):
@@ -186,8 +120,18 @@ class RecordTests(unittest.TestCase):
         self.capture_overlay_settle_original = record.settle_capture_overlay
         self.capture_overlay_settle_patcher = mock.patch.object(record, "settle_capture_overlay")
         self.capture_overlay_settle = self.capture_overlay_settle_patcher.start()
+        # The live click-step probe drives PowerPoint; every record() test stubs it and
+        # asserts on what the drive does with the measurement, not on the probe's IO.
+        self.click_step_probe_patcher = mock.patch.object(
+            record, "measure_slide_click_steps", return_value={1: 1, 2: 1}
+        )
+        self.click_step_probe = self.click_step_probe_patcher.start()
+        self.cue_count_check_patcher = mock.patch.object(record, "assert_cue_counts_match_click_steps")
+        self.cue_count_check = self.cue_count_check_patcher.start()
 
     def tearDown(self):
+        self.cue_count_check_patcher.stop()
+        self.click_step_probe_patcher.stop()
         self.capture_overlay_settle_patcher.stop()
         self.demo_prep_patcher.stop()
 
@@ -585,7 +529,7 @@ Input #0, avfoundation, from '3':
                     "slide": 1,
                     "transcript_path": str(transcript),
                     "audio_path": str(audio),
-                }], "||", {1: 1})
+                }], "||")
 
     def test_validate_items_normalizes_identity_without_type_parallel_fields(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -599,7 +543,7 @@ Input #0, avfoundation, from '3':
                 "slide": 3,
                 "transcript_path": str(transcript),
                 "audio_path": str(audio),
-            }], "||", {3: 0})
+            }], "||")
 
         self.assertEqual(items[0]["identity"], {
             "field": "slide",
@@ -608,172 +552,93 @@ Input #0, avfoundation, from '3':
         self.assertNotIn("slide", items[0])
         self.assertNotIn("name", items[0])
 
-    def test_slide_animation_counts_read_click_effects_from_pptx(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            deck = write_deck(root, {1: 2, 2: 0})
+    def test_click_steps_from_walk_counts_presses_that_do_not_change_the_slide(self):
+        # Slide 1 builds twice then advances; slide 2 builds once then ends the show.
+        counts = record.click_steps_from_slide_index_walk([1, 2], [1, 1, 2, 2, None])
 
-            counts = record.slide_animation_counts(deck, [1, 2])
+        self.assertEqual(counts, {1: 2, 2: 1})
 
-        self.assertEqual(counts, {
-            1: 2,
-            2: 0,
-        })
+    def test_click_steps_from_walk_counts_slides_with_no_animations_as_zero(self):
+        counts = record.click_steps_from_slide_index_walk([4, 5, 6], [5, 6, None])
 
-    def test_slide_animation_count_ignores_build_list_templates(self):
-        namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
-        slide_xml = (
-            f'<p:sld xmlns:p="{namespace}">'
-            "<p:timing>"
-            "<p:tnLst><p:par><p:cTn nodeType=\"tmRoot\">"
-            "<p:childTnLst><p:par><p:cTn nodeType=\"clickEffect\"/></p:par></p:childTnLst>"
-            "</p:cTn></p:par></p:tnLst>"
-            "<p:bldLst><p:bldP><p:tmplLst><p:tmpl><p:tnLst>"
-            "<p:par><p:cTn nodeType=\"clickEffect\"/></p:par>"
-            "</p:tnLst></p:tmpl></p:tmplLst></p:bldP></p:bldLst>"
-            "</p:timing>"
-            "</p:sld>"
-        )
+        self.assertEqual(counts, {4: 0, 5: 0, 6: 0})
 
-        self.assertEqual(record.slide_animation_count_from_xml(slide_xml), 1)
+    def test_click_steps_from_walk_measures_more_steps_than_the_deck_xml_authored(self):
+        # The shipped defect: slide 16 of the m1 deck authors 4 clickEffect nodes in its
+        # layout but the running show consumes 8 click steps, because PowerPoint expands
+        # the layout's paragraph-build template against the slide's own content. The walk
+        # reports what the show consumed, which is the number the drive must plan.
+        observed = [16] * 8 + [None]
 
-    def test_slide_animation_counts_read_click_effects_from_slide_layout(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            deck = write_layout_animation_deck(root, {1: 0, 2: 4, 8: 6})
+        counts = record.click_steps_from_slide_index_walk([16], observed)
 
-            counts = record.slide_animation_counts(deck, [1, 2, 8])
+        self.assertEqual(counts, {16: 8})
 
-        self.assertEqual(counts, {
-            1: 0,
-            2: 4,
-            8: 6,
-        })
+    def test_click_steps_from_walk_rejects_a_jump_past_the_next_slide(self):
+        with self.assertRaisesRegex(RuntimeError, "jumped from slide 1 to slide 3 at press 2"):
+            record.click_steps_from_slide_index_walk([1, 2, 3], [1, 3, None])
 
-    def test_slide_animation_counts_sum_slide_and_layout_click_effects(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            deck = root / "mixed-deck.pptx"
-            presentation_namespace = "http://schemas.openxmlformats.org/presentationml/2006/main"
-            relationships_namespace = "http://schemas.openxmlformats.org/package/2006/relationships"
+    def test_click_steps_from_walk_rejects_a_show_that_ends_early(self):
+        with self.assertRaisesRegex(RuntimeError, "ended on slide 1 at press 1 before reaching"):
+            record.click_steps_from_slide_index_walk([1, 2], [None])
 
-            with zipfile.ZipFile(deck, "w") as archive:
-                slide_xml = (
-                    f'<p:sld xmlns:p="{presentation_namespace}">'
-                    "<p:cSld/>"
-                    "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
-                    "<p:childTnLst>"
-                    "<p:par><p:cTn id=\"2\" nodeType=\"clickEffect\"/></p:par>"
-                    "</p:childTnLst>"
-                    "</p:cTn></p:par></p:tnLst></p:timing>"
-                    "</p:sld>"
-                )
-                archive.writestr("ppt/slides/slide1.xml", slide_xml)
+    def test_click_steps_from_walk_rejects_a_walk_that_never_finishes(self):
+        with self.assertRaisesRegex(RuntimeError, "did not finish within 3 presses"):
+            record.click_steps_from_slide_index_walk([1, 2], [1, 1, 1])
 
-                rels_xml = (
-                    f'<Relationships xmlns="{relationships_namespace}">'
-                    '<Relationship Id="rId1" '
-                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
-                    'Target="../slideLayouts/slideLayout1.xml"/>'
-                    "</Relationships>"
-                )
-                archive.writestr("ppt/slides/_rels/slide1.xml.rels", rels_xml)
+    def test_live_slideshow_slide_index_reads_the_running_show(self):
+        with mock.patch.object(record, "capture_osascript", return_value="7"):
+            self.assertEqual(record.live_slideshow_slide_index(), 7)
 
-                layout_xml = (
-                    f'<p:sldLayout xmlns:p="{presentation_namespace}">'
-                    "<p:cSld/>"
-                    "<p:timing><p:tnLst><p:par><p:cTn id=\"1\">"
-                    "<p:childTnLst>"
-                    "<p:par><p:cTn id=\"2\" nodeType=\"clickEffect\"/></p:par>"
-                    "<p:par><p:cTn id=\"3\" nodeType=\"clickEffect\"/></p:par>"
-                    "</p:childTnLst>"
-                    "</p:cTn></p:par></p:tnLst></p:timing>"
-                    "</p:sldLayout>"
-                )
-                archive.writestr("ppt/slideLayouts/slideLayout1.xml", layout_xml)
+    def test_live_slideshow_slide_index_reports_none_once_the_show_ends(self):
+        with mock.patch.object(record, "capture_osascript", return_value="ended"):
+            self.assertIsNone(record.live_slideshow_slide_index())
 
-            counts = record.slide_animation_counts(deck, [1])
+    def test_live_slideshow_slide_index_rejects_an_unexpected_response(self):
+        with mock.patch.object(record, "capture_osascript", return_value="missing value"):
+            with self.assertRaisesRegex(RuntimeError, "Unexpected slideshow slide index response"):
+                record.live_slideshow_slide_index()
 
-        self.assertEqual(counts, {1: 3})
+    def test_position_watcher_passes_when_the_show_is_on_the_planned_slide(self):
+        watcher = record.SlideshowPositionWatcher(5)
 
-    def test_slide_animation_counts_treat_missing_layout_rels_as_zero(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            deck = write_deck(root, {1: 2})
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=5):
+            watcher.check()
 
-            counts = record.slide_animation_counts(deck, [1])
+    def test_position_watcher_aborts_when_the_deck_runs_ahead_of_the_narration(self):
+        # The shipped defect's signature: extra presses spilled into the next slide, so
+        # the show sits on slide 4 while the plan is still driving slide 3.
+        watcher = record.SlideshowPositionWatcher(3)
 
-        self.assertEqual(counts, {1: 2})
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=4):
+            with self.assertRaisesRegex(RuntimeError, "on slide 4 but the timing plan is driving slide 3"):
+                watcher.check()
 
-    def test_validate_items_uses_deck_animation_count_without_manifest_cue_count(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            transcript = root / "transcript.txt"
-            audio = root / "audio.wav"
-            transcript.write_text("first || second || third", encoding="utf-8")
-            audio.write_bytes(b"audio")
+    def test_position_watcher_aborts_when_the_show_ended_early(self):
+        watcher = record.SlideshowPositionWatcher(2)
 
-            items = record.validate_items([{
-                "slide": 1,
-                "transcript_path": str(transcript),
-                "audio_path": str(audio),
-            }], "||", {1: 2})
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "ended while slide 2 was still being driven"):
+                watcher.check()
 
-        self.assertEqual(items[0]["expected_cue_count"], 2)
+    def test_position_watcher_confirms_a_slide_advance(self):
+        watcher = record.SlideshowPositionWatcher(2)
 
-    def test_validate_items_rejects_cue_count_that_does_not_match_deck_animations(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            transcript = root / "transcript.txt"
-            audio = root / "audio.wav"
-            transcript.write_text("first || second", encoding="utf-8")
-            audio.write_bytes(b"audio")
+        with mock.patch.object(record, "live_slideshow_slide_index", side_effect=[2, 3]), \
+                mock.patch.object(record.time, "sleep"):
+            watcher.confirm_advance_to(3)
 
-            with self.assertRaisesRegex(ValueError, "slide 1 has 1 cue marker but deck has 2 animations"):
-                record.validate_items([{
-                    "slide": 1,
-                    "transcript_path": str(transcript),
-                    "audio_path": str(audio),
-                }], "||", {1: 2})
+        self.assertEqual(watcher.expected_slide, 3)
 
-    def test_build_config_infers_cue_count_from_deck_animations(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            transcript = root / "transcript.txt"
-            audio = root / "audio.wav"
-            deck = write_deck(root, {1: 2})
-            items_path = root / "items.json"
-            transcript.write_text("first || second || third", encoding="utf-8")
-            audio.write_bytes(b"audio")
-            items_path.write_text(json.dumps({
-                "items": [{
-                    "slide": 1,
-                    "transcript_path": str(transcript),
-                    "audio_path": str(audio),
-                }],
-            }), encoding="utf-8")
+    def test_position_watcher_aborts_when_an_advance_press_is_eaten_by_an_animation(self):
+        # The other half of the shipped defect: the deck needed more click steps than
+        # were planned, so the "next slide" press built an animation instead of advancing.
+        watcher = record.SlideshowPositionWatcher(10)
 
-            args = SimpleNamespace(
-                deck=deck,
-                items=items_path,
-                output=root / "out.mp4",
-                work_dir=root / "work",
-                video_input="3",
-                cue_marker="||",
-                framerate=30,
-                recording_lead_seconds=1.0,
-                slide_pause_seconds=0.75,
-                slideshow_start_seconds=2.0,
-                output_width=1920,
-                output_height=1080,
-                force_resolution=False,
-                force_aspect_ratio=None,
-            )
-            config = record.build_config(args)
-
-        self.assertEqual(config["items"][0]["expected_cue_count"], 2)
-        self.assertEqual(config["output_width"], 1920)
-        self.assertEqual(config["output_height"], 1080)
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=10), \
+                mock.patch.object(record.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "did not advance to slide 11"):
+                watcher.confirm_advance_to(11)
 
     def test_prepare_generates_between_slide_silence(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -797,13 +662,14 @@ Input #0, avfoundation, from '3':
                     mock.patch.object(record, "audio_duration", side_effect=[2.0, 3.0]), \
                     mock.patch.object(record, "run", side_effect=fake_run):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    plan = record.prepare(config)
+                    plan = record.prepare(config, {1: 1, 2: 0})
 
             self.assertEqual(generated_silence, ["silence-lead.wav", "silence-slide.wav"])
             self.assertEqual(plan["actions"], [{
                 "at_seconds": 2.0,
                 "key": "space",
                 "item": "Slide 1",
+                "slide": 1,
                 "reason": "action cue",
             }])
             self.assertEqual(plan["items"][0]["identity"], {
@@ -941,7 +807,7 @@ Input #0, avfoundation, from '3':
         audio_process = FakeProcess([None, 0], 0)
         events = []
 
-        def fake_prepare(config):
+        def fake_prepare(config, click_steps):
             events.append("prepare")
             return {
                 "narration_audio": "/tmp/narration.wav",
@@ -973,12 +839,14 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "create_powerpoint_state", side_effect=fake_state), \
                 mock.patch.object(record, "start_slideshow", side_effect=fake_start_slideshow), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run"), \
                 mock.patch.object(subprocess, "Popen", side_effect=fake_popen):
             record.record(config)
 
-        self.assertEqual(events[:4], ["demo_prep", "prepare", "state", "slideshow"])
+        # PowerPoint state is captured before the live click-step probe opens the deck,
+        # so the same cleanup path closes whatever the probe left behind.
+        self.assertEqual(events[:4], ["demo_prep", "state", "prepare", "slideshow"])
         self.assertEqual(events[4], "ffmpeg")
 
     def test_record_aborts_clearly_when_demo_environment_prep_fails(self):
@@ -1090,7 +958,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1151,7 +1019,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1216,7 +1084,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             with contextlib.redirect_stderr(io.StringIO()):
@@ -1256,11 +1124,19 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "set_display_resolution", side_effect=fake_set_display_resolution), \
                 mock.patch.object(record, "probe_capture_dimensions", side_effect=[(4112, 2658), (1920, 1080)]), \
                 mock.patch.object(record, "prepare", side_effect=RuntimeError("prepare failed")), \
+                mock.patch.object(record, "create_powerpoint_state", return_value={
+                    "powerpoint_was_running": False,
+                    "deck_was_open": False,
+                }), \
+                mock.patch.object(record, "close_slideshow_and_deck") as close_slideshow_and_deck, \
                 mock.patch.object(record, "run") as run:
             with self.assertRaisesRegex(RuntimeError, "prepare failed"):
                 record.record(config)
 
         self.assertEqual(events, ["set_resolution", "restore_resolution"])
+        # The click-step probe already opened the deck by this point, so the failure path
+        # must close PowerPoint rather than leaving a probe-opened deck behind.
+        close_slideshow_and_deck.assert_called_once()
         run.assert_not_called()
 
     def test_record_runs_process_cleanup_when_state_creation_fails(self):
@@ -1367,7 +1243,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck", side_effect=fake_close_slideshow_and_deck), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1400,7 +1276,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1437,7 +1313,7 @@ Input #0, avfoundation, from '3':
                 }), \
                 mock.patch.object(record, "start_slideshow"), \
                 mock.patch.object(record, "close_slideshow_and_deck"), \
-                mock.patch.object(record, "assert_slideshow_present"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "run", side_effect=fake_run), \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
             record.record(config)
@@ -1614,15 +1490,16 @@ Input #0, avfoundation, from '3':
         park.assert_called_once_with()
         sleep.assert_called_once_with(record.CAPTURE_OVERLAY_SETTLE_SECONDS)
 
-    def test_assert_slideshow_present_is_read_only(self):
-        with mock.patch.object(record, "execute_ui_actions") as execute:
-            record.assert_slideshow_present()
+    def test_during_capture_watchdog_is_read_only(self):
+        # The during-capture check must never run a mutating UI action (an earlier
+        # regression re-ran the fullscreen action and surfaced the navigation toolbar).
+        watcher = record.SlideshowPositionWatcher(1)
 
-        execute.assert_called_once_with([{
-            "action": "assert_window",
-            "process": "Microsoft PowerPoint",
-            "contains": "Slide Show",
-        }])
+        with mock.patch.object(record, "execute_ui_actions") as execute, \
+                mock.patch.object(record, "capture_osascript", return_value="1"):
+            watcher.check()
+
+        execute.assert_not_called()
 
     def test_set_slideshow_pointer_automatic_uses_powerpoint_command_u_shortcut(self):
         with mock.patch.object(record, "execute_ui_actions") as execute:
@@ -1705,6 +1582,94 @@ Input #0, avfoundation, from '3':
         self.assertEqual(build_config.call_args.args[0].output_height, 1080)
         self.assertIs(build_config.call_args.args[0].force_resolution, True)
         self.assertEqual(build_config.call_args.args[0].force_aspect_ratio, (16, 9))
+
+
+    def test_build_config_prepares_items_without_touching_powerpoint(self):
+        # build_config stays offline: cue counts are checked against the live probe
+        # inside record(), so building a config never needs PowerPoint running.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            deck = root / "deck.pptx"
+            items_path = root / "items.json"
+            transcript.write_text("first || second || third", encoding="utf-8")
+            audio.write_bytes(b"audio")
+            deck.write_bytes(b"deck")
+            items_path.write_text(json.dumps({
+                "items": [{
+                    "slide": 1,
+                    "transcript_path": str(transcript),
+                    "audio_path": str(audio),
+                }],
+            }), encoding="utf-8")
+
+            args = SimpleNamespace(
+                deck=deck,
+                items=items_path,
+                output=root / "out.mp4",
+                work_dir=root / "work",
+                video_input="3",
+                cue_marker="||",
+                framerate=30,
+                recording_lead_seconds=1.0,
+                slide_pause_seconds=0.75,
+                slideshow_start_seconds=2.0,
+                output_width=1920,
+                output_height=1080,
+                force_resolution=False,
+                force_aspect_ratio=None,
+            )
+            config = record.build_config(args)
+
+        self.assertEqual(config["items"][0]["cue_count"], 2)
+        self.assertEqual(config["output_width"], 1920)
+        self.assertEqual(config["output_height"], 1080)
+
+
+class LiveClickStepProbeTests(unittest.TestCase):
+    """Probe and cue-count checks, unstubbed (RecordTests stubs both for its drive tests)."""
+
+    def test_measure_slide_click_steps_walks_the_live_show_and_exits_it(self):
+        config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
+        # Start on slide 3, one build, advance to 4, one build, then the show ends.
+        indexes = [3, 3, 4, 4, None]
+
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "clear_benign_dialogs_before_slideshow"), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "press_space") as press_space, \
+                mock.patch.object(record, "exit_slideshow_if_running") as exit_slideshow, \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
+                mock.patch.object(record.time, "sleep"):
+            counts = record.measure_slide_click_steps(config, [3, 4])
+
+        self.assertEqual(counts, {3: 1, 4: 1})
+        self.assertEqual(press_space.call_count, 4)
+        exit_slideshow.assert_called_once()
+
+    def test_measure_slide_click_steps_rejects_a_show_that_starts_on_the_wrong_slide(self):
+        config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
+
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "clear_benign_dialogs_before_slideshow"), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
+                mock.patch.object(record.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "started on slide 1, expected slide 3"):
+                record.measure_slide_click_steps(config, [3, 4])
+
+    def test_assert_cue_counts_match_click_steps_accepts_matching_counts(self):
+        items = [{"label": "Slide 1", "identity": {"field": "slide", "value": 1}, "cue_count": 2}]
+
+        record.assert_cue_counts_match_click_steps(items, {1: 2})
+
+    def test_assert_cue_counts_match_click_steps_rejects_a_mismatch(self):
+        items = [{"label": "Slide 16", "identity": {"field": "slide", "value": 16}, "cue_count": 4}]
+
+        with self.assertRaisesRegex(ValueError, "slide 16 has 4 cue marker but the live slide show consumes 8 click steps"):
+            record.assert_cue_counts_match_click_steps(items, {16: 8})
 
 
 if __name__ == "__main__":

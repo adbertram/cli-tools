@@ -17,6 +17,7 @@ class TimingAction(CLIModel):
     at_seconds: float
     key: str
     item: str
+    slide: int
     reason: str
 
 
@@ -26,6 +27,7 @@ class RecordingItemPlan(CLIModel):
     label: str
     identity: SlideIdentity
     cue_count: int
+    measured_click_steps: int
     audio: str
     duration_seconds: float
     cue_timing_method: str

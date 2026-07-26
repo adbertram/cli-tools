@@ -5,8 +5,6 @@ import shlex
 import subprocess
 import sys
 import time
-import zipfile
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
@@ -133,12 +131,28 @@ OPEN_DECK_DISMISS_ATTEMPTS = 8
 DIALOG_PROBE_ATTEMPTS = 3
 DIALOG_PROBE_RETRY_SECONDS = 0.5
 DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
+# Settle window between a probe Space press and reading the live slide index. The
+# click-build fades on these decks run 500ms; 0.7s leaves the show quiescent so the
+# index read reflects the press that just landed and never a press still in flight.
+SLIDE_CLICK_PROBE_SETTLE_SECONDS = 0.7
+# Hard upper bound on click steps the probe will tolerate on a single slide before
+# declaring the walk runaway. Real authored slides are far below this; the bound only
+# exists so a slide that never advances cannot loop forever.
+MAX_CLICK_STEPS_PER_SLIDE = 60
+# Bounded window for PowerPoint to actually land on the next slide after an advance
+# press during the recording drive, before the position guard calls it a divergence.
+SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
+SLIDE_ADVANCE_POLL_SECONDS = 0.1
+# Sentinel the slide-index AppleScript returns once the show is over (no slide show
+# window, or the post-final-slide black screen where the view has no current slide).
+SLIDESHOW_ENDED_MARKER = "ended"
 POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
+SLIDE_ADVANCE_REASON = "next slide"
 INTER_SLIDE_ACTIONS = [{
     "key": "space",
-    "reason": "next slide",
+    "reason": SLIDE_ADVANCE_REASON,
 }]
 POWERPOINT_DISCARD_DIALOG_BUTTONS = ["Don't Save", "Discard", "Cancel"]
 # Benign PowerPoint startup/first-run dialogs the recorder auto-dismisses (data,
@@ -191,9 +205,6 @@ POWERPOINT_STARTUP_DIALOGS = [
         "dismiss_button": ["Accept", "Continue", "Get Started", "Skip", "Close", "OK", "Done"],
     },
 ]
-PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
-PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
-SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
 
 
 def slide_label(item, index):
@@ -752,11 +763,10 @@ def audio_path(item, label):
     return require_path(item["audio_path"], f"{label} audio")
 
 
-def normalize_item(item, index, cue_marker, expected_cue_count):
+def normalize_item(item, index, cue_marker):
     label = slide_label(item, index)
     transcript = read_transcript(item, label)
     segments = split_segments(label, transcript, cue_marker)
-    validate_cue_count(segments, label, expected_cue_count)
     return {
         "index": index,
         "label": label,
@@ -766,7 +776,7 @@ def normalize_item(item, index, cue_marker, expected_cue_count):
         },
         "transcript": transcript,
         "segments": segments,
-        "expected_cue_count": expected_cue_count,
+        "cue_count": len(segments) - 1,
         "audio_path": audio_path(item, label),
     }
 
@@ -785,13 +795,23 @@ def split_segments(label, transcript, cue_marker):
     return segments
 
 
-def validate_cue_count(segments, label, expected_cue_count):
-    actual_cue_count = len(segments) - 1
-    if actual_cue_count != expected_cue_count:
-        raise ValueError(
-            f"{label.lower()} has {actual_cue_count} cue marker "
-            f"but deck has {expected_cue_count} animations"
-        )
+def assert_cue_counts_match_click_steps(prepared_items, click_steps):
+    """Fail loudly unless every item authors exactly one cue per live click step.
+
+    ``click_steps`` comes from :func:`measure_slide_click_steps`, which walks the real
+    slide show, so this compares authored cues against what PowerPoint will actually
+    consume rather than against a count guessed from the deck's OOXML.
+    """
+    for item in prepared_items:
+        slide_number = item["identity"]["value"]
+        if slide_number not in click_steps:
+            raise KeyError(f"{item['label']} was not measured by the slide-show probe")
+        expected_cue_count = click_steps[slide_number]
+        if item["cue_count"] != expected_cue_count:
+            raise ValueError(
+                f"{item['label'].lower()} has {item['cue_count']} cue marker "
+                f"but the live slide show consumes {expected_cue_count} click steps"
+            )
 
 
 def audio_duration(path):
@@ -864,68 +884,134 @@ def cue_offsets_from_word_ratio(label, segments, duration_seconds):
     return offsets
 
 
-def slide_animation_count_from_xml(slide_xml):
-    root = ElementTree.fromstring(slide_xml)
-    namespace = {"p": PRESENTATIONML_NAMESPACE}
-    return len(root.findall(".//p:timing/p:tnLst//p:cTn[@nodeType='clickEffect']", namespace))
+def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
+    """Derive per-slide click steps from the live slide indexes a Space walk produced.
 
+    ``observed_indexes`` is the live slide index read after each Space press, in press
+    order, ending with ``None`` for the press that ended the show. A press that leaves
+    the index unchanged consumed a click step (an animation build); a press that moves
+    the index to the next slide consumed the slide advance and is not a click step.
 
-def slide_layout_member_for_slide(deck, slide_number):
-    """Return the ``ppt/slideLayouts/<name>.xml`` member a slide references, or None.
-
-    Pluralsight-templated decks define their click-build animations on the
-    slide's slideLayout rather than on ``slide{N}.xml``. Resolve the layout from
-    the slide's relationship part so its animations can be counted too. A missing
-    or malformed rels part is treated as "no layout" rather than an error.
+    This is the whole reason the recorder no longer counts ``clickEffect`` nodes in the
+    deck's OOXML: on layout-inherited paragraph builds PowerPoint expands the layout's
+    build template against the slide's own content at show time, so the authored node
+    count and the presses the running show consumes are different numbers. Measuring the
+    running show is the only source that cannot disagree with the recording drive.
     """
-    rels_path = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
-    try:
-        rels_xml = deck.read(rels_path)
-    except KeyError:
-        return None
+    if not slide_numbers:
+        raise ValueError("Slide-show probe requires at least one slide")
 
-    try:
-        rels_root = ElementTree.fromstring(rels_xml)
-    except ElementTree.ParseError:
-        return None
+    counts = {slide_number: 0 for slide_number in slide_numbers}
+    final_slide = slide_numbers[-1]
+    current_slide = slide_numbers[0]
 
-    relationship_tag = f"{{{PACKAGE_RELATIONSHIPS_NAMESPACE}}}Relationship"
-    for relationship in rels_root.iter(relationship_tag):
-        relationship_type = relationship.get("Type", "")
-        target = relationship.get("Target", "")
-        if relationship_type.endswith(SLIDE_LAYOUT_RELATIONSHIP_SUFFIX) and target:
-            return f"ppt/slideLayouts/{Path(target).name}"
-    return None
-
-
-def slide_layout_animation_count(deck, slide_number):
-    layout_member = slide_layout_member_for_slide(deck, slide_number)
-    if layout_member is None:
-        return 0
-    try:
-        layout_xml = deck.read(layout_member)
-    except KeyError:
-        return 0
-    return slide_animation_count_from_xml(layout_xml)
-
-
-def slide_animation_counts(deck_path, slide_numbers):
-    counts = {}
-    try:
-        with zipfile.ZipFile(deck_path) as deck:
-            for slide_number in slide_numbers:
-                slide_xml_path = f"ppt/slides/slide{slide_number}.xml"
-                try:
-                    slide_xml = deck.read(slide_xml_path)
-                except KeyError as error:
-                    raise FileNotFoundError(f"Slide {slide_number} XML not found in deck: {slide_xml_path}") from error
-                counts[slide_number] = (
-                    slide_animation_count_from_xml(slide_xml)
-                    + slide_layout_animation_count(deck, slide_number)
+    for press_number, observed_index in enumerate(observed_indexes, start=1):
+        if observed_index is None:
+            if current_slide != final_slide:
+                raise RuntimeError(
+                    f"Slide-show probe ended on slide {current_slide} at press {press_number} "
+                    f"before reaching the last requested slide {final_slide}"
                 )
-    except zipfile.BadZipFile as error:
-        raise ValueError(f"PowerPoint deck is not a readable OOXML presentation: {deck_path}") from error
-    return counts
+            return counts
+
+        if observed_index == current_slide:
+            counts[current_slide] = counts[current_slide] + 1
+            if counts[current_slide] > MAX_CLICK_STEPS_PER_SLIDE:
+                raise RuntimeError(
+                    f"Slide {current_slide} consumed more than {MAX_CLICK_STEPS_PER_SLIDE} "
+                    "click steps; the slide show is not advancing"
+                )
+            continue
+
+        if observed_index == current_slide + 1 and observed_index in counts:
+            current_slide = observed_index
+            continue
+
+        raise RuntimeError(
+            f"Slide-show probe jumped from slide {current_slide} to slide {observed_index} "
+            f"at press {press_number}; expected the same slide or slide {current_slide + 1}"
+        )
+
+    raise RuntimeError(
+        f"Slide-show probe did not finish within {len(observed_indexes)} presses "
+        f"(reached slide {current_slide} of {final_slide})"
+    )
+
+
+def render_live_slideshow_slide_index():
+    """AppleScript reporting the running show's slide index, or ``ended``.
+
+    Two distinct states mean "the show is over": no slide show window at all, and the
+    post-final-slide black screen, where the window still exists but the view has no
+    current slide. Both are reported as ``ended`` rather than being read as an error, so
+    a genuine AppleScript failure still propagates loudly.
+    """
+    return [
+        'tell application "Microsoft PowerPoint"',
+        f'if (count of slide show windows) is 0 then return "{SLIDESHOW_ENDED_MARKER}"',
+        "set currentSlide to slide of slide show view of slide show window 1",
+        f'if currentSlide is missing value then return "{SLIDESHOW_ENDED_MARKER}"',
+        "return (slide index of currentSlide) as text",
+        "end tell",
+    ]
+
+
+def live_slideshow_slide_index():
+    """1-based slide index of the running slide show, or None once the show has ended."""
+    output = capture_osascript(*render_live_slideshow_slide_index())
+    if output == SLIDESHOW_ENDED_MARKER:
+        return None
+    if re.fullmatch(r"[1-9][0-9]*", output) is None:
+        raise RuntimeError(f"Unexpected slideshow slide index response: {output!r}")
+    return int(output)
+
+
+def exit_slideshow_if_running():
+    run_osascript(
+        'tell application "Microsoft PowerPoint"',
+        "if (count of slide show windows) is 0 then return",
+        "exit slide show of slide show view of slide show window 1",
+        "end tell",
+    )
+
+
+def walk_slideshow_slide_indexes(press_budget):
+    """Press Space up to ``press_budget`` times, returning the live index after each."""
+    observed_indexes = []
+    for _ in range(press_budget):
+        press_space()
+        time.sleep(SLIDE_CLICK_PROBE_SETTLE_SECONDS)
+        observed_index = live_slideshow_slide_index()
+        observed_indexes.append(observed_index)
+        if observed_index is None:
+            return observed_indexes
+    return observed_indexes
+
+
+def measure_slide_click_steps(config, slide_numbers):
+    """Walk the real slide show once and return each slide's live click-step count.
+
+    Runs before any capture starts: opens the deck, plays the requested slide range with
+    manual advance, and presses Space through the whole range while reading the live
+    slide index. The recording drive then plans exactly the presses this walk proved the
+    show consumes, so the deck can never run ahead of or behind the narration.
+    """
+    open_deck(config)
+    clear_benign_dialogs_before_slideshow()
+    run_osascript(*render_run_slideshow_range(slide_numbers[0], slide_numbers[-1]))
+    time.sleep(config["slideshow_start_seconds"])
+
+    starting_index = live_slideshow_slide_index()
+    if starting_index != slide_numbers[0]:
+        raise RuntimeError(
+            f"Slide-show probe started on slide {starting_index}, expected slide {slide_numbers[0]}"
+        )
+
+    press_budget = len(slide_numbers) * (MAX_CLICK_STEPS_PER_SLIDE + 1)
+    observed_indexes = walk_slideshow_slide_indexes(press_budget)
+    click_steps = click_steps_from_slide_index_walk(slide_numbers, observed_indexes)
+    exit_slideshow_if_running()
+    return click_steps
 
 
 def requested_slide_numbers(items):
@@ -938,7 +1024,7 @@ def requested_slide_numbers(items):
     return slide_numbers
 
 
-def validate_items(items, cue_marker, animation_counts):
+def validate_items(items, cue_marker):
     if cue_marker == "":
         raise ValueError("--cue-marker cannot be empty")
 
@@ -946,10 +1032,7 @@ def validate_items(items, cue_marker, animation_counts):
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             raise TypeError(f"Item {index} must be an object")
-
-        slide_number = item[SLIDE_IDENTITY_FIELD]
-        expected_cue_count = animation_counts[slide_number]
-        prepared_items.append(normalize_item(item, index, cue_marker, expected_cue_count))
+        prepared_items.append(normalize_item(item, index, cue_marker))
 
     for previous, current in zip(prepared_items, prepared_items[1:]):
         expected_identity = previous["identity"]["value"] + 1
@@ -965,8 +1048,8 @@ def validate_items(items, cue_marker, animation_counts):
 def build_config(args):
     deck_path = require_path(args.deck, "PowerPoint deck")
     items = load_items(args.items)
-    animation_counts = slide_animation_counts(deck_path, requested_slide_numbers(items))
-    prepared_items = validate_items(items, args.cue_marker, animation_counts)
+    requested_slide_numbers(items)
+    prepared_items = validate_items(items, args.cue_marker)
     return {
         "deck_path": str(deck_path),
         "items": prepared_items,
@@ -985,7 +1068,11 @@ def build_config(args):
     }
 
 
-def prepare(config):
+def prepared_slide_numbers(prepared_items):
+    return [item["identity"]["value"] for item in prepared_items]
+
+
+def prepare(config, click_steps):
     work_dir = Path(config["work_dir"])
     audio_dir = work_dir / "audio"
     plan_path = work_dir / "timing-plan.json"
@@ -1017,6 +1104,7 @@ def prepare(config):
                 "at_seconds": round(item_started_at + cue_offset, 3),
                 "key": "space",
                 "item": item["label"],
+                "slide": item["identity"]["value"],
                 "reason": "action cue",
             })
 
@@ -1028,6 +1116,7 @@ def prepare(config):
                     "at_seconds": round(timeline_seconds, 3),
                     "key": inter_item_action["key"],
                     "item": item["label"],
+                    "slide": item["identity"]["value"],
                     "reason": inter_item_action["reason"],
                 })
             audio_files.append(inter_slide_silence)
@@ -1036,7 +1125,8 @@ def prepare(config):
         item_plans.append({
             "label": item["label"],
             "identity": item["identity"],
-            "cue_count": len(item["segments"]) - 1,
+            "cue_count": item["cue_count"],
+            "measured_click_steps": click_steps[item["identity"]["value"]],
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
             "cue_timing_method": "word-ratio",
@@ -1127,12 +1217,47 @@ def settle_capture_overlay():
     time.sleep(CAPTURE_OVERLAY_SETTLE_SECONDS)
 
 
-def assert_slideshow_present():
-    execute_ui_actions([{
-        "action": "assert_window",
-        "process": "Microsoft PowerPoint",
-        "contains": "Slide Show",
-    }])
+class SlideshowPositionWatcher:
+    """Guards that the live show is on the slide the timing plan is driving.
+
+    A lateness guard cannot catch this class of failure: the recorder can press exactly
+    on schedule and still desynchronize, because what breaks is which slide the deck is
+    on when the press lands. Every press is preceded by an equality check against the
+    planned slide, and every slide advance is confirmed before the next slide's cues are
+    driven, so a deck that consumes presses differently than planned aborts the recording
+    instead of silently shipping a desynced video.
+    """
+
+    def __init__(self, expected_slide):
+        self.expected_slide = expected_slide
+
+    def check(self):
+        observed_slide = live_slideshow_slide_index()
+        if observed_slide is None:
+            raise RuntimeError(
+                f"PowerPoint slide show ended while slide {self.expected_slide} was still being driven"
+            )
+        if observed_slide != self.expected_slide:
+            raise RuntimeError(
+                f"PowerPoint slide show is on slide {observed_slide} but the timing plan is "
+                f"driving slide {self.expected_slide}; the deck consumed a different number "
+                "of click steps than the slide-show probe measured"
+            )
+
+    def confirm_advance_to(self, expected_slide):
+        self.expected_slide = expected_slide
+        deadline = time.monotonic() + SLIDE_ADVANCE_CONFIRM_SECONDS
+        while True:
+            observed_slide = live_slideshow_slide_index()
+            if observed_slide == expected_slide:
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"PowerPoint slide show did not advance to slide {expected_slide} within "
+                    f"{SLIDE_ADVANCE_CONFIRM_SECONDS} seconds (observed slide {observed_slide}); "
+                    "the advance press was consumed as an animation build"
+                )
+            time.sleep(SLIDE_ADVANCE_POLL_SECONDS)
 
 
 def powerpoint_is_running():
@@ -1743,14 +1868,21 @@ def record(config):
         )
 
         run_demo_environment_recording_prep()
-        plan = prepare(config)
+
+        # Measure the live click steps BEFORE anything is captured. The probe opens the
+        # deck and plays the requested range once, so PowerPoint state is recorded first
+        # and the same cleanup path closes whatever the probe left behind on failure.
+        state = create_powerpoint_state(config)
+        click_steps = measure_slide_click_steps(config, prepared_slide_numbers(config["items"]))
+        assert_cue_counts_match_click_steps(config["items"], click_steps)
+
+        plan = prepare(config, click_steps)
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         raw_video_path = work_dir / "screen-recording.mov"
         narration_path = Path(plan["narration_audio"])
 
-        state = create_powerpoint_state(config)
         start_slideshow(config)
         ffmpeg_process = subprocess.Popen([
             "ffmpeg",
@@ -1779,15 +1911,18 @@ def record(config):
             (audio_process, "afplay"),
         ]
 
+        position_watcher = SlideshowPositionWatcher(config["items"][0]["identity"]["value"])
         for action in plan["actions"]:
             target_time = started_at + action["at_seconds"]
-            sleep_until(target_time, monitored_processes, assert_slideshow_present)
+            sleep_until(target_time, monitored_processes, position_watcher.check)
             for process, description in monitored_processes:
                 ensure_process_running(process, description)
-            assert_slideshow_present()
+            position_watcher.check()
             press_space()
+            if action["reason"] == SLIDE_ADVANCE_REASON:
+                position_watcher.confirm_advance_to(action["slide"] + 1)
 
-        audio_return_code = wait_for_audio(audio_process, ffmpeg_process, assert_slideshow_present)
+        audio_return_code = wait_for_audio(audio_process, ffmpeg_process, position_watcher.check)
         if audio_return_code != 0:
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 

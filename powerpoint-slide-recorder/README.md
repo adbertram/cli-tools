@@ -67,7 +67,13 @@ A 16:10-only display, such as the built-in MacBook Pro Liquid Retina XDR panel, 
 
 Every item requires `slide`, `transcript_path`, and `audio_path`. Slide numbers must be positive integers and items must be consecutive.
 
-Each transcript is required. Each cue marker sends Space at the estimated cue boundary. The recorder reads each slide's click-triggered animation count from the deck and fails before recording when the transcript cue marker count does not match the slide animation count.
+Each transcript is required. Each cue marker sends Space at the estimated cue boundary.
+
+Before any capture starts, the recorder measures each slide's click steps from the **live** slide show: it opens the deck, plays the requested slide range with manual advance, presses Space through the whole range, and reads the running show's slide index after every press. A press that leaves the index unchanged consumed a click step; a press that moves it to the next slide consumed the advance. The recording then fails before capture when a transcript's cue-marker count does not match the click steps that slide actually consumes.
+
+The count is measured rather than read from the deck's OOXML because they are not the same number. On layout-inherited paragraph builds — the Pluralsight template — PowerPoint expands the layout's build template against each slide's own content at show time, so a slide that authors 4 `clickEffect` nodes can consume 8 presses in the running show (and vice versa). Only the live measurement can agree with the recording drive.
+
+During the recording, every press is preceded by an equality check between the running show's slide index and the slide the timing plan is driving, and every slide advance is confirmed before the next slide's cues are driven. A deck that consumes presses differently than measured aborts the recording instead of producing a desynchronized MP4.
 
 ```json
 {
