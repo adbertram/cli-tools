@@ -60,6 +60,7 @@ def slide_config(root, **overrides):
         "recording_lead_seconds": 1.0,
         "slide_pause_seconds": 0.75,
         "cue_marker": "||",
+        "coursecraft_repo_root": None,
     }
     config.update(overrides)
     return config
@@ -82,6 +83,40 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
             with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
                 with self.assertRaisesRegex(FileNotFoundError, "CourseCraft repo root not found"):
                     record.resolve_demo_environment_automation_module_path()
+
+    def test_demo_environment_manifest_resolves_from_explicit_repo_root_outside_cwd(self):
+        # The recorder is otherwise fully path-explicit; --coursecraft-repo-root must let a
+        # caller record from any working directory without the cwd walk finding anything.
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as unrelated_cwd:
+            root = Path(temp_dir)
+            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text("@{}", encoding="utf-8")
+            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+
+            with mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
+                resolved = record.resolve_demo_environment_automation_module_path(root)
+
+            self.assertEqual(resolved, manifest.resolve())
+
+    def test_coursecraft_repo_root_failure_names_the_explicit_option(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "--coursecraft-repo-root"):
+                    record.resolve_coursecraft_repo_root()
+
+    def test_demo_environment_prep_passes_explicit_repo_root_to_the_manifest_lookup(self):
+        root = Path("/tmp/course")
+        module_path = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+
+        with mock.patch.object(
+            record, "resolve_demo_environment_automation_module_path", return_value=module_path
+        ) as resolve_manifest, \
+                mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
+                mock.patch.object(record, "run"):
+            record.run_demo_environment_recording_prep(root)
+
+        self.assertEqual(resolve_manifest.call_args.args[0], root)
 
     def test_demo_environment_prep_runs_existing_focus_and_notification_helpers(self):
         module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
@@ -832,7 +867,7 @@ Input #0, avfoundation, from '3':
                 return audio_process
             raise AssertionError(command)
 
-        self.demo_environment_prep.side_effect = lambda: events.append("demo_prep")
+        self.demo_environment_prep.side_effect = lambda coursecraft_repo_root: events.append("demo_prep")
 
         with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
                 mock.patch.object(record, "prepare", side_effect=fake_prepare), \
@@ -848,6 +883,41 @@ Input #0, avfoundation, from '3':
         # so the same cleanup path closes whatever the probe left behind.
         self.assertEqual(events[:4], ["demo_prep", "state", "prepare", "slideshow"])
         self.assertEqual(events[4], "ffmpeg")
+
+    def test_record_forwards_configured_coursecraft_repo_root_to_demo_environment_prep(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(
+                Path(temp_dir),
+                work_dir="/tmp/work",
+                coursecraft_repo_root="/tmp/coursecraft",
+            )
+        ffmpeg_process = FakeProcess([None, None, None], 0)
+        audio_process = FakeProcess([None, 0], 0)
+
+        def fake_popen(command, **kwargs):
+            if command[0] == "ffmpeg":
+                return ffmpeg_process
+            if command[0] == "afplay":
+                return audio_process
+            raise AssertionError(command)
+
+        with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
+                mock.patch.object(record, "prepare", return_value={
+                    "narration_audio": "/tmp/narration.wav",
+                    "actions": [],
+                }), \
+                mock.patch.object(record, "create_powerpoint_state", return_value={
+                    "powerpoint_was_running": False,
+                    "deck_was_open": False,
+                }), \
+                mock.patch.object(record, "start_slideshow"), \
+                mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
+                mock.patch.object(record, "run"), \
+                mock.patch.object(subprocess, "Popen", side_effect=fake_popen):
+            record.record(config)
+
+        self.assertEqual(self.demo_environment_prep.call_args.args[0], "/tmp/coursecraft")
 
     def test_record_aborts_clearly_when_demo_environment_prep_fails(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1573,6 +1643,7 @@ Input #0, avfoundation, from '3':
                     output_height=1080,
                     force_resolution=True,
                     force_aspect_ratio=(16, 9),
+                    coursecraft_repo_root=root,
                 )
 
         self.assertEqual(result.output_path, str(output))
@@ -1582,6 +1653,47 @@ Input #0, avfoundation, from '3':
         self.assertEqual(build_config.call_args.args[0].output_height, 1080)
         self.assertIs(build_config.call_args.args[0].force_resolution, True)
         self.assertEqual(build_config.call_args.args[0].force_aspect_ratio, (16, 9))
+        self.assertEqual(build_config.call_args.args[0].coursecraft_repo_root, root)
+
+    def test_public_cli_forwards_coursecraft_repo_root(self):
+        runner = CliRunner()
+
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
+            get_client.return_value.record.return_value = mock.Mock()
+            result = runner.invoke(app, [
+                "record",
+                "--deck", "/tmp/deck.pptx",
+                "--items", "/tmp/items.json",
+                "--output", "/tmp/out.mp4",
+                "--work-dir", "/tmp/work",
+                "--video-input", "3",
+                "--coursecraft-repo-root", "/tmp/coursecraft",
+            ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"],
+            Path("/tmp/coursecraft"),
+        )
+
+    def test_public_cli_defaults_coursecraft_repo_root_to_cwd_discovery(self):
+        runner = CliRunner()
+
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
+            get_client.return_value.record.return_value = mock.Mock()
+            result = runner.invoke(app, [
+                "record",
+                "--deck", "/tmp/deck.pptx",
+                "--items", "/tmp/items.json",
+                "--output", "/tmp/out.mp4",
+                "--work-dir", "/tmp/work",
+                "--video-input", "3",
+            ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIsNone(get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"])
 
 
     def test_build_config_prepares_items_without_touching_powerpoint(self):
@@ -1619,12 +1731,54 @@ Input #0, avfoundation, from '3':
                 output_height=1080,
                 force_resolution=False,
                 force_aspect_ratio=None,
+                coursecraft_repo_root=root / "coursecraft",
             )
             config = record.build_config(args)
+            resolved_repo_root = str((root / "coursecraft").resolve())
 
         self.assertEqual(config["items"][0]["cue_count"], 2)
         self.assertEqual(config["output_width"], 1920)
         self.assertEqual(config["output_height"], 1080)
+        self.assertEqual(config["coursecraft_repo_root"], resolved_repo_root)
+
+    def test_build_config_leaves_coursecraft_repo_root_unset_for_cwd_discovery(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            deck = root / "deck.pptx"
+            items_path = root / "items.json"
+            transcript.write_text("first", encoding="utf-8")
+            audio.write_bytes(b"audio")
+            deck.write_bytes(b"deck")
+            items_path.write_text(json.dumps({
+                "items": [{
+                    "slide": 1,
+                    "transcript_path": str(transcript),
+                    "audio_path": str(audio),
+                }],
+            }), encoding="utf-8")
+
+            args = SimpleNamespace(
+                deck=deck,
+                items=items_path,
+                output=root / "out.mp4",
+                work_dir=root / "work",
+                video_input="3",
+                cue_marker="||",
+                framerate=30,
+                recording_lead_seconds=1.0,
+                slide_pause_seconds=0.75,
+                slideshow_start_seconds=2.0,
+                output_width=1920,
+                output_height=1080,
+                force_resolution=False,
+                force_aspect_ratio=None,
+                coursecraft_repo_root=None,
+            )
+            config = record.build_config(args)
+
+        self.assertIsNone(config["coursecraft_repo_root"])
 
 
 class LiveClickStepProbeTests(unittest.TestCase):

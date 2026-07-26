@@ -1,7 +1,7 @@
 {
   "tool": "powerpoint-slide-recorder",
   "description": "Record narrated PowerPoint slides",
-  "discovered_at": "2026-06-20T19:53:48Z",
+  "discovered_at": "2026-07-26T22:39:14Z",
   "total_commands": 1,
   "global_options": [
     {
@@ -19,9 +19,10 @@
         "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/output.mp4 --work-dir /tmp/record-work --video-input 3 --resolution 1920x1080",
         "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 1920x1080 --force-resolution",
         "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --force-aspect-ratio 16x9",
-        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 2560x1440 --cue-marker \"[cue]\""
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --resolution 2560x1440 --cue-marker \"[cue]\"",
+        "powerpoint-slide-recorder record --deck /path/to/slides.pptx --items /path/to/items.json --output /path/to/slides.mp4 --work-dir /tmp/slides-work --video-input 3 --force-aspect-ratio 16x9 --coursecraft-repo-root /Users/adam/Dropbox/GitRepos/Agents/CourseCraft"
       ],
-      "usage_instructions": "Use powerpoint-slide-recorder record to record one or more consecutive slide items. Required flags are --deck, --items, --output, --work-dir, and --video-input; --resolution defaults to 1920x1080 and defines the final MP4 size. Width and height must be positive even integers. Before capture the recorder measures each slide's click steps by playing the requested slide range once and reading the live slide index after every Space press, requires each transcript to contain exactly that many cue markers, aborts mid-recording if the running show is not on the slide the timing plan is driving, and fails before PowerPoint launches when the AVFoundation capture source does not match the requested output aspect ratio or is smaller than the requested output. The final mux scales matching sources with -vf scale=<width>:<height> and does not add pad or crop filters. Use --force-resolution to temporarily switch the main display to --resolution before recording and restore the previous display mode afterward. Use --force-aspect-ratio 16x9 to temporarily switch the main display to the highest-usable-area mode for 16:9, then scale the final MP4 to the default 1920x1080 output resolution; an exact 16:9 mode is recorded uncropped, while a 16:10-only panel (the built-in MacBook Pro display) is recorded by cropping the centered 16:9 slide region PowerPoint letterboxes inside the 16:10 frame, so no external 16:9 monitor is needed. --force-aspect-ratio fails before launch only when no mode's centered 16:9 crop reaches the output. --force-resolution and --force-aspect-ratio are mutually exclusive. Use --cue-marker to override the default transcript cue marker ||, and use --table/-t only when a summary table is preferred over JSON.",
+      "usage_instructions": "Use powerpoint-slide-recorder record to record one or more consecutive slide items. Required flags are --deck, --items, --output, --work-dir, and --video-input; --resolution defaults to 1920x1080 and defines the final MP4 size. Width and height must be positive even integers. Before capture the recorder measures each slide's click steps by playing the requested slide range once and reading the live slide index after every Space press, requires each transcript to contain exactly that many cue markers, aborts mid-recording if the running show is not on the slide the timing plan is driving, and fails before PowerPoint launches when the AVFoundation capture source does not match the requested output aspect ratio or is smaller than the requested output. The final mux scales matching sources with -vf scale=<width>:<height> and does not add pad or crop filters. Use --force-resolution to temporarily switch the main display to --resolution before recording and restore the previous display mode afterward. Use --force-aspect-ratio 16x9 to temporarily switch the main display to the highest-usable-area mode for 16:9, then scale the final MP4 to the default 1920x1080 output resolution; an exact 16:9 mode is recorded uncropped, while a 16:10-only panel (the built-in MacBook Pro display) is recorded by cropping the centered 16:9 slide region PowerPoint letterboxes inside the 16:10 frame, so no external 16:9 monitor is needed. --force-aspect-ratio fails before launch only when no mode's centered 16:9 crop reaches the output. --force-resolution and --force-aspect-ratio are mutually exclusive. Use --cue-marker to override the default transcript cue marker ||, and use --table/-t only when a summary table is preferred over JSON. Before capture the recorder also runs CourseCraft demo-environment prep (Do Not Disturb plus notification clearing) from the DemoEnvironmentAutomation PowerShell module; it locates that module through --coursecraft-repo-root, and when that option is omitted it searches upward from the current working directory for course-pipeline.json and fails before recording if no CourseCraft repo root is found. Always pass --coursecraft-repo-root when the command is launched from outside the CourseCraft repo tree.",
       "arguments": [],
       "options": [
         {
@@ -107,6 +108,12 @@
           "required": false,
           "help": "Delay after slideshow starts before recording begins",
           "default": "2.0"
+        },
+        {
+          "name": "--coursecraft-repo-root",
+          "type": "PATH",
+          "required": false,
+          "help": "CourseCraft repo root holding the demo environment automation module; defaults to searching upward from the current directory"
         },
         {
           "name": "--table",

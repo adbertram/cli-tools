@@ -33,6 +33,7 @@ def record(
     recording_lead_seconds: float = typer.Option(DEFAULT_RECORDING_LEAD_SECONDS, "--recording-lead-seconds", help="Silence before narration starts"),
     slide_pause_seconds: float = typer.Option(DEFAULT_SLIDE_PAUSE_SECONDS, "--slide-pause-seconds", help="Pause inserted between slide items"),
     slideshow_start_seconds: float = typer.Option(DEFAULT_SLIDESHOW_START_SECONDS, "--slideshow-start-seconds", help="Delay after slideshow starts before recording begins"),
+    coursecraft_repo_root: Optional[Path] = typer.Option(None, "--coursecraft-repo-root", help="CourseCraft repo root holding the demo environment automation module; defaults to searching upward from the current directory"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result summary as a table"),
 ):
     """Record narrated PowerPoint slides."""
@@ -58,6 +59,7 @@ def record(
             output_height=output_height,
             force_resolution=force_resolution,
             force_aspect_ratio=parsed_force_aspect_ratio,
+            coursecraft_repo_root=coursecraft_repo_root,
         )
         if table:
             print_table(

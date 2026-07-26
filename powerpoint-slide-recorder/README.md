@@ -49,7 +49,14 @@ Optional options:
 - `--recording-lead-seconds 1.0`
 - `--slide-pause-seconds 0.75`
 - `--slideshow-start-seconds 2.0`
+- `--coursecraft-repo-root PATH`; see Demo Environment Prep
 - `--table`
+
+## Demo Environment Prep
+
+Before capture the recorder imports the CourseCraft `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. It finds that module by locating the CourseCraft repo root — the nearest directory containing `course-pipeline.json`.
+
+Pass `--coursecraft-repo-root /path/to/CourseCraft` to name that root explicitly. When the option is omitted the recorder searches upward from the current working directory, so the command only works from inside the CourseCraft repo tree; otherwise it fails before recording with `CourseCraft repo root not found from: <cwd>`.
 
 ## Resolution Guard
 
