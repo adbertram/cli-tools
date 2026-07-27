@@ -565,6 +565,24 @@ Edit this file to:
 - Configure exclusions
 - Set max nesting depth per CLI
 - Define parameter fixtures for commands that require IDs
+
+### List/Get Pairing Exclusions
+
+`excluded_from_list_required` and `excluded_from_get_required` under
+`[exclusions]` apply to EVERY CLI in the repo. When a group name is only
+legitimately exempt in one tool, declare the same key under
+`[cli_specific.<cli-name>]` instead — it is merged with the global list for that
+CLI only:
+
+```toml
+[cli_specific.ebay]
+# `listings` is marketplace search: eBay exposes no way to enumerate listings
+# without a query, and `listings search` is the documented ID-discovery command.
+excluded_from_list_required = ["listings", "time-away"]
+```
+
+An exclusion is for a group that genuinely has no ID space to enumerate — never
+for a resource group whose `list` command is merely missing.
 </configuration>
 
 <fixtures>

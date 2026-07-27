@@ -661,6 +661,29 @@ def get_list_commands(
     return [cmd for cmd in discovered_commands if cmd.endswith(" list") or cmd == "list"]
 
 
+def resolve_exclusions(test_config: Dict, cli_name: str, key: str) -> List[str]:
+    """Return the exclusion list for ``key``, widened by this CLI's own entries.
+
+    ``[exclusions]`` names apply to every CLI in the repo, so a group name that
+    is only legitimately exempt in one tool (e.g. eBay's ``listings``, which is
+    marketplace search with no enumerable ID space) must not be added there.
+    ``[cli_specific.<cli>]`` may declare the same keys to scope the exemption to
+    that CLI.
+
+    Args:
+        test_config: Parsed cli_test_config.toml
+        cli_name: CLI under test
+        key: Exclusion key, e.g. "excluded_from_list_required"
+
+    Returns:
+        Global exclusions followed by the CLI-scoped ones.
+    """
+    exclusions = list(test_config["exclusions"][key])
+    cli_specific = test_config.get("cli_specific", {}).get(cli_name, {})
+    exclusions.extend(cli_specific.get(key, []))
+    return exclusions
+
+
 def get_fixture_args(
     cli_name: str,
     cmd_path: str,
