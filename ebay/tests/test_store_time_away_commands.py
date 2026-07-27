@@ -7,14 +7,25 @@ import pytest
 from playwright.sync_api import sync_playwright
 from typer.testing import CliRunner
 
-from ebay_cli.browser import EbayBrowser
+from ebay_cli import time_away
 from ebay_cli.commands import store
 from ebay_cli.main import app
 
 
 class _Browser:
+    """Stand-in for the CLI-owned browser session; only close() is used here."""
+
     def __init__(self):
         self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class _TimeAway:
+    """Stand-in for the ebay_cli.time_away module, recording its calls."""
+
+    def __init__(self):
         self.enabled_calls = []
         self.disabled = False
         self.state = {
@@ -27,10 +38,10 @@ class _Browser:
             "text_excerpt": "Schedule time away",
         }
 
-    def get_time_away_settings(self):
+    def read_settings(self, browser):
         return self.state
 
-    def enable_time_away(self, **kwargs):
+    def enable(self, browser, **kwargs):
         self.enabled_calls.append(kwargs)
         return {
             **self.state,
@@ -39,7 +50,7 @@ class _Browser:
             "has_cancel_action": True,
         }
 
-    def disable_time_away(self):
+    def disable(self, browser):
         self.disabled = True
         return {
             **self.state,
@@ -48,14 +59,15 @@ class _Browser:
             "has_cancel_action": False,
         }
 
-    def close(self):
-        self.closed = True
-
 
 def _patch_browser(monkeypatch, browser):
+    """Wire the fake browser and time_away module into the store commands."""
     config = MagicMock()
     config.get_browser.return_value = browser
     monkeypatch.setattr(store, "get_config", lambda profile=None: config)
+    automation = _TimeAway()
+    monkeypatch.setattr(store, "time_away", automation)
+    return automation
 
 
 def test_parse_time_away_date_accepts_supported_formats():
@@ -69,7 +81,7 @@ def test_parse_time_away_date_accepts_supported_formats():
 
 def test_time_away_enable_refuses_without_yes_or_dry_run(monkeypatch):
     browser = _Browser()
-    _patch_browser(monkeypatch, browser)
+    automation = _patch_browser(monkeypatch, browser)
 
     result = CliRunner().invoke(
         app,
@@ -78,13 +90,13 @@ def test_time_away_enable_refuses_without_yes_or_dry_run(monkeypatch):
 
     assert result.exit_code == 1
     assert "Refusing to update eBay Time Away without --yes or --dry-run" in result.stderr
-    assert browser.enabled_calls == []
+    assert automation.enabled_calls == []
     assert browser.closed is False
 
 
 def test_time_away_enable_dry_run_reads_without_saving(monkeypatch):
     browser = _Browser()
-    _patch_browser(monkeypatch, browser)
+    automation = _patch_browser(monkeypatch, browser)
 
     result = CliRunner().invoke(
         app,
@@ -99,13 +111,13 @@ def test_time_away_enable_dry_run_reads_without_saving(monkeypatch):
     assert data["start_date"] == "2026-07-10"
     assert data["end_date"] == "2026-07-21"
     assert data["mode"] == "allow-sales"
-    assert browser.enabled_calls == []
+    assert automation.enabled_calls == []
     assert browser.closed is True
 
 
 def test_time_away_enable_saves_normalized_dates(monkeypatch):
     browser = _Browser()
-    _patch_browser(monkeypatch, browser)
+    automation = _patch_browser(monkeypatch, browser)
 
     result = CliRunner().invoke(
         app,
@@ -128,7 +140,7 @@ def test_time_away_enable_saves_normalized_dates(monkeypatch):
     assert data["submitted"] is True
     assert data["enabled"] is True
     assert data["mode"] == "pause-sales"
-    assert browser.enabled_calls == [
+    assert automation.enabled_calls == [
         {
             "start_date_iso": "2026-07-10",
             "start_date_display": "7/10/2026",
@@ -142,7 +154,7 @@ def test_time_away_enable_saves_normalized_dates(monkeypatch):
 
 def test_time_away_enable_rejects_invalid_mode(monkeypatch):
     browser = _Browser()
-    _patch_browser(monkeypatch, browser)
+    automation = _patch_browser(monkeypatch, browser)
 
     result = CliRunner().invoke(
         app,
@@ -151,12 +163,12 @@ def test_time_away_enable_rejects_invalid_mode(monkeypatch):
 
     assert result.exit_code == 1
     assert "mode must be allow-sales or pause-sales" in result.stderr
-    assert browser.enabled_calls == []
+    assert automation.enabled_calls == []
 
 
 def test_time_away_disable_saves_with_yes(monkeypatch):
     browser = _Browser()
-    _patch_browser(monkeypatch, browser)
+    automation = _patch_browser(monkeypatch, browser)
 
     result = CliRunner().invoke(
         app,
@@ -167,7 +179,7 @@ def test_time_away_disable_saves_with_yes(monkeypatch):
     data = json.loads(result.stdout)
     assert data["action"] == "disable"
     assert data["submitted"] is True
-    assert browser.disabled is True
+    assert automation.disabled is True
     assert browser.closed is True
 
 
@@ -202,7 +214,7 @@ def test_time_away_form_selects_mode_when_text_wraps_radio():
         page = browser.new_page()
         page.set_content(html)
 
-        EbayBrowser.__new__(EbayBrowser)._set_time_away_form(
+        time_away.set_form(
             page,
             start_date_iso="2026-07-09",
             start_date_display="7/9/2026",

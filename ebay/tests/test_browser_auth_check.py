@@ -37,15 +37,15 @@ class FakePage:
 
 
 class EvalFakePage(FakePage):
-    """FakePage that can be inspected: ``evaluate`` returns a canned page-state
-    dict so the eBay fetch-signal content check runs."""
+    """FakePage that can be inspected: ``evaluate`` returns a canned
+    AUTH_FAILURE_PAGE_JS verdict so the eBay content check runs."""
 
-    def __init__(self, url, page_state, cookies=None):
+    def __init__(self, url, failure_banner, cookies=None):
         super().__init__(url, cookies=cookies)
-        self._page_state = page_state
+        self._failure_banner = failure_banner
 
     def evaluate(self, _script):
-        return self._page_state
+        return self._failure_banner
 
 
 def _browser():
@@ -112,7 +112,7 @@ def test_summary_url_with_rendered_page_is_authenticated():
     the session is authenticated."""
     page = EvalFakePage(
         "https://www.ebay.com/mye/myebay/summary",
-        page_state={"failure_banner": False, "greeting": True},
+        failure_banner=False,
         cookies=ANONYMOUS_EBAY_COOKIES,
     )
     assert _browser()._check_auth(page) is True
@@ -124,7 +124,7 @@ def test_summary_url_error_interstitial_is_not_authenticated():
     fetch a usable page."""
     page = EvalFakePage(
         "https://www.ebay.com/mye/myebay/summary",
-        page_state={"failure_banner": True, "greeting": False},
+        failure_banner=True,
         cookies=ANONYMOUS_EBAY_COOKIES,
     )
     assert _browser()._check_auth(page) is False

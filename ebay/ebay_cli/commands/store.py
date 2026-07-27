@@ -17,6 +17,7 @@ import typer
 
 from ..client import get_client
 from ..config import get_config
+from .. import time_away
 from cli_tools_shared.output import print_json, print_table, handle_error, print_error, print_success
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..properties import validate_and_filter_properties, PropertyValidationError
@@ -123,7 +124,7 @@ def time_away_get(
     """Get current eBay Time Away settings."""
     browser = _get_browser(profile=profile)
     try:
-        result = _format_result("get", browser.get_time_away_settings())
+        result = _format_result("get", time_away.read_settings(browser))
         _print_time_away_result(result, table)
     except Exception as e:
         raise typer.Exit(handle_error(e))
@@ -159,7 +160,7 @@ def time_away_enable(
         browser = _get_browser(profile=profile)
         try:
             if dry_run:
-                state = browser.get_time_away_settings()
+                state = time_away.read_settings(browser)
                 result = _format_result("enable", state, dry_run=True)
                 result.update(
                     {
@@ -171,7 +172,8 @@ def time_away_enable(
                     }
                 )
             else:
-                state = browser.enable_time_away(
+                state = time_away.enable(
+                    browser,
                     start_date_iso=parsed_start.isoformat(),
                     start_date_display=_format_display_date(parsed_start),
                     end_date_iso=parsed_end.isoformat(),
@@ -211,7 +213,7 @@ def time_away_disable(
     browser = _get_browser(profile=profile)
     try:
         if dry_run:
-            state = browser.get_time_away_settings()
+            state = time_away.read_settings(browser)
             result = _format_result("disable", state, dry_run=True)
             result.update(
                 {
@@ -220,7 +222,7 @@ def time_away_disable(
                 }
             )
         else:
-            state = browser.disable_time_away()
+            state = time_away.disable(browser)
             result = _format_result("disable", state)
             result.update(
                 {
