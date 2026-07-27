@@ -193,6 +193,9 @@ def search_get(
             "field": "Time Left",
             "value": item.get("time_left", "") or "N/A",
         }, {
+            "field": "Fulfillment",
+            "value": _format_fulfillment(item),
+        }, {
             "field": "Description",
             "value": _truncate(item.get("description", ""), 100),
         }, {
@@ -205,6 +208,29 @@ def search_get(
         print_table(table_data, ["field", "value"], ["Field", "Value"])
     else:
         print_json(item)
+
+
+def _format_fulfillment(item: Dict) -> str:
+    """Render the listing's Shipping Options panel as one readable line.
+
+    Which options exist comes from `shipping_options`; the cost of each is
+    reported alongside but never used to decide whether the option is offered.
+    """
+    options = item["shipping_options"]
+    parts = []
+    if options["local_pickup"]:
+        price = item["local_pickup_price"]
+        parts.append(f"local pickup (${price:.2f})" if price is not None else "local pickup")
+    if options["flat_rate"]:
+        parts.append(f"{item['standard_shipping_label']} (${item['standard_shipping_price']:.2f})")
+    if options["carrier_calculator"]:
+        carriers = ", ".join(item["shipping_carriers"])
+        quoted = item.get("shipping_total")
+        priced = f", quoted ${quoted:.2f}" if quoted is not None else ""
+        parts.append(f"carrier calculator [{carriers}]{priced}")
+    if not parts:
+        return "none listed"
+    return "; ".join(parts)
 
 
 def _truncate(text: str, max_length: int) -> str:

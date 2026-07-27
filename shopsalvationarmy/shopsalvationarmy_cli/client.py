@@ -39,6 +39,11 @@ class ShopSalvationArmyClient:
     }
     VALID_SORTS = ("newest", "price", "ending")
 
+    # The listing's fulfillment panel and the one row label that is fixed
+    # site-side; every other row label is seller-chosen.
+    SHIPPING_PANEL_HEADING = "Shipping Options"
+    LOCAL_PICKUP_LABEL = "Local Pick Up"
+
     # Categories available on the site
     CATEGORIES = {
         "art": "C160710",
@@ -443,6 +448,82 @@ class ShopSalvationArmyClient:
             return None
         return float(match.group(1).replace(",", ""))
 
+    def _parse_shipping_panel(self, soup: BeautifulSoup) -> Dict:
+        """Parse the listing's "Shipping Options" panel.
+
+        The panel is the seller's own statement of WHICH fulfillment options
+        exist, and it is parsed independently of what each one costs and of
+        whether a live carrier quote later succeeds. Three options appear:
+
+            Local Pick Up:      $0.00                          -> local pickup
+            Standard Shipping:  $46.00 ($46.00 as additional item) -> flat rate
+            [Calculate USPS Shipping Rates]                    -> calculator
+
+        Each label and its price sit either side of a ``</strong>``, so the row
+        TEXT is matched, not the markup. The flat-rate label is seller-chosen
+        and varies ("Standard Shipping:", "UPS Ground:"), so any labelled money
+        row other than local pickup is read as the flat rate.
+        """
+        summary = {
+            "local_pickup_price": None,
+            "standard_shipping_label": None,
+            "standard_shipping_price": None,
+            "standard_shipping_additional_item_price": None,
+            "carriers": [],
+            "options": {
+                "local_pickup": False,
+                "flat_rate": False,
+                "carrier_calculator": False,
+            },
+        }
+
+        panel = None
+        for heading in soup.find_all(class_="panel-heading"):
+            if self.SHIPPING_PANEL_HEADING in heading.get_text(" ", strip=True):
+                panel = heading.parent
+                break
+        if panel is None:
+            return summary
+
+        summary["carriers"] = [
+            button["data-carrier"].strip().lower()
+            for button in panel.select("a.ct[data-carrier]")
+            if button["data-carrier"].strip()
+        ]
+        summary["options"]["carrier_calculator"] = bool(summary["carriers"])
+
+        for row in panel.find_all("li", class_="list-group-item"):
+            label_elem = row.find("strong")
+            if not label_elem:
+                continue
+            label = label_elem.get_text(" ", strip=True).rstrip(":").strip()
+            text = row.get_text(" ", strip=True)
+
+            if label == self.LOCAL_PICKUP_LABEL:
+                summary["options"]["local_pickup"] = True
+                summary["local_pickup_price"] = self._parse_money(text)
+                continue
+
+            if summary["standard_shipping_label"] is not None:
+                continue
+            # The base price always precedes the "as additional item" note, so
+            # the first dollar amount in the row is the flat rate itself.
+            price = self._parse_money(text)
+            if price is None:
+                continue
+            summary["options"]["flat_rate"] = True
+            summary["standard_shipping_label"] = label
+            summary["standard_shipping_price"] = price
+            additional = re.search(
+                r"\$(\d+(?:,\d{3})*(?:\.\d{2})?)\s+as additional item", text
+            )
+            if additional:
+                summary["standard_shipping_additional_item_price"] = float(
+                    additional.group(1).replace(",", "")
+                )
+
+        return summary
+
     def _parse_image_urls(self, soup: BeautifulSoup) -> List[str]:
         """Extract this listing's photo URLs from the image gallery.
 
@@ -570,12 +651,7 @@ class ShopSalvationArmyClient:
             if desc_elem:
                 description = desc_elem.get_text(strip=True)
 
-            local_pickup_price = None
-            for item in soup.find_all("li", class_="list-group-item"):
-                text = item.get_text(" ", strip=True)
-                if "Local Pick Up:" in text:
-                    local_pickup_price = self._parse_money(text)
-                    break
+            shipping = self._parse_shipping_panel(soup)
 
             shipping_additional_charge = None
             for script in soup.find_all("script"):
@@ -584,13 +660,11 @@ class ShopSalvationArmyClient:
                     shipping_additional_charge = float(charge_match.group(1).replace(",", ""))
                     break
 
+            # `shipping_params` is only the live-quote request payload. It is
+            # deliberately NOT the evidence that shipping is offered: that lives
+            # in `shipping_options` / `shipping_carriers`, which survive a
+            # missing or failed quote.
             shipping_params = None
-            shipping_buttons = soup.select("a.ct[data-carrier]")
-            carriers = [
-                button.get("data-carrier", "").strip().lower()
-                for button in shipping_buttons
-                if button.get("data-carrier")
-            ]
             required_shipping_fields = {
                 "from_postal_code": "fromPostalCode",
                 "weight": "weight",
@@ -604,11 +678,20 @@ class ShopSalvationArmyClient:
                 field = soup.find("input", {"id": input_id})
                 if field and field.get("value"):
                     extracted_shipping_fields[output_key] = field["value"]
-            if carriers and set(required_shipping_fields) <= set(extracted_shipping_fields):
-                shipping_params = {
-                    **extracted_shipping_fields,
-                    "carriers": carriers,
-                }
+            if shipping["carriers"] and set(required_shipping_fields) <= set(extracted_shipping_fields):
+                shipping_params = extracted_shipping_fields
+
+            if shipping_params:
+                shipping_quote_status = "destination_required"
+            elif shipping["options"]["carrier_calculator"]:
+                # A calculator exists but this page did not carry the full quote
+                # payload. The rate is unknown -- that is NOT the same as the
+                # seller refusing to ship.
+                shipping_quote_status = "unavailable"
+            else:
+                # No live-rate calculator on this listing at all. Flat-rate or
+                # pickup-only listings land here.
+                shipping_quote_status = "not_applicable"
 
             image_urls = self._parse_image_urls(soup)
 
@@ -624,9 +707,14 @@ class ShopSalvationArmyClient:
                 "bids": bids,
                 "time_left": time_left,
                 "description": description,
-                "local_pickup_price": local_pickup_price,
+                "shipping_options": shipping["options"],
+                "local_pickup_price": shipping["local_pickup_price"],
+                "standard_shipping_label": shipping["standard_shipping_label"],
+                "standard_shipping_price": shipping["standard_shipping_price"],
+                "standard_shipping_additional_item_price": shipping["standard_shipping_additional_item_price"],
+                "shipping_carriers": shipping["carriers"],
                 "shipping_additional_charge": shipping_additional_charge,
-                "shipping_quote_status": "destination_required" if shipping_params else "unavailable",
+                "shipping_quote_status": shipping_quote_status,
                 "shipping_cost": None,
                 "handling_cost": None,
                 "shipping_total": None,

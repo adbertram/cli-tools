@@ -128,9 +128,49 @@ def test_search_commands_are_public_no_auth_commands():
     }
 
 
+# Every fixture below mirrors the live markup of
+# https://www.shopthesalvationarmy.com/Listing/Details/<id>: a `div.panel`
+# wrapping a `div.panel-heading` of "Shipping Options" and a `ul.list-group`
+# whose rows put the label and its price either side of a `</strong>`.
+CALCULATOR_PANEL = """
+        <div class="panel panel-default">
+            <div class="panel-heading">Shipping Options</div>
+            <ul class="list-group">
+                <li class="list-group-item"><strong>Local Pick Up:</strong>&nbsp;&nbsp;$0.00</li>
+                <li class="list-group-item">
+                    <a href="#" class="btn btn-primary ct" data-carrier="USPS">Calculate USPS Shipping Rates</a>
+                </li>
+                <li class="list-group-item">
+                    <a href="#" class="btn btn-primary ct" data-carrier="UPS">Calculate UPS Shipping Rates</a>
+                </li>
+            </ul>
+        </div>
+        <input type="hidden" id="fromPostalCode" value="90404" />
+        <input type="hidden" id="weight" value="38.00000000000000" />
+        <input type="hidden" id="length" value="24.00000000000000" />
+        <input type="hidden" id="width" value="16.00000000000000" />
+        <input type="hidden" id="height" value="21.00000000000000" />
+        <input type="hidden" id="listingId" value="123" />
+"""
+
+# Listing 562200044: a flat shipping price quoted on the page, no calculator.
+FLAT_RATE_PANEL = """
+        <div class="panel panel-default">
+            <div class="panel-heading">Shipping Options</div>
+            <ul class="list-group">
+                <li class="list-group-item"><strong>Local Pick Up:</strong>&nbsp;&nbsp;$0.00</li>
+                <li class="list-group-item">
+                    <strong>Standard Shipping:</strong>&nbsp;&nbsp;$46.00
+                    <span class="small">($46.00 as additional item)</span>
+                </li>
+            </ul>
+        </div>
+"""
+
+
 def test_should_parse_current_price_and_destination_required_shipping_fields():
     item = parse_item(
-        """
+        f"""
         <h1>Active LEGO Lot</h1>
         <span class="detail__status-label">
             <span class="label label-info">Active</span>
@@ -138,22 +178,7 @@ def test_should_parse_current_price_and_destination_required_shipping_fields():
         <span class="detail__price--current Bidding_Current_Price awe-rt-CurrentPrice">
             $<span class="NumberPart">42.00</span>
         </span>
-        <div class="panel-heading">Shipping Options</div>
-        <ul class="list-group">
-            <li class="list-group-item"><strong>Local Pick Up:</strong>&nbsp;&nbsp;$0.00</li>
-            <li class="list-group-item">
-                <a href="#" class="btn btn-primary ct" data-carrier="USPS">Calculate USPS Shipping Rates</a>
-            </li>
-            <li class="list-group-item">
-                <a href="#" class="btn btn-primary ct" data-carrier="UPS">Calculate UPS Shipping Rates</a>
-            </li>
-        </ul>
-        <input type="hidden" id="fromPostalCode" value="90404" />
-        <input type="hidden" id="weight" value="38.00000000000000" />
-        <input type="hidden" id="length" value="24.00000000000000" />
-        <input type="hidden" id="width" value="16.00000000000000" />
-        <input type="hidden" id="height" value="21.00000000000000" />
-        <input type="hidden" id="listingId" value="123" />
+        {CALCULATOR_PANEL}
         <script>var ac = parseFloat("2.99");</script>
         """
     )
@@ -166,6 +191,16 @@ def test_should_parse_current_price_and_destination_required_shipping_fields():
     assert item["handling_cost"] is None
     assert item["shipping_total"] is None
     assert item["total_price"] is None
+    assert item["shipping_options"] == {
+        "local_pickup": True,
+        "flat_rate": False,
+        "carrier_calculator": True,
+    }
+    assert item["shipping_carriers"] == ["usps", "ups"]
+    assert item["standard_shipping_price"] is None
+    assert item["standard_shipping_label"] is None
+    # shipping_params is only the live-quote request payload; the carrier list
+    # is NOT carried here, so a failed quote cannot take it down with it.
     assert item["shipping_params"] == {
         "from_postal_code": "90404",
         "weight": "38.00000000000000",
@@ -173,8 +208,118 @@ def test_should_parse_current_price_and_destination_required_shipping_fields():
         "width": "16.00000000000000",
         "height": "21.00000000000000",
         "listing_id": "123",
-        "carriers": ["usps", "ups"],
     }
+
+
+def test_flat_standard_shipping_line_is_parsed_as_an_offered_option():
+    # Listing 562200044 quotes a flat $46.00 right on the page and offers no
+    # calculator. Dropping that line made the listing read as pickup-only.
+    item = parse_item(f"<h1>LEGO Lot</h1>{FLAT_RATE_PANEL}")
+
+    assert item["shipping_options"] == {
+        "local_pickup": True,
+        "flat_rate": True,
+        "carrier_calculator": False,
+    }
+    assert item["local_pickup_price"] == 0.0
+    assert item["standard_shipping_label"] == "Standard Shipping"
+    assert item["standard_shipping_price"] == 46.0
+    assert item["standard_shipping_additional_item_price"] == 46.0
+    assert item["shipping_carriers"] == []
+    assert item["shipping_params"] is None
+    # No live-rate calculator exists here, so there is no quote to be missing.
+    assert item["shipping_quote_status"] == "not_applicable"
+
+
+def test_flat_rate_label_is_read_from_the_page_not_assumed():
+    # Listing 562767137 labels the same row "UPS Ground:", so the flat rate
+    # cannot be keyed off the literal string "Standard Shipping".
+    item = parse_item(
+        """
+        <h1>LEGO Lot</h1>
+        <div class="panel panel-default">
+            <div class="panel-heading">Shipping Options</div>
+            <ul class="list-group">
+                <li class="list-group-item"><strong>Local Pick Up:</strong>&nbsp;&nbsp;$0.00</li>
+                <li class="list-group-item"><strong>UPS Ground:</strong>&nbsp;&nbsp;$39.99</li>
+            </ul>
+        </div>
+        """
+    )
+
+    assert item["shipping_options"]["flat_rate"] is True
+    assert item["standard_shipping_label"] == "UPS Ground"
+    assert item["standard_shipping_price"] == 39.99
+    assert item["standard_shipping_additional_item_price"] is None
+
+
+def test_pickup_only_listing_reports_no_shipping_option():
+    item = parse_item(
+        """
+        <h1>LEGO Lot</h1>
+        <div class="panel panel-default">
+            <div class="panel-heading">Shipping Options</div>
+            <ul class="list-group">
+                <li class="list-group-item"><strong>Local Pick Up:</strong>&nbsp;&nbsp;$0.00</li>
+            </ul>
+        </div>
+        """
+    )
+
+    assert item["shipping_options"] == {
+        "local_pickup": True,
+        "flat_rate": False,
+        "carrier_calculator": False,
+    }
+    assert item["standard_shipping_price"] is None
+    assert item["shipping_carriers"] == []
+    assert item["shipping_quote_status"] == "not_applicable"
+
+
+def test_carriers_survive_a_missing_quote_payload():
+    # The calculator buttons prove shipping is offered. When the hidden quote
+    # inputs are absent the RATE is unknown -- the listing must not collapse to
+    # "seller does not ship".
+    item = parse_item(f"<h1>LEGO Lot</h1>{CALCULATOR_PANEL.split('<input')[0]}")
+
+    assert item["shipping_params"] is None
+    assert item["shipping_carriers"] == ["usps", "ups"]
+    assert item["shipping_options"]["carrier_calculator"] is True
+    assert item["shipping_quote_status"] == "unavailable"
+
+
+def test_listing_without_a_shipping_panel_reports_no_options():
+    item = parse_item("<h1>LEGO Lot</h1>")
+
+    assert item["shipping_options"] == {
+        "local_pickup": False,
+        "flat_rate": False,
+        "carrier_calculator": False,
+    }
+    assert item["local_pickup_price"] is None
+    assert item["standard_shipping_price"] is None
+    assert item["shipping_carriers"] == []
+    assert item["shipping_quote_status"] == "not_applicable"
+
+
+def test_shipping_panel_parse_ignores_list_groups_outside_the_panel():
+    # Detail pages carry other `ul.list-group` blocks (bid history, seller
+    # info). Only the Shipping Options panel may feed the fulfillment summary.
+    item = parse_item(
+        f"""
+        <h1>LEGO Lot</h1>
+        <div class="panel panel-default">
+            <div class="panel-heading">Payment Options</div>
+            <ul class="list-group">
+                <li class="list-group-item"><strong>Handling Fee:</strong>&nbsp;&nbsp;$9.99</li>
+            </ul>
+        </div>
+        {FLAT_RATE_PANEL}
+        """
+    )
+
+    assert item["standard_shipping_label"] == "Standard Shipping"
+    assert item["standard_shipping_price"] == 46.0
 
 
 class FakeResponse:

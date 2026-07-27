@@ -99,6 +99,47 @@ the photo count in an `Images` row.
 }
 ```
 
+#### Fulfillment options
+
+The listing's "Shipping Options" panel is reported as **which options the seller
+offers** (`shipping_options`) separately from **what each one costs**. To decide
+whether a listing ships, read `shipping_options` — never `shipping_cost`,
+`shipping_params`, or `shipping_quote_status`, all of which describe the live
+carrier quote only.
+
+| Field | Meaning |
+|-------|---------|
+| `shipping_options.local_pickup` | Panel has a "Local Pick Up:" row |
+| `shipping_options.flat_rate` | Panel quotes a flat shipping price outright |
+| `shipping_options.carrier_calculator` | Panel offers live carrier-rate buttons |
+| `local_pickup_price` | Cost of pickup (normally `0.0`) |
+| `standard_shipping_label` | Seller's own label for the flat rate — varies ("Standard Shipping", "UPS Ground") |
+| `standard_shipping_price` | The flat shipping price |
+| `standard_shipping_additional_item_price` | The "($N as additional item)" price, when present |
+| `shipping_carriers` | Carriers offering live rates, e.g. `["usps", "ups"]` |
+| `shipping_params` | Live-quote request payload only — not evidence that shipping is offered |
+
+`shipping_quote_status` is `quoted`, `destination_required`, `unavailable` (a
+calculator exists but the rate could not be fetched — the rate is unknown, the
+seller has *not* refused to ship), or `not_applicable` (no live-rate calculator
+on the listing at all).
+
+```json
+{
+  "id": "562200044",
+  "shipping_options": {"local_pickup": true, "flat_rate": true, "carrier_calculator": false},
+  "local_pickup_price": 0.0,
+  "standard_shipping_label": "Standard Shipping",
+  "standard_shipping_price": 46.0,
+  "standard_shipping_additional_item_price": 46.0,
+  "shipping_carriers": [],
+  "shipping_quote_status": "not_applicable"
+}
+```
+
+The `--table` view renders the same panel as one `Fulfillment` row, e.g.
+`local pickup ($0.00); Standard Shipping ($46.00)`.
+
 ### List Categories
 
 ```bash
