@@ -1,7 +1,7 @@
 {
   "tool": "slack",
   "description": "CLI interface for Slack API",
-  "discovered_at": "2026-07-03T21:30:59Z",
+  "discovered_at": "2026-07-27T22:21:43Z",
   "total_commands": 50,
   "global_options": [
     {
@@ -51,7 +51,7 @@
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Clear stored Slack credentials. Use --profile/-p to clear a specific profile.",
           "arguments": [],
           "options": [
@@ -126,8 +126,8 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
-              "usage_instructions": "List all profiles and show which is the default. Use --filter/-f (e.g., is_default:eq:True), --limit/-l, --properties/-p, --table/-t.",
+              "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "List all profiles and show their auth types and active state. Use --filter/-f (e.g., active:eq:True), --limit/-l, --properties/-p, --table/-t.",
               "arguments": [],
               "options": [
                 {
@@ -227,7 +227,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Check current authentication status. Use --profile/-p to check a specific profile. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -287,7 +287,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Remove all cached API responses. Frees disk space and ensures fresh data on next commands.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -342,10 +349,10 @@
           "usage_instructions": "List canvases in the workspace or a specific channel. CHANNEL_ID is optional — omit for all canvases. Use --limit/-l (default 100), --filter/-f, --properties/-p. Use --table/-t for formatted output.",
           "arguments": [
             {
-              "name": "[channel_id]",
-              "type": "TEXT",
+              "name": "channel_id",
+              "type": "CHANNEL_ID",
               "required": false,
-              "help": "TEXT  Channel ID to list canvases for (optional, lists all if not specified)"
+              "help": "Channel ID to list canvases for (optional, lists all if not specified)"
             }
           ],
           "options": [
@@ -724,7 +731,7 @@
           ]
         },
         "read": {
-          "help": "Read direct message history with a user or group DM.",
+          "help": "Read direct message history with a user or group DM. For 1:1 DMs, specify the user: - User ID (U1234567890) - Email address (user@example.com) - Username (@john.doe or john.doe) For group DMs, specify the channel ID directly: - Channel ID (C01U109E658) - Find channel IDs with: slack dm list --include-group --table Example: slack dm read U1234567890 --table slack dm read user@example.com --limit 20 slack dm read @john.doe --table slack dm read C01U109E658 --table  # group DM by channel ID",
           "usage_instructions": "Read DM history with a USER (required — user ID, email, or @username). Use --limit/-l (default 50), --oldest/--latest for time range, --filter/-f for client-side filtering, --table/-t.",
           "arguments": [
             {
@@ -778,7 +785,7 @@
           ]
         },
         "send": {
-          "help": "Send a direct message to a user or group DM.",
+          "help": "Send a direct message to a user or group DM. For 1:1 DMs, specify the user: - User ID (U1234567890) - Email address (user@example.com) - Username (@john.doe or john.doe) For group DMs, specify the channel ID directly: - Channel ID (C01U109E658) - Find channel IDs with: slack dm list --include-group --table Example: slack dm send U1234567890 \"Hello!\" slack dm send user@example.com \"Hello via email lookup!\" slack dm send @john.doe \"Hello John!\" slack dm send C01U109E658 \"Hello group!\"  # group DM by channel ID",
           "usage_instructions": "Send a DM to a user. USER (user ID, email, or @username) and TEXT are both required positional args. Use --thread-ts to reply in a thread. Remember: Slack uses mrkdwn, not standard markdown.",
           "arguments": [
             {
@@ -1017,6 +1024,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Initial comment"
+            },
+            {
+              "name": "--thread-ts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent message timestamp for a threaded reply"
             },
             {
               "name": "--profile",

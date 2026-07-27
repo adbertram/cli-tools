@@ -132,6 +132,11 @@ def upload_file(
     channels: Optional[str] = typer.Option(None, "--channels", "-c", help="Comma-separated channel IDs"),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="File title"),
     comment: Optional[str] = typer.Option(None, "--comment", help="Initial comment"),
+    thread_ts: Optional[str] = typer.Option(
+        None,
+        "--thread-ts",
+        help="Parent message timestamp for a threaded reply",
+    ),
 ):
     """
     Upload a file to Slack.
@@ -152,6 +157,7 @@ def upload_file(
             channels=channels,
             title=title or path.name,
             initial_comment=comment,
+            thread_ts=thread_ts,
         )
 
         file_info = response.get("file", {})
