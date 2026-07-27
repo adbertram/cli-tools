@@ -31,6 +31,17 @@ manus <command-group> <action> [arguments] [options]
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
 
 `manus task create` checks `usage.availableCredits` and fails before submission when the authoritative `total_credits` field is present and at or below zero. It does not treat `max_refresh_credits` (the next refresh grant cap) or `pro_monthly_credits` (the plan quota) as current spendable balance. When the live response omits `total_credits`, `task.create` remains the admission authority because Manus does not publish a reliable per-task cost estimate. Only a 429 with `error.code: rate_limited` is retried; `resource_exhausted` credit failures return immediately.
+
+**A balance above zero is not proof that a run is affordable.** `task create` performs a zero check, not an affordability check, so it admits any positive balance. A run admitted at a 98-credit balance burned 100 credits, ended at `-2`, and produced no output. Real per-task costs read from the API's own `credit_usage` field (`manus task list --limit 200`, 2026-07-27): fact-check chunks cost 42 to 152 credits; link-validation tasks cost 89 to 443 credits.
+
+Any caller that submits Manus tasks must therefore add its own pre-submission gate:
+
+- Reserve an observed `credit_usage` floor per task, taken from that workload's own past tasks. Scale the requirement by the number of tasks the run submits.
+- Read the live balance with `manus usage available-credits` and use `total_credits` only.
+- Treat an omitted `total_credits` as "balance undisclosed", not zero: admit the run and report that the gate could not predict affordability.
+- Refuse before submission, name the observed balance and the required amount, and exit non-zero. Never guess a balance when the query fails or breaks its contract.
+
+Reference gates: `/Users/adam/Dropbox/GitRepos/Agents/skills/global/fact-check/scripts/manus_fact_check.js` (150 credits per chunk, raised from the live `task.credit_usage`) and `/Users/adam/Dropbox/GitRepos/Agents/ClientContentWriter/scripts/manus_link_validation_gate.js` (450 credits per link-validation task). Test a gate with a stubbed `manus` executable; never spend credits to test one.
 </quick_start>
 
 <essential_principles>
