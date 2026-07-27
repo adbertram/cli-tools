@@ -1,7 +1,7 @@
 {
   "tool": "shopgoodwill",
   "description": "CLI interface for ShopGoodwill",
-  "discovered_at": "2026-07-24T19:19:10Z",
+  "discovered_at": "2026-07-26T19:22:28Z",
   "total_commands": 14,
   "global_options": [
     {
@@ -365,7 +365,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Results per page (max 40)",
+              "help": "Results per page. Default --sort newest: up to 200 (recency-window fetch is capped at 200 items). --sort price/ending/bids: max 40 (single API page)",
               "short": "-l",
               "default": "40"
             },

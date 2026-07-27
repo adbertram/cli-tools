@@ -147,8 +147,8 @@ ID          Title                                     Price    Bids  Ends       
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--page` | `-p` | Page number (default: 1). Not applied to `--sort newest`. |
-| `--limit` | `-l` | Results per page, max 40 (default: 40) |
+| `--page` | `-p` | Page number (default: 1) |
+| `--limit` | `-l` | Results per page (default: 40). `--sort newest`: up to 200. `--sort price/ending/bids`: max 40 |
 | `--min-price` | | Minimum price filter |
 | `--max-price` | | Maximum price filter |
 | `--sort` | `-s` | Sort field (default: `newest`). Valid: `newest`, `price`, `ending`, `bids` |
@@ -180,10 +180,13 @@ the site's own sort dropdown.
 **`newest` is a best-effort client-side refine (Sort Standard Rule 5).**
 ShopGoodwill exposes no true listing-date sort column — its "Newly Listed" option
 is really *ending-date descending*, which only approximates recency because auction
-durations vary. So `--sort newest` fetches the "Newly Listed" window (a few pages,
-~100 items) and then sorts that window client-side by each item's real `startTime`
-(listing date) so results are genuinely newest-listed-first. `--page` is not applied
-to `newest` (the window is always taken from the freshest listings).
+durations vary. So `--sort newest` fetches the "Newly Listed" window (at least
+`--page * --limit` items, minimum 100) and then sorts that window client-side by
+each item's real `startTime` (listing date) so results are genuinely
+newest-listed-first, then slices out the requested `--page`. The window is capped
+at 200 fetched items total (5 underlying API pages), so `(--page - 1) * --limit`
+offsets beyond 200 return no results — this is the real ceiling for `--sort newest`,
+regardless of `--limit`.
 
 ## Configuration
 

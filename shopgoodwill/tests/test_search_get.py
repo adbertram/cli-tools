@@ -71,8 +71,8 @@ class _RecencyClient:
     def __init__(self, require_auth=False):
         self.calls = []
 
-    def search_recency_window(self, query, limit, sort_descending=True, **kwargs):
-        self.calls.append({"limit": limit, "sort_descending": sort_descending})
+    def search_recency_window(self, query, limit, offset=0, sort_descending=True, **kwargs):
+        self.calls.append({"limit": limit, "offset": offset, "sort_descending": sort_descending})
         # Client is responsible for ordering by startTime; mirror real client.
         items = [
             {"itemId": 3, "startTime": self.OLDEST, "currentPrice": 3.0, "title": "c",
@@ -100,6 +100,80 @@ def test_search_query_newest_refines_by_start_time_descending(monkeypatch):
     assert [i["itemId"] for i in data["items"]] == [1, 2, 3]
 
 
+# --- Pagination regression (--page/-p was silently ignored for --sort newest) --
+
+
+class _LargeRecencyClient:
+    """Fake client whose recency window returns a large, already-sorted set of
+    items so --page slicing can be exercised without a live API call."""
+
+    TOTAL_ITEMS = 120
+
+    def __init__(self, require_auth=False):
+        self.calls = []
+
+    def search_recency_window(self, query, limit, offset=0, sort_descending=True, **kwargs):
+        self.calls.append({"limit": limit, "offset": offset})
+        # itemId N has the Nth-newest startTime; index 0 is newest.
+        items = [
+            {"itemId": i, "startTime": f"2026-07-{24 - (i % 20):02d}T00:00:00",
+             "currentPrice": 1.0, "title": f"item-{i}", "numBids": 0,
+             "endTime": "", "sellerCity": "", "sellerState": ""}
+            for i in range(self.TOTAL_ITEMS)
+        ]
+        return items, self.TOTAL_ITEMS
+
+
+def test_search_query_newest_page_2_returns_different_items_than_page_1(monkeypatch):
+    """Regression: --sort newest --page 2 must return a materially different
+    item set than --page 1 (previously --page was silently ignored and both
+    pages, and the response's own "page" field, always reflected page 1)."""
+    monkeypatch.setattr(search, "ShopGoodwillClient", _LargeRecencyClient)
+
+    result_p1 = runner.invoke(
+        search.app, ["query", "lego", "--sort", "newest", "--limit", "40", "--page", "1"]
+    )
+    result_p2 = runner.invoke(
+        search.app, ["query", "lego", "--sort", "newest", "--limit", "40", "--page", "2"]
+    )
+
+    assert result_p1.exit_code == 0
+    assert result_p2.exit_code == 0
+    data_p1 = json.loads(result_p1.stdout)
+    data_p2 = json.loads(result_p2.stdout)
+
+    ids_p1 = [i["itemId"] for i in data_p1["items"]]
+    ids_p2 = [i["itemId"] for i in data_p2["items"]]
+
+    assert ids_p1 != ids_p2
+    assert set(ids_p1).isdisjoint(set(ids_p2))
+    assert ids_p1 == list(range(0, 40))
+    assert ids_p2 == list(range(40, 80))
+
+    # The response's own "page" field must reflect the actually requested page.
+    assert data_p1["page"] == 1
+    assert data_p2["page"] == 2
+
+
+def test_search_query_newest_passes_page_offset_to_recency_window(monkeypatch):
+    """--page N must translate to offset (N - 1) * limit passed to the client."""
+    client_holder = {}
+
+    class _CapturingClient(_LargeRecencyClient):
+        def __init__(self, require_auth=False):
+            super().__init__(require_auth)
+            client_holder["client"] = self
+
+    monkeypatch.setattr(search, "ShopGoodwillClient", _CapturingClient)
+
+    result = runner.invoke(
+        search.app, ["query", "lego", "--sort", "newest", "--limit", "25", "--page", "3"]
+    )
+
+    assert result.exit_code == 0
+    assert client_holder["client"].calls == [{"limit": 25, "offset": 50}]
+
+
 def test_client_recency_window_sorts_by_start_time(monkeypatch):
     """client.search_recency_window sorts the fetched window by startTime."""
     client = ShopGoodwillClient(require_auth=False)
@@ -119,6 +193,52 @@ def test_client_recency_window_sorts_by_start_time(monkeypatch):
 
     assert total == 3
     assert [i["itemId"] for i in items] == [1, 2, 3]  # startTime descending
+
+
+def test_client_recency_window_fetches_enough_pages_to_cover_offset(monkeypatch):
+    """A requested offset beyond one API page must pull additional pages so the
+    window actually contains items at that offset (regression for --page)."""
+    client = ShopGoodwillClient(require_auth=False)
+    pages_fetched = []
+
+    def fake_search(query, page, page_size, sort_column, sort_descending, **kwargs):
+        pages_fetched.append(page)
+        start = (page - 1) * page_size
+        items = [
+            {"itemId": i, "startTime": f"2026-07-{(200 - i):03d}T00:00:00"}
+            for i in range(start, start + page_size)
+        ]
+        return {"searchResults": {"itemCount": 500, "items": items}}
+
+    monkeypatch.setattr(client, "search", fake_search)
+    # page 3 at limit 40 -> offset 80; needs items[80:120] to exist.
+    items, total = client.search_recency_window(
+        query="lego", limit=40, offset=80, sort_descending=True
+    )
+
+    assert total == 500
+    assert len(items) >= 120
+    assert max(pages_fetched) >= 3
+
+
+def test_client_recency_window_caps_at_max_items_ceiling(monkeypatch):
+    """The recency window never exceeds _RECENCY_MAX_ITEMS (200) fetched items,
+    even when offset + limit requests far more (verified live: --limit 500
+    against a 506-result query still returned exactly 200 unique items)."""
+    client = ShopGoodwillClient(require_auth=False)
+
+    def fake_search(query, page, page_size, sort_column, sort_descending, **kwargs):
+        start = (page - 1) * page_size
+        items = [{"itemId": i, "startTime": f"item-{i}"} for i in range(start, start + page_size)]
+        return {"searchResults": {"itemCount": 5000, "items": items}}
+
+    monkeypatch.setattr(client, "search", fake_search)
+    items, total = client.search_recency_window(
+        query="lego", limit=500, offset=0, sort_descending=True
+    )
+
+    assert total == 5000
+    assert len(items) == client._RECENCY_MAX_ITEMS == 200
 
 
 class _FakeClient:

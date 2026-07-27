@@ -54,7 +54,14 @@ def search_query(
     query: str = typer.Argument(..., help="Search text"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     page: int = typer.Option(1, "--page", "-p", help="Page number"),
-    limit: int = typer.Option(40, "--limit", "-l", help="Results per page (max 40)"),
+    limit: int = typer.Option(
+        40, "--limit", "-l",
+        help=(
+            "Results per page. Default --sort newest: up to 200 "
+            "(recency-window fetch is capped at 200 items). "
+            "--sort price/ending/bids: max 40 (single API page)."
+        ),
+    ),
     min_price: Optional[float] = typer.Option(None, "--min-price", help="Minimum price"),
     max_price: Optional[float] = typer.Option(None, "--max-price", help="Maximum price"),
     sort: str = typer.Option(
@@ -85,18 +92,22 @@ def search_query(
         closed_auctions=closed,
     )
 
+    out_page = page
     if sort == "newest":
         # No server-side listing-date sort exists; fetch the "Newly Listed"
-        # window and refine by startTime client-side (--page is not applied).
-        out_page = 1
-        items, total_count = client.search_recency_window(
+        # window, refine by startTime client-side, then slice out the
+        # requested page ourselves (the window is fetched once, sorted, and
+        # paged in-memory).
+        offset = (page - 1) * limit
+        window_items, total_count = client.search_recency_window(
             query=query,
             limit=limit,
+            offset=offset,
             sort_descending=sort_descending,
             **filters,
         )
+        items = window_items[offset:offset + limit]
     else:
-        out_page = page
         result = client.search(
             query=query,
             page=page,
@@ -108,9 +119,8 @@ def search_query(
         search_results = result.get("searchResults", {})
         items = search_results.get("items", [])
         total_count = search_results.get("itemCount", 0)
-
-    # API caps pages at 40 items, so slice to the requested limit ourselves
-    items = items[:limit]
+        # API caps pages at 40 items, so slice to the requested limit ourselves
+        items = items[:limit]
 
     if table:
         if not items:

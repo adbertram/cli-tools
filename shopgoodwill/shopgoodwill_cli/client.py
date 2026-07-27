@@ -211,34 +211,46 @@ class ShopGoodwillClient:
     # build a window, then sort by startTime (the real listing date). ~100 items
     # is enough for an incremental newest-first crawl (Sort Standard Rule 5).
     RECENCY_WINDOW = 100
-    _RECENCY_MAX_PAGES = 5  # bound API calls (5 * 40 = 200 items)
+    # Hard bound on how many items search_recency_window will ever fetch across
+    # underlying API calls (page_size 40 each). This is the real ceiling for
+    # --sort newest results, regardless of the requested --limit/--page: once
+    # offset + limit exceeds this, the window is truncated to whatever was
+    # fetched. Verified live 2026-07-26: --limit 250/300/500 all returned
+    # exactly 200 unique items against a query with total_count > 200.
+    _RECENCY_MAX_ITEMS = 200
+    _RECENCY_PAGE_SIZE = 40
 
     def search_recency_window(
         self,
         query: str,
         limit: int,
+        offset: int = 0,
         sort_descending: bool = True,
         **search_kwargs,
     ) -> tuple:
         """Build a listing-date-ordered result window for --sort newest.
 
         Fetches ShopGoodwill's "Newly Listed" ordering (sortColumn 1) across pages
-        until the window holds at least max(limit, RECENCY_WINDOW) items (or the
-        result set is exhausted), then sorts by startTime. reverse=sort_descending
-        yields newest-first for natural newest and oldest-first for --desc.
+        until the window holds at least max(offset + limit, RECENCY_WINDOW) items,
+        capped at _RECENCY_MAX_ITEMS (or the result set is exhausted), then sorts
+        by startTime. reverse=sort_descending yields newest-first for natural
+        newest and oldest-first for --desc. `offset` is the caller's requested
+        page offset ((page - 1) * limit); the caller slices the returned window
+        at [offset:offset + limit] to honor --page.
 
         Returns:
             (items_sorted_by_start_time, total_count)
         """
-        target = max(limit, self.RECENCY_WINDOW)
+        target = min(max(offset + limit, self.RECENCY_WINDOW), self._RECENCY_MAX_ITEMS)
+        max_pages = -(-self._RECENCY_MAX_ITEMS // self._RECENCY_PAGE_SIZE)  # ceil div
         collected: List[Dict] = []
         total_count = 0
 
-        for page in range(1, self._RECENCY_MAX_PAGES + 1):
+        for page in range(1, max_pages + 1):
             result = self.search(
                 query=query,
                 page=page,
-                page_size=40,
+                page_size=self._RECENCY_PAGE_SIZE,
                 sort_column=1,
                 sort_descending=sort_descending,
                 **search_kwargs,
