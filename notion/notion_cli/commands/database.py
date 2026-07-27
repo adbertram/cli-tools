@@ -1,6 +1,7 @@
 """Database commands for Notion CLI."""
 import json
 import typer
+from datetime import datetime
 from typing import Optional, List, Dict
 
 from ..client import get_client
@@ -33,19 +34,240 @@ page_app.add_typer(content_app, name="content")
 _database_filter_map = FilterMap()
 
 
+# Notion "date" filter condition keys, grouped by the value shape each one takes.
+DATE_VALUE_OPERATORS = ("equals", "before", "after", "on_or_before", "on_or_after")
+DATE_RELATIVE_OPERATORS = (
+    "this_week",
+    "past_week",
+    "past_month",
+    "past_year",
+    "next_week",
+    "next_month",
+    "next_year",
+)
+DATE_PRESENCE_OPERATORS = ("is_empty", "is_not_empty")
+DATE_OPERATORS = DATE_VALUE_OPERATORS + DATE_RELATIVE_OPERATORS + DATE_PRESENCE_OPERATORS
+
+# Keywords Notion accepts in place of an ISO 8601 date string.
+DATE_KEYWORD_VALUES = (
+    "today",
+    "tomorrow",
+    "yesterday",
+    "one_week_ago",
+    "one_week_from_now",
+    "one_month_ago",
+    "one_month_from_now",
+)
+
+# Generic operators this builder translates for non-date properties.
+GENERIC_OPERATORS = (
+    "eq", "ne", "in", "nin", "like", "ilike", "contains",
+    "gt", "gte", "lt", "lte", "null", "notnull",
+)
+
+# Notion property types whose filter condition accepts "is_empty" and
+# "is_not_empty". For each of these the Notion filter key is the property type
+# name itself, so the condition nests as {"property": X, "<type>": {...}}.
+# "date" is absent on purpose: build_date_filter owns every date property.
+EMPTINESS_PROPERTY_TYPES = (
+    "title",
+    "rich_text",
+    "number",
+    "select",
+    "status",
+    "multi_select",
+    "people",
+    "files",
+    "relation",
+    "url",
+    "email",
+    "phone_number",
+    "created_by",
+    "created_time",
+    "last_edited_by",
+    "last_edited_time",
+)
+
+# Property types whose Notion filter condition has no "is_empty" key, mapped to
+# the operators this builder does support for that type.
+NON_EMPTINESS_OPERATORS = {
+    "checkbox": ("eq", "ne"),
+}
+
+# Generic operator to Notion emptiness condition key.
+EMPTINESS_OPERATOR_KEYS = {
+    "null": "is_empty",
+    "notnull": "is_not_empty",
+}
+
+# Generic filter operators accepted as shorthand for a Notion date operator.
+DATE_OPERATOR_ALIASES = {
+    "eq": "equals",
+    "gt": "after",
+    "gte": "on_or_after",
+    "lt": "before",
+    "lte": "on_or_before",
+    "null": "is_empty",
+    "notnull": "is_not_empty",
+}
+
+
+def _describe_date_operators() -> str:
+    """Build the operator help text used in date filter error messages."""
+    aliases = ", ".join(f"{alias}={target}" for alias, target in DATE_OPERATOR_ALIASES.items())
+    return f"Supported date operators: {', '.join(DATE_OPERATORS)}. Aliases: {aliases}."
+
+
+def _validate_date_value(field: str, notion_op: str, value: str) -> str:
+    """Reject a date value the Notion API cannot accept.
+
+    Catches the case where an unrecognized operator token was folded into the
+    value by the implicit-``eq`` parse (e.g. ``Publish Date:sometime:2026-07-20``
+    becomes the value ``sometime:2026-07-20``), so the CLI fails locally instead
+    of posting a body the API rejects.
+    """
+    if value in DATE_KEYWORD_VALUES:
+        return value
+
+    # datetime.fromisoformat does not accept the trailing military "Z"; Notion
+    # does. Normalize it to the equivalent UTC offset before parsing.
+    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        datetime.fromisoformat(candidate)
+    except ValueError:
+        raise FilterValidationError(
+            f"Value '{value}' for date operator '{notion_op}' on property "
+            f"'{field}' is not an ISO 8601 date (e.g. 2026-07-20) or one of: "
+            f"{', '.join(DATE_KEYWORD_VALUES)}. " + _describe_date_operators()
+        )
+    return value
+
+
+def build_date_filter(field: str, op: str, value: Optional[str]) -> dict:
+    """Build a Notion date filter condition for one field:op:value triple.
+
+    Args:
+        field: Notion property name (already known to be a ``date`` property)
+        op: Notion date operator or one of the ``DATE_OPERATOR_ALIASES`` keys
+        value: Raw filter value, or None for value-less operators
+
+    Raises:
+        FilterValidationError: When the operator is not a Notion date operator,
+            or when the supplied value cannot satisfy that operator.
+    """
+    if op in DATE_OPERATOR_ALIASES:
+        notion_op = DATE_OPERATOR_ALIASES[op]
+    else:
+        notion_op = op
+
+    if notion_op not in DATE_OPERATORS:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for date property '{field}' (type: date). "
+            + _describe_date_operators()
+        )
+
+    if notion_op in DATE_VALUE_OPERATORS:
+        if not value:
+            raise FilterValidationError(
+                f"Date operator '{notion_op}' on property '{field}' requires an "
+                "ISO 8601 date value (e.g. 2026-07-20)."
+            )
+        return {
+            "property": field,
+            "date": {notion_op: _validate_date_value(field, notion_op, value)},
+        }
+
+    # Relative and presence operators carry no user value. Notion expects an
+    # empty object for relative ranges and literal true for presence checks.
+    if value is not None and value.strip().lower() not in ("", "true"):
+        raise FilterValidationError(
+            f"Date operator '{notion_op}' on property '{field}' takes no value "
+            f"(got '{value}'). Use '{field}:{notion_op}' or '{field}:{notion_op}:true'."
+        )
+
+    if notion_op in DATE_PRESENCE_OPERATORS:
+        return {"property": field, "date": {notion_op: True}}
+    return {"property": field, "date": {notion_op: {}}}
+
+
+def build_emptiness_filter(field: str, op: str, prop_type: str) -> dict:
+    """Build a Notion is_empty / is_not_empty filter condition for one property.
+
+    Notion nests the emptiness condition under the property's type key, so a
+    text property becomes {"property": field, "rich_text": {"is_empty": true}}.
+    A body without that type key fails API validation with HTTP 400.
+
+    Args:
+        field: Notion property name
+        op: Generic filter operator, either ``null`` or ``notnull``
+        prop_type: Notion property type resolved from the database schema
+
+    Raises:
+        FilterValidationError: When the property type has no Notion
+            is_empty / is_not_empty condition.
+    """
+    if prop_type in NON_EMPTINESS_OPERATORS:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for property '{field}' "
+            f"(type: {prop_type}). Notion has no is_empty/is_not_empty "
+            f"condition for a {prop_type} property. Supported operators: "
+            f"{', '.join(NON_EMPTINESS_OPERATORS[prop_type])}."
+        )
+
+    if prop_type not in EMPTINESS_PROPERTY_TYPES:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for property '{field}' "
+            f"(type: {prop_type}). Notion has no is_empty/is_not_empty "
+            f"condition for a {prop_type} property. Operators 'null' and "
+            f"'notnull' require one of these property types: "
+            f"{', '.join(EMPTINESS_PROPERTY_TYPES)}, date."
+        )
+
+    return {"property": field, prop_type: {EMPTINESS_OPERATOR_KEYS[op]: True}}
+
+
+def parse_notion_filter_conditions(filter_string: str) -> List[tuple]:
+    """Parse a filter string into (field, op, value) triples.
+
+    ``cli_tools_shared.filters.parse_filter_string`` only recognizes the generic
+    operator set, so a Notion-native operator such as ``on_or_after`` would be
+    collapsed into an ``eq`` condition whose value still contains the operator
+    token. Recognize the Notion-native operators here, and delegate every other
+    part to the shared parser so generic operator behavior stays in one place.
+    """
+    from cli_tools_shared.filters import parse_filter_string
+
+    conditions: List[tuple] = []
+    for part in filter_string.split(','):
+        part = part.strip()
+        if not part:
+            continue
+
+        tokens = part.split(':')
+        if len(tokens) >= 2 and tokens[1] in DATE_OPERATORS:
+            conditions.append((tokens[0], tokens[1], ":".join(tokens[2:])))
+        else:
+            conditions.extend(parse_filter_string(part))
+    return conditions
+
+
 def build_filter_from_standard(
-    filter_strings: Optional[List[str]] = None,
-    schema: Optional[Dict[str, str]] = None,
+    filter_strings: Optional[List[str]],
+    schema: Dict[str, str],
 ) -> Optional[dict]:
     """
     Build Notion API filter object from standard field:op:value filter strings.
 
     Args:
         filter_strings: List of standard filter strings (e.g., ["Status:eq:Done", "Priority:eq:High"])
-        schema: Optional dict mapping property names to their types (e.g., {"Phase": "status", "Priority": "select"})
+        schema: Dict mapping property names to their Notion types (e.g., {"Phase": "status", "Priority": "select"})
 
     Returns:
         Notion API filter object or None
+
+    Raises:
+        FilterValidationError: When a filtered property is absent from the
+            schema, or an operator is not supported for that property type.
     """
     if not filter_strings:
         return None
@@ -53,11 +275,7 @@ def build_filter_from_standard(
     # Validate filters first
     validate_filters(filter_strings)
 
-    from cli_tools_shared.filters import parse_filter_string
-
-    schema = schema or {}
-
-    def get_property_type(field_name: str) -> Optional[str]:
+    def get_property_type(field_name: str) -> str:
         """Get property type from schema, trying case-insensitive match."""
         # Try exact match first
         if field_name in schema:
@@ -67,7 +285,14 @@ def build_filter_from_standard(
         for prop_name, prop_type in schema.items():
             if prop_name.lower() == field_lower:
                 return prop_type
-        return None
+        if not schema:
+            raise FilterValidationError(
+                f"Cannot filter on property '{field_name}': the database schema is empty."
+            )
+        raise FilterValidationError(
+            f"Property '{field_name}' does not exist in the database schema. "
+            f"Available properties: {', '.join(sorted(schema))}."
+        )
 
     def build_equals_filter(field: str, value: str, prop_type: Optional[str]) -> dict:
         """Build an equals filter based on property type."""
@@ -84,8 +309,6 @@ def build_filter_from_standard(
                 return {"property": field, "number": {"equals": float(value)}}
             except (ValueError, TypeError):
                 return {"property": field, "rich_text": {"equals": value}}
-        elif prop_type == "date":
-            return {"property": field, "date": {"equals": value}}
         elif prop_type in ("url", "email", "phone_number"):
             return {"property": field, prop_type: {"equals": value}}
         else:
@@ -107,8 +330,6 @@ def build_filter_from_standard(
                 return {"property": field, "number": {"does_not_equal": float(value)}}
             except (ValueError, TypeError):
                 return {"property": field, "rich_text": {"does_not_equal": value}}
-        elif prop_type == "date":
-            return {"property": field, "date": {"does_not_equal": value}}
         elif prop_type in ("url", "email", "phone_number"):
             return {"property": field, prop_type: {"does_not_equal": value}}
         else:
@@ -119,43 +340,44 @@ def build_filter_from_standard(
     all_conditions = []
 
     for filter_str in filter_strings:
-        conditions = parse_filter_string(filter_str)
+        conditions = parse_notion_filter_conditions(filter_str)
         for field, op, value in conditions:
             # Get property type from schema
             prop_type = get_property_type(field)
 
+            if prop_type == "date":
+                # Date properties have their own operator vocabulary in Notion.
+                all_conditions.append(build_date_filter(field, op, value))
+                continue
+
             if op in ('null', 'notnull'):
-                filter_obj = {
-                    "property": field,
-                    "is_empty": True if op == 'null' else False,
-                }
+                filter_obj = build_emptiness_filter(field, op, prop_type)
             elif op in ('gt', 'gte', 'lt', 'lte'):
-                # Comparison operators - number or date
+                # Comparison operators - number properties only. Date properties
+                # take Notion's own date operators and are handled above.
+                if prop_type != "number":
+                    raise FilterValidationError(
+                        f"Operator '{op}' is not valid for property '{field}' "
+                        f"(type: {prop_type}). Comparison operators require a "
+                        "number or date property."
+                    )
                 notion_op_map = {
                     'gt': 'greater_than',
                     'gte': 'greater_than_or_equal_to',
                     'lt': 'less_than',
                     'lte': 'less_than_or_equal_to',
                 }
-                if prop_type == "date":
-                    filter_obj = {
-                        "property": field,
-                        "date": {notion_op_map[op]: value},
-                    }
-                else:
-                    # Default to number
-                    try:
-                        num_val = float(value)
-                        filter_obj = {
-                            "property": field,
-                            "number": {notion_op_map[op]: num_val},
-                        }
-                    except (ValueError, TypeError):
-                        # Fall back to text contains
-                        filter_obj = {
-                            "property": field,
-                            "rich_text": {"contains": value},
-                        }
+                try:
+                    num_val = float(value)
+                except (ValueError, TypeError):
+                    raise FilterValidationError(
+                        f"Operator '{op}' on number property '{field}' requires a "
+                        f"numeric value (got '{value}')."
+                    )
+                filter_obj = {
+                    "property": field,
+                    "number": {notion_op_map[op]: num_val},
+                }
             elif op == 'like' or op == 'ilike':
                 # Text contains (Notion doesn't distinguish case sensitivity in contains)
                 filter_obj = {
@@ -191,8 +413,11 @@ def build_filter_from_standard(
                 else:
                     filter_obj = {"property": field, "rich_text": {"contains": value}}
             else:
-                # Unsupported operator - skip
-                continue
+                raise FilterValidationError(
+                    f"Operator '{op}' is not valid for property '{field}' "
+                    f"(type: {prop_type}). Supported operators: "
+                    f"{', '.join(GENERIC_OPERATORS)}."
+                )
 
             all_conditions.append(filter_obj)
 
@@ -803,6 +1028,13 @@ def page_list(
         notion database page list DB_ID --filter "Complete:true"
         notion database page list DB_ID --filter "Name:like:%project%"
 
+    Date Filter Examples (date properties use Notion's date operators):
+        notion database page list DB_ID --filter "Publish Date:on_or_after:2026-07-20"
+        notion database page list DB_ID --filter "Publish Date:gte:2026-07-20"  # alias of on_or_after
+        notion database page list DB_ID --filter "Publish Date:before:2026-08-01"
+        notion database page list DB_ID --filter "Publish Date:past_week"
+        notion database page list DB_ID --filter "Publish Date:is_not_empty:true"
+
     Output Examples:
         notion database page list DB_ID --table
         notion database page list DB_ID --properties "id,Name,Website,Contact Email"
@@ -814,18 +1046,12 @@ def page_list(
     schema: Dict[str, str] = {}
     if filter:
         db = client.get_database(database_id, data_source_id=data_source)
-        for prop_name, prop_def in db.get("properties", {}).items():
-            schema[prop_name] = prop_def.get("type", "")
+        for prop_name, prop_def in db["properties"].items():
+            schema[prop_name] = prop_def["type"]
 
-    # Build filter
-    filter_obj = None
-
-    try:
-        if filter:
-            filter_obj = build_filter_from_standard(filter, schema=schema)
-    except (FilterValidationError, ValueError) as e:
-        print_warning(str(e))
-        raise typer.Exit(1)
+    # Build filter. FilterValidationError propagates to the @command decorator,
+    # which reports it as a local error and exits 1 before any API call.
+    filter_obj = build_filter_from_standard(filter, schema=schema)
 
     # Build sorts
     sorts = None
