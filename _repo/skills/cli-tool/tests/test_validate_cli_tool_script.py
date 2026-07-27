@@ -27,6 +27,18 @@ def test_validate_script_skips_auth_group_for_no_auth_clis():
     assert '[ "$is_no_auth_cli" = "true" ] || required+=(auth_group_exists)' in script_text
 
 
+def test_validate_script_uses_canonical_uv_registry():
+    script_text = (SKILL_ROOT / "scripts/validate-cli-tool.sh").read_text()
+
+    assert 'CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"' in script_text
+    assert 'CANONICAL_UV_BIN_DIR="$HOME/.local/bin"' in script_text
+    assert 'export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"' in script_text
+    assert 'export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"' in script_text
+    assert 'SYMLINK_PATH="$UV_TOOL_BIN_DIR/$CLI_NAME"' in script_text
+    assert 'UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"' in script_text
+    assert 'EXPECTED_SHEBANG_PREFIX="#!$UV_TOOL_DIR/$UV_TOOL_DIR_NAME/bin/python"' in script_text
+
+
 def test_test_script_validates_auth_profile_secret_placeholders():
     script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
 
@@ -89,6 +101,12 @@ def test_install_script_requires_launcher_symlink_for_success():
     script_text = (SKILL_ROOT / "scripts/install-cli-tool.sh").read_text()
 
     assert 'FORCE_REFRESH="false"' in script_text
+    assert 'CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"' in script_text
+    assert 'CANONICAL_UV_BIN_DIR="$HOME/.local/bin"' in script_text
+    assert 'export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"' in script_text
+    assert 'export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"' in script_text
+    assert 'UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"' in script_text
+    assert 'LAUNCHER="$UV_TOOL_BIN_DIR/$CLI_NAME"' in script_text
     assert 'metadata_refresh_needed="false"' in script_text
     assert 'PYTHON_REQUEST="$(python3 "$SCRIPT_DIR/resolve_uv_python.py" "$TOOL_DIR/pyproject.toml")"' in script_text
     assert 'existing_python_matches_request="false"' in script_text

@@ -41,8 +41,12 @@ if [ -f "$TOOL_DIR/pyproject.toml" ]; then
 fi
 TOOL_PACKAGE_NAME="${PYPROJECT_NAME:-${CLI_NAME}-cli}"
 UV_TOOL_DIR_NAME=$(printf '%s' "$TOOL_PACKAGE_NAME" | python3 -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
-UV_VENV="$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME"
-LAUNCHER="$HOME/.local/bin/$CLI_NAME"
+CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+CANONICAL_UV_BIN_DIR="$HOME/.local/bin"
+export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"
+export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"
+UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"
+LAUNCHER="$UV_TOOL_BIN_DIR/$CLI_NAME"
 USES_CLI_TOOLS_SHARED="false"
 if [ -f "$TOOL_DIR/pyproject.toml" ] && grep -q "cli-tools-shared" "$TOOL_DIR/pyproject.toml"; then
     USES_CLI_TOOLS_SHARED="true"
@@ -172,8 +176,8 @@ INSTALL_EXIT=$?
 # Windows: Remove stale extension-less binary that shadows .exe
 # ============================================================================
 if [ $INSTALL_EXIT -eq 0 ] && [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-    NOEXT="$HOME/.local/bin/$CLI_NAME"
-    WITHEXT="$HOME/.local/bin/$CLI_NAME.exe"
+    NOEXT="$UV_TOOL_BIN_DIR/$CLI_NAME"
+    WITHEXT="$UV_TOOL_BIN_DIR/$CLI_NAME.exe"
     if [ -f "$NOEXT" ] && [ -f "$WITHEXT" ]; then
         # Skip if they are hardlinks to the same file (same inode)
         NOEXT_INODE=$(stat -c '%i' "$NOEXT" 2>/dev/null)
@@ -280,16 +284,16 @@ if [ $INSTALL_EXIT -eq 0 ]; then
     # Prefer the uv-managed launcher we just installed; PATH may resolve to an
     # unrelated system binary with the same command name.
     SMOKE_BIN=""
-    if [ -L "$HOME/.local/bin/$CLI_NAME" ]; then
+    if [ -L "$LAUNCHER" ]; then
         SYMLINK_EXISTS="true"
-        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME"
-    elif [ -f "$HOME/.local/bin/$CLI_NAME.exe" ]; then
+        SMOKE_BIN="$LAUNCHER"
+    elif [ -f "$LAUNCHER.exe" ]; then
         SYMLINK_EXISTS="true"
-        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME.exe"
+        SMOKE_BIN="$LAUNCHER.exe"
     else
         INSTALL_EXIT=1
         INSTALL_OUTPUT="${INSTALL_OUTPUT}
-ERROR: uv tool install completed but did not create expected launcher: $HOME/.local/bin/$CLI_NAME"
+ERROR: uv tool install completed but did not create expected launcher: $LAUNCHER"
     fi
     if [ -n "$SMOKE_BIN" ]; then
         "$SMOKE_BIN" --help >/dev/null 2>&1 && HELP_WORKS="true"

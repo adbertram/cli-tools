@@ -11,6 +11,15 @@ from pathlib import Path
 from cli_test_utils import run_cli_command, get_uv_tool_venv_dir
 
 
+def _canonical_uv_tool_env() -> dict[str, str]:
+    """Return the repo's canonical uv tool registry environment."""
+    home = Path(os.environ["HOME"])
+    env = os.environ.copy()
+    env["UV_TOOL_DIR"] = str(home / ".local" / "share" / "uv" / "tools")
+    env["UV_TOOL_BIN_DIR"] = str(home / ".local" / "bin")
+    return env
+
+
 def _find_cli_tools_root(cli_dir: Path) -> Path | None:
     """Find the cli-tools repo root from a CLI directory."""
     for candidate in [cli_dir, *cli_dir.parents]:
@@ -86,6 +95,19 @@ def test_package_module_names_ignore_dropbox_conflict_copies(tmp_path):
     assert _package_module_names(pkg_dir, cli_dir) == ["demo_cli", "demo_cli.recorder"]
 
 
+def test_canonical_uv_tool_env_overrides_isolated_xdg(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    isolated_xdg = tmp_path / "xdg"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_xdg))
+
+    env = _canonical_uv_tool_env()
+
+    assert env["XDG_DATA_HOME"] == str(isolated_xdg)
+    assert env["UV_TOOL_DIR"] == str(home / ".local" / "share" / "uv" / "tools")
+    assert env["UV_TOOL_BIN_DIR"] == str(home / ".local" / "bin")
+
+
 def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     """CLI must be registered as a uv tool.
 
@@ -97,7 +119,9 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
 
     result = subprocess.run(
         ["uv", "tool", "list"],
-        capture_output=True, text=True
+        capture_output=True,
+        text=True,
+        env=_canonical_uv_tool_env(),
     )
     assert result.returncode == 0, "Failed to run 'uv tool list'"
 

@@ -39,7 +39,11 @@ if [ -z "$PYTHON_BIN" ]; then
     echo '{"error": "validate-cli-tool.sh needs Python 3.11+ for tomllib, but no python3.11+ interpreter was found on PATH. Install one (e.g. brew install python@3.11) and retry."}' >&2
     exit 1
 fi
-SYMLINK_PATH="$HOME/.local/bin/$CLI_NAME"
+CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+CANONICAL_UV_BIN_DIR="$HOME/.local/bin"
+export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"
+export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"
+SYMLINK_PATH="$UV_TOOL_BIN_DIR/$CLI_NAME"
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 PKG_DIR_NAME="${CLI_NAME}-cli"
 if [ -f "$TOOL_DIR/pyproject.toml" ]; then
@@ -47,10 +51,10 @@ if [ -f "$TOOL_DIR/pyproject.toml" ]; then
     [ -n "$PYPROJECT_NAME" ] && PKG_DIR_NAME="$PYPROJECT_NAME"
 fi
 UV_TOOL_DIR_NAME=$(printf '%s' "$PKG_DIR_NAME" | "$PYTHON_BIN" -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
-UV_VENV="$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME"
+UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"
 PKG_NAME="$(echo "$CLI_NAME" | tr '-' '_')_cli"
 MAIN_PY="$TOOL_DIR/$PKG_NAME/main.py"
-EXPECTED_SHEBANG_PREFIX="#!$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME/bin/python"
+EXPECTED_SHEBANG_PREFIX="#!$UV_TOOL_DIR/$UV_TOOL_DIR_NAME/bin/python"
 
 # Each check sets one of these patterns:
 #   <var>=true | <var>=false | <var>=skipped
