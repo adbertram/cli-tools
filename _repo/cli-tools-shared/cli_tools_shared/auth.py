@@ -118,6 +118,10 @@ class BrowserAutomation:
     AUTH_CHECK_URL = ""
     AUTH_URL_PATTERN = ""        # Regex — URL matches → user is on login page
     AUTH_FAILURE_URL_PATTERN = ""  # Regex — URL matches → service requires re-auth/confirmation
+    # JS evaluated on the auth-check page; truthy result → NOT authenticated.
+    # For services that serve a URL-preserving error/interstitial at the
+    # authenticated URL, so URL patterns alone report a false healthy session.
+    AUTH_FAILURE_PAGE_JS = ""
     AUTH_COOKIE_PATTERNS = []    # Cookie name regexes indicating auth
     AUTH_SUCCESS_URL = ""        # URL pattern indicating successful login
     AUTH_SUCCESS_SELECTOR = ""   # CSS/locator selector visible when authenticated
@@ -799,6 +803,25 @@ class BrowserAutomation:
             return result
         return False
 
+    def _is_auth_failure_content(self, url_or_page) -> bool:
+        """Return True when AUTH_FAILURE_PAGE_JS reports a failed page fetch.
+
+        A page that cannot be inspected (no ``evaluate``, or a script error) is
+        not treated as a failure: the URL-based checks stay the ground truth.
+        """
+        if not self.AUTH_FAILURE_PAGE_JS:
+            return False
+        evaluate = getattr(url_or_page, "evaluate", None)
+        if not callable(evaluate):
+            return False
+        try:
+            failed = bool(evaluate(self.AUTH_FAILURE_PAGE_JS))
+        except Exception as e:
+            logger.debug("_is_auth_failure_content: page inspection failed: %s", e)
+            return False
+        logger.debug("_is_auth_failure_content: failed=%s", failed)
+        return failed
+
     def _raise_if_auth_failure_page(self, page) -> None:
         if not self.AUTH_FAILURE_URL_PATTERN:
             return
@@ -819,6 +842,16 @@ class BrowserAutomation:
         if self.AUTH_FAILURE_URL_PATTERN and self._is_auth_failure_page(page):
             logger.debug(
                 "_check_auth: on auth-failure page (url=%s), returning False",
+                page.url,
+            )
+            return False
+
+        # Content-level failure wall: an error/interstitial served at the
+        # authenticated URL keeps every URL pattern happy, so the browser looks
+        # healthy while it cannot actually fetch the page.
+        if self._is_auth_failure_content(page):
+            logger.debug(
+                "_check_auth: auth-check page reported a failed fetch (url=%s), returning False",
                 page.url,
             )
             return False

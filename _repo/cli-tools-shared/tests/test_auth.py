@@ -1017,3 +1017,51 @@ def test_is_auth_failure_page_matches_configured_pattern(tmp_path):
         "https://www.example.com/account/reauth?next=%2Fdashboard"
     ) is True
     assert browser._is_auth_failure_page("https://www.example.com/dashboard") is False
+
+
+class _EvaluatePage(_FakePage):
+    """FakePage whose ``evaluate`` returns a canned AUTH_FAILURE_PAGE_JS verdict."""
+
+    def __init__(self, url: str, verdict):
+        super().__init__(url, visible_selectors={})
+        self._verdict = verdict
+
+    def evaluate(self, _script):
+        if isinstance(self._verdict, Exception):
+            raise self._verdict
+        return self._verdict
+
+
+class _FailureContentBrowser(_TestBrowser):
+    AUTH_SUCCESS_URL = r"/dashboard"
+    AUTH_FAILURE_PAGE_JS = "() => true"
+
+
+def test_check_auth_failure_page_js_rejects_error_page_at_authenticated_url(tmp_path):
+    """A URL-preserving error page must not read as a healthy session."""
+    browser = _FailureContentBrowser(_TestConfig(tmp_path))
+
+    assert browser._check_auth(_EvaluatePage("https://example.com/dashboard", True)) is False
+
+
+def test_check_auth_failure_page_js_accepts_a_rendered_page(tmp_path):
+    browser = _FailureContentBrowser(_TestConfig(tmp_path))
+
+    assert browser._check_auth(_EvaluatePage("https://example.com/dashboard", False)) is True
+
+
+def test_check_auth_failure_page_js_ignores_uninspectable_pages(tmp_path):
+    """No ``evaluate`` (or a script error) leaves the URL checks as ground truth."""
+    browser = _FailureContentBrowser(_TestConfig(tmp_path))
+
+    assert browser._check_auth(_FakePage("https://example.com/dashboard", {})) is True
+    assert browser._check_auth(
+        _EvaluatePage("https://example.com/dashboard", RuntimeError("execution context destroyed"))
+    ) is True
+
+
+def test_check_auth_failure_page_js_is_inert_when_unset(tmp_path):
+    """CLIs that do not declare the hook must not pay for it."""
+    browser = _FailureUrlBrowser(_TestConfig(tmp_path))
+
+    assert browser._is_auth_failure_content(_EvaluatePage("https://example.com/dashboard", True)) is False
