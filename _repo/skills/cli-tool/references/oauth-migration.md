@@ -28,7 +28,7 @@ Before starting, identify which pattern your CLI uses:
 - Auth is managed by a third-party SDK (Google, Dropbox, Podio, Slack)
 - The CLI uses OAuth 1.0a (Bricklink)
 - The CLI uses client credentials flow without user interaction (USPS, FedEx)
-- The CLI has a completely custom token source (Descript JWT extraction)
+- The CLI has a fully custom token source
 
 ---
 

@@ -183,7 +183,7 @@ class Config(BaseConfig):
 **When to use multiple types:**
 - Service has an API but some actions require browser automation after Adam
   explicitly approves the browser-driven command boundary
-- OAuth API + browser session for scraping (e.g., Descript, PayPal)
+- OAuth API + browser session for scraping (e.g., PayPal)
 - API key + username/password for different service tiers
 
 ## API Client Credential Gate in Dual-Auth CLIs

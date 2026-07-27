@@ -383,7 +383,6 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | Tool | Command | What it does |
 | --- | --- | --- |
 | [`buttondown`](buttondown/) | `buttondown` | Command-line access to the Buttondown REST API for subscribers, emails, and tags. |
-| [`descript`](descript/) | `descript` | CLI for managing Descript video projects via reverse-engineered internal API. Authenticates by extracting JWT tokens from the running Descript Electron app via Chrome DevTools Protocol. |
 | [`dev_to`](dev_to/) | `dev_to` | CLI for publishing and reading DEV Community posts through the official Forem API. |
 | [`elevenlabs`](elevenlabs/) | `elevenlabs` | A command-line interface for the [ElevenLabs API](https://elevenlabs.io/docs/api-reference). It supports API-key authentication, voice discovery, model inspection, subscription quota checks, pronunciation dictionaries, and text-to-speech audio generation. |
 | [`facebook`](facebook/) | `facebook` | A command-line tool for Facebook Marketplace, Messenger, and Groups via browser automation (playwright). |

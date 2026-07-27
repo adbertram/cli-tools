@@ -114,7 +114,7 @@ Do not rely on a downstream pipeline stage to hide an upstream missing-operand
 error. This is unsafe:
 
 ```bash
-rg --files descript _repo/skills/descript-cli tests _repo | rg -F 'descript'
+rg --files notion _repo/skills/notion-cli tests _repo | rg -F 'notion'
 ```
 
 Build the operand list from paths proven to exist, print skipped optional paths,
@@ -122,7 +122,7 @@ then search only those operands:
 
 ```bash
 paths=()
-for path in descript _repo/skills/descript-cli tests _repo; do
+for path in notion _repo/skills/notion-cli tests _repo; do
   if [ -e "$path" ]; then
     paths+=("$path")
   else
@@ -133,12 +133,12 @@ if [ "${#paths[@]}" -eq 0 ]; then
   printf '%s\n' 'NO_EXISTING_PATHS'
   exit 0
 fi
-if rg -n -F -- 'descript' "${paths[@]}"; then
+if rg -n -F -- 'notion' "${paths[@]}"; then
   exit 0
 else
   rc=$?
   if [ "$rc" -eq 1 ]; then
-    printf '%s\n' 'NO_MATCH:descript'
+    printf '%s\n' 'NO_MATCH:notion'
     exit 0
   fi
   exit "$rc"

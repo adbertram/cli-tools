@@ -257,13 +257,6 @@ max_nested_depth = 4
 [cli_specific.podio.param_fixtures]
 "item list" = { "_pos1" = "app_id" }
 
-# Descript fixtures: compositions commands need project_id positional arg
-[cli_specific.descript.param_fixtures]
-"compositions list" = { "_pos1" = "project_id" }
-"compositions get" = { "_pos1" = "project_id" }
-"compositions export" = { "_pos1" = "project_id", "_pos2" = "asset_id" }
-"compositions assets" = { "_pos1" = "project_id" }
-
 # Ahrefs fixtures: site-audit commands require project_id positional arg
 [cli_specific.ahrefs.param_fixtures]
 "site-audit list" = { "_pos1" = "project_id" }

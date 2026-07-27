@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-25T18:48:43Z",
-  "total_commands": 56,
+  "discovered_at": "2026-07-27T14:28:28Z",
+  "total_commands": 55,
   "global_options": [
     {
       "name": "--version",
@@ -1910,79 +1910,6 @@
         }
       }
     },
-    "descript": {
-      "help": "Export videos from Descript",
-      "usage_instructions": "Export video clips from Descript projects to course clip folders on Google Drive. Requires Descript to be running with the project open. Finds the project by name (partial match) and locates the composition matching the module/clip pattern.",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "export": {
-          "help": "Export a Descript composition to the course clips folder. Finds the Descript project by name, locates the composition matching the module/clip pattern (e.g., \"m2c1\"), and exports the full composition (with slides, edits, etc.) via the Descript app's local export. Requires Descript to be running with the project open.",
-          "examples": [
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1",
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --course advanced-features-cursor-ai",
-            "coursecraft descript export \"Advanced Features of Cursor AI\" -m 2 -c 1 --dry-run"
-          ],
-          "usage_instructions": "Export a Descript composition to the course clips folder. Positional argument is the project name (partial match supported). Requires --module/-m (module number) and --clip/-c (clip number). Optional --course to override active course slug. Use --dry-run/-n to preview the export without executing.",
-          "arguments": [
-            {
-              "name": "project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Descript project name (partial match supported)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--module",
-              "type": "INTEGER",
-              "required": true,
-              "help": "Module number (e.g., 1, 2, 3)",
-              "short": "-m"
-            },
-            {
-              "name": "--clip",
-              "type": "INTEGER",
-              "required": true,
-              "help": "Clip number (e.g., 1, 2, 3)",
-              "short": "-c"
-            },
-            {
-              "name": "--course",
-              "type": "TEXT",
-              "required": false,
-              "help": "Course slug (defaults to active course)"
-            },
-            {
-              "name": "--clips-root",
-              "type": "PATH",
-              "required": true,
-              "help": "Root directory containing <course>/clips folders"
-            },
-            {
-              "name": "--dry-run",
-              "type": "bool",
-              "required": false,
-              "help": "Show what would be done without exporting",
-              "short": "-n"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        }
-      }
-    },
     "feedback": {
       "help": "Manage feedback records",
       "arguments": [],
@@ -3499,6 +3426,12 @@
               "type": "bool",
               "required": false,
               "help": "Mark the slide's Script as human-verified"
+            },
+            {
+              "name": "--script-review-ai",
+              "type": "TEXT",
+              "required": false,
+              "help": "AI review verdict of the slide Script (artifact-reviewer only)"
             },
             {
               "name": "--demo",
