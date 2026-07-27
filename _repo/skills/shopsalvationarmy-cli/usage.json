@@ -1,7 +1,7 @@
 {
   "tool": "shopsalvationarmy",
   "description": "CLI interface for Shop Salvation Army",
-  "discovered_at": "2026-07-24T19:14:33Z",
+  "discovered_at": "2026-07-27T01:22:29Z",
   "total_commands": 15,
   "global_options": [
     {
@@ -352,10 +352,10 @@
           "usage_instructions": "Use `shopsalvationarmy search query` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "[query]",
-              "type": "TEXT",
+              "name": "query",
+              "type": "QUERY",
               "required": false,
-              "help": "TEXT  Search keywords (leave empty for all items)"
+              "help": "Search keywords (leave empty for all items)"
             }
           ],
           "options": [
