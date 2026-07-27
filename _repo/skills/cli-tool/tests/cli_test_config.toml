@@ -5,6 +5,8 @@ max_nested_depth = 3  # global default, can be overridden per CLI
 [command_discovery]
 skip_list = ["list", "get", "create", "update", "delete", "login", "status", "logout"]
 
+# Names here are exempt in EVERY CLI. Scope a one-tool exemption to
+# [cli_specific.<cli>] with the same key instead of widening these.
 [exclusions]
 excluded_from_get_required = ["search", "profiles", "cart", "rules", "ideas", "responses", "capture", "credentials", "models", "lists"]
 excluded_from_list_required = ["statistics", "metrics", "health", "summary", "status", "content", "profiles", "search", "folders", "agent-traffic", "payouts"]
@@ -66,6 +68,11 @@ max_nested_depth = 4
 [cli_specific.ebay]
 # eBay seller store categories commands live at seller store categories <action>.
 max_nested_depth = 4
+# `listings` is marketplace-wide search: eBay exposes no way to enumerate
+# listings without a query, and `listings search` is the documented ID-discovery
+# command. `time-away` is a single store setting (get/enable/disable) with no ID
+# space at all. Neither has anything a `list` command could return.
+excluded_from_list_required = ["listings", "time-away"]
 
 [cli_specific.wordpress]
 # Profiles is a utility command from cli_tools_shared, not a resource list command

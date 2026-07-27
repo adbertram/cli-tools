@@ -381,7 +381,11 @@ ITEM_DETAIL_JS = """() => {
         has_bid: !!document.querySelector('.x-bid-count, [data-testid="x-bid-action"]')
             || /place bid/i.test(bodyText),
         has_best_offer: /make (an )?offer/i.test(bodyText),
-        ended_banner: /this listing (has ended|was ended)|listing (has )?ended|is no longer available|no longer available/i.test(low)
+        // eBay words the end-of-listing banner several ways. A BIN listing that
+        // sold shows "This listing sold on <date>" with no "ended" anywhere on
+        // the page (verified against item 227445045390), so matching only on
+        // "ended" reported a sold listing as still live.
+        ended_banner: /this (listing|auction) (sold|has ended|was ended|ended)|listing (has )?ended|bidding (has )?ended|is no longer available|no longer available/i.test(low)
             || /^ended\\b/i.test((q('.ux-timer__text') || q('.ux-timer') || '').trim()),
         error_page: /discover error|the listing you'?re looking for/i.test(low),
         captcha: /splashui\\/captcha|are you a human|please verify yourself|hcaptcha|recaptcha/i.test(

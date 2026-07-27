@@ -2,7 +2,7 @@
 
 import pytest
 
-from cli_test_utils import parse_help_commands
+from cli_test_utils import parse_help_commands, resolve_exclusions
 
 
 def test_groups_with_list_must_have_get(cli_name, test_config, help_cache, command_filter):
@@ -20,7 +20,7 @@ def test_groups_with_list_must_have_get(cli_name, test_config, help_cache, comma
         if not subgroups:
             pytest.skip(f"Command group '{command_filter}' not found")
 
-    excluded_from_get = test_config["exclusions"]["excluded_from_get_required"]
+    excluded_from_get = resolve_exclusions(test_config, cli_name, "excluded_from_get_required")
 
     errors = []
     for group in subgroups:
@@ -55,7 +55,7 @@ def test_groups_with_get_must_have_list(cli_name, test_config, help_cache, comma
         if not subgroups:
             pytest.skip(f"Command group '{command_filter}' not found")
 
-    excluded_from_list = test_config["exclusions"]["excluded_from_list_required"]
+    excluded_from_list = resolve_exclusions(test_config, cli_name, "excluded_from_list_required")
 
     errors = []
     for group in subgroups:
