@@ -357,8 +357,18 @@ ITEM_DETAIL_JS = """() => {
         bid_count: q('.x-bid-count .ux-textspans') || q('.x-bid-count'),
         time_left: q('.ux-timer__text') || q('.x-timeleft .ux-timer') || q('.x-timeleft'),
         timer_text: q('.ux-timer__text') || q('.ux-timer'),
-        shipping_dom: q('.ux-labels-values--shipping .ux-labels-values__values .ux-textspans')
-            || q('.d-shipping-minview .ux-textspans'),
+        // First value span of the shipping row -- 'US $5.58 '. Deliberately
+        // has no fallback selector: '.d-shipping-minview .ux-textspans' also
+        // matches the 'Shipping, returns, and payments' section heading on
+        // listings with no shipping row, which is not a rate.
+        shipping_dom: q('.ux-labels-values--shipping .ux-labels-values__values .ux-textspans'),
+        // eBay's own fulfillment label rows. Their PRESENCE is the signal:
+        // a listing offering local pickup renders a 'Pickup:' row, one that
+        // ships renders a 'Shipping:' row, and a listing can have either,
+        // both, or (never, on a real page) neither. The shipping row's values
+        // also carry the 'Located in: <city, state, country>' origin line.
+        pickup_dom: q('.ux-labels-values--localPickup .ux-labels-values__values'),
+        shipping_values_dom: q('.ux-labels-values--shipping .ux-labels-values__values'),
         condition: q('.x-item-condition-text .ux-textspans')
             || q('.x-item-condition-value .ux-textspans'),
         quantity: q('.x-quantity__availability .ux-textspans') || q('.x-quantity__availability'),
@@ -391,10 +401,14 @@ _SCHEMA_CONDITION = {
 
 
 def _numeric_price(text: Optional[str]) -> Optional[str]:
-    """Pull a numeric price string (no currency symbol / suffix) from text."""
+    """Pull a numeric price string (no currency symbol / suffix) from text.
+
+    The match must start with a digit so ordinary prose punctuation (e.g. the
+    comma in 'Shipping, returns, and payments') cannot be read as a price.
+    """
     if not text:
         return None
-    match = re.search(r"[\d,]+(?:\.\d{2})?", text)
+    match = re.search(r"\d[\d,]*(?:\.\d{2})?", text)
     return match.group(0).replace(",", "") if match else None
 
 
@@ -422,6 +436,39 @@ def _parse_shipping_dom(text: Optional[str]) -> Optional[str]:
     if "free" in text.lower():
         return "0.00"
     return _numeric_price(text)
+
+
+# A monetary amount ('US $5.58'), an explicit free-fulfillment phrase, or a
+# delivery estimate in the shipping row's values -- any of these means eBay is
+# quoting shipping for this listing. The bare word "shipping" is deliberately
+# NOT a signal: the row always ends with a clipped "See details for shipping"
+# link, even on listings that do not ship to the buyer.
+_SHIPPING_RATE_RE = re.compile(r"\d[\d,]*\.\d{2}")
+_FREE_FULFILLMENT_RE = re.compile(r"free\s+(?:shipping|delivery|postage)", re.I)
+_DELIVERY_ESTIMATE_RE = re.compile(r"\bdeliver(?:y|s|ed)\b|get it (?:by|between)", re.I)
+
+# 'Located in: Owensboro, Kentucky, United States' -- the last line of the
+# shipping row's values.
+_LOCATED_IN_RE = re.compile(r"Located in:\s*(.+?)\s*$")
+
+
+def _quotes_shipping(shipping_values: Optional[str]) -> bool:
+    """True when the shipping row actually quotes a rate or a delivery estimate."""
+    if not shipping_values:
+        return False
+    return bool(
+        _SHIPPING_RATE_RE.search(shipping_values)
+        or _FREE_FULFILLMENT_RE.search(shipping_values)
+        or _DELIVERY_ESTIMATE_RE.search(shipping_values)
+    )
+
+
+def _parse_item_location(shipping_values: Optional[str]) -> Optional[str]:
+    """Pull the item's origin out of the shipping row's 'Located in:' line."""
+    if not shipping_values:
+        return None
+    match = _LOCATED_IN_RE.search(shipping_values)
+    return match.group(1) if match else None
 
 
 def _iter_jsonld_objects(blocks):
@@ -472,6 +519,25 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
             f"eBay item {item_id} was not found or the listing was removed. "
             f"url={data.get('url')!r} title={data.get('doc_title')!r}"
         )
+
+    # ---- fulfillment (local pickup / shipping / origin) ----
+    # Every real item page renders at least one of eBay's fulfillment label
+    # rows. Neither one present means the page did not load as expected or
+    # eBay changed the markup -- fail rather than report "no pickup, no
+    # shipping", which a caller would read as a real fulfillment answer.
+    pickup_values = data.get("pickup_dom")
+    shipping_values = data.get("shipping_values_dom")
+    if pickup_values is None and shipping_values is None:
+        raise BrowserError(
+            f"eBay item {item_id} page has neither a local-pickup nor a shipping "
+            "fulfillment row, so pickup/shipping availability cannot be determined "
+            "(the item DOM no longer matches the expected selectors). "
+            f"url={data.get('url')!r} title={data.get('doc_title')!r}"
+        )
+
+    local_pickup = pickup_values is not None
+    ships = _quotes_shipping(shipping_values)
+    item_location = _parse_item_location(shipping_values)
 
     # ---- price / currency ----
     currency = "USD"
@@ -563,6 +629,9 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
         bids=bids,
         time_left=data.get("time_left"),
         shipping_price=shipping_price,
+        local_pickup=local_pickup,
+        ships=ships,
+        item_location=item_location,
         condition=condition,
         availability=availability,
         ended=ended,

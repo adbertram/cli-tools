@@ -1,7 +1,7 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-07-24T23:25:42Z",
+  "discovered_at": "2026-07-27T01:18:39Z",
   "total_commands": 72,
   "global_options": [
     {
@@ -464,7 +464,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Fetch detail for a single active eBay listing by item ID. Scrapes the public /itm/<id> page (schema.org Product JSON-LD + DOM) for price, currency, condition, availability, shipping, current bid, and time-left.",
+          "help": "Fetch detail for a single active eBay listing by item ID. Scrapes the public /itm/<id> page (schema.org Product JSON-LD + DOM) for price, currency, condition, availability, shipping, current bid, and time-left. Fulfillment comes from eBay's own label rows: `ships` is true when the shipping row quotes a rate or delivery estimate, `local_pickup` is true when the pickup row is present, and `item_location` is the shipping row's \"Located in:\" origin. A page with neither row is an error, not \"no fulfillment\".",
           "arguments": [
             {
               "name": "item_id",

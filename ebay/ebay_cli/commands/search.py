@@ -49,11 +49,13 @@ ACTIVE_TABLE_HEADERS = ["Title", "Price", "Shipping", "Status", "Time Left", "Fo
 # Table columns for item detail.
 ITEM_TABLE_FIELDS = [
     "item_id", "title", "price", "currency", "format", "bids", "time_left",
-    "shipping_price", "condition", "availability", "ended", "quantity", "seller",
+    "shipping_price", "ships", "local_pickup", "item_location", "condition",
+    "availability", "ended", "quantity", "seller",
 ]
 ITEM_TABLE_HEADERS = [
     "Item ID", "Title", "Price", "Currency", "Format", "Bids", "Time Left",
-    "Shipping", "Condition", "Availability", "Ended", "Qty", "Seller",
+    "Shipping", "Ships", "Pickup", "Location", "Condition",
+    "Availability", "Ended", "Qty", "Seller",
 ]
 
 
@@ -220,11 +222,19 @@ def listings_get(
     price, currency, condition, availability, shipping, current bid, and
     time-left.
 
+    Fulfillment comes from eBay's own label rows: `ships` is true when the
+    shipping row quotes a rate or delivery estimate, `local_pickup` is true
+    when the pickup row is present, and `item_location` is the shipping row's
+    "Located in:" origin. A page with neither row is an error, not "no
+    fulfillment".
+
     Examples:
 
         ebay listings get 127992747834
 
         ebay listings get 127992747834 --table
+
+        ebay listings get 127992747834 -p item_id,ships,local_pickup,item_location
     """
     try:
         client = get_browser_client(profile=profile)
