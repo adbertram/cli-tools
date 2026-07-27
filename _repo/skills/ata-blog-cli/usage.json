@@ -1,8 +1,8 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-06-24T18:45:24Z",
-  "total_commands": 81,
+  "discovered_at": "2026-07-27T13:12:29Z",
+  "total_commands": 82,
   "global_options": [
     {
       "name": "--version",
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use `ata-blog auth profiles list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
@@ -283,7 +283,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Use `ata-blog cache clear` with the documented arguments and options shown below.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -1251,7 +1258,7 @@
           ]
         },
         "unpublish": {
-          "help": "Unpublish an article: revert a published post back to draft.",
+          "help": "Unpublish an article: revert a published post back to draft. The inverse of `publish`. Resolves both the Notion page and the WordPress post from the identifier, trashes (or permanently deletes with --force) the WordPress post, and resets the Notion page status plus its publication artifact fields (Published URL, X Post URL, LinkedIn Post URL, Publish Date -> cleared; Promoted -> false). Content, Keywords, Tags, Category, Schema Type, Stage Date, and Post Performance Snapshots are left intact. This is destructive: pass --yes to run non-interactively, or --dry-run to preview the resolved post and planned field changes without mutating.",
           "examples": [
             "ata-blog notion-page unpublish PAGE_ID --dry-run",
             "ata-blog notion-page unpublish PAGE_ID --yes",
@@ -1313,7 +1320,7 @@
           ]
         },
         "update": {
-          "help": "Update article properties in Notion.",
+          "help": "Update article properties in Notion. Property types are read from the live Notion database schema, so each value is sent with the correct typed payload. An empty value clears the property (url/email/number/select/date -> null, rich_text/multi_select/relation -> empty). Checkbox properties accept true/false/yes/no/1/0 (case-insensitive) and are rejected if ambiguous.",
           "examples": [
             "ata-blog notion-page update PAGE_ID --status \"Draft\"",
             "ata-blog notion-page update PAGE_ID --status \"Developmental Review\"",
@@ -1370,7 +1377,7 @@
       ],
       "commands": {
         "disable": {
-          "help": "Disable Raptive ads on a WordPress post. By default disables ALL ads. Use flags to disable specific ad types only.",
+          "help": "Disable Raptive ads on a WordPress post or page via the wp-admin editor. Drives the live \"Raptive Ads\" meta box (login -> check boxes -> save) and verifies public posts against rendered body classes and pages against the saved editor checkbox state.",
           "examples": [
             "ata-blog raptive disable 12345                    # Disable all ads",
             "ata-blog raptive disable 12345 --content-only     # Disable content ads only",
@@ -1444,7 +1451,7 @@
           ]
         },
         "enable": {
-          "help": "Re-enable Raptive ads on a WordPress post. Removes the disable flags from post meta to restore ads.",
+          "help": "Re-enable Raptive ads on a WordPress post or page via the wp-admin editor. Unchecks the meta-box disable flags. Public posts are verified against rendered body classes; pages are verified against saved editor checkboxes.",
           "examples": [
             "ata-blog raptive enable 12345                  # Enable all ads",
             "ata-blog raptive enable 12345 --content-only  # Enable content ads only",
@@ -1503,7 +1510,7 @@
           ]
         },
         "fields": {
-          "help": "List all Raptive post meta field names. Useful for manual debugging or direct API calls.",
+          "help": "List the controllable Raptive ad types and their editor / body-class mapping.",
           "usage_instructions": "Use `ata-blog raptive fields` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
@@ -1516,7 +1523,7 @@
           ]
         },
         "status": {
-          "help": "Check Raptive ad status for a WordPress post. Shows which ad types are disabled and any scheduled re-enable date.",
+          "help": "Check Raptive ad status for a WordPress post or page. Reads rendered <body> classes for public posts. Pages, drafts, and settings without body-class signals are checked in the wp-admin editor.",
           "examples": [
             "ata-blog raptive status 12345",
             "ata-blog raptive status 12345 --table"
@@ -1670,7 +1677,7 @@
           ]
         },
         "set": {
-          "help": "SCHEMA_TYPE:{Article|TechArticle|Review} Set Rank Math schema on a WordPress post.",
+          "help": "{schema_type}:<Article|TechArticle|Review> Set Rank Math schema on a WordPress post.",
           "examples": [
             "ata-blog schema set 123 TechArticle --proficiency Intermediate",
             "ata-blog schema set 456 Review --rating 4.5 --item \"Azure DevOps\"",
@@ -1686,17 +1693,17 @@
             },
             {
               "name": "schema_type",
-              "type": "TEXT",
+              "type": "ARTICLE|TECHARTICLE|REVIEW",
               "required": true,
-              "help": "SCHEMA_TYPE:{Article|TechArticle|Review}  Schema type (Article, TechArticle, Review)"
+              "help": "Schema type (Article, TechArticle, Review)"
             }
           ],
           "options": [
             {
               "name": "--proficiency",
-              "type": "bool",
+              "type": "BEGINNER|INTERMEDIATE|EXPERT",
               "required": false,
-              "help": "[Beginner|Intermediate|Expert]  Proficiency level for TechArticle (Beginner, Intermediate, Expert)",
+              "help": "Proficiency level for TechArticle (Beginner, Intermediate, Expert)",
               "short": "-p"
             },
             {
@@ -2047,6 +2054,25 @@
         }
       ],
       "commands": {
+        "cache": {
+          "help": "Manage WordPress/WP Engine caches",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "clear-all": {
+              "help": "Clear all WP Engine environment caches through wp-admin.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
         "health-report": {
           "help": "Emit a structured WordPress maintenance health report.",
           "arguments": [],
@@ -2113,7 +2139,7 @@
               ]
             },
             "delete": {
-              "help": "Delete an inactive WordPress plugin.",
+              "help": "Delete an inactive WordPress plugin through wp-admin's native AJAX deleter and verify absence.",
               "usage_instructions": "Use `ata-blog wordpress-admin plugins delete` with the documented arguments and options shown below.",
               "arguments": [
                 {
@@ -2194,7 +2220,7 @@
               ]
             },
             "list": {
-              "help": "List installed WordPress plugins.",
+              "help": "List installed WordPress plugins as JSON by default.",
               "usage_instructions": "Use `ata-blog wordpress-admin plugins list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
@@ -2202,7 +2228,7 @@
                   "name": "--table",
                   "type": "bool",
                   "required": false,
-                  "help": "Display as table",
+                  "help": "Display as table instead of JSON",
                   "short": "-t"
                 },
                 {
@@ -2242,7 +2268,7 @@
               ]
             },
             "upgrade": {
-              "help": "Upgrade a plugin through the WordPress CLI's native updater path.",
+              "help": "Upgrade a plugin through wp-admin's native AJAX updater and verify readback.",
               "usage_instructions": "Use `ata-blog wordpress-admin plugins upgrade` with the documented arguments and options shown below.",
               "arguments": [
                 {
@@ -2294,7 +2320,7 @@
           "options": [],
           "commands": {
             "file-push": {
-              "help": "REMOTE_FILE",
+              "help": "{local_file} {remote_file} Push a local file to a remote WordPress theme through SSH/SFTP.",
               "arguments": [
                 {
                   "name": "theme",
@@ -3288,10 +3314,58 @@
           ],
           "options": [
             {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "New post title"
+            },
+            {
+              "name": "--content",
+              "type": "TEXT",
+              "required": false,
+              "help": "New post content"
+            },
+            {
+              "name": "--content-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Read new post content from file"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "New post status (publish, draft, pending, private, future)"
+            },
+            {
+              "name": "--slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "New URL slug"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule date (ISO 8601)"
+            },
+            {
               "name": "--featured-media",
               "type": "INTEGER",
               "required": false,
               "help": "Featured image media ID"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post excerpt"
+            },
+            {
+              "name": "--meta",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post meta (key=value, repeatable)"
             },
             {
               "name": "--profile",
