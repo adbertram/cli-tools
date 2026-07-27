@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from ..client import get_client
 from cli_tools_shared.filters import (
-    FilterValidationError,
     apply_filters,
     apply_properties_filter,
 )

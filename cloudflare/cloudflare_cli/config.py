@@ -1,5 +1,4 @@
 """Configuration management for Cloudflare CLI."""
-from pathlib import Path
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
