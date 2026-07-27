@@ -3,6 +3,7 @@ import io
 import json
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -163,8 +164,14 @@ class RecordTests(unittest.TestCase):
         self.click_step_probe = self.click_step_probe_patcher.start()
         self.cue_count_check_patcher = mock.patch.object(record, "assert_cue_counts_match_click_steps")
         self.cue_count_check = self.cue_count_check_patcher.start()
+        # audio_peak_dbfs shells out to ffmpeg through subprocess.run, which these tests
+        # reach with subprocess.Popen patched to a FakeProcess. Stub the measurement so the
+        # narration gain stays a real computation over a known peak.
+        self.audio_peak_patcher = mock.patch.object(record, "audio_peak_dbfs", return_value=-1.4)
+        self.audio_peak = self.audio_peak_patcher.start()
 
     def tearDown(self):
+        self.audio_peak_patcher.stop()
         self.cue_count_check_patcher.stop()
         self.click_step_probe_patcher.stop()
         self.capture_overlay_settle_patcher.stop()
@@ -656,24 +663,37 @@ Input #0, avfoundation, from '3':
             with self.assertRaisesRegex(RuntimeError, "ended while slide 2 was still being driven"):
                 watcher.check()
 
-    def test_position_watcher_confirms_a_slide_advance(self):
+    def test_position_watcher_accepts_the_previous_slide_while_an_advance_lands(self):
+        # An advance press does not land instantly, so the bounded transition must not
+        # abort on the very next poll while PowerPoint is still rendering it.
         watcher = record.SlideshowPositionWatcher(2)
+        watcher.expect_slide(3)
 
-        with mock.patch.object(record, "live_slideshow_slide_index", side_effect=[2, 3]), \
-                mock.patch.object(record.time, "sleep"):
-            watcher.confirm_advance_to(3)
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=2):
+            watcher.check()
+
+        self.assertEqual(watcher.expected_slide, 2)
+
+    def test_position_watcher_commits_the_advance_once_the_new_slide_is_observed(self):
+        watcher = record.SlideshowPositionWatcher(2)
+        watcher.expect_slide(3)
+
+        with mock.patch.object(record, "live_slideshow_slide_index", return_value=3):
+            watcher.check()
 
         self.assertEqual(watcher.expected_slide, 3)
 
     def test_position_watcher_aborts_when_an_advance_press_is_eaten_by_an_animation(self):
         # The other half of the shipped defect: the deck needed more click steps than
         # were planned, so the "next slide" press built an animation instead of advancing.
+        # Once the bounded transition window expires, staying put is a hard failure.
         watcher = record.SlideshowPositionWatcher(10)
+        watcher.expect_slide(11)
 
         with mock.patch.object(record, "live_slideshow_slide_index", return_value=10), \
-                mock.patch.object(record.time, "sleep"):
-            with self.assertRaisesRegex(RuntimeError, "did not advance to slide 11"):
-                watcher.confirm_advance_to(11)
+                mock.patch.object(record.time, "monotonic", return_value=1e9):
+            with self.assertRaisesRegex(RuntimeError, "did not advance from slide 10 to slide 11"):
+                watcher.check()
 
     def test_prepare_generates_between_slide_silence(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -827,13 +847,50 @@ Input #0, avfoundation, from '3':
             "code": 49,
         }])
 
-    def test_sleep_until_checks_slideshow_before_action(self):
+    def test_sleep_until_never_runs_the_presence_check_itself(self):
         process = FakeProcess([None], 0)
         presence_check = mock.Mock()
+        watcher = record.SlideshowPresenceWatcher(presence_check, 2.0)
 
-        record.sleep_until(0, [(process, "ffmpeg")], presence_check)
+        record.sleep_until(0, [(process, "ffmpeg")], watcher)
 
-        presence_check.assert_called_once()
+        presence_check.assert_not_called()
+
+    def test_sleep_until_raises_the_watchers_recorded_absence(self):
+        process = FakeProcess([None], 0)
+
+        class FailedWatcher:
+            def raise_if_failed(self):
+                raise RuntimeError("PowerPoint slideshow was not present during capture: gone")
+
+        with self.assertRaisesRegex(RuntimeError, "slideshow was not present during capture"):
+            record.sleep_until(0, [(process, "ffmpeg")], FailedWatcher())
+
+    def test_presence_watcher_records_a_genuinely_absent_slideshow(self):
+        presence_check = mock.Mock(side_effect=RuntimeError("Window containing Slide Show not found"))
+
+        with record.SlideshowPresenceWatcher(presence_check, 0.01) as watcher:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    watcher.raise_if_failed()
+                except RuntimeError as error:
+                    self.assertIn("Window containing Slide Show not found", str(error))
+                    return
+                time.sleep(0.01)
+
+        self.fail("presence watcher never recorded the absent slideshow")
+
+    def test_action_on_schedule_allows_ordinary_jitter(self):
+        action = {"at_seconds": 10.0, "key": "space", "item": "Slide 1", "reason": "action cue"}
+
+        record.assert_action_on_schedule(0, action, 0.0, 10.0 + record.MAX_ACTION_DRIFT_SECONDS)
+
+    def test_action_on_schedule_aborts_a_desynced_advance(self):
+        action = {"at_seconds": 10.0, "key": "space", "item": "Slide 9", "reason": "next slide"}
+
+        with self.assertRaisesRegex(RuntimeError, "Slide advance 3 of Slide 9 \\(next slide\\)"):
+            record.assert_action_on_schedule(2, action, 0.0, 34.0)
 
     def test_record_runs_demo_environment_prep_before_capture_starts(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1324,6 +1381,52 @@ Input #0, avfoundation, from '3':
             "close_powerpoint",
             "mux",
         ])
+
+    def test_advance_expectation_opens_before_the_press_is_sent(self):
+        # PowerPoint can land an advance while press_space() is still returning, and the
+        # position check runs on the watcher thread. Registering the expectation after the
+        # press left a window where a poll saw the new slide while the plan still expected
+        # the old one, and a correctly driven 24-slide recording aborted on slide 10 with
+        # "on slide 11 but the timing plan is driving slide 10".
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir), work_dir="/tmp/work")
+        # The watcher starts out expecting this item's slide, which is also what the
+        # mocked live show reports, so only the advance transition is under test.
+        config["items"][0]["identity"]["value"] = 10
+        ffmpeg_process = FakeProcess([None] * 10, 0)
+        audio_process = FakeProcess([None] * 6 + [0], 0)
+        events = []
+
+        original_expect_slide = record.SlideshowPositionWatcher.expect_slide
+
+        def tracking_expect_slide(self, slide_number):
+            events.append(("expect_slide", slide_number))
+            original_expect_slide(self, slide_number)
+
+        with mock.patch.object(record, "prepare", return_value={
+            "narration_audio": "/tmp/narration.wav",
+            "actions": [{
+                "at_seconds": 0.0,
+                "slide": 10,
+                "item": "Slide 10",
+                "reason": record.SLIDE_ADVANCE_REASON,
+            }],
+        }), \
+                mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
+                mock.patch.object(record, "create_powerpoint_state", return_value={
+                    "powerpoint_was_running": False,
+                    "deck_was_open": False,
+                }), \
+                mock.patch.object(record, "start_slideshow"), \
+                mock.patch.object(record, "close_slideshow_and_deck"), \
+                mock.patch.object(record, "live_slideshow_slide_index", return_value=10), \
+                mock.patch.object(record, "press_space", side_effect=lambda: events.append("press")), \
+                mock.patch.object(record.SlideshowPositionWatcher, "expect_slide", tracking_expect_slide), \
+                mock.patch.object(record, "run"), \
+                mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
+            record.record(config)
+
+        self.assertEqual(events, [("expect_slide", 11), "press"])
 
     def test_final_mux_scales_to_requested_resolution_without_padding_or_crop(self):
         with tempfile.TemporaryDirectory() as temp_dir:

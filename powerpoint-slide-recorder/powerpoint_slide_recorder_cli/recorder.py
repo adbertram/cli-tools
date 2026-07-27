@@ -4,6 +4,7 @@ import re
 import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -109,6 +110,10 @@ DEFAULT_SLIDE_PAUSE_SECONDS = 0.75
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
 CAPTURE_OVERLAY_SETTLE_SECONDS = 2.0
 DEFAULT_CUE_MARKER = "||"
+# Pluralsight's delivery window is -12..-6 dBFS peak. Target the midpoint so
+# normal encode jitter cannot push the muxed output across either edge.
+NARRATION_TARGET_PEAK_DBFS = -9.0
+VOLUMEDETECT_MAX_VOLUME_PATTERN = re.compile(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s*dB")
 # Hard subprocess wall-clock bound on every PowerPoint-targeting osascript. The
 # in-AppleScript ``with timeout`` only bounds Apple-event waits once the script is
 # executing; it cannot bound the case where osascript never starts running because
@@ -142,10 +147,18 @@ MAX_CLICK_STEPS_PER_SLIDE = 60
 # Bounded window for PowerPoint to actually land on the next slide after an advance
 # press during the recording drive, before the position guard calls it a divergence.
 SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
-SLIDE_ADVANCE_POLL_SECONDS = 0.1
 # Sentinel the slide-index AppleScript returns once the show is over (no slide show
 # window, or the post-final-slide black screen where the view has no current slide).
 SLIDESHOW_ENDED_MARKER = "ended"
+# Hard bound on how late a scheduled slide advance may fire before the recording is
+# aborted. Every action time is absolute against the narration timeline, so lateness
+# here is exactly audio/slide desync. The capture loop wakes on a 0.1s sleep
+# granularity and each advance costs one scoped-key osascript round trip, measured on
+# the recording host during a live slide show at median 0.132s / max 0.188s over 92
+# presses, so ordinary jitter stays under 0.3s. 1.0s leaves several times that
+# headroom while still tripping on the first seconds-scale slip, before it can
+# compound into the tens-of-seconds desync that previously shipped at rc=0.
+MAX_ACTION_DRIFT_SECONDS = 1.0
 POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
@@ -839,6 +852,37 @@ def audio_duration(path):
     return float(output)
 
 
+def audio_peak_dbfs(path):
+    completed = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(path),
+            "-map",
+            "0:a:0",
+            "-af",
+            "volumedetect",
+            "-f",
+            "null",
+            "-",
+        ],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    match = VOLUMEDETECT_MAX_VOLUME_PATTERN.search(completed.stderr)
+    if match is None:
+        raise RuntimeError(f"ffmpeg volumedetect reported no max_volume for {path}")
+    return float(match.group(1))
+
+
+def narration_gain_db(path):
+    return round(NARRATION_TARGET_PEAK_DBFS - audio_peak_dbfs(path), 2)
+
+
 def generate_silence(path, duration_seconds):
     run([
         "ffmpeg",
@@ -1233,46 +1277,73 @@ def settle_capture_overlay():
 
 
 class SlideshowPositionWatcher:
-    """Guards that the live show is on the slide the timing plan is driving.
+    """Checks that the live show is on the slide the timing plan is driving.
 
     A lateness guard cannot catch this class of failure: the recorder can press exactly
-    on schedule and still desynchronize, because what breaks is which slide the deck is
-    on when the press lands. Every press is preceded by an equality check against the
-    planned slide, and every slide advance is confirmed before the next slide's cues are
-    driven, so a deck that consumes presses differently than planned aborts the recording
-    instead of silently shipping a desynced video.
+    on schedule and still desynchronize, because what breaks is WHICH slide the deck is
+    on when the press lands. This ``check`` is what ``SlideshowPresenceWatcher`` polls,
+    so the slide-index read stays off the critical path of an advance whose time is
+    fixed by the narration timeline; the capture loop only reads the recorded verdict.
+
+    An advance press does not land instantly, so ``expect_slide`` opens a BOUNDED
+    transition: until the show is observed on the new slide, staying on the previous one
+    is accepted, but only for ``SLIDE_ADVANCE_CONFIRM_SECONDS``. Past that the advance
+    press was consumed as an animation build and the recording aborts. Both failure
+    directions are therefore caught - a deck running ahead of the narration (observed
+    slide beyond the plan) and one running behind (advance never landed).
     """
 
     def __init__(self, expected_slide):
-        self.expected_slide = expected_slide
+        self._lock = threading.Lock()
+        self._expected_slide = expected_slide
+        self._pending_slide = None
+        self._pending_deadline = None
+
+    @property
+    def expected_slide(self):
+        with self._lock:
+            return self._expected_slide
+
+    def expect_slide(self, slide_number):
+        with self._lock:
+            self._pending_slide = slide_number
+            self._pending_deadline = time.monotonic() + SLIDE_ADVANCE_CONFIRM_SECONDS
 
     def check(self):
+        with self._lock:
+            expected_slide = self._expected_slide
+            pending_slide = self._pending_slide
+            pending_deadline = self._pending_deadline
+
         observed_slide = live_slideshow_slide_index()
         if observed_slide is None:
             raise RuntimeError(
-                f"PowerPoint slide show ended while slide {self.expected_slide} was still being driven"
-            )
-        if observed_slide != self.expected_slide:
-            raise RuntimeError(
-                f"PowerPoint slide show is on slide {observed_slide} but the timing plan is "
-                f"driving slide {self.expected_slide}; the deck consumed a different number "
-                "of click steps than the slide-show probe measured"
+                f"PowerPoint slide show ended while slide {expected_slide} was still being driven"
             )
 
-    def confirm_advance_to(self, expected_slide):
-        self.expected_slide = expected_slide
-        deadline = time.monotonic() + SLIDE_ADVANCE_CONFIRM_SECONDS
-        while True:
-            observed_slide = live_slideshow_slide_index()
-            if observed_slide == expected_slide:
+        if pending_slide is not None:
+            if observed_slide == pending_slide:
+                with self._lock:
+                    if self._pending_slide == pending_slide:
+                        self._expected_slide = pending_slide
+                        self._pending_slide = None
+                        self._pending_deadline = None
                 return
-            if time.monotonic() >= deadline:
-                raise RuntimeError(
-                    f"PowerPoint slide show did not advance to slide {expected_slide} within "
-                    f"{SLIDE_ADVANCE_CONFIRM_SECONDS} seconds (observed slide {observed_slide}); "
-                    "the advance press was consumed as an animation build"
-                )
-            time.sleep(SLIDE_ADVANCE_POLL_SECONDS)
+            if observed_slide == expected_slide and time.monotonic() < pending_deadline:
+                return
+            raise RuntimeError(
+                f"PowerPoint slide show did not advance from slide {expected_slide} to slide "
+                f"{pending_slide} within {SLIDE_ADVANCE_CONFIRM_SECONDS} seconds (observed slide "
+                f"{observed_slide}); the deck consumed a different number of click steps than "
+                "the slide-show probe measured"
+            )
+
+        if observed_slide != expected_slide:
+            raise RuntimeError(
+                f"PowerPoint slide show is on slide {observed_slide} but the timing plan is "
+                f"driving slide {expected_slide}; the deck consumed a different number "
+                "of click steps than the slide-show probe measured"
+            )
 
 
 def powerpoint_is_running():
@@ -1806,16 +1877,88 @@ def ensure_process_running(process, description):
         raise RuntimeError(f"{description} exited with code {return_code}")
 
 
-def sleep_until(target_time, monitored_processes, presence_check=None):
-    next_presence_check = 0
+class SlideshowPresenceWatcher:
+    """Poll slideshow presence on a dedicated thread, off the slide-advance path.
+
+    ``assert_slideshow_present`` is a synchronous osascript round trip into the
+    PowerPoint process, bounded only by ``OSASCRIPT_TIMEOUT_SECONDS``. While
+    PowerPoint renders an animation build that Accessibility query blocks for
+    seconds, so running it inline before every ``press_space`` put a multi-second
+    stall directly on the critical path of an advance whose time is fixed by the
+    narration timeline. That is what silently desynced full-module captures.
+
+    The safety property is unchanged - a slideshow that dies or backgrounds
+    mid-capture is still detected within ``DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS``
+    and still fails the recording - but the capture loop now only reads the recorded
+    verdict, which costs nothing and cannot delay an advance. The first failure is
+    terminal: polling stops and every later ``raise_if_failed`` re-raises it.
+    """
+
+    def __init__(self, presence_check, interval_seconds):
+        self._presence_check = presence_check
+        self._interval_seconds = interval_seconds
+        self._failure = None
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._poll,
+            name="slideshow-presence-watcher",
+            daemon=True,
+        )
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self._stop_event.set()
+        self._thread.join(timeout=OSASCRIPT_TIMEOUT_SECONDS)
+        return False
+
+    def _poll(self):
+        while not self._stop_event.is_set():
+            try:
+                self._presence_check()
+            except Exception as error:
+                self._failure = error
+                return
+            self._stop_event.wait(self._interval_seconds)
+
+    def raise_if_failed(self):
+        failure = self._failure
+        if failure is None:
+            return
+        raise RuntimeError(
+            f"PowerPoint slideshow was not present during capture: {failure}"
+        ) from failure
+
+
+def assert_action_on_schedule(action_index, action, started_at, now):
+    """Abort the recording when a scheduled slide advance is late enough to desync.
+
+    Action times are absolute offsets into the narration, so lateness here is
+    literally how far the slides have slipped behind the audio. A silently
+    desynced capture is far worse than a recording that fails in its first seconds,
+    so any slip past ``MAX_ACTION_DRIFT_SECONDS`` raises before the key is sent.
+    """
+    target_time = started_at + action["at_seconds"]
+    drift_seconds = now - target_time
+    if drift_seconds <= MAX_ACTION_DRIFT_SECONDS:
+        return
+    raise RuntimeError(
+        f"Slide advance {action_index + 1} of {action['item']} ({action['reason']}) was scheduled at "
+        f"{action['at_seconds']:.3f}s but fired at {now - started_at:.3f}s, "
+        f"{drift_seconds:.3f}s late (tolerance {MAX_ACTION_DRIFT_SECONDS:.3f}s). "
+        "The slideshow is desynced from the narration; aborting instead of writing a "
+        "silently misaligned recording."
+    )
+
+
+def sleep_until(target_time, monitored_processes, presence_watcher=None):
     while True:
         for process, description in monitored_processes:
             ensure_process_running(process, description)
-        if presence_check is not None:
-            now = time.monotonic()
-            if now >= next_presence_check:
-                presence_check()
-                next_presence_check = now + DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS
+        if presence_watcher is not None:
+            presence_watcher.raise_if_failed()
 
         sleep_seconds = target_time - time.monotonic()
         if sleep_seconds <= 0:
@@ -1823,15 +1966,11 @@ def sleep_until(target_time, monitored_processes, presence_check=None):
         time.sleep(min(sleep_seconds, 0.1))
 
 
-def wait_for_audio(audio_process, ffmpeg_process, presence_check=None):
-    next_presence_check = 0
+def wait_for_audio(audio_process, ffmpeg_process, presence_watcher=None):
     while True:
         ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
-        if presence_check is not None:
-            now = time.monotonic()
-            if now >= next_presence_check:
-                presence_check()
-                next_presence_check = now + DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS
+        if presence_watcher is not None:
+            presence_watcher.raise_if_failed()
         audio_return_code = audio_process.poll()
         if audio_return_code is not None:
             return audio_return_code
@@ -1926,18 +2065,34 @@ def record(config):
             (audio_process, "afplay"),
         ]
 
+        # The position check runs on the presence watcher's thread, so the slide-index
+        # osascript round trip stays off the critical path of an advance whose time is
+        # fixed by the narration timeline. The capture loop only reads the verdict.
         position_watcher = SlideshowPositionWatcher(config["items"][0]["identity"]["value"])
-        for action in plan["actions"]:
-            target_time = started_at + action["at_seconds"]
-            sleep_until(target_time, monitored_processes, position_watcher.check)
-            for process, description in monitored_processes:
-                ensure_process_running(process, description)
-            position_watcher.check()
-            press_space()
-            if action["reason"] == SLIDE_ADVANCE_REASON:
-                position_watcher.confirm_advance_to(action["slide"] + 1)
+        with SlideshowPresenceWatcher(
+            position_watcher.check,
+            DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS,
+        ) as presence_watcher:
+            for action_index, action in enumerate(plan["actions"]):
+                target_time = started_at + action["at_seconds"]
+                sleep_until(target_time, monitored_processes, presence_watcher)
+                for process, description in monitored_processes:
+                    ensure_process_running(process, description)
+                presence_watcher.raise_if_failed()
+                assert_action_on_schedule(action_index, action, started_at, time.monotonic())
+                if action["reason"] == SLIDE_ADVANCE_REASON:
+                    # Open the advance transition BEFORE the key is sent. PowerPoint can
+                    # land the advance while press_space() is still returning, and the
+                    # position check runs on the watcher thread, so registering the
+                    # expectation afterwards leaves a window where a poll observes the new
+                    # slide while the plan still expects the old one -- aborting a
+                    # correctly driven recording as if the deck had run ahead. The bounded
+                    # transition already tolerates the show sitting on the previous slide
+                    # until the press lands, so opening it early is the safe order.
+                    position_watcher.expect_slide(action["slide"] + 1)
+                press_space()
 
-        audio_return_code = wait_for_audio(audio_process, ffmpeg_process, position_watcher.check)
+            audio_return_code = wait_for_audio(audio_process, ffmpeg_process, presence_watcher)
         if audio_return_code != 0:
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 
@@ -1963,6 +2118,20 @@ def record(config):
                 file=sys.stderr,
             )
 
+        # Pluralsight's delivery window is -12..-6 dBFS peak, and source narration arrives at
+        # wildly different levels (hot generated takes measured -1.4 dBFS; other modules measured
+        # -8.8 dBFS). A fixed offset only works for one of those: -6dB rescues a hot take but
+        # pushes already-in-window narration down to roughly -15 dBFS, under the floor. Measure the
+        # concatenated narration's true peak instead and apply exactly the gain that lands it on
+        # NARRATION_TARGET_PEAK_DBFS. This is a single flat gain, so relative dynamics are
+        # untouched; only the offset is computed rather than guessed.
+        gain_db = narration_gain_db(narration_path)
+        print(
+            f"Narration peak measured; applying {gain_db:+.2f} dB to reach "
+            f"{NARRATION_TARGET_PEAK_DBFS} dBFS peak",
+            file=sys.stderr,
+        )
+
         run([
             "ffmpeg",
             "-y",
@@ -1979,12 +2148,8 @@ def record(config):
             "libx264",
             "-vf",
             video_filter,
-            # Narration mp3s are recorded/generated hot (Pluralsight flagged peaks distorting into
-            # red on delivered videos, measured -1.4 dBFS on a raw slide capture). Pluralsight's
-            # delivery window is -12..-6 dBFS peak; -6dB of flat gain reduction here keeps the mux
-            # inside that window without re-normalizing (leaves relative dynamics untouched).
             "-af",
-            "volume=-6dB",
+            f"volume={gain_db}dB",
             "-c:a",
             "aac",
             "-shortest",
