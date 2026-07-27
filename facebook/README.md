@@ -168,6 +168,56 @@ seller's currency — live Evansville results include `$`, `CA$`, and `£`. Comp
 facebook marketplace list --query "LEGO" --properties title,price,original_price
 ```
 
+#### Delivery types (fulfillment) and location
+
+Every listing record carries `delivery_types` — Facebook's own per-listing
+fulfillment model, reported verbatim. Observed tokens (live 2026-07-26):
+
+| Token | Meaning |
+|-------|---------|
+| `IN_PERSON` | Meet the seller |
+| `PUBLIC_MEETUP` | Meet at a public location |
+| `DOOR_PICKUP` | Collect at the seller's door |
+| `DOOR_DROPOFF` | Seller drops off at your door |
+| `SHIPPING_ONSITE` | Ships via Facebook checkout |
+
+The tokens are **not normalized** — a value Facebook adds later passes straight
+through rather than being silently dropped. Anything starting with `SHIPPING`
+means the listing ships; the rest are local collection/delivery.
+
+None of this is rendered as text on the page. The detail page shows only the
+seller's free-form meet-up prose ("Meet on Kansas Road in Evansville"), and a
+search tile shows either a place name **or** the string "Ships to you" — and
+which one it shows is a *distance* decision, not a fulfillment one, so a
+shipping-capable listing near you still renders a place name. The CLI therefore
+reads Facebook's own listing data (the Relay payload that hydrates the page and
+the pagination responses served while scrolling), keyed by listing ID.
+
+**`null` means UNKNOWN, never "no shipping offered".**
+
+- `marketplace get` **never** returns `null`. A listing whose `delivery_types`
+  cannot be read exits non-zero, because a record that reads as "local pickup
+  only" would be reporting the CLI's ignorance as Facebook's data. This applies
+  to cached records too.
+- `marketplace list` reports `null` only for a tile Facebook's own payload never
+  described, and prints a warning naming those listing IDs. The known case is
+  the "commerce_interesting_product" notification tile Facebook injects into the
+  grid, whose data comes from the notifications feed. Use `marketplace get` on
+  those IDs for a definitive read.
+- The field is never an empty list. `[]` would read as "this seller offers no
+  fulfillment at all", so the model rejects it.
+
+`location` on `get` comes from Facebook's own `location_text` ("Evansville, IN").
+On `list` it comes from the tile; a tile that renders "Ships to you" instead of a
+place name reports `location: null` — "Ships to you" is a fulfillment hint, not a
+place, and `delivery_types` carries that answer.
+
+```bash
+# Which listings ship?
+facebook marketplace list --query "LEGO" --properties item_id,title,delivery_types
+facebook marketplace get 1716979012677494 --properties title,location,delivery_types
+```
+
 #### Images
 
 `--download-images` saves only the listing's **own** media gallery (the hero

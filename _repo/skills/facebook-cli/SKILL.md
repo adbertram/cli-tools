@@ -76,6 +76,20 @@ Facebook renders a discounted listing as the current price immediately followed 
 `--download-images` saves only the listing's own media gallery (hero image plus thumbnails). Sidebar advertisement creatives and recommended-listing images are excluded.
 </principle>
 
+<principle name="Marketplace Delivery Types (Fulfillment)">
+Every Marketplace record carries `delivery_types` on BOTH `marketplace list` and `marketplace get` — Facebook's own per-listing fulfillment model, reported VERBATIM and unnormalized. Observed tokens (live 2026-07-26): `IN_PERSON`, `PUBLIC_MEETUP`, `DOOR_PICKUP`, `DOOR_DROPOFF` (all local collection/delivery) and `SHIPPING_ONSITE` (ships via Facebook checkout). Treat any token starting with `SHIPPING` as "this listing ships"; a token Facebook adds later passes straight through rather than being dropped.
+
+`null` means UNKNOWN. It NEVER means "no shipping offered".
+
+- `marketplace get` never returns `null` — an unreadable fulfillment model exits non-zero, including for a stale cached record (`facebook cache clear` then retry).
+- `marketplace list` returns `null` only for a tile Facebook's own payload never described, and prints a warning naming those listing IDs. The known case is the injected "commerce_interesting_product" notification tile. Re-read those IDs with `marketplace get`.
+- The field is never `[]`; the model rejects an empty list, because `[]` reads as "offers no fulfillment at all".
+
+Never infer fulfillment from rendered text. The detail page shows only the seller's free-form meet-up prose, and a search tile shows a place name OR the string "Ships to you" — that choice is a DISTANCE decision, not a fulfillment one, so a shipping-capable listing near the viewer still renders a place name. Reading the prose or the tile text will get the answer wrong.
+
+`location` on `get` now comes from Facebook's own `location_text` (the previous "Listed in " text parse never matched, which is why `get` returned `location: null`); carrying location from the `list` row is no longer necessary. On `list`, a tile rendering "Ships to you" reports `location: null` rather than that string.
+</principle>
+
 <success_criteria>
 - Command executes without error
 - Output is displayed in requested format
@@ -152,3 +166,28 @@ The existing extractor only scans `span` elements for a price-shaped own-text no
 **Verification:** Regression coverage added to `facebook/tests/test_marketplace_extractors.py` against verbatim live DOM appended to `facebook/tests/fixtures/marketplace_list_tiles.html` (item 27542838245367180) -- asserts the correct title/price/currency and a `null` location, plus a synthetic negative test confirming two unrelated `<b>` elements without "listed for" still report `unparsed`. Full suite: `86 passed`. Live re-run of the exact failing command exited `0`, loaded 114 listings (returned 100 per `--limit`), and item `27542838245367180` now extracts as `{"title": "Huge Lot thousands crayons,colored pencils...", "price": 50.0, "original_price": null, "price_currency": "$", "location": null}`.
 
 **Recurrence Prevention:** The extractor now recognizes three tile shapes: aria-labelled, content-derived, and notification/prose. Any further Facebook tile markup change will still fail loudly via `unparsed` (Known Issue #3's fail-loud contract is unchanged) rather than silently dropping the listing. If a fourth shape appears, capture the live DOM FIRST -- instantiate `FacebookClient`/`get_client()`, navigate to the reproducing search, and dump the tile's `outerHTML` plus each `span`'s/`b`'s own text via `page.evaluate(...)` -- before editing `LIST_PAGE_LISTINGS_JS`, exactly as this fix and Known Issue #3 did.
+
+### 6. `marketplace get` exposed no delivery type, and returned `location: null`
+
+**Symptom (2026-07-26):** `facebook marketplace get 26999388286428618` returned `location: null` and no fulfillment field at all, so the only evidence of how the item could be collected was the seller's prose in `description` ("Meet on Kansas Road in Evansville \nEvansville, IN · Location is approximate"). Facebook Marketplace models fulfillment per listing, so a consumer had to guess — and guessing "local pickup only" from meet-up prose silently misprices anything that ships.
+
+**Cause:** Both fields were being read from rendered text that does not carry them.
+- Fulfillment is never rendered. The detail page shows only the seller's free-form meet-up sentence. A search tile shows either a place name or the literal string "Ships to you" — and that choice is a DISTANCE decision, not a fulfillment one, so a shipping-capable listing near the viewer still renders a place name. Verified live: item 1550889686417279 renders "Ships to you" yet carries `["SHIPPING_ONSITE","IN_PERSON"]`, while dozens of tiles rendering a place name carry `SHIPPING_ONSITE` too.
+- `location` was parsed from a `main.innerText` line starting with `"Listed in "`. Facebook renders `"Listed 4 weeks ago in Evansville, IN"`, so that prefix never matched and the field was always `null` on `get`. The parse was effectively dead code.
+
+The answer for both is in the Relay payload that hydrates the page, under Facebook's own GraphQL field names (captured live 2026-07-26):
+```json
+{"__typename":"GroupCommerceProductItem","id":"26999388286428618",
+ "location_text":{"text":"Evansville, IN"},"delivery_types":["IN_PERSON"], ...}
+```
+Two transports carry it and neither alone is complete: `script[type="application/json"]` blobs in the served HTML (the detail page's own listing; a search page's first 24 tiles), and Relay pagination responses (every tile loaded by scrolling — XHR bodies, so a hook must be installed BEFORE scrolling).
+
+**Fix (`facebook/facebook_cli/client.py`, `facebook/facebook_cli/models.py`):**
+- `INSTALL_DELIVERY_CAPTURE_JS` seeds an `item_id -> delivery_types / location_text` map from the embedded blobs and hooks `XMLHttpRequest`/`fetch` for Relay pagination bodies (handling Facebook's multi-document streaming shape and its `for(;;);` prefix). `READ_DELIVERY_CAPTURE_JS` reads it back. Payloads that describe the same listing differently are recorded as conflicts and raise rather than resolving to whichever arrived first.
+- `_extract_listing_fulfillment` raises `ClientError` when a listing has no `delivery_types`; `get_item` re-checks the contract OUTSIDE the `@cached` boundary (the cached worker is now `_fetch_item`) so a record written before this change cannot be replayed with the field silently absent.
+- `_paginated_fetch` installs the capture before the first scroll and `_attach_delivery_types` sets each row, warning by ID for rows Facebook never described. `MarketplaceListing.delivery_types` rejects `[]`.
+- The dead `"Listed in "` location parse was removed; `get` location now comes from `location_text`. A `list` tile rendering `"Ships to you"` reports `location: null` instead of that string as a place name.
+
+**Verification:** `get 26999388286428618` → `location: "Evansville, IN"`, `delivery_types: ["IN_PERSON"]` (was `null` / absent). `get 1716979012677494` → `"Williamsburg, VA"`, `["IN_PERSON","SHIPPING_ONSITE"]`. `list --query lego --limit 100` covered 99/100 rows (vocabulary `IN_PERSON` 99, `DOOR_PICKUP` 23, `PUBLIC_MEETUP` 15, `SHIPPING_ONSITE` 2, `DOOR_DROPOFF` 2), zero rows carrying "Ships to you" as a location, and warned by ID for the one uncovered tile. Regression coverage in `facebook/tests/test_marketplace_delivery_types.py` against verbatim live fixtures, including replaying a real Relay pagination body through a real XHR. Full suite: `100 passed`.
+
+**Recurrence Prevention:** Never read fulfillment from rendered text — not the description prose, not the tile's location slot. `delivery_types` is reported verbatim, so a token Facebook adds later flows through instead of being dropped, and `null` is reserved for UNKNOWN and must never be read as "no shipping offered". The one uncovered row is Facebook's injected "commerce_interesting_product" notification tile, whose listing data comes from the notifications feed rather than the search payload; `marketplace get` on that ID gives a definitive read. If the capture starts returning nothing, dump `script[type="application/json"]` contents and an XHR body from the live page FIRST and confirm Facebook's field names, exactly as this fix did.

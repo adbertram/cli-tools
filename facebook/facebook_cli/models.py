@@ -36,6 +36,17 @@ class MarketplaceListing(CLIModel):
     location: Optional[str] = None
     description: Optional[str] = None
     availability: Optional[str] = None
+    #: Facebook's own per-listing fulfillment model, verbatim. Observed tokens
+    #: (live 2026-07-26): IN_PERSON, PUBLIC_MEETUP, DOOR_PICKUP, DOOR_DROPOFF
+    #: (all local collection/delivery) and SHIPPING_ONSITE (Facebook-checkout
+    #: shipping). Reported raw so a consumer maps them itself and a token
+    #: Facebook adds later is never silently dropped.
+    #:
+    #: None means UNKNOWN -- Facebook did not describe this listing on the
+    #: surface that was read. It NEVER means "no shipping offered". `get` fails
+    #: loudly instead of returning None; only `list` rows can carry it, and only
+    #: for a tile Facebook's own payload never covered.
+    delivery_types: Optional[List[str]] = None
     image_urls: Optional[List[str]] = Field(default=None, exclude=True)
     local_images: Optional[List[str]] = None
 
@@ -77,6 +88,22 @@ class MarketplaceListing(CLIModel):
                 "price rendering and the CLI parser needs updating."
             )
         return float(match.group("amount").replace(",", ""))
+
+    @field_validator("delivery_types")
+    @classmethod
+    def reject_empty_delivery_types(cls, v):
+        """An empty list would read as 'this listing offers no fulfillment'.
+
+        Facebook always names at least one delivery type for a listing it
+        describes, so an empty array means the read is broken, not that the
+        seller offers nothing. Unknown stays None.
+        """
+        if v is not None and len(v) == 0:
+            raise ValueError(
+                "delivery_types must be None (unknown) or a non-empty list; an empty "
+                "list would misreport an unreadable listing as offering no fulfillment."
+            )
+        return v
 
     @field_validator("url", mode="before")
     @classmethod
