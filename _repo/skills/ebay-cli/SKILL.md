@@ -34,12 +34,36 @@ ebay <command-group> <action> [arguments] [options]
 | Discover ACTIVE listings | `ebay listings search "<q>" --active --format bin --sort newest` |
 | Active auctions (time-left/bids) | `ebay listings search "<q>" --active --format auction --sort ending` |
 | Active item detail | `ebay listings get <item_id>` |
+| Fulfillment for one item | `ebay listings get <item_id> -p item_id,ships,local_pickup,item_location` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ebay` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Item Fulfillment Fields">
+`ebay listings get <item_id>` reports fulfillment from eBay's own label rows on
+the item page, not from the shipping price alone:
+
+- **`ships`** (bool) — the `Shipping:` row quotes a rate, a free-shipping
+  phrase, or a delivery estimate. The row's trailing "See details for shipping"
+  link is not a quote, so a listing that does not ship reports `ships: false`.
+- **`local_pickup`** (bool) — the `Pickup:` row is present (buyer can collect in
+  person).
+- **`item_location`** (str) — the origin from the shipping row's
+  `Located in: <city, state, country>` line. Omitted from JSON output on
+  pickup-only listings, because eBay only prints that line inside the shipping
+  row.
+- **`shipping_price`** (str) — unchanged: the numeric rate. Omitted when there
+  is no rate. Read `ships`, not `shipping_price`, to decide whether a listing
+  ships; a missing `shipping_price` alone cannot tell "local pickup only" apart
+  from "the rate did not parse".
+
+A page with neither fulfillment row is an error (`BrowserError`), not a listing
+with no fulfillment — treat it as a scraping failure and retry or investigate.
+Both `ships` and `local_pickup` can be true; item 157780039676 is that case.
 </principle>
 
 <principle name="Command Structure">
