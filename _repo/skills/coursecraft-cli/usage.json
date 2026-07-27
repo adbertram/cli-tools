@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-25T14:43:21Z",
+  "discovered_at": "2026-07-25T18:48:43Z",
   "total_commands": 56,
   "global_options": [
     {
@@ -2243,7 +2243,7 @@
           ]
         },
         "update": {
-          "help": "Update a feedback record.",
+          "help": "Update a feedback record. Stamping a row Applied with a --remediation summary REQUIRES at least one --remediation-claim, and every claim is verified before anything is written: check:<dotted.check.id>              the id must be declared as an 'id' in a checks.json under the CourseCraft skills tree, and its contract must be reachable record:<recordId>:<Field>=<value>    the live record's field must equal the claimed value (trimmed strings) record:<recordId>:<Field>~=<text>    the live record's field must contain the claimed substring A claim that does not verify fails the command with exit 1 and writes NOTHING. There is no warn-and-continue path: an Applied stamp may not assert a check id or record value that does not exist.",
           "arguments": [
             {
               "name": "record_id",
@@ -2330,6 +2330,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Summary of which skills/agents/sources were modified and how, to remediate this feedback (orchestrator-written when set to Applied)"
+            },
+            {
+              "name": "--remediation-claim",
+              "type": "TEXT",
+              "required": false,
+              "help": "Repeatable, machine-verified evidence for --remediation. REQUIRED with --processing-status Applied + --remediation. Forms: check:<dotted.check.id> | record:<recordId>:<Field>=<expected> | record:<recordId>:<Field>~=<substring>"
             },
             {
               "name": "--element-type",
