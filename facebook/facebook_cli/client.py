@@ -16,7 +16,7 @@ from cli_tools_shared.http_session import (
 )
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
-from cli_tools_shared.output import print_info
+from cli_tools_shared.output import print_info, print_warning
 from cli_tools_shared._debug_logging import get_debug_logger
 
 from .config import get_config
@@ -90,21 +90,31 @@ MARKETPLACE_PAGE_STATE_JS = """(selector) => {
 # Extract listings from a Marketplace list/search page, tile by tile.
 #
 # This reads each tile's DOM directly instead of parsing the flattened
-# accessibility-tree name, because Facebook serves TWO tile variants (both
-# captured live 2026-07-25):
+# accessibility-tree name, because Facebook serves THREE tile variants
+# (variants 1-2 captured live 2026-07-25, variant 3 captured live 2026-07-26):
 #
 #   1. aria-labelled:   "Arcade 1Up, $300, Newburgh, IN, listing 1356224139807798"
 #   2. content-derived: "Just listed $400 Legos. Collection with instruction
 #                        books Boonville, IN"
+#   3. notification/prose (a "commerce_interesting_product" recommendation tile
+#      Facebook injects into the grid, href carries
+#      "?ref=notif&notif_t=commerce_interesting_product"):
+#      "UnreadHuge Lot thousands crayons,colored pencils... listed for $50.00.
+#      9h\u00b74 saved" -- rendered as a sentence with the title and price each
+#      wrapped in their own <b> element instead of a dedicated span:
+#      <div>Unread</div><b>Huge Lot ...</b> listed for <b>$50.00</b>.
 #
 # Variant 2 carries no delimiters at all, and on a discounted tile the current
 # and struck-through prices are flattened together ("$50$60"), so any string
 # parse of the accessible name is ambiguous or lossy -- variant 2 previously
 # yielded ZERO parsed listings, which is what made an intermittently healthy
-# search return []. The per-tile DOM is identical for both variants: a span
+# search return []. The per-tile DOM is identical for variants 1-2: a span
 # whose own text is the current price (carrying the struck-through original
 # price as a nested span), followed by the title span and then the location
-# span.
+# span. Variant 3 has no such price/title spans at all -- the price and title
+# text live inside <b> elements, so the span-own-text scan below never finds
+# them and falls through to a second structural pass that reads the <b>
+# elements directly. Variant 3 has no location field.
 #
 # ``unparsed`` reports tiles that rendered text but no usable price/title so the
 # caller can fail loudly instead of under-reporting search results. Tiles that
@@ -151,6 +161,36 @@ LIST_PAGE_LISTINGS_JS = r"""() => {
             // Title and location always follow the price span; badges that
             // precede it ("Just listed") are not listing fields.
             if (price !== "") labels.push(own);
+        }
+
+        if (price === "" || labels.length === 0) {
+            // Notification/prose tile (variant 3): title and price are each
+            // wrapped in a <b> element inside one sentence, e.g.
+            // "<b>Title</b> listed for <b>$50.00</b>." -- not dedicated spans,
+            // so the scan above never populates `price`/`labels`. Both <b>
+            // elements share the same parent, and that parent's OWN text (the
+            // words connecting the two <b> elements) contains "listed for",
+            // which is what distinguishes this from an unrelated pair of bold
+            // elements elsewhere in the tile.
+            const boldEls = anchor.querySelectorAll('b');
+            if (boldEls.length >= 2) {
+                const titleBold = boldEls[0];
+                const priceBold = boldEls[boldEls.length - 1];
+                const parent = titleBold.parentElement;
+                if (parent != null && parent === priceBold.parentElement
+                        && /\blisted for\b/i.test(ownText(parent))) {
+                    const priceText = ownText(priceBold);
+                    const titleText = ownText(titleBold);
+                    if (PRICE.test(priceText) && titleText !== "") {
+                        price = priceText;
+                        for (const child of priceBold.children) {
+                            const childText = (child.textContent || "").trim();
+                            if (PRICE.test(childText)) { originalPrice = childText; break; }
+                        }
+                        labels.push(titleText);
+                    }
+                }
+            }
         }
 
         if (price === "" || labels.length === 0) {
@@ -237,6 +277,108 @@ DETAIL_PAGE_IMAGES_JS = """() => {
         .map((i) => i.src);
     return [...new Set(urls)];
 }"""
+
+# Capture Facebook's own per-listing fulfillment model.
+#
+# Marketplace models fulfillment per listing as a `delivery_types` array
+# (captured live 2026-07-26): IN_PERSON, PUBLIC_MEETUP, DOOR_PICKUP,
+# DOOR_DROPOFF, SHIPPING_ONSITE. NONE of it is rendered as text. The detail page
+# shows only the seller's free-form meet-up prose ("Meet on Kansas Road in
+# Evansville"), and a search tile shows either a location OR the string
+# "Ships to you" -- and which one it shows is a DISTANCE decision, not a
+# fulfillment one, so a shipping-capable listing near the viewer still renders a
+# location. The rendered page therefore cannot answer "does this ship?" at all.
+#
+# The answer lives in the Relay payload that hydrates the page:
+#
+#   {"__typename":"GroupCommerceProductItem","id":"26999388286428618",
+#    "location_text":{"text":"Evansville, IN"},"delivery_types":["IN_PERSON"],
+#    "listing_price":{...}, ...}
+#
+# Two transports carry it and both are captured here, because neither alone is
+# complete:
+#   1. `script[type="application/json"]` blobs in the served HTML -- the detail
+#      page's own listing, and a search page's FIRST batch of tiles (24 live).
+#   2. Relay pagination responses -- every tile loaded by scrolling. These are
+#      XHR/fetch bodies, so the hook must be installed BEFORE scrolling starts.
+#
+# Both `id` and the `delivery_types`/`location_text` fields are Facebook's own
+# GraphQL schema names, not rendered text or CSS classes, so this does not
+# depend on markup Facebook reshuffles between builds.
+INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
+    if (window.__fbDeliveryCapture != null) {
+        return {installed: false, listings: Object.keys(window.__fbDeliveryCapture.deliveryTypes).length};
+    }
+    const capture = {deliveryTypes: {}, locationText: {}, conflicts: {}, payloads: 0, parseErrors: 0};
+    window.__fbDeliveryCapture = capture;
+
+    const record = (node) => {
+        const id = String(node.id);
+        if (Array.isArray(node.delivery_types)) {
+            const seen = capture.deliveryTypes[id];
+            if (seen === undefined) {
+                capture.deliveryTypes[id] = node.delivery_types;
+            } else if (seen.slice().sort().join("|") !== node.delivery_types.slice().sort().join("|")) {
+                // Two payloads described the same listing differently. Recorded
+                // rather than resolved so the caller can fail loudly instead of
+                // reporting whichever arrived first.
+                capture.conflicts[id] = [seen, node.delivery_types];
+            }
+        }
+        if (node.location_text != null && typeof node.location_text.text === "string") {
+            capture.locationText[id] = node.location_text.text;
+        }
+    };
+    const walk = (node) => {
+        if (node === null || typeof node !== "object") return;
+        if (Array.isArray(node)) { for (const value of node) walk(value); return; }
+        if (node.id != null && (Array.isArray(node.delivery_types) || node.location_text != null)) {
+            record(node);
+        }
+        for (const key of Object.keys(node)) walk(node[key]);
+    };
+    const harvest = (text) => {
+        if (!text || text.indexOf("delivery_types") === -1) return;
+        capture.payloads++;
+        // Relay streams a response as several newline-separated JSON documents,
+        // optionally behind Facebook's anti-JSON-hijacking prefix.
+        for (const line of text.replace(/^\s*for\s*\(;;\);/, "").split("\n")) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.indexOf("delivery_types") === -1) continue;
+            try { walk(JSON.parse(trimmed)); } catch (e) { capture.parseErrors++; }
+        }
+    };
+
+    for (const script of document.querySelectorAll('script[type="application/json"]')) {
+        const text = script.textContent || "";
+        if (text.indexOf("delivery_types") === -1 && text.indexOf("location_text") === -1) continue;
+        try { walk(JSON.parse(text)); } catch (e) { capture.parseErrors++; }
+    }
+
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function (...args) {
+        this.addEventListener("load", () => {
+            try { harvest(this.responseText); } catch (e) { capture.parseErrors++; }
+        });
+        return originalSend.apply(this, args);
+    };
+    const originalFetch = window.fetch;
+    window.fetch = function (...args) {
+        return originalFetch.apply(this, args).then((response) => {
+            try { response.clone().text().then(harvest).catch(() => {}); } catch (e) {}
+            return response;
+        });
+    };
+    return {installed: true, listings: Object.keys(capture.deliveryTypes).length};
+}"""
+
+READ_DELIVERY_CAPTURE_JS = """() => window.__fbDeliveryCapture || null"""
+
+# Facebook renders "Ships to you" in a search tile's location position when the
+# listing is too far away to show a place name (captured live 2026-07-26). It is
+# a fulfillment hint, not a location, so it must never be reported as one --
+# `delivery_types` carries the fulfillment answer for that tile.
+TILE_SHIPPING_PLACEHOLDER_LOCATION = "Ships to you"
 
 
 class GroupDiscussionPreloadMissing(ClientError):
@@ -871,12 +1013,102 @@ class FacebookClient:
             )
         return result
 
+    def _install_delivery_capture(self, page) -> None:
+        """Start capturing Facebook's per-listing fulfillment model on this page.
+
+        Seeds from the Relay blobs already in the served HTML and hooks
+        XHR/fetch so Relay pagination responses are captured too. Must be called
+        BEFORE any scrolling, or the scroll-loaded tiles' fulfillment data is
+        gone by the time it is read. See :data:`INSTALL_DELIVERY_CAPTURE_JS`.
+        """
+        result = page.evaluate(INSTALL_DELIVERY_CAPTURE_JS)
+        if not isinstance(result, dict):
+            raise ClientError(
+                "Facebook delivery-type capture returned a non-object result: "
+                f"{type(result).__name__}."
+            )
+        logger.debug(
+            "_install_delivery_capture: installed=%s seeded %s listing(s)",
+            result.get("installed"),
+            result.get("listings"),
+        )
+
+    def _read_delivery_capture(self, page) -> Dict:
+        """Read the captured item_id -> delivery_types / location map.
+
+        Raises:
+            ClientError: The capture was never installed, or two Relay payloads
+                described the same listing's fulfillment differently (which
+                means the capture cannot be trusted for any listing).
+        """
+        capture = page.evaluate(READ_DELIVERY_CAPTURE_JS)
+        if not isinstance(capture, dict):
+            raise ClientError(
+                "Facebook delivery-type capture was not installed on this page, so the "
+                "per-listing fulfillment model could not be read."
+            )
+        conflicts = capture.get("conflicts") or {}
+        if conflicts:
+            raise ClientError(
+                "Facebook returned conflicting delivery_types for "
+                f"{len(conflicts)} listing(s), so the fulfillment read is not "
+                f"trustworthy. Samples: {dict(list(conflicts.items())[:3])}"
+            )
+        delivery_types = capture.get("deliveryTypes")
+        location_text = capture.get("locationText")
+        if not isinstance(delivery_types, dict) or not isinstance(location_text, dict):
+            raise ClientError(
+                "Facebook delivery-type capture returned an unexpected shape: "
+                f"deliveryTypes={type(delivery_types).__name__} "
+                f"locationText={type(location_text).__name__}."
+            )
+        logger.debug(
+            "_read_delivery_capture: %d listing(s) from %s payload(s), %s parse error(s)",
+            len(delivery_types),
+            capture.get("payloads"),
+            capture.get("parseErrors"),
+        )
+        return capture
+
+    def _extract_listing_fulfillment(self, page, item_id: str) -> Dict:
+        """Read one listing's delivery types and location from its detail page.
+
+        Fails loudly rather than returning an absent value: a listing with no
+        readable ``delivery_types`` is indistinguishable from one that offers no
+        shipping, and a consumer reading it as "local pickup only" would be
+        acting on the CLI's ignorance instead of Facebook's data.
+
+        Returns:
+            Dict with ``delivery_types`` (non-empty list of Facebook's own
+            tokens) and ``location`` (Facebook's ``location_text``, or None when
+            the listing carries no place name).
+        """
+        self._install_delivery_capture(page)
+        capture = self._read_delivery_capture(page)
+        delivery_types = capture["deliveryTypes"].get(item_id)
+        if not delivery_types:
+            raise ClientError(
+                f"Facebook did not describe the fulfillment options for listing {item_id}: "
+                "no delivery_types were found in the page's listing data. Facebook changed "
+                "its Marketplace payload and the CLI extractor needs updating. Refusing to "
+                "report an unknown fulfillment model as 'no shipping offered'. "
+                f"(listings described on this page: {len(capture['deliveryTypes'])})"
+            )
+        return {
+            "delivery_types": delivery_types,
+            "location": capture["locationText"].get(item_id),
+        }
+
     def _extract_detail_page_info(self, page) -> Dict:
-        """Extract title, price, location, description, and raw availability signals.
+        """Extract title, price, description, and raw availability signals.
 
         Price extraction is delegated to :meth:`_extract_detail_page_price`,
         which targets the price element itself so a struck-through pre-drop
-        price cannot be concatenated into the current price.
+        price cannot be concatenated into the current price. The listing's
+        location is NOT read here -- it comes from Facebook's own
+        ``location_text`` via :meth:`_extract_listing_fulfillment`, because the
+        detail page renders the place name inside a relative-time sentence
+        ("Listed 4 weeks ago in Evansville, IN") that carries no stable anchor.
 
         The availability signals are intentionally raw (booleans) so the
         Sold/Pending/Available decision stays in pure Python
@@ -884,20 +1116,15 @@ class FacebookClient:
         single-place change.
 
         Returns:
-            Dict with title, price, originalPrice, location, description keys
-            plus the raw availability signals soldText, pendingText,
-            priceRendered.
+            Dict with title, price, originalPrice, description keys plus the raw
+            availability signals soldText, pendingText, priceRendered.
         """
         js = (
             '() => { const main = document.querySelector(\'[role="main"]\');'
-            ' if (main == null) return {title:"",location:"",description:"",soldText:false,pendingText:false};'
+            ' if (main == null) return {title:"",description:"",soldText:false,pendingText:false};'
             ' const h1 = main.querySelector("h1");'
             ' const title = h1 ? (h1.innerText || "").trim() : "";'
             ' const text = main.innerText || "";'
-            ' const lines = text.split("\\n").map(l => l.trim()).filter(Boolean);'
-            ' let location = "";'
-            ' const locLine = lines.find(l => l.startsWith("Listed in "));'
-            ' if (locLine) location = locLine.replace("Listed in ", "");'
             ' let description = "";'
             ' const di = text.indexOf("Details\\n"); const si = text.indexOf("Seller information");'
             ' if (di >= 0) {'
@@ -921,7 +1148,7 @@ class FacebookClient:
             '   || lowerText.indexOf("marked as sold") !== -1;'
             # Conservative pending marker.
             ' const pendingText = lowerText.indexOf("sale pending") !== -1;'
-            ' return {title: title, location: location, description: description,'
+            ' return {title: title, description: description,'
             '   soldText: soldText, pendingText: pendingText}; }'
         )
         result = page.evaluate(js)
@@ -1055,6 +1282,9 @@ class FacebookClient:
                 raise ClientError("Facebook Marketplace listing extractor returned no rows array.")
             unparsed = result.get("unparsed") or []
             if not unparsed:
+                for row in rows:
+                    if row.get("location") == TILE_SHIPPING_PLACEHOLDER_LOCATION:
+                        row["location"] = None
                 return rows
             if time.monotonic() >= deadline:
                 raise ClientError(
@@ -1150,6 +1380,10 @@ class FacebookClient:
             print_info(f"Facebook reported no listings: {state.get('empty_heading')}")
             return []
 
+        # Must be installed before the first scroll: the tiles loaded by
+        # scrolling carry their fulfillment model in Relay pagination responses,
+        # which are gone once the response has been consumed.
+        self._install_delivery_capture(page)
         items = self._scroll_collect(
             page, self._extract_list_page_listings, "item_id", limit, "listing"
         )
@@ -1158,7 +1392,34 @@ class FacebookClient:
                 self._marketplace_page_state(page), f"Marketplace ({status_msg})"
             )
             return []
+        self._attach_delivery_types(page, items)
         return [MarketplaceListing(**d) for d in items]
+
+    def _attach_delivery_types(self, page, items: List[Dict]) -> None:
+        """Set each collected row's ``delivery_types`` from the captured payloads.
+
+        A row Facebook never described keeps ``delivery_types = None`` and is
+        named in a warning, rather than being reported as an empty list. An
+        empty list reads as "this seller offers no fulfillment at all", which is
+        never what a missing capture means. The known case is Facebook's
+        injected "commerce_interesting_product" notification tile, whose listing
+        data comes from the notifications feed rather than the search payload.
+        """
+        capture = self._read_delivery_capture(page)
+        delivery_types = capture["deliveryTypes"]
+        undescribed = []
+        for item in items:
+            item_id = item["item_id"]
+            item["delivery_types"] = delivery_types.get(item_id)
+            if item["delivery_types"] is None:
+                undescribed.append(item_id)
+        if undescribed:
+            print_warning(
+                f"Facebook described no delivery_types for {len(undescribed)} of "
+                f"{len(items)} listing(s); those rows report delivery_types: null, "
+                "which means UNKNOWN and must never be read as 'no shipping offered'. "
+                f"Use `marketplace get <item_id>` for a definitive read. IDs: {undescribed}"
+            )
 
     # --- Marketplace methods ---
 
@@ -1216,13 +1477,36 @@ class FacebookClient:
             limit=limit,
         )
 
-    @cached
     def get_item(self, item_id: str, include_images: bool = False) -> MarketplaceListing:
         """Get details for a specific marketplace listing.
 
-        Extracts title, price, location, and description directly from the
-        detail page DOM rather than the snapshot parser (which picks up
-        recommended listings instead of the main one).
+        Enforces the fulfillment contract on every return, cached or fresh: a
+        listing whose ``delivery_types`` could not be read is an error, never a
+        record that reads as "no shipping offered". The check lives outside the
+        cache because a record written before the CLI captured delivery types
+        would otherwise be replayed with the field silently absent.
+
+        Raises:
+            ClientError: The returned listing carries no ``delivery_types``.
+        """
+        listing = self._fetch_item(item_id, include_images=include_images)
+        if not listing.delivery_types:
+            raise ClientError(
+                f"Listing {item_id} came back with no delivery_types, so its fulfillment "
+                "model is unknown. If this is a cached record written before the CLI read "
+                "delivery types, clear it with `facebook cache clear` and retry."
+            )
+        return listing
+
+    @cached
+    def _fetch_item(self, item_id: str, include_images: bool = False) -> MarketplaceListing:
+        """Read a listing's detail page. Cached; see :meth:`get_item`.
+
+        Extracts title, price, and description directly from the detail page DOM
+        rather than the snapshot parser (which picks up recommended listings
+        instead of the main one). ``delivery_types`` and ``location`` come from
+        Facebook's own listing data (see :meth:`_extract_listing_fulfillment`);
+        neither is rendered as readable text on the page.
 
         Args:
             item_id: The marketplace item ID.
@@ -1230,6 +1514,10 @@ class FacebookClient:
 
         Returns:
             MarketplaceListing with item details.
+
+        Raises:
+            ClientError: Facebook's listing data carried no ``delivery_types``
+                for this listing, so the fulfillment model is unknown.
         """
         url = f"{MARKETPLACE_BASE}/item/{item_id}/"
         print_info(f"Getting listing {item_id}...")
@@ -1242,15 +1530,17 @@ class FacebookClient:
         self._assert_marketplace_authenticated(page, url, f"Marketplace item {item_id}")
 
         info = self._extract_detail_page_info(page)
+        fulfillment = self._extract_listing_fulfillment(page, item_id)
         listing = MarketplaceListing(
             item_id=item_id,
             title=info.get("title") or "Unknown",
             price=info.get("price") or "Unknown",
             original_price=info.get("originalPrice") or None,
             url=f"/marketplace/item/{item_id}/",
-            location=info.get("location") or None,
+            location=fulfillment["location"],
             description=info.get("description") or None,
             availability=self._derive_availability(info),
+            delivery_types=fulfillment["delivery_types"],
         )
 
         if include_images:
