@@ -1,7 +1,7 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-07-24T16:37:33Z",
+  "discovered_at": "2026-07-27T16:06:16Z",
   "total_commands": 56,
   "global_options": [
     {
@@ -1103,7 +1103,7 @@
               ]
             },
             "list": {
-              "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"id,Name,Website,Contact Email\" notion database page list DB_ID --limit 10",
+              "help": "List pages in a database with optional filtering. Filter Examples: notion database page list DB_ID --filter \"Status:eq:Done\" notion database page list DB_ID --filter \"Status:In progress\"  # eq is default notion database page list DB_ID --filter \"Priority:eq:High\" --filter \"Status:ne:Archived\" notion database page list DB_ID --filter \"Complete:true\" notion database page list DB_ID --filter \"Name:like:%project%\" Date Filter Examples (date properties use Notion's date operators): notion database page list DB_ID --filter \"Publish Date:on_or_after:2026-07-20\" notion database page list DB_ID --filter \"Publish Date:gte:2026-07-20\"  # alias of on_or_after notion database page list DB_ID --filter \"Publish Date:before:2026-08-01\" notion database page list DB_ID --filter \"Publish Date:past_week\" notion database page list DB_ID --filter \"Publish Date:is_not_empty:true\" Output Examples: notion database page list DB_ID --table notion database page list DB_ID --properties \"id,Name,Website,Contact Email\" notion database page list DB_ID --limit 10",
               "usage_instructions": "Run `notion database page list --help` for exact arguments and options. Use default JSON output with `--properties \"id,<needed fields>\"` when a page ID will be copied into a follow-up command; quote the entire comma-separated value when any property contains spaces, for example `--properties \"id,Name,Website,Contact Email\"`. Do not copy UUIDs from `--table` output that contains an ellipsis (`...` or `…`).",
               "arguments": [],
               "options": [

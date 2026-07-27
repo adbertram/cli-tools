@@ -164,6 +164,52 @@ notion database page create DB_ID --title "Storyline" \
 ```
 </principle>
 
+<principle name="Filter Operators Depend On The Property Type">
+`notion database page list --filter "Field:op:value"` reads the database schema
+and builds a Notion filter for that property's type. The property name must
+exist in the schema; an unknown name fails locally and lists the real property
+names. An operator the property type does not support also fails locally, before
+any API call.
+
+Generic operators for non-date properties: `eq`, `ne`, `in`, `nin`, `like`,
+`ilike`, `contains`, `gt`, `gte`, `lt`, `lte`, `null`, `notnull`. `in` and `nin`
+take pipe-separated values. `gt`/`gte`/`lt`/`lte` require a `number` property.
+Omitting the operator means `eq` (`--filter "Status:Done"`).
+
+`null` and `notnull` become Notion's `is_empty` and `is_not_empty` conditions,
+nested under the property's own type. They work for `title`, `rich_text`,
+`number`, `select`, `status`, `multi_select`, `people`, `files`, `relation`,
+`url`, `email`, `phone_number`, `created_by`, `created_time`, `last_edited_by`,
+`last_edited_time`, and `date`. Notion has no emptiness condition for
+`checkbox`, `formula`, or `rollup`, so those fail locally before any API call.
+
+```bash
+notion database page list -d DB_ID --filter "Keywords:null"
+notion database page list -d DB_ID --filter "Category:notnull"
+```
+
+**Date properties use Notion's own date operators:** `equals`, `before`,
+`after`, `on_or_before`, `on_or_after`, `this_week`, `past_week`, `past_month`,
+`past_year`, `next_week`, `next_month`, `next_year`, `is_empty`, `is_not_empty`.
+These aliases also work: `eq`=`equals`, `gt`=`after`, `gte`=`on_or_after`,
+`lt`=`before`, `lte`=`on_or_before`, `null`=`is_empty`, `notnull`=`is_not_empty`.
+
+```bash
+notion database page list -d DB_ID --filter "Publish Date:on_or_after:2026-07-20"
+notion database page list -d DB_ID --filter "Publish Date:gte:2026-07-20"
+notion database page list -d DB_ID --filter "Publish Date:before:2026-08-01"
+notion database page list -d DB_ID --filter "Publish Date:past_week"
+notion database page list -d DB_ID --filter "Publish Date:is_not_empty:true"
+```
+
+The relative-range operators (`this_week`, `past_week`, ...) and the presence
+operators (`is_empty`, `is_not_empty`) take no value; write the operator alone
+or with the value `true`. The value operators require an ISO 8601 date such as
+`2026-07-20` or `2026-07-20T09:00:00Z`, or one of Notion's keywords: `today`,
+`tomorrow`, `yesterday`, `one_week_ago`, `one_week_from_now`, `one_month_ago`,
+`one_month_from_now`.
+</principle>
+
 <principle name="Database Metadata JSON Shape">
 When parsing `notion database get` JSON, inspect the actual field type before
 extracting nested values. The CLI can expose database metadata fields such as

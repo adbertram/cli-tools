@@ -49,22 +49,64 @@ Query and inspect databases.
 ### List Pages (Query Database)
 
 ```bash
-notion database list <database-id>
-notion database list <database-id>
-notion database list <database-id> --filter-status "Done"
+notion database page list -d <database-id>
+notion database page list -d <database-id> --filter "Status:eq:Done" --table
+notion database page list -d <database-id> --filter "Publish Date:gte:2026-07-20"
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-s, --filter-status` | Filter by status (format: 'value' or 'property:value') |
-| `--filter-select` | Filter by select property (format: 'property:value') |
-| `--filter-checkbox` | Filter by checkbox property (format: 'property:true/false') |
-| `--filter-text` | Filter by text contains (format: 'property:value') |
-| `-f, --filter` | Raw JSON filter object |
+| `-d, --database-id` | The database ID to query (required) |
+| `-t, --table` | Display as formatted table |
+| `-f, --filter` | Filter using `field:op:value` (repeatable, AND logic) |
 | `-p, --properties` | Quoted comma-separated list of properties to include, for example `"id,Name,Website,Contact Email"` |
 | `-l, --limit` | Maximum number of results |
 | `--sort` | Sort by property (format: 'property' or 'property:asc/desc') |
+| `--data-source` | Specific data_source ID when the database holds multiple data sources |
+
+**Filter operators.** The command reads the database schema and builds a Notion
+filter for the property's type. An unknown property name, or an operator the
+property type does not support, fails locally before any API call. Omitting the
+operator means `eq` (`--filter "Status:Done"`).
+
+| Property type | Operators |
+|---------------|-----------|
+| Text, title, url, email, phone | `eq`, `ne`, `in`, `nin`, `like`, `ilike`, `contains`, `null`, `notnull` |
+| Status, select, multi_select | `eq`, `ne`, `in`, `nin`, `contains`, `null`, `notnull` |
+| Number | `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `nin`, `null`, `notnull` |
+| People, files, relation | `null`, `notnull` |
+| Created by, created time, last edited by, last edited time | `null`, `notnull` |
+| Checkbox | `eq`, `ne` |
+| Date | `equals`, `before`, `after`, `on_or_before`, `on_or_after`, `this_week`, `past_week`, `past_month`, `past_year`, `next_week`, `next_month`, `next_year`, `is_empty`, `is_not_empty` |
+
+`null` and `notnull` become Notion's `is_empty` and `is_not_empty` conditions,
+nested under the property's own type. A property type that has no such
+condition, such as `checkbox`, `formula`, or `rollup`, fails locally and names
+the operators it does support.
+
+```bash
+notion database page list -d DB_ID --filter "Keywords:null"
+notion database page list -d DB_ID --filter "Category:notnull"
+```
+
+Date properties use Notion's own date operators. These aliases also work:
+`eq`=`equals`, `gt`=`after`, `gte`=`on_or_after`, `lt`=`before`,
+`lte`=`on_or_before`, `null`=`is_empty`, `notnull`=`is_not_empty`.
+
+```bash
+notion database page list -d DB_ID --filter "Publish Date:on_or_after:2026-07-20"
+notion database page list -d DB_ID --filter "Publish Date:before:2026-08-01"
+notion database page list -d DB_ID --filter "Publish Date:past_week"
+notion database page list -d DB_ID --filter "Publish Date:is_not_empty:true"
+```
+
+The relative-range operators (`this_week`, `past_week`, ...) and the presence
+operators (`is_empty`, `is_not_empty`) take no value; write the operator alone
+or with the value `true`. The value operators require an ISO 8601 date such as
+`2026-07-20` or `2026-07-20T09:00:00Z`, or one of Notion's keywords: `today`,
+`tomorrow`, `yesterday`, `one_week_ago`, `one_week_from_now`, `one_month_ago`,
+`one_month_from_now`.
 
 ### Get Schema
 
