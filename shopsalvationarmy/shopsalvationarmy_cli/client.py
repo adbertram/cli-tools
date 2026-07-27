@@ -1,4 +1,5 @@
 """ShopSalvationArmy service client."""
+import copy
 import json
 import re
 import urllib.parse
@@ -434,6 +435,27 @@ class ShopSalvationArmyClient:
 
         return items
 
+    # Interactive controls the site renders *inside* the detail-page <h1>:
+    # the watchlist button (Add to Watch List / Watching), the "View Watchlist >"
+    # link, and a hidden edited-listing refresh alert. Their label text is not
+    # part of the listing title and must be dropped before reading the heading.
+    TITLE_CONTROL_SELECTOR = ".addOrRemoveWatchlist, .goToWatchListLink, .awe-refresh-alert"
+
+    @classmethod
+    def _parse_listing_title(cls, title_elem) -> str:
+        """Return the listing title from a detail-page heading element.
+
+        ``get_text()`` on the raw ``<h1 class="detail__title">`` concatenates the
+        watchlist control labels onto the title (e.g. ``... [A71]Add to Watch
+        ListWatchingView Watchlist >``), which corrupts downstream title matching.
+        The controls are removed from a detached copy so the caller's soup is left
+        untouched for the rest of the parse.
+        """
+        heading = copy.copy(title_elem)
+        for control in heading.select(cls.TITLE_CONTROL_SELECTOR):
+            control.decompose()
+        return heading.get_text(strip=True)
+
     @staticmethod
     def _is_hidden(element) -> bool:
         """Return True when a server-rendered status element is hidden."""
@@ -562,7 +584,7 @@ class ShopSalvationArmyClient:
             if not title_elem:
                 title_elem = soup.find("h2")
             if title_elem:
-                title = title_elem.get_text(strip=True)
+                title = self._parse_listing_title(title_elem)
 
             # Detect auction status from the visible detail status, not hidden templates.
             status_label = soup.select_one(".detail__status-label")

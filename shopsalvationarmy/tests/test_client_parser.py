@@ -120,6 +120,58 @@ def test_long_description_is_not_truncated_and_keeps_trailing_spec_fields():
     assert description.endswith("Condition:New")
 
 
+# Verbatim <h1> subtree captured from
+# https://www.shopthesalvationarmy.com/Listing/Details/562200044 with the
+# client's own User-Agent. The watchlist controls are rendered INSIDE the
+# heading, so a naive h1.get_text() appends their button labels to the title.
+REAL_DETAIL_TITLE_H1 = """
+<h1 class="detail__title">
+    <span>Bulk LEGO Building Pieces &#8211; 35 lb Assorted Box [A71]</span>
+    <a class="awe-refresh-alert awe-hidden" onclick="location.reload(true);"
+       title="This listing has been edited since the page was last loaded.">
+        <small class="glyphicon glyphicon-alert text-danger"></small>
+    </a>
+    <span class="addOrRemoveWatchlist" data-iswatching="False" data-watch-listingid="562200044">
+        <button class="awe-rt-hideable awe-rt-ShowStatusActive btn btn-default btn-xs">
+            <img class="icon__button--watchList" src="/Content/Images/bookmark-plus.svg"/>
+            <span class="watchText__notWatching">Add to Watch List</span>
+            <span class="watchText__isWatching">Watching</span>
+        </button>
+    </span>
+    <a class="goToWatchListLink" href="/Account/Bidding/Watching">View Watchlist &gt;</a>
+</h1>
+"""
+
+
+def test_detail_title_excludes_watchlist_control_text():
+    # Consumers (e.g. LegoScout) match LEGO listings on this title, so trailing
+    # UI text is a real matching hazard, not a cosmetic issue.
+    item = parse_item(REAL_DETAIL_TITLE_H1)
+
+    assert item["title"] == "Bulk LEGO Building Pieces – 35 lb Assorted Box [A71]"
+    assert "Add to Watch List" not in item["title"]
+    assert "Watching" not in item["title"]
+    assert "View Watchlist" not in item["title"]
+
+
+def test_detail_title_parse_does_not_mutate_the_caller_soup():
+    # The controls are stripped from a detached copy; the rest of the parse and
+    # any caller-side inspection must still see the original document.
+    soup = BeautifulSoup(REAL_DETAIL_TITLE_H1, "html.parser")
+    client = ShopSalvationArmyClient(require_auth=False, config=object())
+
+    client._parse_item_page(soup, "562200044")
+
+    assert soup.select_one(".addOrRemoveWatchlist") is not None
+    assert soup.select_one(".goToWatchListLink") is not None
+
+
+def test_detail_title_keeps_plain_heading_text_intact():
+    item = parse_item("<h1 class='detail__title'><span>LEGO Technic Lot [B12]</span></h1>")
+
+    assert item["title"] == "LEGO Technic Lot [B12]"
+
+
 def test_search_commands_are_public_no_auth_commands():
     assert COMMAND_CREDENTIALS == {
         "categories": ["no_auth"],

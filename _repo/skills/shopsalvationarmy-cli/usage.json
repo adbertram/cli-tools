@@ -1,7 +1,7 @@
 {
   "tool": "shopsalvationarmy",
   "description": "CLI interface for Shop Salvation Army",
-  "discovered_at": "2026-07-27T01:11:42Z",
+  "discovered_at": "2026-07-27T01:22:29Z",
   "total_commands": 15,
   "global_options": [
     {
