@@ -3,8 +3,8 @@ name: lastpass-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute lastpass operations using the `lastpass` CLI tool.
-  LastPass password manager CLI wrapper for retrieving passwords, usernames, and vault entries.
-  Triggers: lastpass, lastpass cli, lastpass password, lastpass vault, get password from lastpass, lastpass credentials, lastpass login, list lastpass entries, search lastpass, lastpass username
+  LastPass password manager CLI wrapper for retrieving passwords, usernames, vault entries, and safe field metadata.
+  Triggers: lastpass, lastpass cli, lastpass password, lastpass vault, get password from lastpass, lastpass credentials, lastpass login, list lastpass entries, lastpass fields, search lastpass, lastpass username
 ---
 
 <objective>
@@ -25,6 +25,7 @@ lastpass <command-group> <action> [arguments] [options]
 | List payment cards | `lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table` |
 | Search entries (case-insensitive) | `lastpass items list --filter "name:like:%github%" --limit 0` |
 | Get entry details | `lastpass items get <id-or-name>` |
+| Inspect field names without values | `lastpass items fields <id-or-name>` |
 | Get password only | `lastpass items password <id-or-name>` |
 | Copy password to clipboard | `lastpass items password <id-or-name> --clip` |
 | Get username only | `lastpass items username <id-or-name>` |
@@ -41,7 +42,15 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Command Groups">
 - **auth** -- Manage LastPass authentication (login, logout, status, sync)
-- **items** -- Manage vault entries (list, get, password, username)
+- **items** -- Manage vault entries (list, get, fields, password, username)
+</principle>
+
+<principle name="Safe field discovery">
+Use `lastpass items fields <id-or-name>` when automation needs to determine
+whether a custom, OTP, or TOTP-related field exists. It returns an ordered JSON
+array of `{"name", "sensitive"}` records and never prints field values.
+Synthetic header metadata (`id`, `full_path`, `group`, `name`) is excluded.
+Ambiguous names retain the standard metadata-only JSON response and exit `3`.
 </principle>
 
 <principle name="Searching the vault (avoid false negatives)">

@@ -36,6 +36,9 @@ lastpass items list
 # Get a specific entry
 lastpass items get github.com
 
+# Inspect field names without printing field values
+lastpass items fields github.com
+
 # Copy password to clipboard
 lastpass items password github.com --clip
 ```
@@ -97,6 +100,10 @@ lastpass items get github.com -p "id,name"
 
 # Get entry with secret fields visible (cannot be combined with --properties)
 lastpass items get github.com --show-password
+
+# List field names and sensitivity metadata only. Values are never printed.
+lastpass items fields github.com
+lastpass items fields github.com --table
 
 # Get just the password
 lastpass items password github.com
@@ -165,6 +172,8 @@ This CLI wraps the `lpass` CLI:
 
 - **`auth` commands** delegate to `lpass login`, `lpass logout`, `lpass status`
 - **`items` commands** call `lpass ls` and `lpass show`, parse output to JSON/table
+- **`items fields`** projects names from the existing masked detail path; raw
+  field values are never logged or included in command errors
 - **Credentials** are handled entirely by lpass (stored in system keychain)
 
 ## Exit Codes
@@ -179,10 +188,10 @@ This CLI wraps the `lpass` CLI:
 
 ## Ambiguous Lookups (Multiple Matches)
 
-`items get`, `items username`, and `items password` take an entry name or ID. When
-a name matches more than one vault entry, the command exits `3` and prints a
-parseable JSON object on stdout (not freeform text) so automation can pick an
-entry by ID and re-run the lookup:
+`items get`, `items fields`, `items username`, and `items password` take an
+entry name or ID. When a name matches more than one vault entry, the command
+exits `3` and prints a parseable JSON object on stdout (not freeform text) so
+automation can pick an entry by ID and re-run the lookup:
 
 ```bash
 lastpass items username google.com

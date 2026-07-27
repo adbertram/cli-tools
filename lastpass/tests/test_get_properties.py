@@ -23,6 +23,8 @@ from lastpass_cli.commands import items as items_module
 SYNTHETIC_PASSWORD = "synthetic-password-value"
 SYNTHETIC_PASSWD = "synthetic-passwd-value"
 SYNTHETIC_TOKEN = "synthetic-token-value"
+SYNTHETIC_OTP = "synthetic-otp-value"
+SYNTHETIC_TOTP = "synthetic-totp-seed"
 
 SHOW_OUTPUT = "\n".join(
     [
@@ -31,6 +33,8 @@ SHOW_OUTPUT = "\n".join(
         "Username: synthetic-user",
         f"Password: {SYNTHETIC_PASSWORD}",
         f"passwd: {SYNTHETIC_PASSWD}",
+        f"OTP: {SYNTHETIC_OTP}",
+        f"TOTP Seed: {SYNTHETIC_TOTP}",
         "Environment: synthetic-staging",
         f'Notes: {{"api_token": "{SYNTHETIC_TOKEN}", "hint": "blue"}}',
     ]
@@ -93,16 +97,25 @@ def test_properties_projects_explicit_null_for_absent_fields(runner):
         "api_token",
         "client_secret",
         "passwd",
+        "OTP",
+        "otp",
+        "TOTP",
+        "totp",
+        "TOTP Seed",
+        "Notes.OTP",
+        "custom.totp_secret",
     ],
 )
 def test_properties_refuses_secret_fields(runner, props):
     result = runner.invoke(items_module.app, ["get", "1234567890", "--properties", props])
 
-    assert result.exit_code != 0
-    assert "cannot select secret fields" in result.output
-    assert SYNTHETIC_PASSWORD not in result.output
-    assert SYNTHETIC_TOKEN not in result.output
-    assert result.stdout.strip() == ""
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "cannot select secret fields" in result.stderr
+    assert SYNTHETIC_PASSWORD not in result.stderr
+    assert SYNTHETIC_TOKEN not in result.stderr
+    assert SYNTHETIC_OTP not in result.stderr
+    assert SYNTHETIC_TOTP not in result.stderr
 
 
 def test_properties_refuses_show_password_combination(runner):
@@ -147,9 +160,13 @@ def test_get_without_properties_still_masks_by_default(runner):
     payload = json.loads(result.stdout)
     assert payload["Password"] == MASKED
     assert payload["passwd"] == MASKED
+    assert payload["OTP"] == MASKED
+    assert payload["TOTP Seed"] == MASKED
     assert payload["Environment"] == "synthetic-staging"
     assert SYNTHETIC_PASSWORD not in result.output
     assert SYNTHETIC_PASSWD not in result.output
+    assert SYNTHETIC_OTP not in result.output
+    assert SYNTHETIC_TOTP not in result.output
 
 
 def test_show_password_without_properties_still_reveals(runner):

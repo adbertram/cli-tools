@@ -2,19 +2,29 @@
 import json
 import subprocess
 
-from lastpass_cli.client import LastpassClient, MASKED_SECRET_VALUE as MASKED
+import pytest
+
+from lastpass_cli.client import (
+    LastpassClient,
+    MASKED_SECRET_VALUE as MASKED,
+    is_sensitive_item_detail_key,
+)
 
 
 SYNTHETIC_PASSWORD = "synthetic-password-value"
 SYNTHETIC_PASSWD = "synthetic-passwd-value"
 SYNTHETIC_SECRET = "synthetic-api-secret-value"
 SYNTHETIC_EMAIL = "synthetic-user@example.invalid"
+SYNTHETIC_OTP = "synthetic-otp-value"
+SYNTHETIC_TOTP = "synthetic-totp-seed"
 SYNTHETIC_NOTES_JSON = json.dumps(
     {
         "email": SYNTHETIC_EMAIL,
         "password": SYNTHETIC_PASSWORD,
         "passwd": SYNTHETIC_PASSWD,
         "pwd": "nested-pwd-value",
+        "otp": SYNTHETIC_OTP,
+        "totp_secret": SYNTHETIC_TOTP,
         "metadata": {
             "api_secret": SYNTHETIC_SECRET,
         },
@@ -27,6 +37,8 @@ SYNTHETIC_SHOW_OUTPUT = "\n".join(
         "password: lower-case-password",
         f"passwd: {SYNTHETIC_PASSWD}",
         "pwd: short-password-alias",
+        f"OTP: {SYNTHETIC_OTP}",
+        f"TOTP Seed: {SYNTHETIC_TOTP}",
         "Environment: synthetic-staging",
         f"Notes: {SYNTHETIC_NOTES_JSON}",
     ]
@@ -54,6 +66,8 @@ def test_get_item_masks_nested_password_secret_and_email_fields_by_default():
     assert item["password"] == MASKED
     assert item["passwd"] == MASKED
     assert item["pwd"] == MASKED
+    assert item["OTP"] == MASKED
+    assert item["TOTP Seed"] == MASKED
     assert item["Environment"] == "synthetic-staging"
     assert "top-level-password" not in serialized
     assert "lower-case-password" not in serialized
@@ -63,6 +77,8 @@ def test_get_item_masks_nested_password_secret_and_email_fields_by_default():
     assert SYNTHETIC_PASSWORD not in serialized
     assert SYNTHETIC_SECRET not in serialized
     assert SYNTHETIC_EMAIL not in serialized
+    assert SYNTHETIC_OTP not in serialized
+    assert SYNTHETIC_TOTP not in serialized
 
 
 def test_get_item_reveals_password_secret_and_email_fields_when_requested():
@@ -74,5 +90,42 @@ def test_get_item_reveals_password_secret_and_email_fields_when_requested():
     assert item["password"] == "lower-case-password"
     assert item["passwd"] == SYNTHETIC_PASSWD
     assert item["pwd"] == "short-password-alias"
+    assert item["OTP"] == SYNTHETIC_OTP
+    assert item["TOTP Seed"] == SYNTHETIC_TOTP
     assert item["Environment"] == "synthetic-staging"
     assert item["Notes"] == SYNTHETIC_NOTES_JSON
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "OTP",
+        "otp",
+        "TOTP",
+        "totp",
+        "TOTP-Secret",
+        "totp_secret",
+        "Totp Seed",
+    ],
+)
+def test_otp_and_totp_variants_are_sensitive_at_every_depth(field_name):
+    canary = f"synthetic-value-for-{field_name}"
+    notes = json.dumps({field_name: canary})
+    client = _client_with_show_output(
+        "\n".join(
+            [
+                f"{field_name}: {canary}",
+                f"Notes: {notes}",
+            ]
+        )
+    )
+
+    masked = client.get_item("synthetic-item")
+    revealed = client.get_item("synthetic-item", show_password=True)
+
+    assert is_sensitive_item_detail_key(field_name) is True
+    assert masked[field_name] == MASKED
+    assert json.loads(masked["Notes"])[field_name] == MASKED
+    assert canary not in json.dumps(masked)
+    assert revealed[field_name] == canary
+    assert json.loads(revealed["Notes"])[field_name] == canary

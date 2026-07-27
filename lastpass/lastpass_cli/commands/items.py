@@ -90,6 +90,9 @@ COMMAND_CREDENTIALS = {
     "generate": [
         "custom"
     ],
+    "fields": [
+        "custom"
+    ],
     "get": [
         "custom"
     ],
@@ -115,7 +118,7 @@ app = typer.Typer(help="Manage LastPass vault entries")
 # a non-filterable field (e.g. Username, URL) instead of silently returning an
 # empty result, which reads as a false "not found". To filter on a secret-bearing
 # field such as username or url, fetch the entry with `items get`/`items username`.
-LIST_FILTERABLE_FIELDS = ("id", "name", "group", "full_path")
+ITEM_METADATA_FIELDS = ("id", "name", "group", "full_path")
 
 
 @app.command("list")
@@ -156,14 +159,14 @@ def vault_list(
     # so an unsupported field (e.g. Username, URL) raises a clear error
     # instead of silently matching nothing.
     if filters:
-        validate_filters(filters, allowed_fields=LIST_FILTERABLE_FIELDS)
+        validate_filters(filters, allowed_fields=ITEM_METADATA_FIELDS)
 
     client = get_client()
     items = client.list_items(group=group)
 
     # Apply client-side filters
     if filters and isinstance(items, list):
-        items = apply_filters(items, filters, allowed_fields=LIST_FILTERABLE_FIELDS)
+        items = apply_filters(items, filters, allowed_fields=ITEM_METADATA_FIELDS)
 
     # Filter out folder entries for cleaner output
     items = [item for item in items if not item.get("is_folder")]
@@ -250,6 +253,41 @@ def vault_get(
         print_table(rows, ["field", "value"], ["Field", "Value"])
     else:
         print_json(item)
+
+
+@app.command("fields")
+@command
+def vault_fields(
+    item_id: str = typer.Argument(..., help="Entry ID or unique name"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    List an entry's field names and sensitivity metadata without field values.
+
+    The upstream lpass CLI has no field-name-only operation, so this command
+    uses the existing masked item-detail path and projects only field names.
+    Synthetic header metadata (id, full_path, group, name) is excluded.
+
+    Examples:
+        lastpass items fields 1234567890
+        lastpass items fields "Work/GitHub" --table
+    """
+    item = _fetch_or_exit_on_multiple_matches(
+        lambda client: client.get_item(item_id)
+    )
+    fields = [
+        {
+            "name": key,
+            "sensitive": is_sensitive_item_detail_key(key),
+        }
+        for key in item
+        if key not in ITEM_METADATA_FIELDS
+    ]
+
+    if table:
+        print_table(fields, ["name", "sensitive"], ["Field", "Sensitive"])
+    else:
+        print_json(fields)
 
 
 @app.command("password")

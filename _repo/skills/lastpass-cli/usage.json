@@ -1,8 +1,8 @@
 {
   "tool": "lastpass",
   "description": "LastPass password manager CLI wrapper",
-  "discovered_at": "2026-07-06T03:45:44Z",
-  "total_commands": 21,
+  "discovered_at": "2026-07-26T22:09:36Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use `lastpass auth profiles list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
@@ -283,7 +283,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Use `lastpass cache clear` with the documented arguments and options shown below.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -389,6 +396,32 @@
             }
           ]
         },
+        "fields": {
+          "help": "List an entry's field names and sensitivity metadata without field values. The upstream lpass CLI has no field-name-only operation, so this command uses the existing masked item-detail path and projects only field names. Synthetic header metadata (id, full_path, group, name) is excluded.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "generate": {
           "help": "Generate a random password for a new or existing entry.",
           "examples": [
@@ -448,7 +481,7 @@
           ]
         },
         "get": {
-          "help": "Get details of a vault entry.",
+          "help": "Get details of a vault entry. Property selection never emits secret values: requesting a secret field (password, secret, token, ...) with --properties is an error, and --properties cannot be combined with --show-password. Use `items password` for the password value.",
           "examples": [
             "lastpass items get 1234567890",
             "lastpass items get \"Work/GitHub\" --table",
@@ -493,7 +526,7 @@
           ]
         },
         "list": {
-          "help": "List vault entries. Metadata-only: --filter only supports id, name, group, full_path. The name:like/ilike wildcard match is case-insensitive (name:like:%google% also matches \"Google\"). Filtering on a non-metadata field such as Username or URL is an error, not an empty result. Default --limit is 50; use --limit 0 for unlimited metadata searches (truncation prints a stderr notice). Category filtering checks each remaining candidate's NoteType and refuses more than 50 candidates, so pass a group argument or metadata --filter before --category; do not run category-only scans with --limit 0.",
+          "help": "List vault entries. Only metadata fields are returned, so --filter only supports: id, name, group, full_path. The `name:like:`/`ilike:` wildcard match is case-insensitive, so `name:like:%google%` also matches an entry named \"Google\". Filtering on a non-metadata field such as Username or URL is an error (those values require fetching the entry with `items get`). The default limit is 50; pass `--limit 0` for unlimited. When results are truncated a notice is printed to stderr. Category filtering checks each remaining candidate's NoteType and refuses more than 50 candidates. Pass a group argument or metadata --filter before --category; do not run category-only scans with --limit 0.",
           "examples": [
             "lastpass items list",
             "lastpass items list --table",

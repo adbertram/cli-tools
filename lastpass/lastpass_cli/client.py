@@ -46,6 +46,7 @@ SENSITIVE_ITEM_DETAIL_KEY_MARKERS = (
     "apikey",
     "privatekey",
     "email",
+    "otp",
 )
 CATEGORY_SCAN_LIMIT = 50
 
@@ -217,8 +218,13 @@ class LastpassClient:
                 )
                 last_result = result
 
-                debug.debug("_run_command attempt %d: rc=%d stdout=%r stderr=%r",
-                           attempt, result.returncode, result.stdout[:200], result.stderr[:200])
+                debug.debug(
+                    "_run_command attempt %d: rc=%d stdout_bytes=%d stderr_bytes=%d",
+                    attempt,
+                    result.returncode,
+                    len((result.stdout or "").encode()),
+                    len((result.stderr or "").encode()),
+                )
                 crashed = self._is_crash(result)
 
                 if crashed:
@@ -246,8 +252,10 @@ class LastpassClient:
                         )
 
                 if check and result.returncode != 0:
-                    error_msg = result.stderr.strip() or result.stdout.strip() or "Command failed"
-                    raise ClientError(f"{self.config.cli_command} error: {error_msg}")
+                    raise ClientError(
+                        f"{self.config.cli_command} command failed "
+                        f"(exit {result.returncode})"
+                    )
 
                 return result
 
