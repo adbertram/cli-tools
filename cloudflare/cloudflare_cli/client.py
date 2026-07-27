@@ -25,6 +25,106 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 # Cloudflare zone IDs are 32 lowercase hex characters
 ZONE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
+# HTTP methods that mutate Cloudflare state. A scoped API token that carries only
+# Read permission groups authenticates fine and serves GET, then fails these with
+# HTTP 403.
+WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# CLI-tools secret manager entry that holds the Cloudflare API token.
+API_TOKEN_SECRET_NAME = "cloudflare-legacy-api-key"
+SECRETS_MANAGER = (
+    "/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh"
+)
+
+# Cloudflare API-token permission groups required per endpoint family, as
+# (endpoint fragment, read permission, write permission). Ordered most specific
+# first; every fragment is matched against the request endpoint in order.
+PERMISSION_GROUPS = (
+    ("/dns_records", "Zone > DNS > Read", "Zone > DNS > Edit"),
+    (
+        "/firewall/access_rules",
+        "Zone > Firewall Services > Read",
+        "Zone > Firewall Services > Edit",
+    ),
+    ("/purge_cache", "Zone > Cache Purge > Purge", "Zone > Cache Purge > Purge"),
+    ("/settings/", "Zone > Zone Settings > Read", "Zone > Zone Settings > Edit"),
+    ("/graphql", "Zone > Analytics > Read", "Zone > Analytics > Read"),
+    ("/zones", "Zone > Zone > Read", "Zone > Zone > Edit"),
+)
+
+
+def required_permission_group(method: str, endpoint: str) -> Optional[str]:
+    """
+    Return the Cloudflare API-token permission group a request needs.
+
+    Args:
+        method: HTTP method of the request
+        endpoint: API endpoint path (e.g. "/zones/<id>/dns_records/<id>")
+
+    Returns:
+        The permission group name, or None when the endpoint family is unmapped.
+    """
+    for fragment, read_group, write_group in PERMISSION_GROUPS:
+        if fragment in endpoint:
+            return write_group if method.upper() in WRITE_METHODS else read_group
+    return None
+
+
+def build_forbidden_error(method: str, endpoint: str, api_message: str) -> str:
+    """
+    Build an actionable message for a Cloudflare HTTP 403 response.
+
+    Cloudflare returns 403 with the generic message "Authentication error" both
+    for an invalid credential and for a valid token that lacks the permission
+    group for the operation. The bare API message reads like a broken
+    credential, which sends diagnosis down the wrong path, so name the real
+    cause and the rotation command.
+
+    Args:
+        method: HTTP method of the failed request
+        endpoint: API endpoint path of the failed request
+        api_message: Message Cloudflare returned in the errors array
+
+    Returns:
+        Multi-line error message text
+    """
+    upper_method = method.upper()
+    lines = [
+        f"API request failed (403): {api_message}",
+        "",
+        f"Cloudflare refused {upper_method} {endpoint}.",
+        "A Cloudflare 403 means either an invalid credential or a valid API "
+        "token that lacks the permission group for this operation. Cloudflare "
+        "reports both as an authentication error.",
+    ]
+
+    permission_group = required_permission_group(method, endpoint)
+    if permission_group is not None:
+        lines.append(f"Permission group required: {permission_group}")
+
+    if upper_method in WRITE_METHODS:
+        lines.append(
+            "Read commands that keep working prove the token is valid and "
+            "prove the token is missing Edit scope, not that it expired."
+        )
+
+    lines.extend(
+        [
+            "",
+            "Confirm the token is valid and active:",
+            "  cloudflare auth test",
+            "",
+            "Note: 'cloudflare auth test' only issues a read. It passes on a "
+            "read-only token and cannot detect missing Edit scope.",
+            "",
+            "Mint a replacement token in the Cloudflare dashboard with the "
+            "permission group above, then store it:",
+            f"  {SECRETS_MANAGER} set {API_TOKEN_SECRET_NAME}",
+        ]
+    )
+
+    return "\n".join(lines)
+
 # GraphQL Analytics API queries
 ANALYTICS_SUMMARY_QUERY = """
 query AnalyticsSummary($zoneTag: string, $start: string, $end: string) {
@@ -274,6 +374,8 @@ class CloudflareClient:
                 error_msg = errors[0].get("message", "Unknown error")
             else:
                 error_msg = "Request failed"
+            if last_response.status_code == 403:
+                raise ClientError(build_forbidden_error(method, endpoint, error_msg))
             raise ClientError(f"API request failed ({last_response.status_code}): {error_msg}")
 
         return response_data

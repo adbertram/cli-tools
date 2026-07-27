@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from ..client import get_client
 from cli_tools_shared.filters import apply_filters, apply_properties_filter
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import print_json, print_table, command, print_success
 
 
 class AccessRuleMode(str, Enum):
@@ -73,6 +73,7 @@ def flatten_rule_for_table(rule) -> dict:
 
 
 @app.command("list")
+@command
 def access_rules_list(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -93,41 +94,38 @@ def access_rules_list(
         cloudflare access-rules list ZONE_ID --filter "mode:eq:block"
         cloudflare access-rules list ZONE_ID --properties "id,mode,notes"
     """
-    try:
-        client = get_client()
-        rules = client.list_access_rules(
-            zone_id=zone_id,
-            limit=limit,
-            mode=mode.value if mode else None,
-            target=target.value if target else None,
-            value=value,
+    client = get_client()
+    rules = client.list_access_rules(
+        zone_id=zone_id,
+        limit=limit,
+        mode=mode.value if mode else None,
+        target=target.value if target else None,
+        value=value,
+    )
+
+    # Convert to dicts for filtering
+    rule_dicts = [flatten_rule_for_table(r) for r in rules]
+
+    # Apply client-side filters
+    if filter_str:
+        rule_dicts = apply_filters(rule_dicts, filter_str)
+
+    # Apply properties filter
+    if properties:
+        rule_dicts = apply_properties_filter(rule_dicts, properties)
+
+    if table:
+        print_table(
+            rule_dicts,
+            ["id", "mode", "target", "value", "notes"],
+            ["ID", "Mode", "Target", "Value", "Notes"],
         )
-
-        # Convert to dicts for filtering
-        rule_dicts = [flatten_rule_for_table(r) for r in rules]
-
-        # Apply client-side filters
-        if filter_str:
-            rule_dicts = apply_filters(rule_dicts, filter_str)
-
-        # Apply properties filter
-        if properties:
-            rule_dicts = apply_properties_filter(rule_dicts, properties)
-
-        if table:
-            print_table(
-                rule_dicts,
-                ["id", "mode", "target", "value", "notes"],
-                ["ID", "Mode", "Target", "Value", "Notes"],
-            )
-        else:
-            print_json(rule_dicts)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    else:
+        print_json(rule_dicts)
 
 
 @app.command("get")
+@command
 def access_rules_get(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     rule_id: str = typer.Argument(..., help="The rule ID"),
@@ -140,31 +138,28 @@ def access_rules_get(
         cloudflare access-rules get ZONE_ID RULE_ID
         cloudflare access-rules get ZONE_ID RULE_ID --table
     """
-    try:
-        client = get_client()
-        rule = client.get_access_rule(zone_id, rule_id)
+    client = get_client()
+    rule = client.get_access_rule(zone_id, rule_id)
 
-        if table:
-            # Convert model to key-value table
-            rule_dict = model_to_dict(rule)
-            rows = []
-            for k, v in rule_dict.items():
-                if v is not None:
-                    if isinstance(v, dict):
-                        # Flatten nested dicts
-                        for nested_k, nested_v in v.items():
-                            rows.append({"field": f"{k}.{nested_k}", "value": str(nested_v)})
-                    else:
-                        rows.append({"field": k, "value": str(v)})
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(rule)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        # Convert model to key-value table
+        rule_dict = model_to_dict(rule)
+        rows = []
+        for k, v in rule_dict.items():
+            if v is not None:
+                if isinstance(v, dict):
+                    # Flatten nested dicts
+                    for nested_k, nested_v in v.items():
+                        rows.append({"field": f"{k}.{nested_k}", "value": str(nested_v)})
+                else:
+                    rows.append({"field": k, "value": str(v)})
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(rule)
 
 
 @app.command("create")
+@command
 def access_rules_create(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     target: ConfigurationTarget = typer.Option(..., "--target", "-t", help="Target type (ip, ip_range, asn, country, ipv6)"),
@@ -182,33 +177,30 @@ def access_rules_create(
         cloudflare access-rules create ZONE_ID --target asn --value AS12345 --mode block
         cloudflare access-rules create ZONE_ID --target country --value CN --mode challenge
     """
-    try:
-        client = get_client()
-        rule = client.create_access_rule(
-            zone_id=zone_id,
-            target=target.value,
-            value=value,
-            mode=mode.value,
-            notes=notes,
+    client = get_client()
+    rule = client.create_access_rule(
+        zone_id=zone_id,
+        target=target.value,
+        value=value,
+        mode=mode.value,
+        notes=notes,
+    )
+
+    if table:
+        flattened = flatten_rule_for_table(rule)
+        print_table(
+            [flattened],
+            ["id", "mode", "target", "value", "notes"],
+            ["ID", "Mode", "Target", "Value", "Notes"],
         )
+    else:
+        print_json(rule)
 
-        if table:
-            flattened = flatten_rule_for_table(rule)
-            print_table(
-                [flattened],
-                ["id", "mode", "target", "value", "notes"],
-                ["ID", "Mode", "Target", "Value", "Notes"],
-            )
-        else:
-            print_json(rule)
-
-        print_success(f"Created access rule {rule.id}: {mode.value} {target.value}={value}")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_success(f"Created access rule {rule.id}: {mode.value} {target.value}={value}")
 
 
 @app.command("update")
+@command
 def access_rules_update(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     rule_id: str = typer.Argument(..., help="The rule ID"),
@@ -227,23 +219,20 @@ def access_rules_update(
         typer.echo("Error: At least one of --mode or --notes must be specified", err=True)
         raise typer.Exit(1)
 
-    try:
-        client = get_client()
-        rule = client.update_access_rule(
-            zone_id=zone_id,
-            rule_id=rule_id,
-            mode=mode.value if mode else None,
-            notes=notes,
-        )
+    client = get_client()
+    rule = client.update_access_rule(
+        zone_id=zone_id,
+        rule_id=rule_id,
+        mode=mode.value if mode else None,
+        notes=notes,
+    )
 
-        print_json(rule)
-        print_success(f"Updated access rule {rule_id}")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_json(rule)
+    print_success(f"Updated access rule {rule_id}")
 
 
 @app.command("delete")
+@command
 def access_rules_delete(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     rule_id: str = typer.Argument(..., help="The rule ID"),
@@ -272,15 +261,11 @@ def access_rules_delete(
             typer.echo("Cancelled")
             raise typer.Exit(0)
 
-    try:
-        client = get_client()
-        result = client.delete_access_rule(zone_id, rule_id)
+    client = get_client()
+    result = client.delete_access_rule(zone_id, rule_id)
 
-        deleted_id = result.get("id", rule_id)
-        print_success(f"Deleted access rule {deleted_id}")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    deleted_id = result.get("id", rule_id)
+    print_success(f"Deleted access rule {deleted_id}")
 
 
 COMMAND_CREDENTIALS = {

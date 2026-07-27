@@ -41,7 +41,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** — Manage authentication (login, logout, status, refresh, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **zones** — Manage Cloudflare zones (list, get, update security settings)
-- **cache** — Manage cache (purge all cached content)
+- **cache** — `cache purge ZONE_ID` purges the Cloudflare CDN edge cache for a zone; `cache clear` removes the local CLI response cache for a profile. These are different caches.
 - **access-rules** — Manage IP access rules (whitelist, block, challenge IPs/ranges/ASNs/countries)
 - **dns** — Manage DNS with sub-groups: `dns zones` (list/get zones) and `dns records` (full CRUD on DNS records)
 - **analytics** — Zone traffic analytics via the GraphQL Analytics API: `analytics summary` (totals for a date range) and `analytics top-paths` (top pages by HTML page views). Zone argument accepts a zone name or zone ID. Requires the `Analytics: Read` zone permission on the API token.
@@ -53,6 +53,84 @@ This file contains complete command syntax, all arguments, all options, and usag
 </essential_principles>
 
 <known_issues>
+<issue name="Reads succeed but every write returns 403 'Authentication error' (token scope)">
+**Symptom.** Read commands work and return correct data:
+
+```
+cloudflare zones list --table
+cloudflare dns records list <zone_id> --limit 200
+```
+
+Every write fails with exit 1 and a 403:
+
+```
+cloudflare dns records delete <zone_id> <record_id> --force
+Error: API request failed (403): Authentication error
+```
+
+The failure hits every record and every zone identically.
+
+**Cause.** The stored credential is a scoped Cloudflare **User API Token**, not
+the legacy Global API Key that the secret name `cloudflare-legacy-api-key`
+suggests. That token carries only Read permission groups. Cloudflare returns
+HTTP 403 with the generic message `Authentication error` for an out-of-scope
+token, which reads like a broken or expired credential and sends diagnosis down
+the wrong path.
+
+**This is not a header-shape bug.** `CloudflareClient._update_headers` builds
+`Authorization: Bearer <token>` once in `__init__`, and `_make_request` sends
+that same header for every HTTP method. Reads and writes are authenticated
+identically. Do not go looking for an `X-Auth-Key`/`X-Auth-Email` branch or a
+per-method code path; there is none, and
+`cloudflare/tests/test_write_path_auth.py` locks that in.
+
+**`cloudflare auth test` cannot detect this.** Its handler issues
+`GET /zones`, so a read-only token returns `authenticated: true` and
+`api_test: passed` while every write still fails. Never treat a green
+`auth test` or `auth status` as proof that writes will work.
+
+**How to confirm the credential is a token, not a Global API Key.** A Global API
+Key is 37 hex characters. An API token is longer, mixed-case, and starts with
+`cfut`. `auth status` shows the masked prefix. `GET /user/tokens/verify` with the
+`Authorization: Bearer` header returns 200 and
+`"This API Token is valid and active"` for a token; a Global API Key fails that
+endpoint under Bearer. A valid `verify` plus a 403 write proves scope, not
+validity.
+
+**Fix (Adam must mint the token; an agent cannot).** Create a replacement API
+token in the Cloudflare dashboard at
+https://dash.cloudflare.com/profile/api-tokens with **Edit** permission for each
+area the CLI must write, then store it in the secret manager:
+
+| CLI command group | Permission group required |
+|-------------------|---------------------------|
+| `dns records create/update/delete` | Zone > DNS > Edit |
+| `access-rules create/update/delete` | Zone > Firewall Services > Edit |
+| `cache purge` | Zone > Cache Purge > Purge |
+| `zones update` (security level) | Zone > Zone Settings > Edit |
+| `zones list/get` | Zone > Zone > Read |
+| `analytics summary/top-paths` | Zone > Analytics > Read |
+
+Set Zone Resources to include every zone the CLI manages, then rotate:
+
+```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-legacy-api-key
+```
+
+Verify the new scope with a real write against a low-risk zone
+(`atademos.com`, `1bb82acebb2c9cc1e8c334e599db915d`) — create a throwaway TXT
+record, confirm it, then delete it. Never test writes against
+`actionblogger.com`, `adamtheautomator.com`, or `brickbuddy.io`.
+
+**CLI behavior since the fix.** `_make_request` now routes any 403 through
+`build_forbidden_error`, so the CLI names the refused method and endpoint, the
+exact permission group required, the fact that working reads prove missing Edit
+scope rather than an expired token, the `auth test` false-green warning, and the
+`secrets.sh set` rotation command. A bare
+`API request failed (403): Authentication error` from this CLI now means the
+error path itself regressed.
+</issue>
+
 <issue name="API key is sourced from a CLI-tools secret (auth login cannot re-prompt it)">
 The `cloudflare` credential type is `api_key`, and the active profile stores it as a
 `secret://cloudflare-legacy-api-key` placeholder resolved from the CLI-tools secret

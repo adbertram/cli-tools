@@ -1,7 +1,7 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-07-02T17:36:04Z",
+  "discovered_at": "2026-07-27T14:00:42Z",
   "total_commands": 28,
   "global_options": [
     {
@@ -52,9 +52,9 @@
           "options": [
             {
               "name": "--target",
-              "type": "bool",
+              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
               "required": true,
-              "help": "[ip|ip_range|asn|country|ipv6]                              Target type (ip, ip_range, asn, country, ipv6)",
+              "help": "Target type (ip, ip_range, asn, country, ipv6)",
               "short": "-t"
             },
             {
@@ -66,9 +66,9 @@
             },
             {
               "name": "--mode",
-              "type": "bool",
+              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
               "required": true,
-              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  Action mode (whitelist, block, challenge, js_challenge, managed_challenge)",
+              "help": "Action mode (whitelist, block, challenge, js_challenge, managed_challenge)",
               "short": "-m"
             },
             {
@@ -216,16 +216,16 @@
             },
             {
               "name": "--mode",
-              "type": "bool",
+              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
               "required": false,
-              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  Filter by mode",
+              "help": "Filter by mode",
               "short": "-m"
             },
             {
               "name": "--target",
-              "type": "bool",
+              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
               "required": false,
-              "help": "[ip|ip_range|asn|country|ipv6]                              Filter by target type"
+              "help": "Filter by target type"
             },
             {
               "name": "--value",
@@ -266,9 +266,9 @@
           "options": [
             {
               "name": "--mode",
-              "type": "bool",
+              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
               "required": false,
-              "help": "[whitelist|block|challenge|js_challenge|managed_challenge]  New action mode",
+              "help": "New action mode",
               "short": "-m"
             },
             {
@@ -301,7 +301,7 @@
       ],
       "commands": {
         "summary": {
-          "help": "Show zone traffic totals for a date range.",
+          "help": "Show zone traffic totals for a date range. Totals come from the httpRequests1dGroups daily rollup dataset: page views, unique visitors, requests, and bytes. unique_visitors is the sum of per-day uniques, not deduplicated across days.",
           "arguments": [
             {
               "name": "zone",
@@ -341,7 +341,7 @@
           ]
         },
         "top-paths": {
-          "help": "Show top request paths by HTML page views for a date range.",
+          "help": "Show top request paths by HTML page views for a date range. Uses the httpRequestsAdaptiveGroups dataset filtered to edge responses with content type \"html\" (page views). Data is adaptively sampled by Cloudflare, and pct_of_total is each path's share of all HTML page views in the range. Dataset retention varies by plan, so old ranges may return no data.",
           "arguments": [
             {
               "name": "zone",
@@ -506,7 +506,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show auth type and active state.",
               "usage_instructions": "Run `cloudflare auth profiles list` to list all profiles and show which is the default. Common options: `--table/-t`, `--limit/-l`, `--filter/-f`, `--properties/-p`.",
               "arguments": [],
               "options": [
@@ -610,12 +610,26 @@
       "help": "Manage Cloudflare cache",
       "usage_instructions": "Use `cloudflare cache` for manage cloudflare cache. Available subcommands here are `purge`.",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "clear": {
-          "help": "Remove all cached CLI responses.",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         },
         "purge": {
           "help": "Purge all cache for a zone. WARNING: This will purge ALL cached content for the zone.",
@@ -647,6 +661,12 @@
               "required": false,
               "help": "Display result as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -692,9 +712,9 @@
               "options": [
                 {
                   "name": "--type",
-                  "type": "bool",
+                  "type": "A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT",
                   "required": true,
-                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  Record type (A, AAAA, CNAME, TXT, MX, etc.)",
+                  "help": "Record type (A, AAAA, CNAME, TXT, MX, etc.)",
                   "short": "-T"
                 },
                 {
@@ -875,9 +895,9 @@
                 },
                 {
                   "name": "--type",
-                  "type": "bool",
+                  "type": "A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT",
                   "required": false,
-                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  Filter by record type"
+                  "help": "Filter by record type"
                 },
                 {
                   "name": "--name",
@@ -933,9 +953,9 @@
               "options": [
                 {
                   "name": "--type",
-                  "type": "bool",
+                  "type": "A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT",
                   "required": false,
-                  "help": "[A|AAAA|CAA|CNAME|MX|NS|PTR|SRV|TXT]  New record type",
+                  "help": "New record type",
                   "short": "-T"
                 },
                 {
@@ -1211,9 +1231,9 @@
           "options": [
             {
               "name": "--security-level",
-              "type": "bool",
+              "type": "OFF|ESSENTIALLY_OFF|LOW|MEDIUM|HIGH|UNDER_ATTACK",
               "required": false,
-              "help": "[off|essentially_off|low|medium|high|under_attack]  Set security level (off, essentially_off, low, medium, high, under_attack)",
+              "help": "Set security level (off, essentially_off, low, medium, high, under_attack)",
               "short": "-s"
             },
             {

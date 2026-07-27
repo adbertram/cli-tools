@@ -11,7 +11,7 @@ import typer
 
 from ..client import get_client
 from cli_tools_shared.filters import apply_filters, apply_properties_filter
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, command
 
 app = typer.Typer(help="Zone traffic analytics (GraphQL Analytics API)", no_args_is_help=True)
 
@@ -26,6 +26,7 @@ def resolve_date_range(start: Optional[str], end: Optional[str]) -> Tuple[str, s
 
 
 @app.command("summary")
+@command
 def analytics_summary(
     zone: str = typer.Argument(..., help="Zone name (e.g. example.com) or 32-character zone ID"),
     start: Optional[str] = typer.Option(None, "--start", "-s", help="Start date YYYY-MM-DD, inclusive (default: 30 days ago)"),
@@ -44,24 +45,21 @@ def analytics_summary(
         cloudflare analytics summary example.com --start 2026-06-01 --end 2026-06-30
         cloudflare analytics summary example.com --table
     """
-    try:
-        start_date, end_date = resolve_date_range(start, end)
-        client = get_client()
-        zone_id = client.resolve_zone_id(zone)
-        summary = client.get_analytics_summary(zone_id, start_date, end_date)
-        summary = {"zone": zone, **summary}
+    start_date, end_date = resolve_date_range(start, end)
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+    summary = client.get_analytics_summary(zone_id, start_date, end_date)
+    summary = {"zone": zone, **summary}
 
-        if table:
-            rows = [{"field": k, "value": str(v)} for k, v in summary.items()]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(summary)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        rows = [{"field": k, "value": str(v)} for k, v in summary.items()]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(summary)
 
 
 @app.command("top-paths")
+@command
 def analytics_top_paths(
     zone: str = typer.Argument(..., help="Zone name (e.g. example.com) or 32-character zone ID"),
     start: Optional[str] = typer.Option(None, "--start", "-s", help="Start date YYYY-MM-DD, inclusive (default: 30 days ago)"),
@@ -86,29 +84,25 @@ def analytics_top_paths(
         cloudflare analytics top-paths example.com --limit 5 --table
         cloudflare analytics top-paths example.com --filter "path:contains:blog"
     """
-    try:
-        start_date, end_date = resolve_date_range(start, end)
-        client = get_client()
-        zone_id = client.resolve_zone_id(zone)
-        paths = client.get_top_paths(zone_id, start_date, end_date, limit=limit)
+    start_date, end_date = resolve_date_range(start, end)
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+    paths = client.get_top_paths(zone_id, start_date, end_date, limit=limit)
 
-        if filter_str:
-            paths = apply_filters(paths, filter_str)
+    if filter_str:
+        paths = apply_filters(paths, filter_str)
 
-        if properties:
-            paths = apply_properties_filter(paths, properties)
+    if properties:
+        paths = apply_properties_filter(paths, properties)
 
-        if table:
-            print_table(
-                paths,
-                ["path", "page_views", "pct_of_total"],
-                ["Path", "Page Views", "% of Total"],
-            )
-        else:
-            print_json(paths)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        print_table(
+            paths,
+            ["path", "page_views", "pct_of_total"],
+            ["Path", "Page Views", "% of Total"],
+        )
+    else:
+        print_json(paths)
 
 
 COMMAND_CREDENTIALS = {
