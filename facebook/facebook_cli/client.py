@@ -90,21 +90,31 @@ MARKETPLACE_PAGE_STATE_JS = """(selector) => {
 # Extract listings from a Marketplace list/search page, tile by tile.
 #
 # This reads each tile's DOM directly instead of parsing the flattened
-# accessibility-tree name, because Facebook serves TWO tile variants (both
-# captured live 2026-07-25):
+# accessibility-tree name, because Facebook serves THREE tile variants
+# (variants 1-2 captured live 2026-07-25, variant 3 captured live 2026-07-26):
 #
 #   1. aria-labelled:   "Arcade 1Up, $300, Newburgh, IN, listing 1356224139807798"
 #   2. content-derived: "Just listed $400 Legos. Collection with instruction
 #                        books Boonville, IN"
+#   3. notification/prose (a "commerce_interesting_product" recommendation tile
+#      Facebook injects into the grid, href carries
+#      "?ref=notif&notif_t=commerce_interesting_product"):
+#      "UnreadHuge Lot thousands crayons,colored pencils... listed for $50.00.
+#      9h\u00b74 saved" -- rendered as a sentence with the title and price each
+#      wrapped in their own <b> element instead of a dedicated span:
+#      <div>Unread</div><b>Huge Lot ...</b> listed for <b>$50.00</b>.
 #
 # Variant 2 carries no delimiters at all, and on a discounted tile the current
 # and struck-through prices are flattened together ("$50$60"), so any string
 # parse of the accessible name is ambiguous or lossy -- variant 2 previously
 # yielded ZERO parsed listings, which is what made an intermittently healthy
-# search return []. The per-tile DOM is identical for both variants: a span
+# search return []. The per-tile DOM is identical for variants 1-2: a span
 # whose own text is the current price (carrying the struck-through original
 # price as a nested span), followed by the title span and then the location
-# span.
+# span. Variant 3 has no such price/title spans at all -- the price and title
+# text live inside <b> elements, so the span-own-text scan below never finds
+# them and falls through to a second structural pass that reads the <b>
+# elements directly. Variant 3 has no location field.
 #
 # ``unparsed`` reports tiles that rendered text but no usable price/title so the
 # caller can fail loudly instead of under-reporting search results. Tiles that
@@ -151,6 +161,36 @@ LIST_PAGE_LISTINGS_JS = r"""() => {
             // Title and location always follow the price span; badges that
             // precede it ("Just listed") are not listing fields.
             if (price !== "") labels.push(own);
+        }
+
+        if (price === "" || labels.length === 0) {
+            // Notification/prose tile (variant 3): title and price are each
+            // wrapped in a <b> element inside one sentence, e.g.
+            // "<b>Title</b> listed for <b>$50.00</b>." -- not dedicated spans,
+            // so the scan above never populates `price`/`labels`. Both <b>
+            // elements share the same parent, and that parent's OWN text (the
+            // words connecting the two <b> elements) contains "listed for",
+            // which is what distinguishes this from an unrelated pair of bold
+            // elements elsewhere in the tile.
+            const boldEls = anchor.querySelectorAll('b');
+            if (boldEls.length >= 2) {
+                const titleBold = boldEls[0];
+                const priceBold = boldEls[boldEls.length - 1];
+                const parent = titleBold.parentElement;
+                if (parent != null && parent === priceBold.parentElement
+                        && /\blisted for\b/i.test(ownText(parent))) {
+                    const priceText = ownText(priceBold);
+                    const titleText = ownText(titleBold);
+                    if (PRICE.test(priceText) && titleText !== "") {
+                        price = priceText;
+                        for (const child of priceBold.children) {
+                            const childText = (child.textContent || "").trim();
+                            if (PRICE.test(childText)) { originalPrice = childText; break; }
+                        }
+                        labels.push(titleText);
+                    }
+                }
+            }
         }
 
         if (price === "" || labels.length === 0) {

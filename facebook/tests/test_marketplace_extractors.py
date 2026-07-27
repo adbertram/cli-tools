@@ -7,9 +7,12 @@ an authenticated Facebook session:
     listing 2088943005027414, a price-dropped listing rendering ``$15`` with a
     struck-through ``$20``. Reading the price element's text yielded ``$15$20``,
     which the price normalizer turned into ``1520.0``.
-  - ``marketplace_list_tiles.html`` -- four verbatim search/browse tile anchors
+  - ``marketplace_list_tiles.html`` -- five verbatim search/browse tile anchors
     covering every rendered variant: aria-labelled, content-derived, a
-    "Just listed" badge tile, and a discounted tile (``$100`` / ``$350``).
+    "Just listed" badge tile, a discounted tile (``$100`` / ``$350``), and (added
+    2026-07-26) a "commerce_interesting_product" notification/prose tile whose
+    title and price are rendered as ``<b>`` elements inside a sentence
+    ("Huge Lot ... listed for $50.00.") instead of dedicated spans.
   - ``marketplace_search_no_results.html`` -- the ``[role="main"]`` subtree of a
     genuinely empty search, carrying Facebook's own "No listings found for ...
     within 10 miles" heading.
@@ -185,7 +188,7 @@ def test_list_tile_extractor_reads_every_rendered_tile_variant(list_tiles_html):
 
     assert result["unparsed"] == []
     rows = {row["item_id"]: row for row in result["rows"]}
-    assert len(rows) == 4
+    assert len(rows) == 5
 
     # "Just listed" badge tile: the badge precedes the price and is not a field.
     assert rows["27627584550238930"]["title"] == "Moving Sale"
@@ -199,6 +202,46 @@ def test_list_tile_extractor_reads_every_rendered_tile_variant(list_tiles_html):
     # content-derived variant
     assert rows["1615488030295895"]["title"] == "Vintage Legos"
     assert rows["1615488030295895"]["price"] == "$30"
+
+
+def test_list_tile_extractor_reads_a_notification_prose_tile(list_tiles_html):
+    """A 'commerce_interesting_product' notification tile (captured live
+    2026-07-26, item 27542838245367180) renders its title and price as <b>
+    elements inside a sentence -- "<b>Title</b> listed for <b>$50.00</b>." --
+    instead of dedicated spans, with an unrelated "Unread" badge <div>
+    immediately before the title. Regression for `list` raising
+    'listing tile(s) still rendered without a recognizable price and title'."""
+    result = _evaluate(list_tiles_html, LIST_PAGE_LISTINGS_JS)
+    row = next(r for r in result["rows"] if r["item_id"] == "27542838245367180")
+
+    assert row["title"] == "Huge Lot thousands crayons,colored pencils..."
+    assert row["price"] == "$50.00"
+    assert row["original_price"] is None
+    # This tile shape carries no location field -- it must not be invented
+    # from the badge/relative-time text ("Unread" or "9h").
+    assert row["location"] is None
+
+    listing = MarketplaceListing(**row)
+    assert listing.price == 50.0
+    assert listing.price_currency == "$"
+
+
+def test_list_tile_extractor_ignores_unrelated_bold_pairs_without_listed_for():
+    """The notification/prose fallback must not fire on any two <b> elements --
+    only ones connected by the literal "listed for" wording Facebook renders
+    for this tile shape. A tile with two unrelated bold elements (no such
+    wording, no shared parent) must still report unparsed rather than
+    inventing a price/title pairing.
+    """
+    html = (
+        '<a href="https://www.facebook.com/marketplace/item/999/?ref=x">'
+        "<div><b>Bold heading</b></div><div><b>$99</b> deposit required</div></a>"
+    )
+
+    result = _evaluate(html, LIST_PAGE_LISTINGS_JS)
+
+    assert result["rows"] == []
+    assert result["unparsed"] != []
 
 
 def test_list_tile_extractor_splits_a_discounted_tile(list_tiles_html):
