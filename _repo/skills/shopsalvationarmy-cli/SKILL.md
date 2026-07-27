@@ -37,6 +37,38 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **search** — Search and browse item listings: query for items, list categories, get item details
 - **auth** — Manage authentication: login, logout, check status
 </principle>
+
+<principle name="Fulfillment: read `shipping_options`, never a price or a quote">
+`search get <id>` reports the listing's "Shipping Options" panel as **which
+options the seller offers** (`shipping_options`) separately from **what each
+one costs**. To answer "does this listing ship?", read `shipping_options` — do
+not infer it from `shipping_cost`, `shipping_params`, or `shipping_quote_status`.
+
+| Field | Meaning |
+|-------|---------|
+| `shipping_options.local_pickup` | The panel has a "Local Pick Up:" row |
+| `shipping_options.flat_rate` | The panel quotes a flat shipping price outright |
+| `shipping_options.carrier_calculator` | The panel offers live carrier-rate buttons |
+| `local_pickup_price` | Cost of pickup (normally `0.0`) |
+| `standard_shipping_label` | Seller's own label for the flat rate — varies ("Standard Shipping", "UPS Ground") |
+| `standard_shipping_price` | The flat shipping price |
+| `standard_shipping_additional_item_price` | The "($N as additional item)" price, when present |
+| `shipping_carriers` | Carriers offering live rates, e.g. `["usps", "ups"]` |
+| `shipping_params` | Live-quote request payload only — **not** evidence that shipping is offered |
+
+`shipping_quote_status` describes the **live carrier quote only**:
+
+- `quoted` — a live rate came back; `shipping_cost` / `shipping_total` / `total_price` are populated
+- `destination_required` — a calculator exists and the quote payload is present, but no destination was quoted
+- `unavailable` — a calculator exists and the quote failed or returned no rate. **The rate is unknown; this does NOT mean the seller refuses to ship.**
+- `not_applicable` — the listing has no live-rate calculator at all (flat-rate or pickup-only listings)
+
+Listing 562200044 is the worked example: `local_pickup` **and** `flat_rate`
+are true, `standard_shipping_price` is `46.0`, and `carrier_calculator` is
+false — so `shipping_carriers` is empty and `shipping_quote_status` is
+`not_applicable`. A consumer that reads only the quote fields would wrongly
+call that listing pickup-only.
+</principle>
 </essential_principles>
 
 <reference_index>
