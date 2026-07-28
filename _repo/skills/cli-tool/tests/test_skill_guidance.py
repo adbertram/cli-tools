@@ -368,6 +368,52 @@ def test_playwright_cli_run_code_wrapper_surfaces_failure_stdout():
     assert '[ -s "$out" ] && sed -n \'1,80p\' "$out" >&2' in text
 
 
+def test_playwright_cli_guidance_restricts_secret_keys_to_fill():
+    """`type` maps to browser_press_sequentially, which never calls lookupSecret.
+
+    Passing a secret key name to `type` sends the literal characters to the page.
+    """
+    skill = _words(_read("../playwright-cli/SKILL.md"))
+    patterns = _words(_read("../playwright-cli/references/workflow-patterns.md"))
+    usage = json.loads(_read("../playwright-cli/usage.json"))
+    notes = _words(" ".join(usage["notes"]))
+
+    for text in (skill, patterns, notes):
+        assert "fill or `type`" not in text
+        assert "`fill`/`type`" not in text
+        assert "fill/type" not in text
+
+    assert "Never pass a secret key name to `type`" in skill
+    assert "`browser_press_sequentially`" in skill
+    assert "never calls `lookupSecret`" in skill
+    assert "NEVER pass a secret key name to type" in notes
+    assert "browser_press_sequentially" in notes
+    assert "`type` never substitutes a secret" in patterns
+
+
+def test_playwright_cli_guidance_requires_post_fill_length_verification():
+    """`fill` can write the secret into a different focused input and still exit 0."""
+    skill = _read("../playwright-cli/SKILL.md")
+    skill_words = _words(skill)
+    patterns = _words(_read("../playwright-cli/references/workflow-patterns.md"))
+    notes = _words(" ".join(json.loads(_read("../playwright-cli/usage.json"))["notes"]))
+
+    assert "Secret Fill Verification (MANDATORY)" in skill
+    assert "can write the secret into a **different** input" in skill_words
+    assert "`page.keyboard.insertText(value)` out of process" in skill_words
+    assert "value **LENGTHS**" in skill_words
+    assert "Never read, print, or log a field value" in skill_words
+    assert "verify-secret-fill.sh" in skill
+    assert "`PW_GUARD_FAIL`, **do not submit the form.**" in skill_words
+
+    assert "read back per-field value LENGTHS only, never values" in notes
+    assert "Do not submit the form when the check fails" in notes
+
+    assert "verify-secret-fill.sh" in patterns
+    assert "Post-fill verification is mandatory" in patterns
+    assert "Do not submit the form when the check fails" in patterns
+
+
 def test_skill_requires_structured_cli_json_parsing_from_files():
     text = _read("SKILL.md")
     text_words = _words(text)
