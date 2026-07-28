@@ -41,7 +41,13 @@ NODE
 PLAYWRIGHT_MCP_SECRETS_FILE="$secrets_file" playwright-cli -s=app open https://app.example.com/login
 playwright-cli snapshot
 playwright-cli fill ref="email_input" "user@example.com"
+# MANDATORY: baseline the field lengths, fill the secret, then verify where it landed.
+guard=/Users/adam/Dropbox/GitRepos/Agents/skills/global/browser-automation/scripts/verify-secret-fill.sh
+"$guard" baseline app /tmp/pw-base.json
 playwright-cli -s=app fill ref="password_input" APP_PASSWORD
+"$guard" check app "$secrets_file" APP_PASSWORD '#password_input' /tmp/pw-base.json
+
+# Submit only after the guard prints PW_GUARD_OK.
 playwright-cli click ref="login_button"
 
 # Save auth state for reuse
@@ -53,7 +59,11 @@ playwright-cli state-load auth-example.json
 playwright-cli goto https://app.example.com/dashboard
 ```
 
-**Secret rule:** `run-code` cannot read `process.env`; its VM context only receives `page`. For secret entry, set `PLAYWRIGHT_MCP_SECRETS_FILE` when opening the session and pass the secret key name, not the secret value, to `fill` or `type`. Do not verify real password fields by returning their full `inputValue()`.
+**Secret rule:** `run-code` cannot read `process.env`; its VM context only receives `page`. For secret entry, set `PLAYWRIGHT_MCP_SECRETS_FILE` when opening the session and pass the secret key name, not the secret value, to **`fill` only**. Do not verify real password fields by returning their full `inputValue()`.
+
+**`type` never substitutes a secret.** `type` maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `fill` (MCP `browser_type`) and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=app type APP_PASSWORD` types the literal characters `APP_PASSWORD` into the page and produces a failed login that looks like a wrong-password event. Verified on 2026-07-27 against installed `@playwright/cli` 0.1.0 and re-confirmed in published 0.1.17.
+
+**Post-fill verification is mandatory.** `fill` can write the secret into a different input while it exits `0` and prints the correct locator. `locator.fill()` focuses the target in an injected in-page script, then the driver inserts the text out of process with `page.keyboard.insertText()`, which goes to whatever holds the focus at that moment. Read back per-field value **LENGTHS** only, never values. Confirm the target field's length equals the secret's length and no other field's length changed. Do not submit the form when the check fails. See the `Secret Fill Verification` principle in `SKILL.md`.
 
 **Validation pitfall:** Dummy values in `PLAYWRIGHT_MCP_SECRETS_FILE` are still secrets. If a wrapper reads a field value after filling from a dummy secret key, expect the CLI response redaction layer to return `<secret>KEY_NAME</secret>` rather than the literal dummy value. Validate that command output uses `process.env['KEY_NAME']` and does not print the raw value.
 

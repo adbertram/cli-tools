@@ -113,8 +113,39 @@ node -e 'const fs=require("node:fs"); const path=require("node:path"); const {cr
 <principle name="fill vs type">
 - `fill REF "text"` — Replaces existing content instantly (like clearing + pasting). Requires a REF. Use for most form fields.
 - `type "text"` — Types character by character into the currently focused element. **Takes only text, no REF.** Focus the target first (e.g., `click REF`) before `type`. Use when the field has autocomplete, live search, or key-by-key event handlers. Add `--submit` to press Enter after typing.
-- For password/API-key/token fields, do not pass the real secret value as the `fill`/`type` text and do not embed it in `run-code`; command output includes the generated Playwright code. Instead, open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` pointing to a dotenv file, then pass the secret key name to `fill` or `type`, e.g. `playwright-cli -s=pp fill REF PAYPAL_PASS`. The CLI fills the secret value and redacts it from output as `<secret>PAYPAL_PASS</secret>`.
+- For password/API-key/token fields, do not pass the real secret value as the `fill` text and do not embed it in `run-code`; command output includes the generated Playwright code. Instead, open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` pointing to a dotenv file, then pass the secret key name to `fill` only, e.g. `playwright-cli -s=pp fill REF PAYPAL_PASS`. The CLI fills the secret value and redacts it from output as `<secret>PAYPAL_PASS</secret>`.
+- **Only `fill` substitutes a secret key. `type` does not. Never pass a secret key name to `type`.** The CLI `fill` command maps to the MCP tool `browser_type`, which calls `lookupSecret`. The CLI `type` command maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `browser_type` and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=x type MY_KEY` types the literal characters `MY_KEY` into the page. The result is a failed login that looks like a wrong-password event. There is no CLI command that types a secret key by key. Verified on 2026-07-27 against installed `@playwright/cli` 0.1.0 and re-confirmed in published 0.1.17.
+- **Every secret `fill` requires the post-fill length check.** See the `Secret Fill Verification` principle below.
 - If `click REF` on a visible submit control is blocked by an overlay or intercepted pointer events, use keyboard submission from the focused field, such as `playwright-cli press Enter` or `playwright-cli fill REF "text" --submit`, before reaching for raw DOM submission.
+</principle>
+
+<principle name="Secret Fill Verification (MANDATORY)">
+`fill` can write the secret into a **different** input while it exits `0` and prints the correct locator. Playwright's `locator.fill()` runs in two phases. An injected in-page script focuses the target element and returns `needsinput`. The driver then calls `page.keyboard.insertText(value)` out of process, and that text goes to whatever holds the focus at that moment. A page that forces the focus back to another field receives the secret. The printed generated code comes from ref resolution, not from the write, so the printed locator is cosmetic. Exit status `0` is not proof. `click REF` before `fill` does not prevent this.
+
+After every secret `fill`, read back the per-field value **LENGTHS** and confirm two facts:
+1. The intended field's value length equals the secret's length.
+2. No other field's value length changed.
+
+Never read, print, or log a field value. Read `value.length` only.
+
+Take a baseline before the `fill`, then check after the `fill`:
+
+```bash
+guard=/Users/adam/Dropbox/GitRepos/Agents/skills/global/browser-automation/scripts/verify-secret-fill.sh
+"$guard" baseline pp /tmp/pw-base.json
+playwright-cli -s=pp fill REF PAYPAL_PASS
+"$guard" check pp /tmp/pp.env PAYPAL_PASS '#password' /tmp/pw-base.json
+```
+
+The guard prints `PW_GUARD_OK` and exits `0` only when both facts hold. On `PW_GUARD_FAIL`, **do not submit the form.** Clear the polluted field, resolve why the focus moved, and fill again. On a two-step login, submit the email step first so the password field genuinely accepts the focus. Do not set the value with `eval` or `run-code`; that puts the plaintext secret on the command line and skips the page's input events.
+
+The inline equivalent of the length read:
+
+```bash
+playwright-cli -s=pp eval "() => Array.from(document.querySelectorAll('input,textarea')).map(el => ({ sel: el.id, type: el.type, len: el.value.length }))"
+```
+
+A `fill` that puts the literal secret key name into the page is a different failure: the secrets file path was missing or unreadable. Stop, and rerun with the real readable `PLAYWRIGHT_MCP_SECRETS_FILE` path. Do not keep submitting the form.
 </principle>
 
 <principle name="CAPTCHA and Disabled Submit Controls">
@@ -223,7 +254,7 @@ for `### Error`.
 <principle name="Verify Form Mutations">
 `run-code` expects a JavaScript function/callable expression invoked with the `page` object. Do not pass top-level statements such as `await page.title();` or `const title = await page.title();`; use `async (page) => { ... }` for multi-statement snippets. Runtime syntax errors can print a markdown `### Error` block while the process still exits `0`, so inspect stdout for `### Error` before treating a `run-code` result as successful.
 
-Do not assume Node globals are available in `run-code`. In this environment, `process` is `undefined`, `require(...)` fails with `ReferenceError: require is not defined`, and dynamic `import(...)` can fail with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`. For secrets, do not use `process.env` in `run-code`; open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` and use normal snapshot-ref `fill`/`type` commands with the secret key name.
+Do not assume Node globals are available in `run-code`. In this environment, `process` is `undefined`, `require(...)` fails with `ReferenceError: require is not defined`, and dynamic `import(...)` can fail with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`. For secrets, do not use `process.env` in `run-code`; open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` and use a snapshot-ref `fill` command with the secret key name. Only `fill` substitutes a secret key. Never pass a secret key name to `type`, because `type` sends the literal characters. Verify every secret `fill` with the length check in the `Secret Fill Verification` principle.
 
 After dropdown changes, verify the live DOM value with `playwright-cli eval`. If `playwright-cli select REF VALUE` reports success but the selected value is still empty, set the element value with `eval` and dispatch a bubbling `change` event, then verify again.
 </principle>
@@ -243,4 +274,6 @@ For payment or credential flows, minimize exploratory commands once sensitive pa
 - Snapshot taken before any element-ref interaction command.
 - `-s=<session>` used when multiple sessions exist.
 - Command stdout inspected for `### Error`; when present, final page state is verified before continuing.
+- Secret key names passed to `fill` only, never to `type`.
+- Every secret `fill` followed by the per-field length check, and the form not submitted when the check fails.
 </success_criteria>

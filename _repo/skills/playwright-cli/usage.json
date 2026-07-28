@@ -10,7 +10,9 @@
     "All commands are flat (single-word or hyphenated). The binary does NOT use grouped subcommands like 'browser open' or 'page snapshot'.",
     "The category field below mirrors the sections shown in 'playwright-cli --help' and is reference-only — it is NOT a command prefix.",
     "On macOS, keep --session/-s names short. The CLI embeds the session name in a Unix socket path under the system temp directory, and long names can fail with listen EINVAL when the full socket path exceeds the OS limit.",
-    "For secret entry, set PLAYWRIGHT_MCP_SECRETS_FILE to a dotenv file when opening the session, then pass the secret key name as the fill/type text. Do not use run-code with process.env; process is unavailable in the run-code VM."
+    "For secret entry, set PLAYWRIGHT_MCP_SECRETS_FILE to a dotenv file when opening the session, then pass the secret key name as the fill text. Do not use run-code with process.env; process is unavailable in the run-code VM.",
+    "Only fill substitutes a secret key. fill maps to the MCP tool browser_type, which calls lookupSecret. NEVER pass a secret key name to type: type maps to browser_press_sequentially, whose handler calls page.keyboard.type(text) with no lookupSecret call, so it types the literal key name into the page and produces a failed login that looks like a wrong-password event. Verified 2026-07-27 against installed @playwright/cli 0.1.0 and re-confirmed in published 0.1.17.",
+    "MANDATORY after every secret fill: read back per-field value LENGTHS only, never values, and confirm the target field length equals the secret length and no other field length changed. locator.fill() focuses the target in an injected script, then inserts the text out of process with page.keyboard.insertText(), so a page that moves focus receives the secret in a different input while the command still exits 0 and prints the correct locator. Do not submit the form when the check fails. See the 'Secret Fill Verification' principle in SKILL.md."
   ],
   "global_options": [
     {"name": "--help", "type": "TEXT", "required": false, "help": "Print help; optionally pass a command name for command-specific help"},
