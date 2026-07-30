@@ -284,6 +284,7 @@ nextdoor classifieds list --limit 1
     "title": "Pokemon Card Tins Collection",
     "price": "$150",
     "original_price": null,
+    "variant": null,
     "subtitle": "9 hr ago · 8.7 mi · Evansville",
     "image_url": "https://us1-photo.nextdoor.com/post_photos/fc/0c/fc0c10ef47365f4aeba0911d9dff05f6.jpeg",
     "url": "https://nextdoor.com/for_sale_and_free/e0a5a7da-7c11-410a-b185-930cca2a1818/?init_source=search"
@@ -431,6 +432,7 @@ genuinely does not carry it:
 | `title` | Listing title |
 | `price` | Current price display (`$150`, `FREE`); `null` when the listing shows no price |
 | `original_price` | Struck-through pre-discount price; `null` when not discounted |
+| `variant` | Selected variant line under the title, e.g. `Color: Rescue Red/Navy/White`; `null` when the listing has none |
 | `subtitle` | Nextdoor's own summary line, e.g. `9 hr ago · 8.7 mi · Evansville` |
 | `image_url` | Primary listing photo |
 | `url` | **Direct listing URL** |

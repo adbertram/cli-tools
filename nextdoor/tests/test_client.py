@@ -194,6 +194,7 @@ def test_normalize_classified_item_splits_price_from_title():
         "title": "Pokemon Card Tins Collection",
         "price": "$150",
         "original_price": None,
+        "variant": None,
         "subtitle": "9 hr ago · 8.7 mi · Evansville",
         "image_url": "https://us1-photo.nextdoor.com/x.jpeg",
         "url": "https://nextdoor.com/for_sale_and_free/e0a5a7da/?init_source=search",
@@ -241,10 +242,32 @@ def test_normalize_classified_item_sponsored_slot_has_no_listing_fields():
     assert record["url"] is None
 
 
-def test_normalize_classified_item_rejects_unknown_title_shape():
-    with pytest.raises(ClientError) as exc:
-        normalize_classified_item(_grid_node("a\nb\nc", [_run(0, 5)]))
-    assert "Unexpected classified title shape" in str(exc.value)
+def test_normalize_classified_item_variant_line_becomes_variant_field():
+    # Real captured shape that used to crash the whole classifieds query:
+    # a price line, a title line, and a "Color: ..." variant line.
+    record = normalize_classified_item(
+        _grid_node(
+            "$260\nNew YETI Tundra 45 Hard Cooler\nColor: Rescue Red/Navy/White",
+            [_run(0, 4)],
+        )
+    )
+    assert record["title"] == "New YETI Tundra 45 Hard Cooler"
+    assert record["price"] == "$260"
+    assert record["original_price"] is None
+    assert record["variant"] == "Color: Rescue Red/Navy/White"
+
+
+def test_normalize_classified_item_two_line_title_has_no_variant():
+    record = normalize_classified_item(
+        _grid_node("$150\nPokemon Card Tins Collection", [_run(0, 4)])
+    )
+    assert record["variant"] is None
+
+
+def test_normalize_classified_item_extra_variant_lines_are_newline_joined():
+    record = normalize_classified_item(_grid_node("$5\nWidget\nColor: Red\nSize: L", [_run(0, 2)]))
+    assert record["title"] == "Widget"
+    assert record["variant"] == "Color: Red\nSize: L"
 
 
 def test_normalize_search_result_non_grid_title_is_verbatim():

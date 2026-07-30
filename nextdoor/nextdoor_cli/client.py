@@ -10,6 +10,7 @@ Nextdoor routes each persisted query as ``POST {base_url}/<operationName>``
 the path and the persisted-query hash travels in the request body.
 """
 
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -39,10 +40,213 @@ from .config import (
     get_config,
 )
 
-# Persisted-query hashes for each operation. These travel in the request body;
-# Nextdoor rotates them with frontend builds, so they are stored as data here.
+# Full GraphQL query documents for each operation, keyed by operation name.
+#
+# Nextdoor's Automatic Persisted Query (APQ) protocol normally lets a client
+# send just a sha256 hash once the server has the matching query text
+# registered, falling back to sending the hash *and* the full document when
+# the server answers "PersistedQueryNotFound" (see ``_graphql()``). Nextdoor's
+# own frontend never sends that fallback in practice: every request captured
+# live from it (news feed, For Sale & Free grid, and global search pages) was
+# hash-only, and its production JS bundles (searched live, ~7MB across all 11
+# loaded chunks) contain zero occurrences of any of these operation names --
+# the query text is stripped from the client at build time. That means
+# Nextdoor's own internal document text is unrecoverable by design, and a
+# hash we merely copied from live traffic would break again the next time
+# Nextdoor rotates it with no way to recover.
+#
+# So this client owns its own documents instead: each one below was authored
+# from the exact fields ``normalize_*`` (below) already relies on -- taken
+# from real captured response fixtures in ``tests/fixtures/`` -- and verified
+# live against Nextdoor's GraphQL schema by executing it end-to-end through
+# the authenticated session (introspection is disabled server-side, so
+# argument/type names came from the server's own field-validation error
+# messages, e.g. "Cannot query field 'x' on type 'Y'. Did you mean to use an
+# inline fragment on 'Z'?", not from guessing). See ``PERSISTED_QUERIES``
+# below for how each operation's fast-path hash relates to its document here
+# (derived-and-primary for the two operations that were actually broken;
+# fallback-only, alongside Nextdoor's own still-working hash, for the rest).
+#
+# Known limitation: ``ClassifiedFeedItem`` intentionally omits
+# ``locationGeoTag.location.formattedName`` (and therefore the ``location``
+# field stays ``None`` if this fallback ever fires). That field requires a
+# ``format: GeoLocationNameFormat!`` enum argument whose legal values could
+# not be discovered without introspection (multiple plausible guesses --
+# FULL, DEFAULT, STANDARD, FORMATTED, SHORT_NAME, LONG -- were all rejected
+# live); every other field ``normalize_classified_detail`` uses is present.
+PERSISTED_QUERY_DOCUMENTS = {
+    "PersonalizedFeed": """query PersonalizedFeed($mainFeedArgs: MainFeedArgs!) {
+  me {
+    personalizedFeed(mainFeedArgs: $mainFeedArgs) {
+      feedItems {
+        feedItemType
+        contentId
+        ... on FeedItemPost {
+          post {
+            postType
+            subject
+            body
+            author { displayName }
+            createdAt { epochMillis }
+            detailLink { href }
+            classified { title price currency description }
+          }
+        }
+        ... on FeedItemPromo {
+          promo {
+            ... on Ad {
+              creative { sponsorName { text } }
+            }
+          }
+        }
+      }
+    }
+  }
+}""",
+    "getMe": """query getMe {
+  me {
+    user {
+      id
+      legacyUserId
+      secureUserId
+      name { shortName displayName }
+      gender
+      isAvailable
+      userSocialGraphData { connectionStatus }
+      __typename
+    }
+  }
+}""",
+    "dashboardBadges": """query dashboardBadges {
+  me {
+    shortcuts {
+      type
+      title
+      badges
+      __typename
+    }
+  }
+}""",
+    # The For Sale & Free grid (https://nextdoor.com/for_sale_and_free/).
+    "searchClassifiedV2": """query searchClassifiedV2($classifiedSearchArgs: ClassifiedSearchArgs!) {
+  searchClassifiedFeed(classifiedSearchArgs: $classifiedSearchArgs) {
+    searchResultView {
+      ... on SearchResultGrid {
+        searchResultItemsV2 {
+          pageInfo { hasNextPage endCursor }
+          edges {
+            node {
+              itemType
+              item {
+                __typename
+                ... on SearchResultGridItem {
+                  contentId
+                  title { text styles { start length attributes { isStrikethrough } } }
+                  subtitle { text }
+                  image { image { url } }
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}""",
+    # One For Sale & Free listing detail page
+    # (https://nextdoor.com/for_sale_and_free/<uuid>/).
+    "ClassifiedFeedItem": """query ClassifiedFeedItem($classifiedId: NextdoorID!) {
+  classifiedFeedItem(classifiedId: $classifiedId) {
+    classified {
+      legacyClassifiedId
+      title
+      price
+      originalPrice
+      currency
+      status
+      isSold
+      topic { name { singularName } }
+      author {
+        ... on UserAuthor {
+          user { name { displayName } }
+        }
+      }
+      distance { miles }
+      createdAt { epochMillis }
+      expiresAt { epochMillis }
+      photos { url }
+      shareText
+      description
+    }
+  }
+}""",
+    # Nextdoor's real global content search (https://nextdoor.com/search/).
+    "search": """query search($excludeFirstSection: Boolean, $mainSearchArgs: MainSearchArgs!) {
+  searchFeedV2(excludeFirstSection: $excludeFirstSection, mainSearchArgs: $mainSearchArgs) {
+    searchResultView {
+      ... on SearchResultGrid {
+        type
+        searchResultItemsV2 {
+          edges {
+            node {
+              itemType
+              item {
+                __typename
+                ... on SearchResultGridItem {
+                  contentId
+                  contentType
+                  title { text styles { start length attributes { isStrikethrough } } }
+                  subtitle { text }
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+      ... on SearchResultSection {
+        type
+        searchResultItems {
+          edges {
+            node {
+              __typename
+              contentId
+              contentType
+              title { text }
+              subtitle { text }
+              url
+            }
+          }
+        }
+      }
+    }
+  }
+}""",
+}
+
+# Fast-path persisted-query hashes.
+#
+# ``PersonalizedFeed`` and ``search`` were the two operations actually broken
+# (their old hardcoded hashes were stale -- confirmed via live capture: the
+# real production frontend now sends different hashes for both, which is
+# exactly what "PersistedQueryNotFound" for every call meant). Their fast
+# path is therefore derived from the document THIS CLIENT owns, so it no
+# longer depends on matching Nextdoor's internal, frequently-rotating build
+# hash for these two at all -- any future rotation is handled entirely by the
+# APQ fallback in ``_graphql()`` re-registering the same, unchanging hash.
+#
+# The other four operations (getMe, dashboardBadges, searchClassifiedV2,
+# ClassifiedFeedItem) already work correctly with Nextdoor's own current
+# production hash (verified live) and, for getMe/ClassifiedFeedItem, that
+# hash's query returns MORE fields than this client's authored document
+# below (e.g. getMe's full raw profile; ClassifiedFeedItem's
+# ``location.formattedName``). Switching their fast path to the authored
+# hash would silently narrow already-working output, so their hardcoded
+# hash is kept as primary; the matching entry in ``PERSISTED_QUERY_DOCUMENTS``
+# is used only as the APQ fallback if that hash is ever rotated/evicted.
 PERSISTED_QUERIES = {
-    "PersonalizedFeed": "50d786132cd0779d6c34b9e683ea5fcb82e9ff71866e6c8bd32f43c805c03ad8",
+    "PersonalizedFeed": hashlib.sha256(PERSISTED_QUERY_DOCUMENTS["PersonalizedFeed"].encode()).hexdigest(),
     "getMe": "17d16335240791a39640e8cebc220c3f84786668a46245176749d1e5e4eb21e1",
     "dashboardBadges": "f721ff14d106e321b4019f064e130331e5b73c091c3675b55866b3775b5cd738",
     # The For Sale & Free grid (https://nextdoor.com/for_sale_and_free/).
@@ -50,8 +254,7 @@ PERSISTED_QUERIES = {
     # One For Sale & Free listing detail page
     # (https://nextdoor.com/for_sale_and_free/<uuid>/).
     "ClassifiedFeedItem": "0d413ce56d2ef7b14155c237ff58fbc34a4e0206fadd2e02d006f145493fd9d6",
-    # Nextdoor's real global content search (https://nextdoor.com/search/).
-    "search": "394b62b3a306ab874cfa4eb5c2b01de9dee85f8f671dfec9b012a4d0939196f0",
+    "search": hashlib.sha256(PERSISTED_QUERY_DOCUMENTS["search"].encode()).hexdigest(),
 }
 
 
@@ -60,7 +263,7 @@ PERSISTED_QUERIES = {
 # so the display columns can never drift from the record fields. Shapes are
 # derived from real captured Nextdoor GraphQL responses.
 FEED_COLUMNS = ("id", "type", "title", "price", "created_at", "url")
-CLASSIFIED_COLUMNS = ("id", "title", "price", "subtitle", "url")
+CLASSIFIED_COLUMNS = ("id", "title", "price", "variant", "subtitle", "url")
 SEARCH_COLUMNS = ("id", "section", "type", "title", "url")
 NOTIFICATION_COLUMNS = ("id", "label", "badges")
 
@@ -200,26 +403,32 @@ def normalize_feed_item(raw: dict) -> dict:
 
 
 def _split_priced_title(styled: dict) -> dict:
-    """Split a classified grid item's ``StyledText`` title into price + title.
+    """Split a classified grid item's ``StyledText`` title into price + title
+    (+ optional variant).
 
-    Nextdoor packs the price display and the listing title into ONE StyledText
-    separated by a newline: ``"$150\\nPokemon Card Tins Collection"``. A
-    listing with no price is a single line (``"Garage sale"``); a discounted
-    listing renders both prices on the price line
-    (``"$175 $250\\nWoods RM59 finishing mower"``) and marks the original
-    price with a strikethrough style run. The style runs — not currency
-    guesswork — decide which characters are struck through, so the split is
-    structural. Anything other than one or two lines is an unknown shape and
-    fails loudly.
+    Nextdoor packs the price display, the listing title, and (for listings
+    with a selected variant, e.g. color) a variant line into ONE StyledText
+    separated by newlines: ``"$150\\nPokemon Card Tins Collection"`` (no
+    variant), ``"$260\\nNew YETI Tundra 45 Hard Cooler\\nColor: Rescue
+    Red/Navy/White"`` (variant line). A listing with no price is a single
+    line (``"Garage sale"``); a discounted listing renders both prices on the
+    price line (``"$175 $250\\nWoods RM59 finishing mower"``) and marks the
+    original price with a strikethrough style run. The style runs — not
+    currency guesswork — decide which characters are struck through, so the
+    split is structural.
+
+    Line roles by count: 1 line = title only (no price); 2 lines = price
+    line + title; 3+ lines = price line + title + one or more variant lines
+    (joined back with newlines into a single ``variant`` string). Every
+    return carries a ``variant`` key so callers never branch on its absence.
     """
     text = required_path(styled, ["text"], str)
     lines = text.split("\n")
     if len(lines) == 1:
-        return {"title": lines[0], "price": None, "original_price": None}
-    if len(lines) != 2:
-        raise ClientError(f"Unexpected classified title shape ({len(lines)} lines): {text!r}")
+        return {"title": lines[0], "price": None, "original_price": None, "variant": None}
 
-    price_line, title = lines
+    price_line, title = lines[0], lines[1]
+    variant_lines = lines[2:]
     struck = set()
     for style in _optional_list(styled, "styles"):
         if not required_path(style, ["attributes", "isStrikethrough"], bool):
@@ -233,6 +442,7 @@ def _split_priced_title(styled: dict) -> dict:
         "title": title,
         "price": price or None,
         "original_price": original_price or None,
+        "variant": "\n".join(variant_lines) or None,
     }
 
 
@@ -248,13 +458,14 @@ def _result_item_parts(item: dict) -> dict:
     """
     styled = _optional_dict(item, "title")
     if styled is None:
-        return {"title": None, "price": None, "original_price": None}
+        return {"title": None, "price": None, "original_price": None, "variant": None}
     if item.get("__typename") == "SearchResultGridItem":
         return _split_priced_title(styled)
     return {
         "title": required_path(styled, ["text"], str),
         "price": None,
         "original_price": None,
+        "variant": None,
     }
 
 
@@ -277,6 +488,7 @@ def normalize_classified_item(raw: dict) -> dict:
         "title": parts["title"],
         "price": parts["price"],
         "original_price": parts["original_price"],
+        "variant": parts["variant"],
         "subtitle": subtitle.get("text") if subtitle is not None else None,
         "image_url": image.get("url") if image is not None else None,
         "url": item.get("url"),
@@ -384,6 +596,15 @@ def _error_message(err) -> str:
     if isinstance(err, dict) and isinstance(err.get("message"), str):
         return err["message"]
     return str(err)
+
+
+def _is_persisted_query_not_found(errors: list) -> bool:
+    """True when a GraphQL ``errors`` array is Apollo's ``PersistedQueryNotFound``.
+
+    Confirmed live against Nextdoor: an unregistered/unknown hash answers with
+    HTTP 200 and exactly ``{"errors": [{"message": "PersistedQueryNotFound", ...}]}``.
+    """
+    return any(_error_message(err) == "PersistedQueryNotFound" for err in errors)
 
 
 def _feed_query_variables(limit: int, sort_order: str) -> dict:
@@ -518,40 +739,32 @@ class NextdoorClient:
     def _graphql(self, operation: str, variables: Optional[Dict] = None) -> Dict:
         """POST a persisted-query GraphQL operation and return its ``data`` object.
 
-        Nextdoor routes the operation by path: ``{base_url}/<operation>``.
+        Nextdoor routes the operation by path: ``{base_url}/<operation>``. This
+        sends the fast-path hash-only request first; on a ``PersistedQueryNotFound``
+        error (Nextdoor evicts or rotates registered hashes independently of this
+        client), it retries exactly once with the full query document from
+        ``PERSISTED_QUERY_DOCUMENTS`` included, per the standard Apollo Automatic
+        Persisted Query protocol. See the comment above ``PERSISTED_QUERY_DOCUMENTS``
+        for why this client owns its own documents instead of Nextdoor's.
         """
         if operation not in PERSISTED_QUERIES:
             raise ClientError(f"Unknown Nextdoor GraphQL operation: {operation}")
+        variables = {} if variables is None else variables
 
-        payload = {
-            "operationName": operation,
-            "variables": {} if variables is None else variables,
-            "extensions": {
-                "persistedQuery": {
-                    "version": 1,
-                    "sha256Hash": PERSISTED_QUERIES[operation],
-                }
-            },
-        }
-        url = f"{self.base_url}/{operation}"
-        response = self._request("POST", url, json_body=payload)
-
-        if response.status_code in (401, 403) or _is_login_wall(response.text):
-            raise ClientError(
-                "Nextdoor session is not authenticated (server returned the login "
-                "page). Run 'nextdoor auth login --force' to refresh the session."
-            )
-        if not response.ok:
-            raise ClientError(f"HTTP {response.status_code}: {response.text[:300]}")
-
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise ClientError(
-                f"Nextdoor returned a non-JSON response for {operation}: {response.text[:200]}"
-            ) from exc
-
+        body = self._graphql_post(operation, variables, PERSISTED_QUERIES[operation])
         errors = _optional_list(body, "errors")
+        if errors and _is_persisted_query_not_found(errors):
+            document = PERSISTED_QUERY_DOCUMENTS.get(operation)
+            if document is None:
+                raise ClientError(
+                    f"Nextdoor rejected the persisted query for {operation} "
+                    "(PersistedQueryNotFound) and no fallback query document is "
+                    "available for this operation."
+                )
+            fallback_hash = hashlib.sha256(document.encode()).hexdigest()
+            body = self._graphql_post(operation, variables, fallback_hash, query=document)
+            errors = _optional_list(body, "errors")
+
         if errors:
             messages = "; ".join(_error_message(err) for err in errors)
             if any(
@@ -578,6 +791,48 @@ class NextdoorClient:
                 "user). Run 'nextdoor auth login --force' to refresh the session."
             )
         return data
+
+    def _graphql_post(
+        self,
+        operation: str,
+        variables: Dict,
+        sha256_hash: str,
+        query: Optional[str] = None,
+    ) -> Dict:
+        """POST one persisted-query GraphQL request and return its parsed JSON body.
+
+        ``query`` is omitted for the normal fast (hash-only) path and included
+        only for the APQ fallback retry in ``_graphql()``.
+        """
+        payload = {
+            "operationName": operation,
+            "variables": variables,
+            "extensions": {
+                "persistedQuery": {
+                    "version": 1,
+                    "sha256Hash": sha256_hash,
+                }
+            },
+        }
+        if query is not None:
+            payload["query"] = query
+        url = f"{self.base_url}/{operation}"
+        response = self._request("POST", url, json_body=payload)
+
+        if response.status_code in (401, 403) or _is_login_wall(response.text):
+            raise ClientError(
+                "Nextdoor session is not authenticated (server returned the login "
+                "page). Run 'nextdoor auth login --force' to refresh the session."
+            )
+        if not response.ok:
+            raise ClientError(f"HTTP {response.status_code}: {response.text[:300]}")
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise ClientError(
+                f"Nextdoor returned a non-JSON response for {operation}: {response.text[:200]}"
+            ) from exc
 
     def _request(self, method: str, url: str, json_body: Optional[Dict] = None) -> requests.Response:
         def send() -> requests.Response:
