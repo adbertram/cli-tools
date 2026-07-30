@@ -75,7 +75,12 @@ def refund_issue(
             )
         )
 
-        if result.get("success"):
+        # A dry run fills the form and stops; it issues nothing. Reporting it as
+        # "issued" gives the operator a false picture of the refund state, which
+        # is the same failure class as a false verification result.
+        if result.get("dry_run"):
+            print_success(f"Dry run only — NO refund was issued for order {order_id}")
+        elif result.get("success"):
             print_success(f"Refund of ${amount:.2f} issued for order {order_id}")
         print_json(result)
 

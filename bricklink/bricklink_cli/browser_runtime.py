@@ -857,19 +857,24 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return {"order_id": order_id, **info, "refund_page_url": page.url}
 
-    def _parse_prior_refunds_amount(self, value) -> float:
+    def _parse_prior_refunds_amount(self, value) -> float | None:
         """Parse a prior_refunds string like 'US $3.50' into a float.
 
-        Returns 0.0 if None/empty/unparseable — an UNPARSEABLE value is treated
-        the same as "no prior refunds" for the before-snapshot; the delta check
-        after submission is what actually proves success.
+        Returns ``None`` when the value is missing or unparseable. ``None``
+        means "the page did not tell us", which is NOT the same as $0.00.
+        BrickLink renders a literal ``"US $0.00"`` for an order that has never
+        been refunded (verified live against order 30891363 on 2026-07-30), so
+        a missing value can only mean the page failed to render or the parser
+        lost its anchor. Substituting 0.0 there previously let an unreadable
+        page masquerade as a proven-zero page, which is how a posted refund got
+        reported as "did NOT post".
         """
         if not value:
-            return 0.0
+            return None
         import re as _re
         m = _re.search(r"([0-9]+(?:\.[0-9]+)?)", str(value))
         if not m:
-            return 0.0
+            return None
         return float(m.group(1))
 
     @staticmethod
@@ -921,10 +926,108 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 return lbl
         return None
 
-    def _read_prior_refunds_total(self, order_id: str) -> float:
-        """Fetch the refund page fresh and return prior refunds as a float ($)."""
+    def _read_prior_refunds_total(self, order_id: str) -> float | None:
+        """Fetch the refund page fresh and return prior refunds as a float ($).
+
+        Returns ``None`` when the page did not yield a readable value. The raw
+        string is logged on every read so a future incident can distinguish
+        "page said $0.00" from "page said nothing" — the activity log used to
+        record only the collapsed float, which made those two cases
+        indistinguishable after the fact.
+        """
         info = self.get_refund_info(order_id)
-        return self._parse_prior_refunds_amount(info.get("prior_refunds"))
+        raw = info.get("prior_refunds")
+        amount = self._parse_prior_refunds_amount(raw)
+        activity.info(
+            "refund page read for order %s: prior_refunds_raw=%r parsed=%s refund_status=%r",
+            order_id, raw,
+            "unreadable" if amount is None else f"${amount:.2f}",
+            info.get("refund_status"),
+        )
+        return amount
+
+    # BrickLink's refund page is EVENTUALLY CONSISTENT. The submitted refund
+    # does not land in "Prior refund(s)" the moment the confirm button is
+    # clicked. Measured on order 32175236 (2026-07-30, activity log): the page
+    # still read $0.00 eleven seconds after submit and read $1.00 five minutes
+    # later. The previous 3-attempt / ~6-second budget expired while the refund
+    # was still in flight, then asserted "The refund did NOT post" — which
+    # invites the operator to re-issue and double-refund a real buyer.
+    # Cumulative budget below: 120 seconds.
+    REFUND_VERIFY_BACKOFF_SECONDS = (2, 3, 5, 8, 12, 15, 20, 25, 30)
+
+    def _verify_refund_posted(self, page, order_id: str, prior_before: float,
+                              expected_delta: float | None) -> tuple[float, float]:
+        """Poll the refund page until the submitted refund becomes visible.
+
+        Returns ``(prior_after, actual_delta)`` once the increase is confirmed.
+
+        Raises ``RuntimeError`` describing the outcome as UNCONFIRMED when the
+        budget is exhausted. It must NEVER claim the refund did not post: by the
+        time this runs the confirm button has already been clicked and the money
+        may have moved. A positive reading proves the refund posted; the absence
+        of a reading proves nothing at all.
+        """
+        target = prior_before + expected_delta if expected_delta is not None else None
+        observations: list[str] = []
+        last_amount: float | None = None
+        elapsed = 0.0
+
+        for wait_seconds in self.REFUND_VERIFY_BACKOFF_SECONDS:
+            page.wait_for_timeout(int(wait_seconds * 1000))
+            elapsed += wait_seconds
+            try:
+                amount = self._read_prior_refunds_total(order_id)
+            except Exception as exc:
+                observations.append(
+                    f"+{elapsed:.0f}s read error: {type(exc).__name__}: {exc}"
+                )
+                continue
+            if amount is None:
+                observations.append(
+                    f"+{elapsed:.0f}s page returned no readable prior-refund amount"
+                )
+                continue
+
+            last_amount = amount
+            observations.append(f"+{elapsed:.0f}s prior_refunds=${amount:.2f}")
+            confirmed = (
+                amount > prior_before + 0.005 if target is None
+                else amount + 0.005 >= target
+            )
+            if confirmed:
+                actual_delta = round(amount - prior_before, 2)
+                activity.info(
+                    "refund CONFIRMED for order %s after %.0fs: prior_refunds "
+                    "$%.2f -> $%.2f (delta $%.2f)",
+                    order_id, elapsed, prior_before, amount, actual_delta,
+                )
+                return amount, actual_delta
+
+        trail = "; ".join(observations) or "no reads completed"
+        expected_str = (
+            f"reach ${target:.2f} (an increase of ${expected_delta:.2f})"
+            if target is not None
+            else f"rise above ${prior_before:.2f} (full refund)"
+        )
+        last_str = (
+            "never read successfully" if last_amount is None else f"${last_amount:.2f}"
+        )
+        activity.error(
+            "refund UNCONFIRMED for order %s after %.0fs; observations: %s",
+            order_id, elapsed, trail,
+        )
+        raise RuntimeError(
+            f"Refund state UNCONFIRMED for order {order_id}. The refund WAS submitted "
+            f"to Bricklink — the confirm button was clicked — but the refund page did "
+            f"not show the expected change within {elapsed:.0f}s. Expected prior_refunds "
+            f"to {expected_str}. Before=${prior_before:.2f}, last observed={last_str}. "
+            f"DO NOT re-issue this refund: Bricklink's refund page is eventually "
+            f"consistent and the refund may already have posted. Check "
+            f"`bricklink refund info {order_id}` or {self.REFUND_URL}?id={order_id} "
+            f"and only re-issue if prior refunds are genuinely unchanged. "
+            f"Read trail: {trail}"
+        )
 
     def _submit_refund(self, order_id: str, reason: str, details: str = None,
                        amount: float = None, full: bool = False, dry_run: bool = False) -> dict:
@@ -932,12 +1035,29 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         Verifies success by re-reading the refund page after submission and
         confirming that prior_refunds increased by at least the submitted
-        amount. Raises RuntimeError on any verification failure — never
-        silently reports success.
+        amount. Never silently reports success.
+
+        Failure semantics differ either side of the confirm click:
+        - BEFORE the click, an unreadable page raises and states plainly that
+          no refund was submitted.
+        - AFTER the click, a missing confirmation raises as UNCONFIRMED. The
+          money may already have moved, so the error tells the operator to
+          check the refund page rather than re-issue. See
+          ``_verify_refund_posted``.
         """
         try:
             # --- SNAPSHOT: capture prior refunds BEFORE submission ---
+            # An unreadable snapshot is a hard stop, not a zero. Nothing has
+            # been submitted yet, so failing here is safe and costs the buyer
+            # nothing; guessing $0.00 here would poison the delta check later.
             prior_before = self._read_prior_refunds_total(order_id)
+            if prior_before is None:
+                raise RuntimeError(
+                    f"Could not read prior refunds from the Bricklink refund page for "
+                    f"order {order_id} before submitting. NO refund was submitted. "
+                    "The page did not render a 'Prior refund(s)' amount — check that "
+                    f"{self.REFUND_URL}?id={order_id} loads and shows the refund form."
+                )
             activity.info(f"refund pre-submit prior_refunds=${prior_before:.2f} for order {order_id}")
 
             url = f"{self.REFUND_URL}?id={order_id}"
@@ -1200,43 +1320,9 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             # --- VERIFY: re-read refund page and confirm prior_refunds delta ---
             # Small tolerance for float/rounding (BL displays to 2 decimals).
             expected_delta = float(amount) if (amount is not None and not full) else None
-            # Retry read a couple of times — BL can take a moment to persist.
-            prior_after = prior_before
-            for attempt in range(3):
-                page.wait_for_timeout(1500)
-                try:
-                    prior_after = self._read_prior_refunds_total(order_id)
-                except Exception:
-                    continue
-                if expected_delta is None:
-                    # Full refund — any increase is enough
-                    if prior_after > prior_before + 0.005:
-                        break
-                else:
-                    if prior_after + 0.005 >= prior_before + expected_delta:
-                        break
-
-            actual_delta = round(prior_after - prior_before, 2)
-            activity.info(
-                f"refund post-submit prior_refunds=${prior_after:.2f} "
-                f"(delta=${actual_delta:.2f}) for order {order_id}"
+            prior_after, actual_delta = self._verify_refund_posted(
+                page, order_id, prior_before, expected_delta
             )
-
-            if full:
-                verified = prior_after > prior_before + 0.005
-            else:
-                verified = (prior_after + 0.005) >= (prior_before + expected_delta)
-
-            if not verified:
-                expected_str = (
-                    f"${expected_delta:.2f}" if expected_delta is not None else "(any amount, full refund)"
-                )
-                raise RuntimeError(
-                    f"Refund verification FAILED for order {order_id}. "
-                    f"Expected prior_refunds to increase by {expected_str}. "
-                    f"Before=${prior_before:.2f}, After=${prior_after:.2f}, "
-                    f"Delta=${actual_delta:.2f}. The refund did NOT post to Bricklink."
-                )
 
             result = {
                 "success": True,

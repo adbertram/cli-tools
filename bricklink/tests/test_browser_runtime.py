@@ -565,3 +565,182 @@ def test_get_refund_info_payment_not_found(monkeypatch):
 
     assert "Payment Not Found" in str(ei.value)
     runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/v3/order/refund.page?id=31748542")
+
+
+# ---------------------------------------------------------------------------
+# Refund verification — stale/eventually-consistent refund page.
+#
+# Incident 2026-07-30, order 32175236: `bricklink refund issue 32175236 1` posted
+# a real $1.00 refund, then exited non-zero with "The refund did NOT post to
+# Bricklink." The activity log shows the refund page still reading $0.00 eleven
+# seconds after the confirm click and $1.00 five minutes later. A false "did not
+# post" invites the operator to re-issue and double-refund a real buyer.
+# ---------------------------------------------------------------------------
+
+
+class _CountingPage:
+    """Records wait_for_timeout calls so a test can assert the retry budget."""
+
+    def __init__(self):
+        self.waits_ms = []
+
+    def wait_for_timeout(self, ms):
+        self.waits_ms.append(ms)
+
+
+def _refund_runtime(monkeypatch, reads):
+    """Runtime whose refund-page reads replay ``reads`` in order.
+
+    Each entry is either a float (a parsed amount), ``None`` (page rendered but
+    no readable amount), or an Exception instance (the read itself blew up).
+    """
+    runtime = _make_runtime(monkeypatch)
+    runtime.REFUND_URL = "https://www.bricklink.com/v3/order/refund.page"
+    remaining = list(reads)
+
+    def _read(order_id):
+        value = remaining.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    runtime._read_prior_refunds_total = _read
+    return runtime
+
+
+def test_parse_prior_refunds_returns_none_when_unreadable(monkeypatch):
+    """Missing/unparseable must be None, never a fabricated 0.0.
+
+    Bricklink renders a literal "US $0.00" for a never-refunded order, so an
+    absent value can only mean the page failed to render.
+    """
+    runtime = _make_runtime(monkeypatch)
+
+    assert runtime._parse_prior_refunds_amount("US $0.00") == 0.0
+    assert runtime._parse_prior_refunds_amount("US $3.50") == 3.50
+    assert runtime._parse_prior_refunds_amount(None) is None
+    assert runtime._parse_prior_refunds_amount("") is None
+    assert runtime._parse_prior_refunds_amount("--") is None
+
+
+def test_verify_refund_posted_confirms_after_stale_reads(monkeypatch):
+    """The exact incident shape: page lags, then catches up. Must confirm."""
+    runtime = _refund_runtime(monkeypatch, [0.0, 0.0, 0.0, 1.0])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    assert prior_after == 1.0
+    assert delta == 1.0
+    # Four attempts consumed, so the budget must outlast the ~6s the old code
+    # allowed. The incident needed more than 11 seconds.
+    assert sum(page.waits_ms) / 1000 >= 11
+
+
+def test_verify_refund_budget_outlasts_observed_lag(monkeypatch):
+    """The total retry budget must exceed the lag measured in the incident."""
+    from bricklink_cli.browser_runtime import BricklinkRuntimeBrowser
+
+    assert sum(BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS) >= 60
+
+
+def test_verify_refund_unconfirmed_never_claims_refund_did_not_post(monkeypatch):
+    """Budget exhausted on a stale page => UNCONFIRMED, not a failure claim."""
+    reads = [0.0] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "DO NOT re-issue" in message
+    assert "bricklink refund info 32175236" in message
+    # The observation trail must be in the error so the operator can see what
+    # was actually read and when.
+    assert "prior_refunds=$0.00" in message
+
+
+def test_verify_refund_unconfirmed_when_page_never_readable(monkeypatch):
+    """All reads unreadable => UNCONFIRMED, and never a $0.00 claim.
+
+    The old code collapsed an unreadable page to 0.0 and reported a $0.00
+    delta as proof the refund had not posted.
+    """
+    reads = [None] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "never read successfully" in message
+
+
+def test_verify_refund_unconfirmed_when_every_read_raises(monkeypatch):
+    """All reads raise => UNCONFIRMED naming the errors, not a silent zero.
+
+    The old loop swallowed read exceptions with a bare `continue`, left
+    prior_after at prior_before, and reported delta $0.00 as proof of failure.
+    """
+    reads = [RuntimeError("Bricklink server error at /v3/error/500.page")] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "Bricklink server error" in message
+
+
+def test_verify_full_refund_confirms_on_any_increase(monkeypatch):
+    """Full refunds have no expected amount — any increase confirms."""
+    runtime = _refund_runtime(monkeypatch, [0.0, 44.64])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "30850160", 0.0, None)
+
+    assert prior_after == 44.64
+    assert delta == 44.64
+
+
+def test_verify_partial_refund_on_top_of_existing_refund(monkeypatch):
+    """A second partial refund must clear prior_before + amount, not just > 0."""
+    runtime = _refund_runtime(monkeypatch, [8.43, 8.43, 10.43])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "30850160", 8.43, 2.0)
+
+    assert prior_after == 10.43
+    assert delta == 2.0
+
+
+def test_submit_refund_refuses_when_presubmit_read_is_unreadable(monkeypatch):
+    """An unreadable page BEFORE the click is a hard stop with no side effect."""
+    runtime = _refund_runtime(monkeypatch, [None])
+    runtime._get_page_for = MagicMock()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._submit_refund("32175236", "missing-unsatisfactory", amount=1.0)
+
+    message = str(ei.value)
+    assert "NO refund was submitted" in message
+    # Must fail before ever loading the refund form for submission.
+    runtime._get_page_for.assert_not_called()
