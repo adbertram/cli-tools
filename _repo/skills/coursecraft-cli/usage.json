@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-07-27T14:28:28Z",
+  "discovered_at": "2026-08-01T14:25:13Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -1800,13 +1800,13 @@
               "name": "--execution-method",
               "type": "bool",
               "required": false,
-              "help": "<Automated Walkthrough|Manual Instructor>                    Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+              "help": "<Automated Walkthrough|Manual Instructor>                   Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
             },
             {
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited"
+              "help": "<Manual Instructor Generation|Automatic Narration           How this demo's narration is produced: 'Manual Instructor Generation>                                                 Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited"
             },
             {
               "name": "--action-summary",
@@ -1839,6 +1839,12 @@
               "required": false,
               "help": "Demo script",
               "short": "-s"
+            },
+            {
+              "name": "--preserve-manual-voice-recording",
+              "type": "bool",
+              "required": false,
+              "help": "Keep a verified registered manual voice take after a changed script"
             },
             {
               "name": "--script-review-ai",
@@ -1984,7 +1990,7 @@
               "name": "--feedback-source",
               "type": "bool",
               "required": true,
-              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - VCP|CourseCraft|User>  Where this feedback came from: 'User' (Adam in the app), 'CourseCraft' (CLI/agent pipeline), 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'. Required"
+              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - Tech Reviewer|Pluralsight -       Where this feedback came from: 'User' (Adam in the app), 'CourseCraft' VCP|CourseCraft|User>                                                          (CLI/agent pipeline), 'Pluralsight', 'Pluralsight - CQA', 'Pluralsight - Tech Reviewer', or 'Pluralsight - VCP'. Required"
             },
             {
               "name": "--processing-status",
@@ -2096,48 +2102,48 @@
           ]
         },
         "list": {
-          "help": "List feedback records. The --demo, --slide, --clip, --module, and --course options return feedback rows linked to that exact record. Only one link option may be used at a time. Do not combine those link options with --filter; use jq for any additional field predicates after fetching linked feedback rows.",
+          "help": "List feedback records. The --demo, --slide, --clip, --module, and --course options return feedback rows linked to that exact record ID. Only one link option may be used at a time, and a link option cannot be combined with --filter.",
           "arguments": [],
           "options": [
             {
               "name": "--demo",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by linked demo record ID (client-side)",
+              "help": "Filter by linked demo record ID",
               "short": "-D"
             },
             {
               "name": "--slide",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by linked slide record ID (client-side)",
+              "help": "Filter by linked slide record ID",
               "short": "-S"
             },
             {
               "name": "--clip",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by linked clip record ID (client-side)",
+              "help": "Filter by linked clip record ID",
               "short": "-c"
             },
             {
               "name": "--module",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by linked module record ID (client-side)",
+              "help": "Filter by linked module record ID",
               "short": "-m"
             },
             {
               "name": "--course",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by linked course record ID (client-side)"
+              "help": "Filter by linked course record ID"
             },
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value. Cannot be combined with --demo, --slide, --clip, --module, or --course",
+              "help": "Filter: field:op:value (e.g., status:eq:Pending). Cannot be combined with --demo, --slide, --clip, --module, or --course",
               "short": "-f"
             },
             {
@@ -2238,7 +2244,7 @@
               "name": "--feedback-source",
               "type": "bool",
               "required": false,
-              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - VCP|CourseCraft|User>  Where this feedback came from: 'User', 'CourseCraft', 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'"
+              "help": "<Pluralsight|Pluralsight - CQA|Pluralsight - Tech Reviewer|Pluralsight -        Where this feedback came from: 'User', 'CourseCraft', 'Pluralsight', VCP|CourseCraft|User>                                                           'Pluralsight - CQA', 'Pluralsight - Tech Reviewer', or 'Pluralsight - VCP'"
             },
             {
               "name": "--processing-status",
@@ -2262,7 +2268,13 @@
               "name": "--remediation-claim",
               "type": "TEXT",
               "required": false,
-              "help": "Repeatable, machine-verified evidence for --remediation. REQUIRED with --processing-status Applied + --remediation. Forms: check:<dotted.check.id> | record:<recordId>:<Field>=<expected> | record:<recordId>:<Field>~=<substring>"
+              "help": "Repeatable, machine-verified evidence for --remediation. REQUIRED with"
+            },
+            {
+              "name": "--processing-status",
+              "type": "bool",
+              "required": false,
+              "help": "Applied + --remediation. Forms: check:<dotted.check.id> | record:<recordId>:<Field>=<expected> | record:<recordId>:<Field>~=<substring>"
             },
             {
               "name": "--element-type",
