@@ -1,8 +1,8 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-07-20T15:45:17Z",
-  "total_commands": 20,
+  "discovered_at": "2026-07-27T22:49:38Z",
+  "total_commands": 21,
   "global_options": [
     {
       "name": "--version",
@@ -284,12 +284,19 @@
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "icons": {
-      "help": "Search and download Pluralsight Author Kit icons",
+      "help": "Import, search, and download legacy Author Kit icons",
       "arguments": [],
       "options": [
         {
@@ -363,6 +370,25 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Replace the selected profile's legacy PNG archive.",
+          "arguments": [
+            {
+              "name": "archive",
+              "type": "PATH",
+              "required": true,
+              "help": "Legacy Pluralsight Author Kit PNG archive"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",
