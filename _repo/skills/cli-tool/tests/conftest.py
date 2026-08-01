@@ -12,7 +12,7 @@ from typing import Dict
 # Add tests directory to path so cli_test_utils can be imported
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cli_test_utils import discover_list_commands, run_cli_command
+from cli_test_utils import discover_list_commands, get_config_auth_metadata, run_cli_command
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
 CLI_SELECTION_FIXTURE = "cli_name"
@@ -24,28 +24,19 @@ CLI_NAME_REQUIRED_MESSAGE = (
 
 
 def _credential_types_from_config(cli_dir: Path, cli_name: str) -> list[str] | None:
-    """Return declared CREDENTIAL_TYPES, or None if the config cannot be parsed."""
-    config_file = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "config.py"
-    if not config_file.exists():
+    """Return declared CREDENTIAL_TYPES, or None if metadata cannot be loaded."""
+    metadata = get_config_auth_metadata(cli_dir, cli_name)
+    if metadata is None or not isinstance(metadata.get("credential_types"), list):
         return None
-    tree = ast.parse(config_file.read_text())
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "CREDENTIAL_TYPES":
-                if isinstance(node.value, ast.List):
-                    credential_types = []
-                    for element in node.value.elts:
-                        if isinstance(element, ast.Attribute):
-                            credential_types.append(element.attr.lower())
-                        elif isinstance(element, ast.Constant) and isinstance(element.value, str):
-                            credential_types.append(element.value.lower())
-                        else:
-                            return None
-                    return credential_types
-                return None
-    return None
+    return [str(value).lower() for value in metadata["credential_types"]]
+
+
+def _profile_auth_types_from_config(cli_dir: Path, cli_name: str) -> list[str]:
+    """Return declared PROFILE_AUTH_TYPES keys."""
+    metadata = get_config_auth_metadata(cli_dir, cli_name)
+    if metadata is None or not isinstance(metadata.get("profile_auth_types"), list):
+        return []
+    return [str(value).lower() for value in metadata["profile_auth_types"]]
 
 
 def _command_credentials_from_module(module_file: Path) -> dict[str, list[str]]:
@@ -95,15 +86,18 @@ def _required_credential_types_for_list_commands(
     cli_dir: Path,
     cli_name: str,
     list_commands: list[str],
+    *,
+    allowed_types: set[str] | None = None,
 ) -> list[str]:
     """Return credential types required by the discovered list commands."""
     pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
-    configured_credential_types = _credential_types_from_config(cli_dir, cli_name)
-    if configured_credential_types is None:
-        pytest.fail(
-            f"{cli_name} CREDENTIAL_TYPES could not be parsed from {pkg_dir / 'config.py'}."
-        )
-    configured_credential_type_set = set(configured_credential_types)
+    if allowed_types is None:
+        configured_credential_types = _credential_types_from_config(cli_dir, cli_name)
+        if configured_credential_types is None:
+            pytest.fail(
+                f"{cli_name} CREDENTIAL_TYPES could not be parsed from {pkg_dir / 'config.py'}."
+            )
+        allowed_types = set(configured_credential_types)
     commands_dir = pkg_dir / "commands"
     package_modules = {
         module_file.stem: module_file
@@ -157,10 +151,24 @@ def _required_credential_types_for_list_commands(
         required_types.update(
             credential_type
             for credential_type in credential_types
-            if credential_type in configured_credential_type_set
+            if credential_type in allowed_types
         )
 
     return sorted(required_types)
+
+
+def _required_profile_auth_types_for_list_commands(
+    cli_dir: Path,
+    cli_name: str,
+    list_commands: list[str],
+) -> list[str]:
+    """Return profile auth types required by the discovered list commands."""
+    return _required_credential_types_for_list_commands(
+        cli_dir,
+        cli_name,
+        list_commands,
+        allowed_types=set(_profile_auth_types_from_config(cli_dir, cli_name)),
+    )
 
 
 def _auth_required_message(cli_name: str, auth_command: str) -> str:
@@ -168,6 +176,13 @@ def _auth_required_message(cli_name: str, auth_command: str) -> str:
         f"Authentication required for complete live list-command testing. "
         f"Run '{auth_command}' to authenticate, then re-run tests."
     )
+
+
+def _profile_context(profile: dict) -> dict:
+    return {
+        "profile": profile.get("name"),
+        "auth_type": profile.get("auth_type"),
+    }
 
 
 def _profile_has_required_credentials(profile: dict, required_credential_types: list[str]) -> bool:
@@ -394,13 +409,56 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
         pytest.skip(f"{cli_name} has no auth subcommand (auth is optional for this CLI type)")
 
     credential_types = _credential_types_from_config(cli_dir, cli_name)
-    if credential_types == []:
-        return True
-
     list_commands, _ = discover_list_commands(cli_executable, cli_name, test_config, command_filter)
     required_credential_types = _required_credential_types_for_list_commands(cli_dir, cli_name, list_commands)
-    if not required_credential_types:
+    required_profile_auth_types = _required_profile_auth_types_for_list_commands(
+        cli_dir,
+        cli_name,
+        list_commands,
+    )
+    if not required_credential_types and not required_profile_auth_types:
         return True
+
+    profile_context = None
+    if required_profile_auth_types:
+        profile_result = run_cli_command(cli_executable, ["auth", "profiles", "list"])
+        if profile_result.returncode != 0:
+            pytest.fail(
+                f"{cli_name} auth profiles list returned exit code {profile_result.returncode}."
+            )
+        try:
+            profile_rows = json.loads(profile_result.stdout)
+        except (json.JSONDecodeError, AttributeError):
+            pytest.fail(f"{cli_name} auth profiles list did not return valid JSON.")
+        # Profile-auth-type CLIs keep one active profile PER auth type, so a CLI
+        # whose list commands span multiple auth types legitimately has one
+        # active profile for each. Require exactly one active profile per
+        # required auth type, and pin a profile context only when the list
+        # commands need a single auth type; otherwise the CLI's own per-type
+        # active-profile resolution selects the profile for each command.
+        matching_profiles_by_auth_type = {
+            auth_type: [
+                profile
+                for profile in profile_rows
+                if isinstance(profile, dict)
+                and profile.get("active") is True
+                and profile.get("auth_type") == auth_type
+            ]
+            for auth_type in required_profile_auth_types
+        }
+        for auth_type, matching_profiles in matching_profiles_by_auth_type.items():
+            if len(matching_profiles) != 1:
+                pytest.fail(
+                    f"{cli_name} requires one active profile for auth type "
+                    f"{auth_type}; found {len(matching_profiles)}."
+                )
+        if len(required_profile_auth_types) == 1:
+            profile_context = _profile_context(
+                matching_profiles_by_auth_type[required_profile_auth_types[0]][0]
+            )
+
+    if not required_credential_types:
+        return profile_context
 
     auth_command = f"{cli_name} auth login"
     auth_login_help = help_cache("auth login")
@@ -433,6 +491,12 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
         for profile in profiles
         if isinstance(profile, dict) and profile.get("active") is True
     ]
+    if profile_context is not None:
+        active_profiles = [
+            profile
+            for profile in active_profiles
+            if profile.get("name") == profile_context["profile"]
+        ]
     if not active_profiles:
         pytest.fail(
             f"{cli_name} auth status did not report an active profile.\n"
@@ -474,10 +538,7 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
             f"{_auth_required_message(cli_name, auth_command)}"
         )
 
-    return {
-        "profile": matching_profile.get("name"),
-        "auth_type": matching_profile.get("auth_type"),
-    }
+    return _profile_context(matching_profile)
 
 
 @pytest.fixture(scope="session")
