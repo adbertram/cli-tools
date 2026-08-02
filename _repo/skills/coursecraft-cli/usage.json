@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-01T14:25:13Z",
+  "discovered_at": "2026-08-02T15:10:12Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -1929,7 +1929,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required and records provenance: 'User' (Adam in the CourseCraft app), 'CourseCraft' (the CLI / agent pipeline), 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'. Only EXACTLY 'Pluralsight' is counted by the Modules 'Open Pluralsight Feedback Count' gate -- the '- CQA' and '- VCP' variants are not, so use plain 'Pluralsight' for a row that must hold a module in the feedback phase.",
+          "help": "Create a feedback record. The Timestamp auto-stamps to the current UTC time when --timestamp is omitted. --source is required and records provenance: 'User' (Adam in the CourseCraft app), 'CourseCraft' (the CLI / agent pipeline), 'Pluralsight', 'Pluralsight - CQA', or 'Pluralsight - VCP'. Source does NOT affect gating. Every Source counts into the 'Open Feedback Count' rollups on Slides, Demos, Clips and Modules, which SUM the Feedback 'Is Open' formula with no Source condition. Any row with an open Processing Status therefore drives its linked element to 'Edits Needed (Design)' or 'Edits Needed (Recorded)' and holds the module in the feedback phase.",
           "arguments": [],
           "options": [
             {
