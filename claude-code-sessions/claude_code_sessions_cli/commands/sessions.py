@@ -45,6 +45,8 @@ def _render_session_table(items: List[dict], columns: List[str], headers: List[s
         item['start_time'] = format_local_time(item.get('created_at', ''))
         # Session display name; blank when the session has no custom title
         item['name'] = item.get('custom_title') or ''
+        # Last model used in the session; blank when not recorded
+        item['model'] = item.get('model') or ''
     print_table(items, columns, headers)
 
 
@@ -158,8 +160,8 @@ def list_sessions(
             items = [{k: v for k, v in item.items() if k in prop_list} for item in items]
 
         if table:
-            columns = ["name", "id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective", "has_errors"]
-            headers = ["Name", "ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective", "Errors"]
+            columns = ["name", "id", "project_path", "start_time", "model", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective", "has_errors"]
+            headers = ["Name", "ID", "Project Path", "Started", "Model", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective", "Errors"]
             _render_session_table(items, columns, headers)
         else:
             print_json(items)
@@ -198,6 +200,7 @@ def get_session(
                 {"field": "Project Path", "value": session.project_path or "N/A"},
                 {"field": "Created", "value": format_local_time(session.created_at)},
                 {"field": "Last Activity", "value": format_local_time(session.last_activity)},
+                {"field": "Model", "value": session.model or "N/A"},
                 {"field": "Messages", "value": str(len(session.messages))},
                 {"field": "Subagents", "value": str(len(session.subagents))},
                 {"field": "Todos", "value": str(len(session.todos))},
@@ -254,8 +257,8 @@ def search_sessions(
             items = [{k: v for k, v in item.items() if k in prop_list} for item in items]
 
         if table:
-            columns = ["name", "id", "project_path", "start_time", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
-            headers = ["Name", "ID", "Project Path", "Started", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
+            columns = ["name", "id", "project_path", "start_time", "model", "message_count", "tool_call_count", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
+            headers = ["Name", "ID", "Project Path", "Started", "Model", "Msgs", "Tools", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
             _render_session_table(items, columns, headers)
         else:
             print_json(items)

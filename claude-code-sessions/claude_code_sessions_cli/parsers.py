@@ -26,6 +26,37 @@ from .models import (
 )
 
 
+def extract_assistant_model(entry: Dict[str, Any]) -> Optional[str]:
+    """
+    Return the model recorded for an assistant JSONL entry, or None.
+
+    Model is normally nested under entry['message']['model'], but some
+    entries record it at the top level instead; check both. Single source of
+    truth for every raw model-field lookup in this module.
+    """
+    message = entry.get('message', {})
+    return message.get('model') or entry.get('model')
+
+
+# Claude Code writes this sentinel as the model of internal synthetic
+# assistant entries (e.g. "You've hit your weekly limit" rate-limit
+# notices). These are not real model turns and must not be reported as the
+# "last model used".
+SYNTHETIC_MODEL_MARKER = '<synthetic>'
+
+
+def extract_last_used_model(entry: Dict[str, Any]) -> Optional[str]:
+    """
+    Return the model for a "last model used" computation, or None.
+
+    Wraps extract_assistant_model() and excludes SYNTHETIC_MODEL_MARKER.
+    """
+    model = extract_assistant_model(entry)
+    if model == SYNTHETIC_MODEL_MARKER:
+        return None
+    return model
+
+
 def format_tool_call_entry(
     tc: ToolCall,
     session_id: str,
@@ -515,6 +546,9 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
     current_conversation_id = 1
     # Session display name (custom title); last one in file order wins
     custom_title = None
+    # Model from the most recent main-thread (non-sidechain) assistant turn;
+    # file order is chronological, so the last one found wins.
+    last_model = None
 
     try:
         # Collect all entries for conversation detection
@@ -560,6 +594,12 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
                     total_cache_read_tokens += usage.get('cache_read_input_tokens', 0)
                     total_cache_creation_tokens += usage.get('cache_creation_input_tokens', 0)
 
+                    # Track the model from the last main-thread assistant turn.
+                    if not entry.get('isSidechain'):
+                        entry_model = extract_last_used_model(entry)
+                        if entry_model:
+                            last_model = entry_model
+
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, dict):
@@ -588,6 +628,7 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
             project_path=project_path,
             created_at=created_at or '',
             last_activity=last_activity or '',
+            model=last_model,
             message_count=message_count,
             tool_call_count=tool_call_count,
             has_errors=has_errors,
@@ -633,6 +674,40 @@ def scan_session_title(session_path: Path) -> Optional[str]:
     except (OSError, UnicodeDecodeError):
         return None
     return title
+
+
+def scan_last_model(session_path: Path) -> Optional[str]:
+    """
+    Read a session file and return the model from its most recent main-thread
+    (non-sidechain) assistant turn, or None.
+
+    Lightweight lookup: substring-prefilters each line on the '"model"' marker
+    and JSON-parses only candidate lines, so sessions with few assistant turns
+    cost a cheap string scan instead of a full parse. File order is
+    chronological, so the LAST assistant turn with a recorded model wins (a
+    session can span multiple models after a mid-session model switch).
+    """
+    last_model: Optional[str] = None
+    try:
+        with open(session_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '"model"' not in line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get('type') != 'assistant' or entry.get('isSidechain'):
+                    continue
+                value = extract_last_used_model(entry)
+                if value:
+                    last_model = value
+    except (OSError, UnicodeDecodeError):
+        return None
+    return last_model
 
 
 def scan_session_titles(
@@ -707,6 +782,7 @@ def parse_conversation_summaries(
                 'session_id': session_path.stem,
                 'project': project_name,
                 'conversation_id': conv_id,
+                'model': None,
                 'message_count': 0,
                 'user_message_count': 0,
                 'assistant_message_count': 0,
@@ -746,6 +822,14 @@ def parse_conversation_summaries(
             conv_data['total_output_tokens'] += usage.get('output_tokens', 0)
             conv_data['total_cache_read_tokens'] += cache_read
             conv_data['total_cache_creation_tokens'] += cache_creation
+
+            # Track the model from the last main-thread assistant turn in
+            # this conversation; file order is chronological so the last
+            # one found wins.
+            if not entry.get('isSidechain'):
+                entry_model = extract_last_used_model(entry)
+                if entry_model:
+                    conv_data['model'] = entry_model
 
             # Count tool calls in assistant messages
             content = message.get('content', '')
@@ -951,6 +1035,12 @@ def parse_full_session(session_path: Path, project_name: str) -> Optional[Sessio
             subagents[parent_uuid].messages.append(message)
         else:
             messages.append(message)
+
+            # Track the model from the last main-thread assistant turn.
+            if entry_type == 'assistant':
+                entry_model = extract_last_used_model(entry)
+                if entry_model:
+                    model = entry_model
 
         # Track errors from tool calls
         for tc in message.tool_calls:
@@ -1639,7 +1729,7 @@ def extract_timeline_from_session(
         if entry_type == 'assistant':
             message = entry.get('message', {})
             content = message.get('content', '')
-            response_model = message.get('model') or entry.get('model')
+            response_model = extract_assistant_model(entry)
             response_turn_id = uuid or f"{session_id}:{timestamp}"
             row_turn_id = current_turn_id or response_turn_id
 
@@ -1973,7 +2063,7 @@ def extract_timeline_from_session(
 
                 message = entry.get('message', {})
                 content = message.get('content', '')
-                response_model = message.get('model') or entry.get('model')
+                response_model = extract_assistant_model(entry)
                 timestamp = entry.get('timestamp', '')
                 response_turn_id = entry.get('uuid', '') or f"{agent_id}:{timestamp}"
                 row_turn_id = agent_id_to_turn_id.get(agent_id) or response_turn_id
@@ -2224,6 +2314,7 @@ def search_session_file(
         project_path=project_path,
         created_at=created_at,
         last_activity=last_activity,
+        model=scan_last_model(session_path),
         match_count=len(matches),
         matches=matches,
     )

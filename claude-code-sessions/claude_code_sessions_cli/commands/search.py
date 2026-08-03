@@ -53,6 +53,8 @@ def search(
             for item in items:
                 item['started'] = format_local_time(item.get('created_at', ''))
                 item['last'] = format_local_time(item.get('last_activity', ''))
+                # Last model used in the matched session; blank when not recorded
+                item['model'] = item.get('model') or ''
                 if snippets and item.get('matches'):
                     # Show first match snippet truncated
                     first = item['matches'][0]
@@ -63,8 +65,8 @@ def search(
                 else:
                     item['first_match'] = ''
 
-            columns = ["session_id", "project", "started", "last", "match_count"]
-            headers = ["Session ID", "Project", "Started", "Last Activity", "Matches"]
+            columns = ["session_id", "project", "started", "last", "model", "match_count"]
+            headers = ["Session ID", "Project", "Started", "Last Activity", "Model", "Matches"]
             if snippets:
                 columns.append("first_match")
                 headers.append("First Match")

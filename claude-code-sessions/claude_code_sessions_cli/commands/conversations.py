@@ -77,8 +77,10 @@ def list_conversations(
                 # Format timestamps in local timezone
                 item['first_msg'] = format_local_time(item.get('created_at', ''))
                 item['last_msg'] = format_local_time(item.get('ended_at', ''))
-            columns = ["session_id", "conversation_id", "message_count", "first_msg", "last_msg", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
-            headers = ["Session", "Conv", "Msgs", "First Msg", "Last Msg", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
+                # Last model used in the conversation; blank when not recorded
+                item['model'] = item.get('model') or ''
+            columns = ["session_id", "conversation_id", "model", "message_count", "first_msg", "last_msg", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
+            headers = ["Session", "Conv", "Model", "Msgs", "First Msg", "Last Msg", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
             print_table(items, columns, headers, max_columns=0)
         else:
             print_json(items)
@@ -97,7 +99,7 @@ def get_conversation(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
-    Get a specific conversation by ID.
+    Get a specific conversation by ID, including user and assistant messages.
 
     Two ways to identify the conversation:
     - Positional: session:conversation_number (e.g., abc123:1), where session is
@@ -150,29 +152,24 @@ def get_conversation(
         session_id = client.resolve_session_id(session_arg, project=project)
         if project is None:
             project = client.get_session_project(session_id)
-        conversations = client.list_conversations(
+        conversation = client.get_conversation(
             project=project,
             session_id=session_id,
+            conversation_id=conv_num,
         )
 
-        # Find the matching conversation
-        match = None
-        for c in conversations:
-            if c.conversation_id == conv_num:
-                match = c
-                break
-
-        if not match:
+        if conversation is None:
             print_json({"error": f"Conversation {conv_num} not found in session '{session_id}'"})
             raise typer.Exit(1)
 
-        item = match.model_dump()
+        item = conversation.model_dump()
 
         if table:
             rows = [
                 {"field": "Session ID", "value": item.get("session_id", "")},
                 {"field": "Conversation", "value": str(item.get("conversation_id", ""))},
                 {"field": "Project", "value": item.get("project", "")},
+                {"field": "Model", "value": item.get("model") or "N/A"},
                 {"field": "Messages", "value": str(item.get("message_count", 0))},
                 {"field": "User Messages", "value": str(item.get("user_message_count", 0))},
                 {"field": "Assistant Messages", "value": str(item.get("assistant_message_count", 0))},
@@ -183,6 +180,13 @@ def get_conversation(
                 {"field": "Output Tokens", "value": f"{item.get('total_output_tokens', 0):,}"},
                 {"field": "Effective Tokens", "value": f"{item.get('effective_tokens', 0):,}"},
             ]
+            rows.extend(
+                {
+                    "field": f"Message {index} ({message.get('type', '')})",
+                    "value": message.get("content", ""),
+                }
+                for index, message in enumerate(item.get("messages", []), start=1)
+            )
             print_table(rows, ["field", "value"], ["Field", "Value"])
         else:
             print_json(item)
