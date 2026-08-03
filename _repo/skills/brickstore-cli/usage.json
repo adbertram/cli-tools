@@ -1,0 +1,178 @@
+{
+  "tool": "brickstore",
+  "description": "CLI interface for brickstore",
+  "discovered_at": "2026-08-03T00:51:26Z",
+  "total_commands": 5,
+  "global_options": [],
+  "commands": {
+    "part": {
+      "help": "Return BrickStore price guide data for one part.",
+      "arguments": [
+        {
+          "name": "item_number",
+          "type": "TEXT",
+          "required": true,
+          "help": "BrickLink part item ID"
+        },
+        {
+          "name": "color",
+          "type": "COLOR",
+          "required": false,
+          "help": "BrickStore color name"
+        }
+      ],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--leave-open",
+          "type": "bool",
+          "required": false,
+          "help": "Leave a BrickStore app started by this command open"
+        }
+      ]
+    },
+    "query": {
+      "help": "Return BrickStore catalog items matching the given filters.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--item-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by item ID (case-insensitive partial match)"
+        },
+        {
+          "name": "--item-name",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by item name (case-insensitive partial match)"
+        },
+        {
+          "name": "--item-type",
+          "type": "TEXT",
+          "required": false,
+          "help": "Item type name or BrickLink letter (Part, Set, Minifig, P, S, M, ...)"
+        },
+        {
+          "name": "--category",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by category name (case-insensitive partial match)"
+        },
+        {
+          "name": "--color",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter by color name (case-insensitive partial match)"
+        },
+        {
+          "name": "--related-to-item-id",
+          "type": "TEXT",
+          "required": false,
+          "help": "Reference item ID for relationship filtering"
+        },
+        {
+          "name": "--related-to-item-type",
+          "type": "TEXT",
+          "required": false,
+          "help": "Reference item type, required with --related-to-item-id"
+        },
+        {
+          "name": "--relationship",
+          "type": "TEXT",
+          "required": false,
+          "help": "Relationship type name filter, used with --related-to-item-id"
+        },
+        {
+          "name": "--year-min",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Minimum production year (inclusive)"
+        },
+        {
+          "name": "--year-max",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum production year (inclusive)"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--leave-open",
+          "type": "bool",
+          "required": false,
+          "help": "Leave a BrickStore app started by this command open"
+        }
+      ]
+    },
+    "set": {
+      "help": "Return BrickStore price guide data for one set.",
+      "arguments": [
+        {
+          "name": "set_number",
+          "type": "TEXT",
+          "required": true,
+          "help": "BrickLink set item ID"
+        }
+      ],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--leave-open",
+          "type": "bool",
+          "required": false,
+          "help": "Leave a BrickStore app started by this command open"
+        }
+      ]
+    },
+    "set-batch": {
+      "help": "Return price guide data for a set batch in one source call.",
+      "arguments": [
+        {
+          "name": "set_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink set item IDs"
+        }
+      ],
+      "options": [
+        {
+          "name": "--leave-open",
+          "type": "bool",
+          "required": false,
+          "help": "Leave a BrickStore app started by this command open"
+        }
+      ]
+    },
+    "set-contents": {
+      "help": "Return direct item records for one or more sets.",
+      "arguments": [
+        {
+          "name": "set_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink set item IDs"
+        }
+      ],
+      "options": []
+    }
+  },
+  "usage_instructions": "Use the `brickstore` CLI. Run `brickstore --help` to discover command groups and `--help` on any subcommand for its options."
+}

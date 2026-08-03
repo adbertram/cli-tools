@@ -18,6 +18,7 @@
 | `brickfreedom` | The `brickfreedom` CLI provides a command-line interface for Brickfreedom (browser automation). Use it when you need repeatable access to brickfreedom workflows that are only available through a signed-in website. |
 | `bricklink` |  |
 | `brickowl` | The `brickowl` CLI provides a command-line interface for Brickowl API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `brickstore` | Read BrickStore price guide and catalog data through its local MCP server |
 | `buttondown` | The `buttondown` CLI provides a command-line interface for Buttondown API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cj` | The `cj` CLI provides a command-line interface for Cj API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `claude-code-sessions` | The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
