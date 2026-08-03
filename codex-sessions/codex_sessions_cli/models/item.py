@@ -34,6 +34,9 @@ class SessionSummary(CLIModel):
     project_path: str
     created_at: str
     last_activity: str
+    # Model from the most recent turn_context record in the session (None if
+    # the session has no turn_context record with a recorded model).
+    model: Optional[str] = None
     message_count: int
     tool_call_count: int
     has_errors: bool
@@ -62,6 +65,9 @@ class ConversationSummary(CLIModel):
     project_path: str
     created_at: str
     last_activity: str
+    # Model recorded on the turn_context record that started this
+    # conversation/turn (None for legacy rollouts without turn_context).
+    model: Optional[str] = None
     message_count: int
     tool_call_count: int
     summary: Optional[str] = None
