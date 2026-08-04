@@ -74,6 +74,20 @@ max_nested_depth = 4
 # space at all. Neither has anything a `list` command could return.
 excluded_from_list_required = ["listings", "time-away"]
 
+[cli_specific.vinted]
+# `listings` is marketplace-wide search: Vinted's catalog endpoint answers a
+# query, and it exposes no way to enumerate listings without one.
+# `listings search` is the ID-discovery command that feeds `listings get`.
+excluded_from_list_required = ["listings"]
+# `listings search` IS the collection command, so the list-command flag and
+# execution tests must run against it rather than skip.
+list_commands = ["listings search"]
+
+# Both listings commands take a positional argument.
+[cli_specific.vinted.param_fixtures]
+"listings search" = { "_pos1" = "search_query" }
+"listings get" = { "_pos1" = "item_id" }
+
 [cli_specific.wordpress]
 # Profiles is a utility command from cli_tools_shared, not a resource list command
 # Exclude it from list command tests that require --limit/--filter/--properties

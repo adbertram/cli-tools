@@ -1065,3 +1065,67 @@ def test_check_auth_failure_page_js_is_inert_when_unset(tmp_path):
     browser = _FailureUrlBrowser(_TestConfig(tmp_path))
 
     assert browser._is_auth_failure_content(_EvaluatePage("https://example.com/dashboard", True)) is False
+
+
+# --- bot-protection challenge settling -------------------------------------
+
+
+class _ChallengePage:
+    """Page that reports "not authenticated" for the first N checks."""
+
+    def __init__(self, clears_after):
+        self.clears_after = clears_after
+        self.checks = 0
+        self.waits = []
+
+    def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+
+class _SettlingBrowser(BrowserAutomation):
+    AUTH_CHALLENGE_ATTEMPTS = 4
+    AUTH_CHALLENGE_POLL_MS = 10
+
+    def __init__(self):
+        super().__init__(config=None)
+
+    def _check_auth(self, page):
+        page.checks += 1
+        return page.checks > page.clears_after
+
+
+def test_check_auth_settled_defaults_to_a_single_check():
+    """Every existing tool keeps the historic behaviour of one check."""
+    assert BrowserAutomation.AUTH_CHALLENGE_ATTEMPTS == 1
+
+    class _Once(_SettlingBrowser):
+        AUTH_CHALLENGE_ATTEMPTS = 1
+
+    page = _ChallengePage(clears_after=1)
+    assert _Once()._check_auth_settled(page) is False
+    assert page.checks == 1
+    assert page.waits == []
+
+
+def test_check_auth_settled_returns_true_without_waiting_when_already_clear():
+    page = _ChallengePage(clears_after=0)
+
+    assert _SettlingBrowser()._check_auth_settled(page) is True
+    assert page.checks == 1
+    assert page.waits == []
+
+
+def test_check_auth_settled_polls_until_the_challenge_clears():
+    page = _ChallengePage(clears_after=2)
+
+    assert _SettlingBrowser()._check_auth_settled(page) is True
+    assert page.checks == 3
+    assert page.waits == [10, 10]
+
+
+def test_check_auth_settled_gives_up_after_the_configured_attempts():
+    page = _ChallengePage(clears_after=99)
+
+    assert _SettlingBrowser()._check_auth_settled(page) is False
+    assert page.checks == 4
+    assert page.waits == [10, 10, 10]

@@ -149,6 +149,13 @@ class BrowserAutomation:
     AUTH_TOKEN_REJECT_AUD = ()       # JWT 'aud' values meaning NOT authenticated
     AUTH_TOKEN_REJECT_CONTEXT = ()   # 'x-user-context-type' values meaning NOT authenticated
     AUTH_TOKEN_POLL_SECONDS = 6
+    # Bot-protection challenge settling. A managed Cloudflare/DataDome challenge
+    # clears with no interaction, but it can take most of a minute, so a single
+    # immediate check after login reports a false block. Tools behind such a
+    # wall raise AUTH_CHALLENGE_ATTEMPTS; the default of 1 keeps the historic
+    # single check for every other tool.
+    AUTH_CHALLENGE_ATTEMPTS = 1
+    AUTH_CHALLENGE_POLL_MS = 3000
     # Automation-free login. When True, authenticate() opens a PLAIN browser (no
     # --remote-debugging-port, no CDP, no webdriver patching) for the user to log
     # in by hand — for sites whose login flow blocks automated browsers — then
@@ -367,7 +374,7 @@ class BrowserAutomation:
         page = svc
         try:
             page.wait_for_timeout(2000)
-            if not confirmed and not self._check_auth(page):
+            if not confirmed and not self._check_auth_settled(page):
                 self._complete_noninteractive_login(page)
             if has_hook:
                 logger.debug("authenticate: running post-auth hook")
@@ -381,7 +388,7 @@ class BrowserAutomation:
                 page.goto(self.AUTH_CHECK_URL)
                 if not self.AUTH_COOKIE_PATTERNS:
                     page.wait_for_timeout(2000)
-            if not self._check_auth(page):
+            if not self._check_auth_settled(page):
                 raise BrowserAutomationError("Browser session is not authenticated after login.")
         finally:
             self.close()
@@ -911,6 +918,26 @@ class BrowserAutomation:
 
         # 6. Fallback: not on login/failure page
         return not self._is_login_page(page)
+
+    def _check_auth_settled(self, page) -> bool:
+        """Check auth, polling while a bot-protection challenge clears.
+
+        Behaves exactly like ``_check_auth`` unless the subclass raises
+        ``AUTH_CHALLENGE_ATTEMPTS``. The page owns the delay, so the wait is a
+        count of attempts rather than a wall clock.
+        """
+        attempts = max(1, int(self.AUTH_CHALLENGE_ATTEMPTS))
+        for attempt in range(attempts):
+            if self._check_auth(page):
+                return True
+            if attempt == attempts - 1:
+                break
+            logger.debug(
+                "_check_auth_settled: attempt %d/%d not authenticated, waiting %dms",
+                attempt + 1, attempts, self.AUTH_CHALLENGE_POLL_MS,
+            )
+            page.wait_for_timeout(self.AUTH_CHALLENGE_POLL_MS)
+        return False
 
     def _check_available(self, page) -> bool:
         if not self.AUTH_UNAVAILABLE_SELECTOR:
