@@ -1,7 +1,7 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-07-24T19:24:50Z",
+  "discovered_at": "2026-08-04T21:23:24Z",
   "total_commands": 25,
   "global_options": [
     {
@@ -650,7 +650,7 @@
               "name": "--download-images",
               "type": "bool",
               "required": false,
-              "help": "Download listing images to local cache"
+              "help": "Also save the listing images to the local cache. Image URLs are returned either way"
             },
             {
               "name": "--profile",
@@ -755,7 +755,7 @@
               "name": "--download-images",
               "type": "bool",
               "required": false,
-              "help": "Download listing images to local cache (implies --include-detail)"
+              "help": "Also save the listing images to the local cache (implies --include-detail). Image URLs are returned either way"
             },
             {
               "name": "--profile",

@@ -94,7 +94,7 @@ def marketplace_list(
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
     include_detail: bool = typer.Option(False, "--include-detail", help="Navigate to each listing for description and full details"),
-    download_images: bool = typer.Option(False, "--download-images", help="Download listing images to local cache (implies --include-detail)"),
+    download_images: bool = typer.Option(False, "--download-images", help="Also save the listing images to the local cache (implies --include-detail). Image URLs are returned either way."),
 ):
     """List Facebook Marketplace listings.
 
@@ -133,7 +133,7 @@ def marketplace_list(
         items = []
         if include_detail:
             for listing in listings:
-                detail = client.get_item(listing.item_id, include_images=download_images)
+                detail = client.get_item(listing.item_id)
                 image_urls = detail.image_urls
                 data = detail.model_dump()
                 if download_images:
@@ -155,7 +155,7 @@ def marketplace_get(
     item_id: str = typer.Argument(..., help="Marketplace listing item ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
-    download_images: bool = typer.Option(False, "--download-images", help="Download listing images to local cache"),
+    download_images: bool = typer.Option(False, "--download-images", help="Also save the listing images to the local cache. Image URLs are returned either way."),
 ):
     """Get details for a specific Facebook Marketplace listing.
 
@@ -166,7 +166,7 @@ def marketplace_get(
         facebook marketplace get 123456789 --download-images
     """
     with client_session() as client:
-        item = client.get_item(item_id, include_images=download_images)
+        item = client.get_item(item_id)
         image_urls = item.image_urls
         data = item.model_dump()
 

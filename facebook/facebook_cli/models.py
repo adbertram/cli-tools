@@ -47,7 +47,20 @@ class MarketplaceListing(CLIModel):
     #: loudly instead of returning None; only `list` rows can carry it, and only
     #: for a tile Facebook's own payload never covered.
     delivery_types: Optional[List[str]] = None
-    image_urls: Optional[List[str]] = Field(default=None, exclude=True)
+    #: The listing's own gallery photo URLs, scoped by DETAIL_PAGE_IMAGES_JS so a
+    #: sidebar advertisement creative is never reported as a listing photo.
+    #:
+    #: This used to carry `exclude=True`, which kept it out of every `model_dump`
+    #: and therefore out of every JSON the CLI printed. The URLs were extracted
+    #: and then silently dropped, so the only way to see a listing's photos was
+    #: `--download-images`, which writes files to a local cache. A consumer that
+    #: wanted to LOOK at a photo rather than store it got nothing: a LegoScout
+    #: run on 2026-08-04 marked all 19 Facebook candidates `no_images` and left
+    #: 7 LEGO listings unidentified for exactly this reason.
+    #:
+    #: None means the URLs were not read (a `list` row without `--include-detail`).
+    #: `[]` means the gallery was read and the listing genuinely has no photos.
+    image_urls: Optional[List[str]] = None
     local_images: Optional[List[str]] = None
 
     @model_validator(mode="before")

@@ -1477,7 +1477,7 @@ class FacebookClient:
             limit=limit,
         )
 
-    def get_item(self, item_id: str, include_images: bool = False) -> MarketplaceListing:
+    def get_item(self, item_id: str) -> MarketplaceListing:
         """Get details for a specific marketplace listing.
 
         Enforces the fulfillment contract on every return, cached or fresh: a
@@ -1489,7 +1489,7 @@ class FacebookClient:
         Raises:
             ClientError: The returned listing carries no ``delivery_types``.
         """
-        listing = self._fetch_item(item_id, include_images=include_images)
+        listing = self._fetch_item(item_id)
         if not listing.delivery_types:
             raise ClientError(
                 f"Listing {item_id} came back with no delivery_types, so its fulfillment "
@@ -1499,7 +1499,7 @@ class FacebookClient:
         return listing
 
     @cached
-    def _fetch_item(self, item_id: str, include_images: bool = False) -> MarketplaceListing:
+    def _fetch_item(self, item_id: str) -> MarketplaceListing:
         """Read a listing's detail page. Cached; see :meth:`get_item`.
 
         Extracts title, price, and description directly from the detail page DOM
@@ -1508,9 +1508,13 @@ class FacebookClient:
         Facebook's own listing data (see :meth:`_extract_listing_fulfillment`);
         neither is rendered as readable text on the page.
 
+        Reads the gallery URLs on every call. Extracting them is one evaluate on
+        a page that is already open, and a caller who wants to LOOK at a photo
+        should not have to ask the CLI to WRITE it to disk first. Downloading is
+        a separate concern and stays behind `--download-images`.
+
         Args:
             item_id: The marketplace item ID.
-            include_images: If True, extract image URLs from the page.
 
         Returns:
             MarketplaceListing with item details.
@@ -1543,8 +1547,7 @@ class FacebookClient:
             delivery_types=fulfillment["delivery_types"],
         )
 
-        if include_images:
-            listing.image_urls = self._extract_detail_page_image_urls(page)
+        listing.image_urls = self._extract_detail_page_image_urls(page)
 
         return listing
 

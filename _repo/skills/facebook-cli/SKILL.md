@@ -73,7 +73,11 @@ Facebook renders a discounted listing as the current price immediately followed 
 
 `marketplace list` returns `[]` with exit 0 ONLY when Facebook renders its own results container together with `No listings found for "..." within N miles`. Every other empty outcome exits non-zero and names the cause (results container never rendered, page never settled, blocked, or listing tiles the extractor could not read). Treat a silently empty result as impossible: if `list` exits 0 with `[]`, Facebook genuinely has no matches.
 
-`--download-images` saves only the listing's own media gallery (hero image plus thumbnails). Sidebar advertisement creatives and recommended-listing images are excluded.
+`marketplace get` and `marketplace list --include-detail` return `image_urls` on every call. `--download-images` is a separate, optional step that ALSO writes those images to a local cache and reports the paths in `local_images`.
+
+Both cover only the listing's own media gallery (hero image plus thumbnails). Sidebar advertisement creatives and recommended-listing images are excluded.
+
+`image_urls` is `null` on a `list` row read without `--include-detail` (the gallery was never opened) and `[]` when the gallery was read and the listing has no photos. Those are different answers and are not collapsed.
 </principle>
 
 <principle name="Marketplace Delivery Types (Fulfillment)">

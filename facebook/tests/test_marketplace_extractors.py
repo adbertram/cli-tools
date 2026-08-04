@@ -371,3 +371,42 @@ def test_rendered_tiles_that_extract_to_nothing_raise_as_a_markup_change():
         FacebookClient._raise_for_empty_marketplace_results(
             _state(item_link_count=24), "Marketplace (search)"
         )
+
+
+def test_image_urls_survive_model_dump():
+    """The regression: `image_urls` carried `exclude=True`.
+
+    The extractor worked, the field was populated, and then `model_dump()` threw
+    it away, so every JSON the CLI printed reported a listing as having no
+    photos. The only way to reach a photo was `--download-images`, which writes
+    files to disk -- useless to a consumer that wants to LOOK at one. A LegoScout
+    run on 2026-08-04 marked all 19 Facebook candidates `no_images` because of
+    this, leaving 7 LEGO listings unidentified.
+    """
+    listing = MarketplaceListing(
+        item_id="1",
+        title="LEGO bulk lot",
+        price="$50",
+        url="/marketplace/item/1/",
+        delivery_types=["IN_PERSON"],
+        image_urls=["https://scontent.example/a.jpg", "https://scontent.example/b.jpg"],
+    )
+    dumped = listing.model_dump()
+    assert "image_urls" in dumped
+    assert dumped["image_urls"] == [
+        "https://scontent.example/a.jpg",
+        "https://scontent.example/b.jpg",
+    ]
+
+
+def test_image_urls_default_to_none_not_an_empty_list():
+    """`None` means "not read"; `[]` means "read, and there are none".
+
+    Collapsing the two would report a `list` row that never opened a detail page
+    as a listing with no photos.
+    """
+    listing = MarketplaceListing(
+        item_id="1", title="LEGO bulk lot", price="$50",
+        url="/marketplace/item/1/", delivery_types=["IN_PERSON"],
+    )
+    assert listing.model_dump()["image_urls"] is None
