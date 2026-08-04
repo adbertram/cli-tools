@@ -202,6 +202,49 @@ def _panel_sections(panel) -> Dict[str, str]:
     return sections
 
 
+def _lot_images(soup) -> List[str]:
+    """The lot's OWN gallery photos, full size, in the page's own order.
+
+    `a.carousel-link` is the desktop gallery: one anchor per photo, each with
+    `data-image` and `data-linknum` pointing at the `_original.jpg`. That class
+    is the whole reason this is not a bare `img[src*=housePhotos]` scan.
+
+    A lot page ALSO renders the previous and next lots' thumbnails, tagged
+    `prev-next-image`, plus tooltip previews of them. A loose scan picks those
+    up and attributes a neighbouring lot's photos to this one -- the exact
+    failure the appraiser's catalog-image comparison exists to catch, arriving
+    from the one direction the comparison cannot see. `a.carousel-link` never
+    matches them.
+
+    Falls back to the mobile gallery (`a.mobile-carousel-link`), which carries
+    the same photos at a smaller size, when the desktop block is absent.
+    Returns `[]` for a genuinely photo-less lot; a lot with no photos is a real
+    thing and is not an error.
+    """
+    urls: List[str] = []
+    for selector in ("a.carousel-link[data-image]", "a.mobile-carousel-link[data-image]"):
+        anchors = soup.select(selector)
+        if not anchors:
+            continue
+
+        def _order(anchor):
+            raw = anchor.get("data-linknum")
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                # An anchor the page did not number sorts last rather than
+                # crashing the whole lot read over gallery ordering.
+                return len(anchors)
+
+        for anchor in sorted(anchors, key=_order):
+            url = (anchor.get("data-image") or anchor.get("href") or "").strip()
+            if url and url not in urls:
+                urls.append(url)
+        if urls:
+            break
+    return urls
+
+
 def _lot_status(lot_data, soup, variant: str) -> str:
     """Return 'closed' or 'open' from the closed-marker visibility + ga variant."""
     closed_marker = soup.select_one("#lotClosedText")
@@ -357,5 +400,6 @@ def parse_lot_detail(html: str, url: Optional[str] = None) -> Dict[str, Any]:
         "shipping_terms": shipping_terms,
         "conditions_of_sale": conditions_of_sale,
         "description": description,
+        "image_urls": _lot_images(soup),
         "url": resolved_url,
     }

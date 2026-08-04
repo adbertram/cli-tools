@@ -36,7 +36,8 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="Command Groups">
 - **search `<query>`** -- Search public AuctionZip lots by keyword. List-style: `--limit/-l`, `--filter/-f`, `--table/-t`, `--properties/-p`. Returns `ref`, `lot_number`, `title`, `auction_house`, `current_bid`, `bids`, `time_remaining`/`close_time`, `estimate`, `url`.
-- **get `<lot>`** -- Full detail for one lot by URL, `slug_ref`, or bare ref. `--table/-t`, `--properties/-p`. Returns current bid, bid count, next bid, `buyer_premium`, `status`, `auction_type`, `close_time`, `location`, `accepted_payment`, `shipping_terms`, `conditions_of_sale`, and more.
+- **get `<lot>`** -- Full detail for one lot by URL, `slug_ref`, or bare ref. `--table/-t`, `--properties/-p`. Returns current bid, bid count, next bid, `buyer_premium`, `status`, `auction_type`, `close_time`, `location`, `accepted_payment`, `shipping_terms`, `conditions_of_sale`, `image_urls`, and more.
+  - `image_urls` is the lot's OWN gallery at full size (`_original.jpg`), in page order. A lot page also renders the PREVIOUS and NEXT lots' thumbnails; those are `prev-next-image` and are excluded, so a photo is never attributed to the wrong lot. `[]` means the lot genuinely has no photos.
 - **auth** -- Authentication management (login, logout, status, test) and nested `auth profiles`
 - **cache** -- Local response cache management
 </principle>

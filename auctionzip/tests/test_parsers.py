@@ -25,6 +25,15 @@ def lot_html() -> str:
     return (FIXTURES / "lot_open.html").read_text(encoding="utf-8")
 
 
+@pytest.fixture(scope="module")
+def gallery_lot_html() -> str:
+    """A lot that HAS photos. `lot_open.html` has none, so it cannot pin the
+    gallery contract -- and a parser that returned nothing would pass against it.
+    Captured live 2026-08-04 from auction-lot/unopened-lego-creator_5596A08A47.
+    """
+    return (FIXTURES / "lot_with_gallery.html").read_text(encoding="utf-8")
+
+
 def test_search_returns_both_card_variants(search_html):
     rows = parse_search_results(search_html, BASE_URL)
     assert len(rows) == 2
@@ -120,3 +129,33 @@ def test_lot_payment_and_shipping_terms(lot_html):
 def test_lot_rejects_non_lot_html():
     with pytest.raises(ValueError):
         parse_lot_detail("<html><body><p>not a lot</p></body></html>")
+
+
+def test_lot_returns_its_own_gallery_at_full_size(gallery_lot_html):
+    lot = parse_lot_detail(gallery_lot_html)
+    assert lot["image_urls"] == [
+        "https://image.invaluable.com/housePhotos/AnnettesLakesideAuction"
+        "/01/817001/H22635-L443949881_original.jpg",
+        "https://image.invaluable.com/housePhotos/AnnettesLakesideAuction"
+        "/01/817001/H22635-Lw6Hv8ZIyTT57U_original.jpg",
+    ]
+
+
+def test_lot_gallery_excludes_the_neighbouring_lots_thumbnails(gallery_lot_html):
+    """A lot page also renders the PREVIOUS and NEXT lots' photos.
+
+    A loose `img[src*=housePhotos]` scan attributes those to this lot, which is
+    how a downstream set identification ends up made from another lot's picture.
+    """
+    lot = parse_lot_detail(gallery_lot_html)
+    joined = " ".join(lot["image_urls"])
+    assert "L443961688" not in joined   # the previous lot
+    assert "LjtVI53g6B5SUs" not in joined  # the next lot
+    assert "prev-next" not in joined
+    assert all(u.endswith("_original.jpg") for u in lot["image_urls"])
+
+
+def test_a_lot_with_no_photos_returns_an_empty_list(lot_html):
+    """Not an error. A photo-less lot is a real thing, and `[]` says so."""
+    lot = parse_lot_detail(lot_html)
+    assert lot["image_urls"] == []
