@@ -305,11 +305,35 @@ DETAIL_PAGE_IMAGES_JS = """() => {
 # Both `id` and the `delivery_types`/`location_text` fields are Facebook's own
 # GraphQL schema names, not rendered text or CSS classes, so this does not
 # depend on markup Facebook reshuffles between builds.
+#
+# ONE LISTING, TWO IDS (captured live 2026-08-04). Facebook identifies a listing
+# by its listing id AND by a story/post id, and different surfaces link by
+# different ones. A search tile links by the listing id; an injected
+# "commerce_interesting_product" notification tile links by the post id. The
+# listing node is always keyed by the LISTING id, and publishes the post id in
+# two of its own fields:
+#
+#   {"id":"1533173811265557", "delivery_types":["IN_PERSON","PUBLIC_MEETUP"],
+#    "story":{"post_id":"28800686242866906", ...},
+#    "product_item":{"id":"28800686242866906", ...}}
+#
+# So `capture.aliases` maps post id -> listing id, and a lookup by either id
+# reaches the same listing. Without it, `marketplace get 28800686242866906`
+# failed on a page that fully described the listing under its other id.
+#
+# The same nodes also carry Facebook's own listing-state booleans (is_sold /
+# is_pending / is_live) and, on search payloads, `primary_listing_photo`. Both
+# are captured here so the list surface answers "is it still for sale?" and
+# "what does it look like?" without a per-listing detail navigation.
 INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
     if (window.__fbDeliveryCapture != null) {
         return {installed: false, listings: Object.keys(window.__fbDeliveryCapture.deliveryTypes).length};
     }
-    const capture = {deliveryTypes: {}, locationText: {}, conflicts: {}, payloads: 0, parseErrors: 0};
+    const capture = {
+        deliveryTypes: {}, locationText: {}, availability: {}, primaryImage: {},
+        aliases: {}, conflicts: {}, availabilityConflicts: {}, aliasConflicts: {},
+        payloads: 0, parseErrors: 0,
+    };
     window.__fbDeliveryCapture = capture;
 
     const record = (node) => {
@@ -327,6 +351,43 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
         }
         if (node.location_text != null && typeof node.location_text.text === "string") {
             capture.locationText[id] = node.location_text.text;
+        }
+        if (typeof node.is_sold === "boolean" || typeof node.is_pending === "boolean"
+            || typeof node.is_live === "boolean") {
+            const state = {
+                is_sold: node.is_sold === true,
+                is_pending: node.is_pending === true,
+                is_live: node.is_live === true,
+            };
+            const seen = capture.availability[id];
+            if (seen === undefined) {
+                capture.availability[id] = state;
+            } else if (seen.is_sold !== state.is_sold || seen.is_pending !== state.is_pending
+                       || seen.is_live !== state.is_live) {
+                // A stale payload claiming "live" alongside a fresh one claiming
+                // "sold" is exactly the answer a consumer must not get wrong.
+                capture.availabilityConflicts[id] = [seen, state];
+            }
+        }
+        if (node.primary_listing_photo != null && node.primary_listing_photo.image != null
+            && typeof node.primary_listing_photo.image.uri === "string") {
+            capture.primaryImage[id] = node.primary_listing_photo.image.uri;
+        }
+        // Facebook's own alternate identifier for this same listing.
+        const aliasSources = [
+            node.story != null ? node.story.post_id : null,
+            node.product_item != null ? node.product_item.id : null,
+        ];
+        for (const alias of aliasSources) {
+            if (alias == null) continue;
+            const aliasId = String(alias);
+            if (aliasId === id) continue;
+            const seen = capture.aliases[aliasId];
+            if (seen === undefined) {
+                capture.aliases[aliasId] = id;
+            } else if (seen !== id) {
+                capture.aliasConflicts[aliasId] = [seen, id];
+            }
         }
     };
     const walk = (node) => {
@@ -373,6 +434,19 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
 }"""
 
 READ_DELIVERY_CAPTURE_JS = """() => window.__fbDeliveryCapture || null"""
+
+# The maps INSTALL_DELIVERY_CAPTURE_JS writes, listed here so the Python reader
+# fails loudly if the two ever drift apart.
+CAPTURE_MAPS = ("deliveryTypes", "locationText", "availability", "primaryImage", "aliases")
+
+# Conflict maps and what a conflict in each one means. A conflict is fatal: two
+# payloads describing the same listing differently makes first-writer-wins a
+# coin flip, and the losing answer is silently wrong.
+CAPTURE_CONFLICT_MAPS = {
+    "conflicts": "delivery_types",
+    "availabilityConflicts": "listing-state booleans (is_sold/is_pending/is_live)",
+    "aliasConflicts": "listing-id aliases",
+}
 
 # Facebook renders "Ships to you" in a search tile's location position when the
 # listing is too far away to show a place name (captured live 2026-07-26). It is
@@ -1034,12 +1108,13 @@ class FacebookClient:
         )
 
     def _read_delivery_capture(self, page) -> Dict:
-        """Read the captured item_id -> delivery_types / location map.
+        """Read the captured listing maps back off the page.
 
         Raises:
-            ClientError: The capture was never installed, or two Relay payloads
-                described the same listing's fulfillment differently (which
-                means the capture cannot be trusted for any listing).
+            ClientError: The capture was never installed, its shape does not
+                match what the capture JS writes, or two Relay payloads
+                described the same listing differently (which means the capture
+                cannot be trusted for any listing).
         """
         capture = page.evaluate(READ_DELIVERY_CAPTURE_JS)
         if not isinstance(capture, dict):
@@ -1047,31 +1122,55 @@ class FacebookClient:
                 "Facebook delivery-type capture was not installed on this page, so the "
                 "per-listing fulfillment model could not be read."
             )
-        conflicts = capture.get("conflicts") or {}
-        if conflicts:
+        for key, subject in CAPTURE_CONFLICT_MAPS.items():
+            conflicts = capture.get(key) or {}
+            if conflicts:
+                raise ClientError(
+                    f"Facebook returned conflicting {subject} for {len(conflicts)} "
+                    "listing(s), so the read is not trustworthy. Samples: "
+                    f"{dict(list(conflicts.items())[:3])}"
+                )
+        wrong_shape = {
+            key: type(capture.get(key)).__name__
+            for key in CAPTURE_MAPS
+            if not isinstance(capture.get(key), dict)
+        }
+        if wrong_shape:
             raise ClientError(
-                "Facebook returned conflicting delivery_types for "
-                f"{len(conflicts)} listing(s), so the fulfillment read is not "
-                f"trustworthy. Samples: {dict(list(conflicts.items())[:3])}"
-            )
-        delivery_types = capture.get("deliveryTypes")
-        location_text = capture.get("locationText")
-        if not isinstance(delivery_types, dict) or not isinstance(location_text, dict):
-            raise ClientError(
-                "Facebook delivery-type capture returned an unexpected shape: "
-                f"deliveryTypes={type(delivery_types).__name__} "
-                f"locationText={type(location_text).__name__}."
+                f"Facebook listing capture returned an unexpected shape: {wrong_shape}."
             )
         logger.debug(
-            "_read_delivery_capture: %d listing(s) from %s payload(s), %s parse error(s)",
-            len(delivery_types),
+            "_read_delivery_capture: %d listing(s), %d alias(es) from %s payload(s), "
+            "%s parse error(s)",
+            len(capture["deliveryTypes"]),
+            len(capture["aliases"]),
             capture.get("payloads"),
             capture.get("parseErrors"),
         )
         return capture
 
+    @staticmethod
+    def _resolve_captured_listing_id(capture: Dict, item_id: str) -> Optional[str]:
+        """Map a requested Marketplace id to the id Facebook described it under.
+
+        Facebook gives one listing two ids -- a listing id and a story/post id --
+        and links to it by either, so the id in a URL or a tile href is not
+        always the id its own payload is keyed by. The capture records
+        Facebook's own alias fields, so a request by either id resolves.
+
+        Returns:
+            The id the listing's ``delivery_types`` are filed under, or None
+            when this page never described the listing at all.
+        """
+        if capture["deliveryTypes"].get(item_id):
+            return item_id
+        alias = capture["aliases"].get(item_id)
+        if alias is not None and capture["deliveryTypes"].get(alias):
+            return alias
+        return None
+
     def _extract_listing_fulfillment(self, page, item_id: str) -> Dict:
-        """Read one listing's delivery types and location from its detail page.
+        """Read one listing's delivery types, location, and state from its page.
 
         Fails loudly rather than returning an absent value: a listing with no
         readable ``delivery_types`` is indistinguishable from one that offers no
@@ -1080,27 +1179,30 @@ class FacebookClient:
 
         Returns:
             Dict with ``delivery_types`` (non-empty list of Facebook's own
-            tokens) and ``location`` (Facebook's ``location_text``, or None when
-            the listing carries no place name).
+            tokens), ``location`` (Facebook's ``location_text``, or None when
+            the listing carries no place name), and ``availability``.
         """
         self._install_delivery_capture(page)
         capture = self._read_delivery_capture(page)
-        delivery_types = capture["deliveryTypes"].get(item_id)
-        if not delivery_types:
+        described_id = self._resolve_captured_listing_id(capture, item_id)
+        if described_id is None:
             raise ClientError(
                 f"Facebook did not describe the fulfillment options for listing {item_id}: "
-                "no delivery_types were found in the page's listing data. Facebook changed "
-                "its Marketplace payload and the CLI extractor needs updating. Refusing to "
+                "no delivery_types were found in the page's listing data, under that id or "
+                "under any listing id Facebook aliases to it. Facebook changed its "
+                "Marketplace payload and the CLI extractor needs updating. Refusing to "
                 "report an unknown fulfillment model as 'no shipping offered'. "
-                f"(listings described on this page: {len(capture['deliveryTypes'])})"
+                f"(listings described on this page: {len(capture['deliveryTypes'])}, "
+                f"aliases: {len(capture['aliases'])})"
             )
         return {
-            "delivery_types": delivery_types,
-            "location": capture["locationText"].get(item_id),
+            "delivery_types": capture["deliveryTypes"][described_id],
+            "location": capture["locationText"].get(described_id),
+            "availability": self._derive_availability(capture["availability"].get(described_id)),
         }
 
     def _extract_detail_page_info(self, page) -> Dict:
-        """Extract title, price, description, and raw availability signals.
+        """Extract the listing's title, price, and description.
 
         Price extraction is delegated to :meth:`_extract_detail_page_price`,
         which targets the price element itself so a struck-through pre-drop
@@ -1109,19 +1211,16 @@ class FacebookClient:
         ``location_text`` via :meth:`_extract_listing_fulfillment`, because the
         detail page renders the place name inside a relative-time sentence
         ("Listed 4 weeks ago in Evansville, IN") that carries no stable anchor.
-
-        The availability signals are intentionally raw (booleans) so the
-        Sold/Pending/Available decision stays in pure Python
-        (:meth:`_derive_availability`). That keeps the live-DOM marker tuning a
-        single-place change.
+        Availability is not read here either: Facebook publishes ``is_sold`` /
+        ``is_pending`` / ``is_live`` in the same listing node, which is a
+        stronger answer than any banner text this page renders.
 
         Returns:
-            Dict with title, price, originalPrice, description keys plus the raw
-            availability signals soldText, pendingText, priceRendered.
+            Dict with title, price, originalPrice, and description keys.
         """
         js = (
             '() => { const main = document.querySelector(\'[role="main"]\');'
-            ' if (main == null) return {title:"",description:"",soldText:false,pendingText:false};'
+            ' if (main == null) return {title:"",description:""};'
             ' const h1 = main.querySelector("h1");'
             ' const title = h1 ? (h1.innerText || "").trim() : "";'
             ' const text = main.innerText || "";'
@@ -1137,19 +1236,7 @@ class FacebookClient:
             '   if (lm) desc = desc.substring(0, desc.length - lm[0].length).trim();'
             '   description = desc;'
             ' }'
-            ' const lowerText = (text || "").toLowerCase();'
-            # Conservative sold/removed markers. Facebook shows a banner such as
-            # "This item is no longer available" once a listing is sold/removed.
-            # These exact phrases are placeholders the live session tunes against
-            # a real sold item; the Python mapping in _derive_availability is the
-            # source of truth, so tuning stays a single-place change.
-            ' const soldText = lowerText.indexOf("no longer available") !== -1'
-            '   || lowerText.indexOf("this item is sold") !== -1'
-            '   || lowerText.indexOf("marked as sold") !== -1;'
-            # Conservative pending marker.
-            ' const pendingText = lowerText.indexOf("sale pending") !== -1;'
-            ' return {title: title, description: description,'
-            '   soldText: soldText, pendingText: pendingText}; }'
+            ' return {title: title, description: description}; }'
         )
         result = page.evaluate(js)
         if not isinstance(result, dict):
@@ -1160,35 +1247,34 @@ class FacebookClient:
         price = self._extract_detail_page_price(page)
         result["price"] = price.get("price") or ""
         result["originalPrice"] = price.get("originalPrice") or ""
-        # A real price string was extracted; empty when Facebook did not render
-        # a listing price (e.g. a login/removed shell).
-        result["priceRendered"] = result["price"] != ""
         return result
 
     @staticmethod
-    def _derive_availability(signals: Dict) -> Optional[str]:
-        """Map raw detail-page availability signals to an availability string.
+    def _derive_availability(state: Optional[Dict]) -> Optional[str]:
+        """Map Facebook's own listing-state booleans to an availability string.
 
-        This is the single source of truth for the Sold/Pending/Available
-        classification, so the live-DOM markers extracted in
-        :meth:`_extract_detail_page_info` can be tuned without touching the
-        decision logic. Conservative precedence:
-          1. a sold/removed banner        -> "Sold"
-          2. a pending marker             -> "Pending"
-          3. a real price/listing rendered -> "Available"
-          4. otherwise                    -> None (could not determine)
+        The booleans come from the same listing node as ``delivery_types``
+        (:data:`INSTALL_DELIVERY_CAPTURE_JS`), so both surfaces answer from
+        Facebook's data rather than from rendered banner text. The detail page
+        used to be read for phrases such as "no longer available", which only
+        the detail surface renders and which no live sold listing had ever been
+        checked against. Precedence:
+          1. ``is_sold``    -> "Sold"
+          2. ``is_pending`` -> "Pending"
+          3. ``is_live``    -> "Available"
+          4. otherwise      -> None (Facebook did not describe this listing)
 
         Args:
-            signals: Dict carrying the raw booleans ``soldText``, ``pendingText``,
-                and ``priceRendered`` (extra keys such as title/price are ignored).
+            state: The captured ``{is_sold, is_pending, is_live}`` booleans, or
+                None when this page's payload never described the listing.
         """
-        if not isinstance(signals, dict):
+        if not isinstance(state, dict):
             return None
-        if signals.get("soldText"):
+        if state.get("is_sold"):
             return "Sold"
-        if signals.get("pendingText"):
+        if state.get("is_pending"):
             return "Pending"
-        if signals.get("priceRendered"):
+        if state.get("is_live"):
             return "Available"
         return None
 
@@ -1392,32 +1478,44 @@ class FacebookClient:
                 self._marketplace_page_state(page), f"Marketplace ({status_msg})"
             )
             return []
-        self._attach_delivery_types(page, items)
+        self._attach_captured_listing_fields(page, items)
         return [MarketplaceListing(**d) for d in items]
 
-    def _attach_delivery_types(self, page, items: List[Dict]) -> None:
-        """Set each collected row's ``delivery_types`` from the captured payloads.
+    def _attach_captured_listing_fields(self, page, items: List[Dict]) -> None:
+        """Set each row's fulfillment, state, and tile photo from the payloads.
 
-        A row Facebook never described keeps ``delivery_types = None`` and is
-        named in a warning, rather than being reported as an empty list. An
-        empty list reads as "this seller offers no fulfillment at all", which is
-        never what a missing capture means. The known case is Facebook's
-        injected "commerce_interesting_product" notification tile, whose listing
-        data comes from the notifications feed rather than the search payload.
+        A row Facebook never described keeps every captured field at None and is
+        named in a warning, rather than being reported as an empty list or as an
+        available listing. An empty ``delivery_types`` reads as "this seller
+        offers no fulfillment at all", which is never what a missing capture
+        means. The known case is Facebook's injected
+        "commerce_interesting_product" notification tile: its href carries the
+        listing's story/post id and its listing data comes from the
+        notifications feed, which the search payload never contains under any
+        id. `marketplace get` on that id reads the listing's own page and
+        resolves the id alias there.
         """
         capture = self._read_delivery_capture(page)
-        delivery_types = capture["deliveryTypes"]
         undescribed = []
         for item in items:
-            item_id = item["item_id"]
-            item["delivery_types"] = delivery_types.get(item_id)
-            if item["delivery_types"] is None:
-                undescribed.append(item_id)
+            described_id = self._resolve_captured_listing_id(capture, item["item_id"])
+            if described_id is None:
+                item["delivery_types"] = None
+                item["availability"] = None
+                item["primary_image_url"] = None
+                undescribed.append(item["item_id"])
+                continue
+            item["delivery_types"] = capture["deliveryTypes"][described_id]
+            item["availability"] = self._derive_availability(
+                capture["availability"].get(described_id)
+            )
+            item["primary_image_url"] = capture["primaryImage"].get(described_id)
         if undescribed:
             print_warning(
-                f"Facebook described no delivery_types for {len(undescribed)} of "
-                f"{len(items)} listing(s); those rows report delivery_types: null, "
-                "which means UNKNOWN and must never be read as 'no shipping offered'. "
+                f"Facebook described no listing data for {len(undescribed)} of "
+                f"{len(items)} listing(s); those rows report delivery_types, "
+                "availability, and primary_image_url as null, which means UNKNOWN. "
+                "A null delivery_types must never be read as 'no shipping offered'. "
                 f"Use `marketplace get <item_id>` for a definitive read. IDs: {undescribed}"
             )
 
@@ -1543,7 +1641,7 @@ class FacebookClient:
             url=f"/marketplace/item/{item_id}/",
             location=fulfillment["location"],
             description=info.get("description") or None,
-            availability=self._derive_availability(info),
+            availability=fulfillment["availability"],
             delivery_types=fulfillment["delivery_types"],
         )
 

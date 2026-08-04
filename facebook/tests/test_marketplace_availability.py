@@ -6,7 +6,7 @@ These tests never touch a live browser or Facebook login. They exercise:
     corroboration), never by result count, so an empty-but-authenticated
     search passes while a login-walled page fails loudly with the exact
     re-auth remediation;
-  - the pure ``_derive_availability`` signal -> string mapping;
+  - the pure ``_derive_availability`` listing-state -> string mapping;
   - ``MarketplaceListing`` accepting the new ``availability`` field.
 
 The fake page objects reproduce only the surface the assertion touches: the
@@ -172,27 +172,32 @@ class PageHasCUserTests(unittest.TestCase):
 
 
 class DeriveAvailabilityTests(unittest.TestCase):
+    """Availability comes from Facebook's own listing-state booleans.
+
+    Both surfaces read the same captured node, so `list` and `get` can no longer
+    disagree about whether a listing is still for sale.
+    """
+
     def test_sold_wins_over_everything(self):
-        signals = {"soldText": True, "pendingText": True, "priceRendered": True}
-        self.assertEqual(FacebookClient._derive_availability(signals), "Sold")
+        state = {"is_sold": True, "is_pending": True, "is_live": True}
+        self.assertEqual(FacebookClient._derive_availability(state), "Sold")
 
     def test_pending_when_not_sold(self):
-        signals = {"soldText": False, "pendingText": True, "priceRendered": True}
-        self.assertEqual(FacebookClient._derive_availability(signals), "Pending")
+        state = {"is_sold": False, "is_pending": True, "is_live": True}
+        self.assertEqual(FacebookClient._derive_availability(state), "Pending")
 
-    def test_available_when_price_rendered(self):
-        signals = {"soldText": False, "pendingText": False, "priceRendered": True}
-        self.assertEqual(FacebookClient._derive_availability(signals), "Available")
+    def test_available_when_live(self):
+        state = {"is_sold": False, "is_pending": False, "is_live": True}
+        self.assertEqual(FacebookClient._derive_availability(state), "Available")
 
-    def test_none_when_no_signal(self):
-        signals = {"soldText": False, "pendingText": False, "priceRendered": False}
-        self.assertIsNone(FacebookClient._derive_availability(signals))
+    def test_none_when_no_state_is_set(self):
+        state = {"is_sold": False, "is_pending": False, "is_live": False}
+        self.assertIsNone(FacebookClient._derive_availability(state))
 
-    def test_none_when_signals_not_a_dict(self):
+    def test_none_when_facebook_never_described_the_listing(self):
         self.assertIsNone(FacebookClient._derive_availability(None))
 
-    def test_missing_keys_default_to_none(self):
-        # An empty signals dict (e.g. from the null-main fallback) yields None.
+    def test_missing_keys_yield_unknown(self):
         self.assertIsNone(FacebookClient._derive_availability({}))
 
 

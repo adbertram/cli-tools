@@ -61,6 +61,16 @@ class MarketplaceListing(CLIModel):
     #: None means the URLs were not read (a `list` row without `--include-detail`).
     #: `[]` means the gallery was read and the listing genuinely has no photos.
     image_urls: Optional[List[str]] = None
+    #: Facebook's own tile photo for this listing, taken from
+    #: ``primary_listing_photo`` in the search payload. It is a square-cropped
+    #: CDN render of the listing's first gallery photo, NOT a gallery URL, so it
+    #: is reported separately from ``image_urls`` -- putting it there would tell
+    #: a consumer the listing has exactly one photo.
+    #:
+    #: Only the `list` surface carries it: the detail page's listing node has no
+    #: ``primary_listing_photo`` field, and `get` reads the full gallery into
+    #: ``image_urls`` instead. None means Facebook did not describe this tile.
+    primary_image_url: Optional[str] = None
     local_images: Optional[List[str]] = None
 
     @model_validator(mode="before")

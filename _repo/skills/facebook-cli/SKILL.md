@@ -78,6 +78,8 @@ Facebook renders a discounted listing as the current price immediately followed 
 Both cover only the listing's own media gallery (hero image plus thumbnails). Sidebar advertisement creatives and recommended-listing images are excluded.
 
 `image_urls` is `null` on a `list` row read without `--include-detail` (the gallery was never opened) and `[]` when the gallery was read and the listing has no photos. Those are different answers and are not collapsed.
+
+A plain `marketplace list` row carries `primary_image_url` instead — Facebook's own tile photo from the search payload, a square-cropped CDN render of the first gallery photo. It is a separate field because it is ONE cropped image, not the gallery; reporting it in `image_urls` would claim the listing has exactly one photo. It is `null` on `get` (the detail page's listing node has no `primary_listing_photo`; `get` reads the real gallery instead) and `null` for a tile Facebook never described.
 </principle>
 
 <principle name="Marketplace Delivery Types (Fulfillment)">
@@ -92,6 +94,22 @@ Every Marketplace record carries `delivery_types` on BOTH `marketplace list` and
 Never infer fulfillment from rendered text. The detail page shows only the seller's free-form meet-up prose, and a search tile shows a place name OR the string "Ships to you" — that choice is a DISTANCE decision, not a fulfillment one, so a shipping-capable listing near the viewer still renders a place name. Reading the prose or the tile text will get the answer wrong.
 
 `location` on `get` now comes from Facebook's own `location_text` (the previous "Listed in " text parse never matched, which is why `get` returned `location: null`); carrying location from the `list` row is no longer necessary. On `list`, a tile rendering "Ships to you" reports `location: null` rather than that string.
+</principle>
+
+<principle name="Marketplace One Listing, Two IDs">
+Facebook identifies one listing by TWO ids and links to it by either: a LISTING id and a STORY/POST id. A search tile links by the listing id. Facebook's injected "commerce_interesting_product" notification tile links by the post id.
+
+The listing's own payload node is always keyed by the LISTING id and publishes the post id in its own `story.post_id` and `product_item.id` fields. The CLI indexes that mapping, so `marketplace get <either id>` resolves.
+
+`item_id` in the output is the id that was requested, NOT a canonical one. Two records for the same listing under its two ids are the same listing. Never treat them as two listings.
+</principle>
+
+<principle name="Marketplace Availability">
+`availability` reports `Sold`, `Pending`, `Available`, or `null` on BOTH `marketplace list` and `marketplace get`. It is mapped from Facebook's own `is_sold` / `is_pending` / `is_live` booleans, which ride in the same listing node as `delivery_types`. No rendered banner text is read.
+
+`null` means UNKNOWN — Facebook did not describe that listing on the surface that was read. It NEVER means "still for sale".
+
+A consumer re-checking many saved listings for sold state should use one `marketplace list` call, not one `marketplace get` per listing.
 </principle>
 
 <success_criteria>
@@ -195,3 +213,42 @@ Two transports carry it and neither alone is complete: `script[type="application
 **Verification:** `get 26999388286428618` → `location: "Evansville, IN"`, `delivery_types: ["IN_PERSON"]` (was `null` / absent). `get 1716979012677494` → `"Williamsburg, VA"`, `["IN_PERSON","SHIPPING_ONSITE"]`. `list --query lego --limit 100` covered 99/100 rows (vocabulary `IN_PERSON` 99, `DOOR_PICKUP` 23, `PUBLIC_MEETUP` 15, `SHIPPING_ONSITE` 2, `DOOR_DROPOFF` 2), zero rows carrying "Ships to you" as a location, and warned by ID for the one uncovered tile. Regression coverage in `facebook/tests/test_marketplace_delivery_types.py` against verbatim live fixtures, including replaying a real Relay pagination body through a real XHR. Full suite: `100 passed`.
 
 **Recurrence Prevention:** Never read fulfillment from rendered text — not the description prose, not the tile's location slot. `delivery_types` is reported verbatim, so a token Facebook adds later flows through instead of being dropped, and `null` is reserved for UNKNOWN and must never be read as "no shipping offered". The one uncovered row is Facebook's injected "commerce_interesting_product" notification tile, whose listing data comes from the notifications feed rather than the search payload; `marketplace get` on that ID gives a definitive read. If the capture starts returning nothing, dump `script[type="application/json"]` contents and an XHR body from the live page FIRST and confirm Facebook's field names, exactly as this fix did.
+
+**Superseded in part by Known Issue #7 (2026-08-04):** the `marketplace get` recovery path named above was broken for exactly those notification-tile IDs, because the capture was keyed by one of Facebook's two listing IDs and the notification tile links by the other. #7 restores it.
+
+### 7. `marketplace get` on a notification-tile ID failed on a page that fully described the listing
+
+**Symptom (2026-08-04):** `facebook marketplace list --query "lego" --location evansville --sort newest --limit 100` warned `Facebook described no delivery_types for 2 of 100 listing(s) ... IDs: ['28800686242866906', '37076565001958568']`, and Known Issue #6's documented recovery path then failed on both:
+
+```
+Error: Facebook did not describe the fulfillment options for listing 28800686242866906: no delivery_types were found in the page's listing data. ... (listings described on this page: 21)
+```
+
+Exit 1 both times, on a healthy authenticated session. Both rows also returned `location: null` and no description on `list`. Because the consumer is forbidden from guessing fulfillment, both listings were dropped — and both were real bulk LEGO lots ("Lego Lot" $100, "Large lot of misc lego/building blocks/max blocks" $50), the two most valuable candidates in that window.
+
+**Cause:** ONE LISTING, TWO IDS. Facebook identifies a listing by a LISTING id and by a STORY/POST id, and links to it by either. The detail page WAS describing the listing in full — under its other id. Captured live from `/marketplace/item/28800686242866906/`:
+
+```json
+{"__typename":"GroupCommerceProductItem","id":"1533173811265557",
+ "delivery_types":["IN_PERSON","PUBLIC_MEETUP"],
+ "location_text":{"text":"Evansville, IN"},
+ "story":{"post_id":"28800686242866906", ...},
+ "product_item":{"id":"28800686242866906", ...},
+ "is_sold":false,"is_pending":false,"is_live":true}
+```
+
+The capture map is keyed by `node.id` (the listing id `1533173811265557`), so a lookup by the URL id `28800686242866906` missed and the fail-loud guard fired. The error message ("Facebook changed its Marketplace payload") was misleading: Facebook had changed nothing, and the "21 listings described" it reported were the 20 recommended listings plus the target itself.
+
+Which id a surface uses is not arbitrary. A normal search tile links by the listing id (`get 26999388286428618` was a direct hit and always worked). The injected "commerce_interesting_product" notification tile links by the post id, which is why only those two rows failed. Both failing tiles carried `?ref=notif&notif_t=commerce_interesting_product` in the href.
+
+**Fix (`facebook/facebook_cli/client.py`, `facebook/facebook_cli/models.py`):**
+- `INSTALL_DELIVERY_CAPTURE_JS` now also records `capture.aliases`, mapping each listing's `story.post_id` and `product_item.id` to the id its node is keyed by. Two listings claiming the same alias are recorded in `aliasConflicts` and raise, matching the existing `delivery_types` conflict handling.
+- `_resolve_captured_listing_id` resolves a requested id: direct hit first, then the alias index. `_extract_listing_fulfillment` and the `list` attachment both use it.
+- The same capture now records Facebook's `is_sold`/`is_pending`/`is_live` booleans and `primary_listing_photo`, so `list` reports `availability` and `primary_image_url`.
+- `_derive_availability` takes those booleans on BOTH surfaces. The detail-page text markers it used before (`"no longer available"`, `"sale pending"`) were never validated against a real sold listing and were removed with the DOM signals that fed them.
+
+**Verification:** `get 28800686242866906` → `delivery_types: ["IN_PERSON","PUBLIC_MEETUP"]`, `location: "Evansville, IN"`, `availability: "Available"`, `original_price: 250.0`, 7 gallery URLs. `get 37076565001958568` → `["IN_PERSON","PUBLIC_MEETUP"]`, `"Utica, KY"`. The exact failing `list` command exited 0 with 98 of 100 rows carrying `delivery_types`, `availability`, and `primary_image_url`. Regression coverage in `facebook/tests/test_marketplace_delivery_types.py` against a verbatim live fixture (`tests/fixtures/marketplace_item_delivery_post_id_alias.html`, the real script element from listing 28800686242866906's page). Full suite: `114 passed`.
+
+**Honest limit (unchanged and confirmed live):** `marketplace list` STILL reports `null` for those same two notification tiles, and that is correct. Their ids appear nowhere in the search page's payloads — not in any `script[type="application/json"]` blob, not in any of the 15 captured XHR bodies, and not under the canonical listing id either. Facebook serves the notification tile's listing data from the notifications feed, which the search page never loads. So the `list` surface genuinely cannot describe them, the warning names them by id, and `marketplace get` is now once again the definitive read. Do NOT try to fill those rows by guessing.
+
+**Recurrence Prevention:** Never assume the id in a Marketplace URL or tile href is the id Facebook's own payload is keyed by. When a lookup misses on a page that clearly rendered the listing, dump the node and compare its `id` against `story.post_id` and `product_item.id` BEFORE concluding Facebook changed its payload. The fail-loud guard did its job here — it refused to report an unknown fulfillment model — but its error text blamed Facebook for a keying bug in the CLI, so a "Facebook changed its payload" message is a hypothesis to test against the live page, never a conclusion.

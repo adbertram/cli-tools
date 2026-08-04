@@ -218,12 +218,48 @@ facebook marketplace list --query "LEGO" --properties item_id,title,delivery_typ
 facebook marketplace get 1716979012677494 --properties title,location,delivery_types
 ```
 
+#### One listing, two IDs
+
+Facebook identifies a listing by **two** IDs — a listing ID and a story/post ID —
+and links to it by either. A search tile links by the listing ID; the injected
+notification tile links by the post ID. The listing's own payload node is always
+keyed by the listing ID and publishes the post ID in its `story.post_id` and
+`product_item.id` fields, so `marketplace get` accepts either ID and resolves the
+alias from Facebook's own data.
+
+`item_id` in the output is the ID you asked for, not a canonical one. Two records
+for the same listing under its two IDs are the same listing.
+
+#### Availability
+
+`availability` reports `Sold`, `Pending`, `Available`, or `null` (unknown) on
+**both** surfaces, mapped from Facebook's own `is_sold` / `is_pending` /
+`is_live` booleans in the same listing node that carries `delivery_types`.
+Rendered banner text is not read. A consumer re-checking many saved listings for
+sold state gets the answer from one `list` call instead of one `get` per listing.
+
+A row Facebook never described reports `availability: null`, which means unknown,
+never "still for sale".
+
 #### Images
 
-`--download-images` saves only the listing's **own** media gallery (the hero
-image plus every thumbnail). Sidebar advertisement creatives served from the
-same Facebook CDN, and the images of the recommended listings shown below a
-detail page, are excluded.
+`marketplace get` returns the listing's full media gallery in `image_urls` (the
+hero image plus every thumbnail). `marketplace list` returns Facebook's own tile
+photo in `primary_image_url` — a square-cropped CDN render of the first gallery
+photo, taken from the search payload. It is reported separately because it is one
+cropped image, not the gallery; putting it in `image_urls` would claim the
+listing has exactly one photo.
+
+`--download-images` also writes the gallery to a local cache and reports the file
+paths in `local_images`. Image URLs are returned either way, so reading a photo
+needs no download. Sidebar advertisement creatives served from the same Facebook
+CDN, and the images of the recommended listings shown below a detail page, are
+excluded.
+
+```bash
+# Tile photo and sold state for a whole search, no per-listing navigation
+facebook marketplace list --query "LEGO" --properties item_id,availability,primary_image_url
+```
 
 #### Empty results
 

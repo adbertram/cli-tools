@@ -13,10 +13,17 @@ authenticated session:
   - ``marketplace_item_delivery_shipping.html`` -- the same element from listing
     1716979012677494, a shipping-capable listing
     (``["IN_PERSON", "SHIPPING_ONSITE"]``, Williamsburg, VA).
+  - ``marketplace_item_delivery_post_id_alias.html`` -- captured live 2026-08-04
+    from ``/marketplace/item/28800686242866906/``, the "Lego Lot" listing that
+    `marketplace get` refused to read. Facebook files the node under its LISTING
+    id 1533173811265557 and publishes the requested id as ``story.post_id`` and
+    ``product_item.id``. This is the fixture for the id-alias resolution.
   - ``marketplace_search_pagination_response.txt`` -- the verbatim body of a
     Relay pagination response served while scrolling a Marketplace search. This
     is the ONLY transport that carries fulfillment for scroll-loaded tiles, so
-    it is replayed here through a real XHR rather than parsed directly.
+    it is replayed here through a real XHR rather than parsed directly. It also
+    carries the per-listing ``is_sold``/``is_pending``/``is_live`` booleans and
+    ``primary_listing_photo`` that the list surface reports.
 
 The capture is browser-evaluated JavaScript, so every fixture is loaded into a
 real headless Chromium page and the exact production JS constant is evaluated
@@ -42,6 +49,28 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 IN_PERSON_ITEM_ID = "26999388286428618"
 SHIPPING_ITEM_ID = "1716979012677494"
+# One listing, two ids: the URL/tile id Facebook's notification tile links by,
+# and the listing id its own payload node is keyed by.
+ALIAS_POST_ID = "28800686242866906"
+ALIAS_LISTING_ID = "1533173811265557"
+
+
+def _capture_stub(**overrides) -> dict:
+    """A capture in the exact shape ``INSTALL_DELIVERY_CAPTURE_JS`` writes."""
+    capture = {
+        "deliveryTypes": {},
+        "locationText": {},
+        "availability": {},
+        "primaryImage": {},
+        "aliases": {},
+        "conflicts": {},
+        "availabilityConflicts": {},
+        "aliasConflicts": {},
+        "payloads": 1,
+        "parseErrors": 0,
+    }
+    capture.update(overrides)
+    return capture
 
 
 class _FakePage:
@@ -81,6 +110,10 @@ def test_capture_reads_a_local_pickup_only_listing():
     assert capture["deliveryTypes"][IN_PERSON_ITEM_ID] == ["IN_PERSON"]
     assert capture["locationText"][IN_PERSON_ITEM_ID] == "Evansville, IN"
     assert capture["conflicts"] == {}
+    # Facebook's own listing-state booleans ride in the same node.
+    assert capture["availability"][IN_PERSON_ITEM_ID] == {
+        "is_sold": False, "is_pending": False, "is_live": True
+    }
 
 
 def test_capture_reads_a_shipping_capable_listing():
@@ -117,7 +150,77 @@ def test_capture_ignores_a_page_with_no_listing_data():
     capture = _capture_from("<div role='main'><h1>Log in to Facebook</h1></div>")
 
     assert capture["deliveryTypes"] == {}
+    assert capture["aliases"] == {}
     assert capture["parseErrors"] == 0
+
+
+# --- One listing, two ids ---------------------------------------------------
+
+
+def test_capture_indexes_facebooks_own_id_alias_for_a_listing():
+    """`marketplace get 28800686242866906` failed on a page that described the
+    listing in full -- under its OTHER id. Facebook publishes the mapping."""
+    capture = _capture_from(
+        (FIXTURES / "marketplace_item_delivery_post_id_alias.html").read_text(encoding="utf-8")
+    )
+
+    assert capture["deliveryTypes"][ALIAS_LISTING_ID] == ["IN_PERSON", "PUBLIC_MEETUP"]
+    assert ALIAS_POST_ID not in capture["deliveryTypes"]
+    assert capture["aliases"][ALIAS_POST_ID] == ALIAS_LISTING_ID
+    assert capture["aliasConflicts"] == {}
+
+
+def test_get_resolves_a_listing_requested_by_its_post_id():
+    """The documented recovery path for an undescribed `list` row: a definitive
+    read of the listing Facebook's search payload never covered."""
+    html = (FIXTURES / "marketplace_item_delivery_post_id_alias.html").read_text(encoding="utf-8")
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(html)
+        client = FacebookClient.__new__(FacebookClient)
+        fulfillment = client._extract_listing_fulfillment(page, ALIAS_POST_ID)
+        browser.close()
+
+    assert fulfillment == {
+        "delivery_types": ["IN_PERSON", "PUBLIC_MEETUP"],
+        "location": "Evansville, IN",
+        "availability": "Available",
+    }
+
+
+def test_a_listing_requested_by_its_listing_id_still_resolves_directly():
+    """The alias index must not displace a direct hit."""
+    capture = _capture_stub(
+        deliveryTypes={"111": ["IN_PERSON"], "222": ["SHIPPING_ONSITE"]},
+        aliases={"111": "222"},
+    )
+
+    assert FacebookClient._resolve_captured_listing_id(capture, "111") == "111"
+    assert FacebookClient._resolve_captured_listing_id(capture, "999") is None
+
+
+def test_an_alias_to_an_undescribed_listing_is_not_a_hit():
+    """An alias that points at a listing this page never described resolves to
+    nothing, so the caller still fails loudly."""
+    capture = _capture_stub(deliveryTypes={}, aliases={"111": "222"})
+
+    assert FacebookClient._resolve_captured_listing_id(capture, "111") is None
+
+
+def test_conflicting_id_aliases_fail_loudly():
+    """Two listings claiming the same alias would make one of them answer for
+    the other."""
+    page = _FakePage({
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"111": ["IN_PERSON"]},
+            aliasConflicts={"999": ["111", "222"]},
+        ),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+
+    with pytest.raises(ClientError, match="conflicting listing-id aliases"):
+        client._read_delivery_capture(page)
 
 
 # --- Relay pagination transport ---------------------------------------------
@@ -162,6 +265,16 @@ def test_capture_harvests_scroll_loaded_tiles_from_a_pagination_response():
     # Every captured listing names at least one delivery type; an empty array
     # would be reported as "offers no fulfillment".
     assert all(types for types in capture["deliveryTypes"].values())
+    # The same response answers "is it still for sale?" and "what does it look
+    # like?", so the list surface needs no per-listing detail navigation.
+    assert len(capture["availability"]) == len(capture["deliveryTypes"])
+    assert all(
+        set(state) == {"is_sold", "is_pending", "is_live"}
+        for state in capture["availability"].values()
+    )
+    assert len(capture["primaryImage"]) == len(capture["deliveryTypes"])
+    assert all(uri.startswith("https://") for uri in capture["primaryImage"].values())
+    assert capture["availabilityConflicts"] == {}
 
 
 # --- Fail-loud contract on `get` --------------------------------------------
@@ -172,13 +285,7 @@ def test_get_fails_loudly_when_facebook_describes_no_delivery_types():
     does not ship."""
     page = _FakePage({
         INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 3},
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"111": ["IN_PERSON"]},
-            "locationText": {},
-            "conflicts": {},
-            "payloads": 2,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(deliveryTypes={"111": ["IN_PERSON"]}),
     })
     client = FacebookClient.__new__(FacebookClient)
 
@@ -189,13 +296,7 @@ def test_get_fails_loudly_when_facebook_describes_no_delivery_types():
 def test_get_fails_loudly_on_an_empty_delivery_types_array():
     page = _FakePage({
         INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 1},
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"999": []},
-            "locationText": {},
-            "conflicts": {},
-            "payloads": 1,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(deliveryTypes={"999": []}),
     })
     client = FacebookClient.__new__(FacebookClient)
 
@@ -206,17 +307,43 @@ def test_get_fails_loudly_on_an_empty_delivery_types_array():
 def test_conflicting_payloads_fail_loudly():
     """If two payloads disagree about a listing, no listing's read is trusted."""
     page = _FakePage({
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"999": ["IN_PERSON"]},
-            "locationText": {},
-            "conflicts": {"999": [["IN_PERSON"], ["IN_PERSON", "SHIPPING_ONSITE"]]},
-            "payloads": 2,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"999": ["IN_PERSON"]},
+            conflicts={"999": [["IN_PERSON"], ["IN_PERSON", "SHIPPING_ONSITE"]]},
+        ),
     })
     client = FacebookClient.__new__(FacebookClient)
 
     with pytest.raises(ClientError, match="conflicting delivery_types"):
+        client._read_delivery_capture(page)
+
+
+def test_conflicting_listing_state_fails_loudly():
+    """A stale "live" beside a fresh "sold" is the one answer a consumer
+    re-checking a saved listing must not get wrong."""
+    page = _FakePage({
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"999": ["IN_PERSON"]},
+            availabilityConflicts={"999": [
+                {"is_sold": False, "is_pending": False, "is_live": True},
+                {"is_sold": True, "is_pending": False, "is_live": False},
+            ]},
+        ),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+
+    with pytest.raises(ClientError, match="conflicting listing-state booleans"):
+        client._read_delivery_capture(page)
+
+
+def test_a_capture_missing_a_map_fails_loudly():
+    """The capture JS and this reader must not drift apart silently."""
+    stub = _capture_stub()
+    del stub["aliases"]
+    page = _FakePage({READ_DELIVERY_CAPTURE_JS: stub})
+    client = FacebookClient.__new__(FacebookClient)
+
+    with pytest.raises(ClientError, match="unexpected shape"):
         client._read_delivery_capture(page)
 
 
@@ -231,20 +358,30 @@ def test_uninstalled_capture_fails_loudly():
 def test_listing_fulfillment_returns_location_when_facebook_carries_one():
     page = _FakePage({
         INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 1},
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"999": ["IN_PERSON", "SHIPPING_ONSITE"]},
-            "locationText": {"999": "Evansville, IN"},
-            "conflicts": {},
-            "payloads": 1,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"999": ["IN_PERSON", "SHIPPING_ONSITE"]},
+            locationText={"999": "Evansville, IN"},
+            availability={"999": {"is_sold": False, "is_pending": False, "is_live": True}},
+        ),
     })
     client = FacebookClient.__new__(FacebookClient)
 
     assert client._extract_listing_fulfillment(page, "999") == {
         "delivery_types": ["IN_PERSON", "SHIPPING_ONSITE"],
         "location": "Evansville, IN",
+        "availability": "Available",
     }
+
+
+def test_listing_availability_is_unknown_when_facebook_omits_the_booleans():
+    """None means unknown. It must not be reported as an available listing."""
+    page = _FakePage({
+        INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 1},
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(deliveryTypes={"999": ["IN_PERSON"]}),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+
+    assert client._extract_listing_fulfillment(page, "999")["availability"] is None
 
 
 # --- `list` rows ------------------------------------------------------------
@@ -255,41 +392,80 @@ def test_list_rows_get_delivery_types_and_undescribed_rows_stay_null(capsys):
     live case is Facebook's injected notification tile, whose listing data comes
     from the notifications feed rather than the search payload."""
     page = _FakePage({
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"111": ["IN_PERSON"], "222": ["IN_PERSON", "SHIPPING_ONSITE"]},
-            "locationText": {},
-            "conflicts": {},
-            "payloads": 3,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"111": ["IN_PERSON"], "222": ["IN_PERSON", "SHIPPING_ONSITE"]},
+            payloads=3,
+        ),
     })
     client = FacebookClient.__new__(FacebookClient)
     items = [{"item_id": "111"}, {"item_id": "222"}, {"item_id": "27542838245367180"}]
 
-    client._attach_delivery_types(page, items)
+    client._attach_captured_listing_fields(page, items)
 
     assert items[0]["delivery_types"] == ["IN_PERSON"]
     assert items[1]["delivery_types"] == ["IN_PERSON", "SHIPPING_ONSITE"]
     assert items[2]["delivery_types"] is None
+    assert items[2]["availability"] is None
+    assert items[2]["primary_image_url"] is None
     warning = capsys.readouterr().err
     assert "must never be read as 'no shipping offered'" in warning
     assert "27542838245367180" in warning
 
 
+def test_list_rows_report_facebooks_listing_state_and_tile_photo():
+    """A consumer re-checking N saved listings for sold-state gets the answer
+    from the search payload, without N detail navigations."""
+    page = _FakePage({
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={"111": ["IN_PERSON"], "222": ["IN_PERSON"], "333": ["IN_PERSON"]},
+            availability={
+                "111": {"is_sold": False, "is_pending": False, "is_live": True},
+                "222": {"is_sold": True, "is_pending": False, "is_live": False},
+                "333": {"is_sold": False, "is_pending": True, "is_live": True},
+            },
+            primaryImage={"111": "https://scontent.xx.fbcdn.net/v/photo1.jpg"},
+        ),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+    items = [{"item_id": "111"}, {"item_id": "222"}, {"item_id": "333"}]
+
+    client._attach_captured_listing_fields(page, items)
+
+    assert [item["availability"] for item in items] == ["Available", "Sold", "Pending"]
+    assert items[0]["primary_image_url"] == "https://scontent.xx.fbcdn.net/v/photo1.jpg"
+    # A described listing with no tile photo reports None, not a guessed URL.
+    assert items[1]["primary_image_url"] is None
+
+
+def test_list_rows_resolve_a_tile_linked_by_its_post_id():
+    """The tile href and the payload node can name the same listing by
+    different ids."""
+    page = _FakePage({
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(
+            deliveryTypes={ALIAS_LISTING_ID: ["IN_PERSON", "PUBLIC_MEETUP"]},
+            availability={
+                ALIAS_LISTING_ID: {"is_sold": False, "is_pending": False, "is_live": True}
+            },
+            aliases={ALIAS_POST_ID: ALIAS_LISTING_ID},
+        ),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+    items = [{"item_id": ALIAS_POST_ID}]
+
+    client._attach_captured_listing_fields(page, items)
+
+    assert items[0]["delivery_types"] == ["IN_PERSON", "PUBLIC_MEETUP"]
+    assert items[0]["availability"] == "Available"
+
+
 def test_no_warning_when_every_row_is_described(capsys):
     page = _FakePage({
-        READ_DELIVERY_CAPTURE_JS: {
-            "deliveryTypes": {"111": ["IN_PERSON"]},
-            "locationText": {},
-            "conflicts": {},
-            "payloads": 1,
-            "parseErrors": 0,
-        },
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(deliveryTypes={"111": ["IN_PERSON"]}),
     })
     client = FacebookClient.__new__(FacebookClient)
     items = [{"item_id": "111"}]
 
-    client._attach_delivery_types(page, items)
+    client._attach_captured_listing_fields(page, items)
 
     assert capsys.readouterr().err == ""
 
