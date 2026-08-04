@@ -932,12 +932,20 @@ class BrickOwlBrowser:
         # No match — use "Other" and put freeform text in the note
         return ("Other", reason)
 
-    def _select_refund_reason(self, reason: str) -> None:
-        """Select the refund reason dropdown and fill the note textbox.
+    def _select_refund_reason(self, reason: str, note: Optional[str] = None) -> None:
+        """Select the refund reason dropdown and fill the required note field.
 
-        Raises RuntimeError if the dropdown is not found or selection fails.
+        Brick Owl rejects every refund submission with "A note is required
+        to inform the customer" unless the note field is non-empty,
+        regardless of which reason is selected. ``note`` is the buyer-facing
+        text to put there (the CLI's ``--message``); when not provided, the
+        freeform ``reason`` text is used instead so the field is never left
+        empty.
+
+        Raises RuntimeError if the dropdown or the note field is not found,
+        selection fails, or the note value cannot be verified.
         """
-        dropdown_label, note_text = self._resolve_refund_reason(reason)
+        dropdown_label, _ = self._resolve_refund_reason(reason)
 
         reason_dropdown = self._page.query_selector("select")
         if not reason_dropdown:
@@ -956,15 +964,116 @@ class BrickOwlBrowser:
                 f"Dropdown still shows '{selected_value}'."
             )
 
-        # Put freeform reason text in the note textbox if it didn't match exactly
-        if note_text:
-            note_input = self._page.query_selector(
-                "select + input[type='text'], select ~ input[type='text'], "
-                "select + textarea, select ~ textarea"
+        self._fill_refund_note(note if note else reason)
+
+    # Confirmed via live DOM inspection of a real refund page (order 6249860,
+    # 2026-08-04): the required note field is a standalone
+    # <textarea name="bottom_left_refund_note">, NOT inside any <tr>/<td> —
+    # which is exactly why the old row-label lookup found every other row
+    # label ('Refund Shipping', 'Refund Adjustment', 'Total', ...) but never
+    # this field. It is the only named, non-table-cell text field on the
+    # page (id is a random per-load string, so match on name).
+    _REFUND_NOTE_SELECTOR = 'textarea[name="bottom_left_refund_note"]'
+
+    def _fill_refund_note(self, text: str) -> None:
+        """Fill the refund note field and verify the value was set.
+
+        Brick Owl rejects the submission with "A note is required to
+        inform the customer" if this field is empty. Primary strategy
+        targets the confirmed field by its stable `name` attribute
+        (Strategy 1); if Brick Owl's markup changes, falls back to the
+        row-label table lookup used for Refund Shipping / Refund Adjustment
+        (Strategy 2), then a text input/textarea that immediately follows
+        the reason <select> (Strategy 3 — the field's original, narrower
+        assumption).
+
+        Raises RuntimeError if no matching field is found, or if the fill
+        cannot be verified afterward — never submits silently without a
+        note.
+        """
+        found = self._page.evaluate("""(args) => {
+            const [text, selector] = args;
+
+            const primary = document.querySelector(selector);
+            if (primary) {
+                primary.value = '';
+                primary.value = text;
+                primary.dispatchEvent(new Event('input', { bubbles: true }));
+                primary.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+
+            const rows = document.querySelectorAll('tr');
+            for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 2 && /note/i.test(cells[0].textContent.trim())) {
+                    const input = cells[1].querySelector('input[type="text"], textarea, input');
+                    if (input) {
+                        input.value = '';
+                        input.value = text;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        return true;
+                    }
+                }
+            }
+
+            const select = document.querySelector('select');
+            const sibling = select && select.parentElement
+                ? select.parentElement.querySelector('input[type="text"], textarea')
+                : null;
+            if (sibling) {
+                sibling.value = '';
+                sibling.value = text;
+                sibling.dispatchEvent(new Event('input', { bubbles: true }));
+                sibling.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+
+            return false;
+        }""", [text, self._REFUND_NOTE_SELECTOR])
+
+        if not found:
+            row_labels = self._page.evaluate("""() => {
+                const labels = [];
+                for (const row of document.querySelectorAll('tr')) {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) labels.push(cells[0].textContent.trim());
+                }
+                return labels;
+            }""")
+            raise RuntimeError(
+                "Refund note field not found on the refund page "
+                f"(tried {self._REFUND_NOTE_SELECTOR!r}, a row-label lookup, "
+                f"and a select-sibling lookup). Table row labels seen: {row_labels}"
             )
-            if note_input:
-                note_input.fill(note_text)
-                self._page.wait_for_timeout(300)
+
+        self._page.wait_for_timeout(300)
+
+        # Verify the value was actually set — do not trust the fill silently.
+        actual_value = self._page.evaluate("""(selector) => {
+            const primary = document.querySelector(selector);
+            if (primary) return primary.value;
+
+            const rows = document.querySelectorAll('tr');
+            for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 2 && /note/i.test(cells[0].textContent.trim())) {
+                    const input = cells[1].querySelector('input[type="text"], textarea, input');
+                    if (input) return input.value;
+                }
+            }
+            const select = document.querySelector('select');
+            const sibling = select && select.parentElement
+                ? select.parentElement.querySelector('input[type="text"], textarea')
+                : null;
+            return sibling ? sibling.value : null;
+        }""", self._REFUND_NOTE_SELECTOR)
+
+        if actual_value != text:
+            raise RuntimeError(
+                f"Refund note verification failed: expected {text!r}, got {actual_value!r}."
+            )
 
     def _clear_refund_draft_state(self) -> None:
         """Clear any persisted draft state from the refund form.
@@ -1187,13 +1296,22 @@ class BrickOwlBrowser:
         # reasons unrelated to a successful refund.
         return False
 
-    def issue_refund(self, order_id: str, amount: float, reason: str = "Missing items") -> dict:
+    def issue_refund(
+        self,
+        order_id: str,
+        amount: float,
+        reason: str = "Missing items",
+        message: Optional[str] = None,
+    ) -> dict:
         """Issue a partial refund for an order.
 
         Args:
             order_id: The Brick Owl order ID.
             amount: Refund amount in USD.
             reason: Refund reason (mapped to valid dropdown label).
+            message: Buyer-facing note. Brick Owl requires a non-empty note
+                on every refund submission; when omitted, ``reason`` is used
+                so the required field is never left empty.
         """
         self._ensure_authenticated()
 
@@ -1209,7 +1327,8 @@ class BrickOwlBrowser:
         self._clear_refund_draft_state()
 
         # Select refund reason (maps freeform text to valid dropdown label)
-        self._select_refund_reason(reason)
+        # and fill the required note field.
+        self._select_refund_reason(reason, message)
 
         # Enter refund amount in the Adjustment field
         self._fill_refund_adjustment(amount)
@@ -1228,14 +1347,24 @@ class BrickOwlBrowser:
             "order_id": order_id,
             "amount": f"{amount:.2f}",
             "reason": reason,
+            "note": message if message else reason,
             "message": "Refund issued successfully",
         }
 
-    def issue_full_refund(self, order_id: str, reason: str = "Customer request") -> dict:
+    def issue_full_refund(
+        self, order_id: str, reason: str = "Customer request", message: Optional[str] = None
+    ) -> dict:
         """Issue a full refund for an order.
 
         Gets order total from the refund page, sets all item quantities to refund,
         fills shipping refund, and submits.
+
+        Args:
+            order_id: The Brick Owl order ID.
+            reason: Refund reason (mapped to valid dropdown label).
+            message: Buyer-facing note. Brick Owl requires a non-empty note
+                on every refund submission; when omitted, ``reason`` is used
+                so the required field is never left empty.
         """
         self._ensure_authenticated()
 
@@ -1262,7 +1391,8 @@ class BrickOwlBrowser:
         self._clear_refund_draft_state()
 
         # Select refund reason (maps freeform text to valid dropdown label)
-        self._select_refund_reason(reason)
+        # and fill the required note field.
+        self._select_refund_reason(reason, message)
 
         # Set all item "Qty to Refund" fields to their ordered quantity
         self._page.evaluate("""() => {
@@ -1319,6 +1449,7 @@ class BrickOwlBrowser:
             "order_id": order_id,
             "amount": f"{order_total:.2f}",
             "reason": reason,
+            "note": message if message else reason,
             "message": "Full refund issued successfully",
         }
 

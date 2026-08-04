@@ -73,6 +73,8 @@ def refund_issue(
     kwargs = {}
     if reason is not None:
         kwargs["reason"] = reason
+    if message is not None:
+        kwargs["message"] = message
 
     browser = get_browser()
     try:
@@ -108,6 +110,8 @@ def refund_full(
     kwargs = {}
     if reason is not None:
         kwargs["reason"] = reason
+    if message is not None:
+        kwargs["message"] = message
 
     browser = get_browser()
     try:
