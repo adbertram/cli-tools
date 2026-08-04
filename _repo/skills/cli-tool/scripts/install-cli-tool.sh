@@ -52,14 +52,20 @@ if [ -f "$TOOL_DIR/pyproject.toml" ] && grep -q "cli-tools-shared" "$TOOL_DIR/py
     USES_CLI_TOOLS_SHARED="true"
 fi
 
-# uv builds/resolves the tool against the interpreter it is given. Forcing the
-# ambient python3 breaks when it is older than the tool's requires-python (e.g.
-# macOS system 3.9 vs a >=3.11 tool: uv reports "requirements are
-# unsatisfiable"). resolve_uv_python.py returns the ambient interpreter when it
-# already satisfies the constraint, otherwise a compatible "3.X" version request
-# for uv to find or download. Compute this before the fast-path health check so
-# an editable install with a stale uv-managed interpreter is refreshed.
+# uv builds/resolves the tool against the interpreter it is given. Without
+# --python, uv's default python-preference = "managed" picks a uv-managed
+# interpreter (observed: CPython 3.12.10) and the CLI fails
+# tests/test_python_version.py::test_cli_uses_system_python.
+# resolve_uv_python.py returns the absolute system python3 when it satisfies
+# the tool's requires-python, otherwise a compatible "3.X" version request for
+# uv to find or download. Compute this before the fast-path health check so an
+# editable install with a stale uv-managed interpreter is refreshed.
 PYTHON_REQUEST="$(python3 "$SCRIPT_DIR/resolve_uv_python.py" "$TOOL_DIR/pyproject.toml")"
+RESOLVE_EXIT=$?
+if [ $RESOLVE_EXIT -ne 0 ] || [ -z "$PYTHON_REQUEST" ]; then
+    echo '{"error": "resolve_uv_python.py could not resolve an interpreter for '"$TOOL_DIR"' (exit '"$RESOLVE_EXIT"'). Refusing to run uv tool install unpinned; uv would install against its own managed interpreter."}' >&2
+    exit 1
+fi
 
 existing_editable_install="false"
 existing_editable_location=""
@@ -115,9 +121,7 @@ if [ "$FORCE_REFRESH" = "false" ] && [ -L "$LAUNCHER" ] && [ -x "$LAUNCHER" ] &&
     if [ -n "$existing_python_exe" ]; then
         existing_python_version=""
         if existing_python_version=$("$existing_python_exe" --version 2>&1); then
-            if [ -z "$PYTHON_REQUEST" ]; then
-                existing_python_matches_request="true"
-            elif [[ "$PYTHON_REQUEST" = /* ]]; then
+            if [[ "$PYTHON_REQUEST" = /* ]]; then
                 requested_python_version=""
                 if [ -x "$PYTHON_REQUEST" ] && requested_python_version=$("$PYTHON_REQUEST" --version 2>&1); then
                     existing_python_major_minor=$(printf '%s\n' "$existing_python_version" | awk '{ print $2 }' | awk -F. '{ print $1 "." $2 }')
@@ -155,14 +159,9 @@ fi
 # ============================================================================
 # Install via uv tool install (editable mode, force reinstall)
 # ============================================================================
-# uv builds/resolves the tool against the interpreter it is given. Forcing the
-# ambient python3 breaks when it is older than the tool's requires-python (e.g.
-# macOS system 3.9 vs a >=3.11 tool: uv reports "requirements are
-# unsatisfiable"). resolve_uv_python.py returns the ambient interpreter when it
-# already satisfies the constraint, otherwise a compatible "3.X" version request
-# for uv to find or download.
-PY_FLAG=()
-[ -n "$PYTHON_REQUEST" ] && PY_FLAG=(--python "$PYTHON_REQUEST")
+# PYTHON_REQUEST was resolved and validated above, so the pin is unconditional.
+# An unpinned `uv tool install` silently selects a uv-managed interpreter.
+PY_FLAG=(--python "$PYTHON_REQUEST")
 
 OVERRIDE_FLAG=()
 if [ -f "$TOOL_DIR/uv-overrides.txt" ]; then

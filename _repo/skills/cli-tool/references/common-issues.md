@@ -124,6 +124,12 @@ uv tool install -e <cli-tools-root>/myservice --force --refresh \
 (On this machine that is `/opt/homebrew/bin/python3.14`.) The launcher shebang
 must still point into `~/.local/share/uv/tools/`.
 
+`new-cli-tool`, `_repo/skills/cli-tool/scripts/install-cli-tool.sh`, and
+`_repo/_scripts/install-cli-tool.sh` apply this pin themselves through
+`scripts/resolve_uv_python.py`, so a fresh scaffold or a reinstall through those
+scripts already matches the system `python3`. Run the manual command only when a
+venv was created by a bare `uv tool install`.
+
 ---
 
 ## Metadata Probe Fails: No module named pip

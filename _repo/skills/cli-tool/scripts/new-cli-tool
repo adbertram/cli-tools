@@ -237,20 +237,30 @@ def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
     """Install the package using uv tool install."""
     print_step("Installing via uv tool install...")
 
-    # Honor the tool's requires-python. Forcing the ambient python3 breaks when
-    # it is older than the tool requires (e.g. macOS system 3.9 vs a >=3.11
-    # tool, which uv rejects as "unsatisfiable"). resolve_uv_python returns the
-    # ambient interpreter when it already satisfies the constraint, otherwise a
-    # compatible "3.X" request for uv to find or download.
+    # Always pin the interpreter. Without --python, uv's default
+    # python-preference = "managed" installs the CLI against a uv-managed
+    # interpreter (observed: CPython 3.12.10) instead of the system python3,
+    # and every scaffolded CLI then fails
+    # tests/test_python_version.py::test_cli_uses_system_python.
+    # resolve_uv_python returns the absolute system python3 when it satisfies
+    # the tool's requires-python, otherwise a compatible "3.X" request for uv
+    # to find or download. It raises rather than returning an empty request.
     scripts_dir = str(Path(__file__).resolve().parent)
     if scripts_dir not in sys.path:
         sys.path.append(scripts_dir)
     from resolve_uv_python import resolve_uv_python_request
 
-    cmd = ["uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh"]
-    python_request = resolve_uv_python_request(tool_dir / "pyproject.toml")
-    if python_request:
-        cmd += ["--python", python_request]
+    try:
+        python_request = resolve_uv_python_request(tool_dir / "pyproject.toml")
+    except RuntimeError as exc:
+        print_error(str(exc))
+        return False
+
+    cmd = [
+        "uv", "tool", "install", "-e", str(tool_dir), "--force", "--refresh",
+        "--python", python_request,
+    ]
+    print_success(f"Pinned uv interpreter: {python_request}")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:

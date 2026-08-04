@@ -10,12 +10,24 @@ tool): uv then aborts with "requirements are unsatisfiable".
 This resolver reads ``requires-python`` from a tool's ``pyproject.toml`` and
 returns the value to pass to ``uv ... --python``:
 
-* If the ambient interpreter already satisfies the constraint, return its path
-  so installs keep using the contextual interpreter (the prior behavior, with no
-  regression for shells whose ``python3`` is already new enough).
+* If the system ``python3`` already satisfies the constraint, return its
+  absolute path so the installed CLI matches the interpreter the compliance
+  test ``test_python_version.py::test_cli_uses_system_python`` measures.
 * Otherwise, derive a compatible CPython minor from the constraint and return a
   version request such as ``3.11`` so uv finds or downloads that interpreter.
-* If there is no parseable constraint, return the ambient interpreter path.
+* If there is no parseable constraint, return the system ``python3`` path.
+
+The interpreter is the absolute path of ``python3`` on PATH, not
+``sys.executable``. Those two diverge whenever the caller launches a lifecycle
+script with a non-system interpreter (an activated venv, a uv-managed
+interpreter, an editor Python), and pinning the caller's interpreter then
+installs the CLI against the wrong Python.
+
+This resolver never returns an empty request. An empty request makes callers
+drop ``--python`` entirely, and uv's default ``python-preference = "managed"``
+then installs against a uv-managed interpreter (observed: CPython 3.12.10)
+instead of the system one, which fails the compliance test with no obvious
+cause. A missing or unusable ``python3`` raises instead.
 
 Only the ``>=3.X`` lower bound and the ``<3.X`` exclusive upper bound are
 parsed, which covers every constraint shape used in this repo (all tools pin a
@@ -30,7 +42,10 @@ Usage (shell):   resolve_uv_python.py <pyproject-path>
 Usage (import):  resolve_uv_python_request(pyproject_path) -> str
 """
 
+import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -64,37 +79,98 @@ def _parse_minor_bounds(pyproject_path):
     )
 
 
+def system_path_entries():
+    """Return PATH entries as the CLI compliance tests see them.
+
+    ``tests/cli_test_utils._clean_path`` drops the active virtualenv's ``bin``
+    and prepends ``~/.local/bin`` before it measures ``python3 --version``. The
+    installer must pin the same interpreter that test measures, so it applies
+    the same two edits here.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    virtual_env = os.environ.get("VIRTUAL_ENV")
+    if virtual_env:
+        venv_bin = os.path.join(virtual_env, "bin")
+        entries = [entry for entry in entries if entry != venv_bin]
+    user_bin = str(Path.home() / ".local" / "bin")
+    if user_bin not in entries:
+        entries.insert(0, user_bin)
+    return entries
+
+
+def system_python3_path():
+    """Return the absolute path of the system ``python3``.
+
+    Raises ``RuntimeError`` when PATH holds no ``python3``. Returning nothing
+    would make the caller drop ``--python`` and let uv silently install against
+    its own managed interpreter.
+    """
+    resolved = shutil.which("python3", path=os.pathsep.join(system_path_entries()))
+    if not resolved:
+        raise RuntimeError(
+            "SYSTEM_PYTHON3_UNRESOLVED: no `python3` found on PATH after removing "
+            "the active virtualenv bin. uv would then install the CLI against a "
+            "uv-managed interpreter and fail "
+            "tests/test_python_version.py::test_cli_uses_system_python. "
+            "Put a python3 on PATH and retry."
+        )
+    return os.path.abspath(resolved)
+
+
+def system_python3_minor(interpreter_path):
+    """Return the CPython minor version of ``interpreter_path``.
+
+    Returns ``None`` when the interpreter is not CPython 3.x. Raises
+    ``RuntimeError`` when the interpreter cannot report its version.
+    """
+    result = subprocess.run(
+        [interpreter_path, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "SYSTEM_PYTHON3_UNUSABLE: {} could not report its version (exit {}): {}".format(
+                interpreter_path, result.returncode, (result.stderr or "").strip()
+            )
+        )
+    major, minor = result.stdout.split()
+    if int(major) != 3:
+        return None
+    return int(minor)
+
+
 def resolve_uv_python_request(pyproject_path):
     """Resolve the ``--python`` value uv should use for this tool.
 
-    Returns an interpreter path (the ambient interpreter already satisfies the
+    Returns the absolute system ``python3`` path (it already satisfies the
     constraint, or there is no constraint) or a ``3.<minor>`` version request
-    (the ambient interpreter is missing or out of range). Returns an empty
-    string only when there is neither an ambient interpreter nor a constraint,
-    in which case the caller omits ``--python`` and lets uv discover one.
+    (the system interpreter is out of range for ``requires-python``). Never
+    returns an empty string; a missing or unusable ``python3`` raises
+    ``RuntimeError``.
     """
-    # The resolver is invoked by the same ``python3`` uv would otherwise inherit
-    # (run directly by the shell scripts, imported by new-cli-tool), so its own
-    # interpreter is the ambient one.
-    ambient_path = sys.executable or ""
-    ambient_minor = sys.version_info[1] if sys.version_info[0] == 3 else None
+    # The system python3 on PATH is the interpreter the compliance test
+    # measures, and it is not necessarily the interpreter running this
+    # resolver.
+    system_path = system_python3_path()
 
     lower, upper = _parse_minor_bounds(pyproject_path)
 
-    # No declared constraint: keep installing against the ambient interpreter.
+    # No declared constraint: install against the system interpreter.
     if lower is None and upper is None:
-        return ambient_path
+        return system_path
 
-    ambient_satisfies = (
-        ambient_minor is not None
-        and (lower is None or ambient_minor >= lower)
-        and (upper is None or ambient_minor < upper)
+    system_minor = system_python3_minor(system_path)
+    system_satisfies = (
+        system_minor is not None
+        and (lower is None or system_minor >= lower)
+        and (upper is None or system_minor < upper)
     )
-    if ambient_satisfies and ambient_path:
-        return ambient_path
+    if system_satisfies:
+        return system_path
 
-    # Ambient interpreter is missing or out of range. Derive a compatible minor
-    # from the constraint and let uv find or download it.
+    # System interpreter is out of range for requires-python. Derive a
+    # compatible minor from the constraint and let uv find or download it.
     if upper is not None:
         target_minor = upper - 1
         if lower is not None and target_minor < lower:
@@ -108,7 +184,12 @@ def main(argv):
     if len(argv) != 2:
         sys.stderr.write("usage: resolve_uv_python.py <pyproject-path>\n")
         return 2
-    sys.stdout.write(resolve_uv_python_request(argv[1]))
+    try:
+        request = resolve_uv_python_request(argv[1])
+    except RuntimeError as exc:
+        sys.stderr.write("{}\n".format(exc))
+        return 1
+    sys.stdout.write(request)
     return 0
 
 

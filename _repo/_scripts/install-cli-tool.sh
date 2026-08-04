@@ -40,7 +40,22 @@ if [[ "$FORCE_REFRESH" == false && -x "$LAUNCHER" ]]; then
     exit 0
 fi
 
-uv tool install --force --editable "$TOOL_DIR"
+# Pin the interpreter. An unpinned `uv tool install` uses uv's default
+# python-preference = "managed", which installs the CLI against a uv-managed
+# interpreter (observed: CPython 3.12.10) instead of the system python3 and
+# fails tests/test_python_version.py::test_cli_uses_system_python.
+PYTHON_RESOLVER="$REPO_ROOT/_repo/skills/cli-tool/scripts/resolve_uv_python.py"
+if [[ ! -f "$PYTHON_RESOLVER" ]]; then
+    printf 'Interpreter resolver not found: %s\n' "$PYTHON_RESOLVER" >&2
+    exit 1
+fi
+PYTHON_REQUEST="$(python3 "$PYTHON_RESOLVER" "$TOOL_DIR/pyproject.toml")"
+if [[ -z "$PYTHON_REQUEST" ]]; then
+    printf 'resolve_uv_python.py returned an empty interpreter request for %s\n' "$TOOL_DIR" >&2
+    exit 1
+fi
+
+uv tool install --force --editable "$TOOL_DIR" --python "$PYTHON_REQUEST"
 
 if [[ ! -x "$LAUNCHER" ]]; then
     printf 'uv tool install completed but did not create expected launcher: %s\n' "$LAUNCHER" >&2
