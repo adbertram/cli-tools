@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-02T15:10:12Z",
+  "discovered_at": "2026-08-04T14:31:20Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -1499,6 +1499,12 @@
               "short": "-l"
             },
             {
+              "name": "--learner-takeaway",
+              "type": "TEXT",
+              "required": false,
+              "help": "One-sentence transferable capability the demo proves"
+            },
+            {
               "name": "--demo-overview",
               "type": "TEXT",
               "required": false,
@@ -1753,6 +1759,18 @@
               "required": false,
               "help": "Target length in minutes (e.g., 2.5)",
               "short": "-l"
+            },
+            {
+              "name": "--learner-takeaway",
+              "type": "TEXT",
+              "required": false,
+              "help": "One-sentence transferable capability the demo proves"
+            },
+            {
+              "name": "--learner-takeaway-review-ai",
+              "type": "TEXT",
+              "required": false,
+              "help": "AI review of the learner takeaway"
             },
             {
               "name": "--demo-overview",
