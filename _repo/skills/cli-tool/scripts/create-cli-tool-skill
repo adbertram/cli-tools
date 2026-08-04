@@ -30,6 +30,12 @@ if [[ "${NAME}" == -* ]]; then
     exit 2
 fi
 
+if [[ "${NAME}" == */* ]]; then
+    echo "Error: tool name must not contain '/': ${NAME}" >&2
+    usage >&2
+    exit 2
+fi
+
 # Normalize: lowercase, strip trailing -cli if provided
 NAME="$(echo "${NAME}" | tr '[:upper:]' '[:lower:]')"
 NAME="${NAME%-cli}"
@@ -41,7 +47,41 @@ if [[ -d "${SKILL_DIR}" ]]; then
     exit 1
 fi
 
+REGEN="${SCRIPT_DIR}/regenerate-usage-json"
+DERIVE="${SCRIPT_DIR}/skill_content_from_usage.py"
+
+for required in "${REGEN}" "${DERIVE}"; do
+    if [[ ! -f "${required}" ]]; then
+        echo "Error: required generator not found: ${required}" >&2
+        exit 1
+    fi
+done
+
 mkdir -p "${SKILL_DIR}"
+
+# usage.json is generated first, from the installed CLI's live --help tree, and
+# SKILL.md is then derived from it. Generating SKILL.md from a fixed template
+# advertised commands the CLI may not have (an --auth-type none CLI has no
+# `auth` group), so an agent following the skill ran a command that does not
+# exist.
+echo "Generating usage.json from installed '${NAME}' CLI..."
+if ! "${REGEN}" "${NAME}" --usage-json "${SKILL_DIR}/usage.json"; then
+    rm -rf "${SKILL_DIR}"
+    echo "Error: could not generate usage.json for '${NAME}'. Install the CLI, then rerun." >&2
+    exit 1
+fi
+echo "Created ${SKILL_DIR}/usage.json"
+
+if ! QUICK_START_ROWS="$(python3 "${DERIVE}" "${SKILL_DIR}/usage.json" "${NAME}" --section quick-start)"; then
+    rm -rf "${SKILL_DIR}"
+    echo "Error: could not derive quick_start rows from ${SKILL_DIR}/usage.json" >&2
+    exit 1
+fi
+if ! COMMAND_GROUPS="$(python3 "${DERIVE}" "${SKILL_DIR}/usage.json" "${NAME}" --section command-groups)"; then
+    rm -rf "${SKILL_DIR}"
+    echo "Error: could not derive command groups from ${SKILL_DIR}/usage.json" >&2
+    exit 1
+fi
 
 # Derive display name (PascalCase)
 DISPLAY_NAME="$(python3 -c "import sys; n=sys.argv[1]; print(''.join(w.capitalize() for w in n.replace('-','_').split('_')))" "${NAME}")"
@@ -68,8 +108,7 @@ ${NAME} <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
-| Authenticate | \`${NAME} auth login\` |
-| Check auth | \`${NAME} auth status\` |
+${QUICK_START_ROWS}
 </quick_start>
 
 <essential_principles>
@@ -79,8 +118,7 @@ Consult \`usage.json\` when the repo or installed package ships it. If \`usage.j
 </principle>
 
 <principle name="Command Groups">
-- **auth** -- Authentication management (login, logout, status, test) and nested \`auth profiles\`
-- **cache** -- Local response cache management
+${COMMAND_GROUPS}
 </principle>
 </essential_principles>
 
@@ -99,17 +137,7 @@ SKILLMD
 
 echo "Created ${SKILL_DIR}/SKILL.md"
 
-# Generate usage.json from the installed CLI
-REGEN="${SCRIPT_DIR}/regenerate-usage-json"
-if [[ -f "${REGEN}" && -x "${REGEN}" ]]; then
-    echo "Generating usage.json from installed '${NAME}' CLI..."
-    "${REGEN}" "${NAME}" --usage-json "${SKILL_DIR}/usage.json"
-    echo "Created ${SKILL_DIR}/usage.json"
-else
-    echo "Warning: regenerate-usage-json executable file not found at ${REGEN} — skipping usage.json" >&2
-    echo "Run it manually: regenerate-usage-json ${NAME} ${SKILL_DIR}/usage.json"
-fi
-
 echo ""
 echo "Skill scaffolded: ${SKILL_DIR}"
-echo "Next: review SKILL.md and fill in the quick_start table and command groups."
+echo "Next: review SKILL.md. The quick_start table and command groups come from"
+echo "the live command tree; add service-specific principles and examples."
