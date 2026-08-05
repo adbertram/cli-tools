@@ -72,6 +72,7 @@
 | `nextdoor` | The `nextdoor` CLI provides browser-session-authenticated access to Nextdoor's GraphQL API (feed, For Sale & Free classifieds with direct listing URLs, me, notifications, content search). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `notifier` | The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `offerup` | Search and read OfferUp local marketplace listings |
 | `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `openai-whisper` | The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `partnerstack` | The `partnerstack` CLI provides a command-line interface for Partnerstack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -92,6 +93,7 @@
 | `shopsalvationarmy` | The `shopsalvationarmy` CLI provides a command-line interface for Shop The Salvation Army auction site. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `slack` | The `slack` CLI provides a command-line interface for Slack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `snagit` | The `snagit` CLI provides a command-line interface for Snagit API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `stockx` | Search and read StockX sneaker and streetwear market data |
 | `target` | A command-line interface for [Target](https://www.target.com) using browser automation. Target consumer CLI for searching products, adding to cart, and checking out. Use this CLI when you need repeatable access to Target workflows that are only available through the website. |
 | `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
 | `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

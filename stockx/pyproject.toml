@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockx-cli"
+version = "0.1.0"
+description = "Search and read StockX sneaker and streetwear market data"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "cli-tools-shared",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+"stockx" = "stockx_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["stockx_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

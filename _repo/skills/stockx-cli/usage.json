@@ -1,0 +1,555 @@
+{
+  "tool": "stockx",
+  "description": "CLI interface for stockx",
+  "discovered_at": "2026-08-05T03:51:09Z",
+  "total_commands": 16,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage stockx authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "products": {
+      "help": "Search and read StockX products",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get the catalog record for one product.",
+          "arguments": [
+            {
+              "name": "product",
+              "type": "TEXT",
+              "required": true,
+              "help": "Product url key or stockx.com product URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "Browse the StockX catalog with no keyword.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of products (merged across pages)",
+              "short": "-l",
+              "default": "40"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: featured, lowest-ask, highest-bid, release-date",
+              "short": "-s",
+              "default": "featured"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort field's natural direction",
+              "short": "-d"
+            },
+            {
+              "name": "--brand",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand slug, repeatable (e.g. nike, adidas)",
+              "short": "-b"
+            },
+            {
+              "name": "--gender",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gender, repeatable: men, women, unisex, kids",
+              "short": "-g"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Category, repeatable: sneakers, apparel, accessories, collectibles, shoes, trading-cards",
+              "short": "-c"
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": false,
+              "help": "Color, repeatable: black, white, multi, blue, green, grey, red, pink, brown, orange, yellow, purple"
+            },
+            {
+              "name": "--activity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Activity slug, repeatable (e.g. basketball, running)"
+            },
+            {
+              "name": "--below-retail",
+              "type": "bool",
+              "required": false,
+              "help": "Only products asking below retail"
+            },
+            {
+              "name": "--xpress-ship",
+              "type": "bool",
+              "required": false,
+              "help": "Only products eligible for Xpress Ship"
+            },
+            {
+              "name": "--min-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum lowest ask in US dollars (needs --max-price)"
+            },
+            {
+              "name": "--max-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Maximum lowest ask in US dollars (needs --min-price)"
+            }
+          ]
+        },
+        "market": {
+          "help": "Get live market data (asks, bids, sales) for one product.",
+          "arguments": [
+            {
+              "name": "product",
+              "type": "TEXT",
+              "required": true,
+              "help": "Product url key or stockx.com product URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search the StockX catalog by keyword.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search keywords"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of products (merged across pages)",
+              "short": "-l",
+              "default": "40"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: featured, lowest-ask, highest-bid, release-date",
+              "short": "-s",
+              "default": "featured"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort field's natural direction",
+              "short": "-d"
+            },
+            {
+              "name": "--brand",
+              "type": "TEXT",
+              "required": false,
+              "help": "Brand slug, repeatable (e.g. nike, adidas)",
+              "short": "-b"
+            },
+            {
+              "name": "--gender",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gender, repeatable: men, women, unisex, kids",
+              "short": "-g"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Category, repeatable: sneakers, apparel, accessories, collectibles, shoes, trading-cards",
+              "short": "-c"
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": false,
+              "help": "Color, repeatable: black, white, multi, blue, green, grey, red, pink, brown, orange, yellow, purple"
+            },
+            {
+              "name": "--activity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Activity slug, repeatable (e.g. basketball, running)"
+            },
+            {
+              "name": "--below-retail",
+              "type": "bool",
+              "required": false,
+              "help": "Only products asking below retail"
+            },
+            {
+              "name": "--xpress-ship",
+              "type": "bool",
+              "required": false,
+              "help": "Only products eligible for Xpress Ship"
+            },
+            {
+              "name": "--min-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum lowest ask in US dollars (needs --max-price)"
+            },
+            {
+              "name": "--max-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Maximum lowest ask in US dollars (needs --min-price)"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `stockx` CLI. Run `stockx --help` to discover command groups and `--help` on any subcommand for its options."
+}
