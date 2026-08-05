@@ -47,6 +47,19 @@ class MarketplaceListing(CLIModel):
     #: loudly instead of returning None; only `list` rows can carry it, and only
     #: for a tile Facebook's own payload never covered.
     delivery_types: Optional[List[str]] = None
+    #: Who is selling it, read from Facebook's own `marketplace_listing_seller`
+    #: node alongside `delivery_types` -- not from the rendered "Seller
+    #: information" heading, which the detail extractor already located and used
+    #: only to mark where the description ends before throwing it away.
+    #:
+    #: `seller_id` is Facebook's numeric profile id and is the stable key;
+    #: `seller_name` is the display name, which a person can change. None on
+    #: either means Facebook's payload named no seller for this listing. Unlike
+    #: `delivery_types`, that is not fatal: an absent seller cannot be misread as
+    #: a different seller the way an absent fulfillment model was misread as
+    #: "no shipping offered".
+    seller_id: Optional[str] = None
+    seller_name: Optional[str] = None
     #: The listing's own gallery photo URLs, scoped by DETAIL_PAGE_IMAGES_JS so a
     #: sidebar advertisement creative is never reported as a listing photo.
     #:

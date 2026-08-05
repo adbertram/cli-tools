@@ -241,6 +241,27 @@ sold state gets the answer from one `list` call instead of one `get` per listing
 A row Facebook never described reports `availability: null`, which means unknown,
 never "still for sale".
 
+#### Seller
+
+`seller_id` and `seller_name` report who is selling the listing, on **both**
+surfaces, read from Facebook's own `marketplace_listing_seller` node in the same
+listing node that carries `delivery_types`. `seller_id` is the numeric profile ID
+and is the stable key; `seller_name` is the display name, which a person can
+change.
+
+The rendered "Seller information" heading on the detail page is not read. The
+description extractor already finds that heading and uses it only to mark where
+the description ends.
+
+Both fields report `null` when Facebook's payload named no seller. Unlike
+`delivery_types`, that is not an error: an absent seller cannot be misread as a
+different seller.
+
+```bash
+# Group a search by seller without a per-listing detail call
+facebook marketplace list --query "LEGO" --properties item_id,title,seller_id,seller_name
+```
+
 #### Images
 
 `marketplace get` returns the listing's full media gallery in `image_urls` (the

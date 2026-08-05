@@ -331,6 +331,7 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
     }
     const capture = {
         deliveryTypes: {}, locationText: {}, availability: {}, primaryImage: {},
+        seller: {},
         aliases: {}, conflicts: {}, availabilityConflicts: {}, aliasConflicts: {},
         payloads: 0, parseErrors: 0,
     };
@@ -372,6 +373,19 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
         if (node.primary_listing_photo != null && node.primary_listing_photo.image != null
             && typeof node.primary_listing_photo.image.uri === "string") {
             capture.primaryImage[id] = node.primary_listing_photo.image.uri;
+        }
+        // Who is selling it, from Facebook's own listing node rather than the
+        // rendered "Seller information" heading. That heading was already read
+        // on the detail page -- only to mark where the description ends -- and
+        // then thrown away, so every consumer got a listing with no seller.
+        // Reading it here means the search surface answers too, and a listing
+        // whose payload names no seller stays absent instead of guessed.
+        const seller = node.marketplace_listing_seller;
+        if (seller != null && (seller.id != null || typeof seller.name === "string")) {
+            capture.seller[id] = {
+                id: seller.id != null ? String(seller.id) : null,
+                name: typeof seller.name === "string" ? seller.name : null,
+            };
         }
         // Facebook's own alternate identifier for this same listing.
         const aliasSources = [
@@ -437,7 +451,8 @@ READ_DELIVERY_CAPTURE_JS = """() => window.__fbDeliveryCapture || null"""
 
 # The maps INSTALL_DELIVERY_CAPTURE_JS writes, listed here so the Python reader
 # fails loudly if the two ever drift apart.
-CAPTURE_MAPS = ("deliveryTypes", "locationText", "availability", "primaryImage", "aliases")
+CAPTURE_MAPS = ("deliveryTypes", "locationText", "availability", "primaryImage", "seller",
+                "aliases")
 
 # Conflict maps and what a conflict in each one means. A conflict is fatal: two
 # payloads describing the same listing differently makes first-writer-wins a
@@ -1180,7 +1195,13 @@ class FacebookClient:
         Returns:
             Dict with ``delivery_types`` (non-empty list of Facebook's own
             tokens), ``location`` (Facebook's ``location_text``, or None when
-            the listing carries no place name), and ``availability``.
+            the listing carries no place name), ``availability``, and
+            ``seller_id`` / ``seller_name`` from Facebook's own
+            ``marketplace_listing_seller`` node. The two seller fields are None
+            when the payload named no seller; unlike ``delivery_types`` that is
+            not fatal, because an absent seller cannot be misread as a
+            different seller the way an absent fulfillment model was misread as
+            "no shipping offered".
         """
         self._install_delivery_capture(page)
         capture = self._read_delivery_capture(page)
@@ -1199,6 +1220,7 @@ class FacebookClient:
             "delivery_types": capture["deliveryTypes"][described_id],
             "location": capture["locationText"].get(described_id),
             "availability": self._derive_availability(capture["availability"].get(described_id)),
+            **self._captured_seller(capture, described_id),
         }
 
     def _extract_detail_page_info(self, page) -> Dict:
@@ -1248,6 +1270,22 @@ class FacebookClient:
         result["price"] = price.get("price") or ""
         result["originalPrice"] = price.get("originalPrice") or ""
         return result
+
+    @staticmethod
+    def _captured_seller(capture: Dict, described_id: str) -> Dict:
+        """The listing's ``seller_id``/``seller_name``, or both None.
+
+        Both surfaces need the same two fields off the same map, so the "no
+        seller in this payload" case is written down once here rather than
+        twice as an inline ``or {}``. The capture JS writes both keys whenever
+        it writes the entry at all, so the entry itself is indexed directly: a
+        payload change that drops one of them should raise, not report a
+        listing as having no seller.
+        """
+        seller = capture["seller"].get(described_id)
+        if seller is None:
+            return {"seller_id": None, "seller_name": None}
+        return {"seller_id": seller["id"], "seller_name": seller["name"]}
 
     @staticmethod
     def _derive_availability(state: Optional[Dict]) -> Optional[str]:
@@ -1503,6 +1541,8 @@ class FacebookClient:
                 item["delivery_types"] = None
                 item["availability"] = None
                 item["primary_image_url"] = None
+                item["seller_id"] = None
+                item["seller_name"] = None
                 undescribed.append(item["item_id"])
                 continue
             item["delivery_types"] = capture["deliveryTypes"][described_id]
@@ -1510,11 +1550,13 @@ class FacebookClient:
                 capture["availability"].get(described_id)
             )
             item["primary_image_url"] = capture["primaryImage"].get(described_id)
+            item.update(self._captured_seller(capture, described_id))
         if undescribed:
             print_warning(
                 f"Facebook described no listing data for {len(undescribed)} of "
                 f"{len(items)} listing(s); those rows report delivery_types, "
-                "availability, and primary_image_url as null, which means UNKNOWN. "
+                "availability, primary_image_url, and the seller as null, which means "
+                "UNKNOWN. "
                 "A null delivery_types must never be read as 'no shipping offered'. "
                 f"Use `marketplace get <item_id>` for a definitive read. IDs: {undescribed}"
             )
@@ -1643,6 +1685,8 @@ class FacebookClient:
             description=info.get("description") or None,
             availability=fulfillment["availability"],
             delivery_types=fulfillment["delivery_types"],
+            seller_id=fulfillment["seller_id"],
+            seller_name=fulfillment["seller_name"],
         )
 
         listing.image_urls = self._extract_detail_page_image_urls(page)

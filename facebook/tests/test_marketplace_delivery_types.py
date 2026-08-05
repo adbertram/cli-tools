@@ -62,6 +62,7 @@ def _capture_stub(**overrides) -> dict:
         "locationText": {},
         "availability": {},
         "primaryImage": {},
+        "seller": {},
         "aliases": {},
         "conflicts": {},
         "availabilityConflicts": {},
@@ -186,6 +187,8 @@ def test_get_resolves_a_listing_requested_by_its_post_id():
         "delivery_types": ["IN_PERSON", "PUBLIC_MEETUP"],
         "location": "Evansville, IN",
         "availability": "Available",
+        "seller_id": "100069931946880",
+        "seller_name": "Larry Gerbig",
     }
 
 
@@ -275,6 +278,76 @@ def test_capture_harvests_scroll_loaded_tiles_from_a_pagination_response():
     assert len(capture["primaryImage"]) == len(capture["deliveryTypes"])
     assert all(uri.startswith("https://") for uri in capture["primaryImage"].values())
     assert capture["availabilityConflicts"] == {}
+    # ...and "who is selling it", so `list` answers without a per-item detail call.
+    assert len(capture["seller"]) == len(capture["deliveryTypes"])
+    assert all(
+        seller["id"] and seller["name"] for seller in capture["seller"].values()
+    )
+    # Distinct sellers, not one leaked across every row.
+    assert len({seller["id"] for seller in capture["seller"].values()}) > 1
+
+
+# --- Seller capture ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("fixture,item_id,seller_id,seller_name", [
+    ("marketplace_item_delivery_in_person.html", IN_PERSON_ITEM_ID,
+     "61590475513218", "Zach Broson"),
+    ("marketplace_item_delivery_shipping.html", SHIPPING_ITEM_ID,
+     "100060779521742", "Frye Cristina"),
+    ("marketplace_item_delivery_post_id_alias.html", ALIAS_LISTING_ID,
+     "100069931946880", "Larry Gerbig"),
+])
+def test_detail_page_capture_reads_the_listings_seller(
+    fixture, item_id, seller_id, seller_name
+):
+    """The seller comes from Facebook's own ``marketplace_listing_seller`` node.
+
+    The detail page also renders a "Seller information" heading, and the
+    description extractor already finds it -- to mark where the description
+    ends, then discards it. Reading the payload instead means the search
+    surface answers too, and a display name Facebook renders differently per
+    viewer cannot change the answer.
+    """
+    capture = _capture_from((FIXTURES / fixture).read_text(encoding="utf-8"))
+    assert capture["seller"][item_id] == {"id": seller_id, "name": seller_name}
+
+
+def test_a_listing_whose_payload_names_no_seller_reports_null_not_an_error():
+    """Unlike ``delivery_types``, an absent seller is not fatal.
+
+    An empty ``delivery_types`` reads as "this seller offers no fulfillment",
+    which is a wrong answer a consumer acts on. An absent seller cannot be
+    misread as a DIFFERENT seller, so it is reported as null.
+    """
+    page = _FakePage({
+        INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 1},
+        READ_DELIVERY_CAPTURE_JS: _capture_stub(deliveryTypes={"999": ["IN_PERSON"]}),
+    })
+    client = FacebookClient.__new__(FacebookClient)
+
+    fulfillment = client._extract_listing_fulfillment(page, "999")
+    assert fulfillment["seller_id"] is None
+    assert fulfillment["seller_name"] is None
+    assert fulfillment["delivery_types"] == ["IN_PERSON"]
+
+
+def test_the_capture_shape_check_covers_the_seller_map():
+    """`seller` is in CAPTURE_MAPS, so a payload change that drops it fails loudly
+    instead of reporting every listing as having no seller."""
+    from facebook_cli.client import CAPTURE_MAPS
+
+    assert "seller" in CAPTURE_MAPS
+    stub = _capture_stub(deliveryTypes={"999": ["IN_PERSON"]})
+    del stub["seller"]
+    page = _FakePage({
+        INSTALL_DELIVERY_CAPTURE_JS: {"installed": True, "listings": 1},
+        READ_DELIVERY_CAPTURE_JS: stub,
+    })
+    client = FacebookClient.__new__(FacebookClient)
+
+    with pytest.raises(ClientError, match="unexpected shape"):
+        client._extract_listing_fulfillment(page, "999")
 
 
 # --- Fail-loud contract on `get` --------------------------------------------
@@ -370,6 +443,8 @@ def test_listing_fulfillment_returns_location_when_facebook_carries_one():
         "delivery_types": ["IN_PERSON", "SHIPPING_ONSITE"],
         "location": "Evansville, IN",
         "availability": "Available",
+        "seller_id": None,
+        "seller_name": None,
     }
 
 
