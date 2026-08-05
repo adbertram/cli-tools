@@ -191,14 +191,90 @@ def _product_url(url_key):
 
 def test_normalize_products_adds_url_without_dropping_fields():
     rows = normalize_products(
-        [{"id": "abc", "urlKey": "nike-dunk-low", "title": "Nike Dunk Low"}], _product_url
+        [{
+            "__typename": "Product",
+            "id": "abc",
+            "urlKey": "nike-dunk-low",
+            "title": "Nike Dunk Low",
+        }],
+        _product_url,
     )
     assert rows == [{
+        "__typename": "Product",
         "id": "abc",
         "urlKey": "nike-dunk-low",
         "title": "Nike Dunk Low",
         "url": "https://stockx.com/nike-dunk-low",
     }]
+
+
+# --- browse union: Variant nodes ------------------------------------------
+# Verified live: a `lego` search returned 40 Product nodes and 4 Variant nodes
+# on one page. A Variant has no top-level urlKey/title/brand.
+
+def _variant_node():
+    return {
+        "__typename": "Variant",
+        "id": "variant-1",
+        "market": {"state": {"lowestAsk": {"amount": 400}}},
+        "sizeChart": {"baseType": "us"},
+        "product": {
+            "id": "product-1",
+            "urlKey": "lego-technic-mobile-crane-mk-ii-set-42009",
+            "title": "LEGO Technic Mobile Crane MK II Set 42009",
+            "brand": "LEGO",
+            "productCategory": "collectibles",
+        },
+    }
+
+
+def test_variant_node_promotes_its_product_identity():
+    row = normalize_products([_variant_node()], _product_url)[0]
+    assert row["urlKey"] == "lego-technic-mobile-crane-mk-ii-set-42009"
+    assert row["title"] == "LEGO Technic Mobile Crane MK II Set 42009"
+    assert row["brand"] == "LEGO"
+    assert row["id"] == "product-1"
+    assert row["url"] == (
+        "https://stockx.com/lego-technic-mobile-crane-mk-ii-set-42009"
+    )
+
+
+def test_variant_node_keeps_its_own_id_and_size_level_data():
+    row = normalize_products([_variant_node()], _product_url)[0]
+    assert row["variantId"] == "variant-1"
+    assert row["sizeChart"] == {"baseType": "us"}
+    assert row["market"] == {"state": {"lowestAsk": {"amount": 400}}}
+    assert row["product"] == _variant_node()["product"]
+
+
+def test_variant_node_keeps_its_typename():
+    row = normalize_products([_variant_node()], _product_url)[0]
+    assert row["__typename"] == "Variant"
+
+
+def test_mixed_product_and_variant_nodes_share_one_row_shape():
+    product = {
+        "__typename": "Product",
+        "id": "abc",
+        "urlKey": "nike-dunk-low",
+        "title": "Nike Dunk Low",
+        "brand": "Nike",
+    }
+    rows = normalize_products([product, _variant_node()], _product_url)
+    for row in rows:
+        assert {"id", "urlKey", "title", "brand", "url"} <= set(row)
+
+
+def test_variant_without_a_nested_product_raises():
+    with pytest.raises(ValueError) as excinfo:
+        normalize_products([{"__typename": "Variant", "id": "v"}], _product_url)
+    assert "no nested product" in str(excinfo.value)
+
+
+def test_unknown_node_type_raises():
+    with pytest.raises(ValueError) as excinfo:
+        normalize_products([{"__typename": "MysteryBox", "id": "m"}], _product_url)
+    assert "Unsupported StockX browse node type" in str(excinfo.value)
 
 
 def test_normalize_product_adds_url():
@@ -217,6 +293,62 @@ def test_normalize_market_preserves_the_market_block():
 def test_normalize_products_rejects_a_record_without_a_url_key():
     with pytest.raises(ValueError):
         normalize_products([{"id": "abc"}], _product_url)
+
+
+# --- pagination -----------------------------------------------------------
+# StockX offsets by index * limit, so a shrinking last page shifts the window
+# and returns rows already seen (verified: a 100-row request yielded 98).
+
+def _paging_client(monkeypatch, total_pages=5, page_size=40):
+    """A client whose _graphql returns distinct products per page index."""
+    client = StockxClient.__new__(StockxClient)
+    calls = []
+
+    def fake_graphql(operation, variables):
+        calls.append(variables["page"])
+        index = variables["page"]["index"]
+        if index > total_pages:
+            return {"browse": {"results": {"edges": []}}}
+        start = (index - 1) * page_size
+        return {"browse": {"results": {"edges": [
+            {"node": {
+                "__typename": "Product",
+                "id": f"p{start + offset}",
+                "urlKey": f"key-{start + offset}",
+                "title": f"Product {start + offset}",
+            }}
+            for offset in range(page_size)
+        ]}}}
+
+    monkeypatch.setattr(client, "_graphql", fake_graphql)
+    monkeypatch.setattr(client, "product_url", lambda key: f"https://stockx.com/{key}")
+    return client, calls
+
+
+def test_every_page_requests_the_same_page_size(monkeypatch):
+    client, calls = _paging_client(monkeypatch)
+    client.search_products.__wrapped__(client, query="lego", limit=100)
+    assert [page["limit"] for page in calls] == [40] * len(calls)
+
+
+def test_page_index_increments_by_one(monkeypatch):
+    client, calls = _paging_client(monkeypatch)
+    client.search_products.__wrapped__(client, query="lego", limit=100)
+    assert [page["index"] for page in calls] == list(range(1, len(calls) + 1))
+
+
+def test_results_are_trimmed_to_the_requested_limit(monkeypatch):
+    client, _ = _paging_client(monkeypatch)
+    rows = client.search_products.__wrapped__(client, query="lego", limit=100)
+    assert len(rows) == 100
+    assert len({row["urlKey"] for row in rows}) == 100
+
+
+def test_paging_stops_when_a_page_returns_no_edges(monkeypatch):
+    client, calls = _paging_client(monkeypatch, total_pages=2)
+    rows = client.search_products.__wrapped__(client, query="lego", limit=1000)
+    assert len(rows) == 80
+    assert len(calls) == 3
 
 
 # --- CLI-level validation (runs before any browser work) ------------------

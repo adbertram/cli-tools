@@ -324,14 +324,26 @@ class StockxClient:
     def product_url(self, url_key: str) -> str:
         return f"{self.config.base_url.rstrip('/')}/{url_key}"
 
-    def _ready_page(self):
+    def _ready_page(self, url: Optional[str] = None):
         """Return the session page once StockX's app payload is readable.
+
+        With no ``url``, the browser navigates to ``AUTH_CHECK_URL`` on the
+        first call and every later call reuses the open page untouched. A paged
+        search therefore loads stockx.com once instead of once per page:
+        re-navigating between pages made a multi-page search fail where a
+        single-page search succeeded (observed live at ``--limit 100``). Any
+        StockX page keeps ``__NEXT_DATA__`` and the same origin, so the in-page
+        fetch works from wherever the hash capture left the router.
+
+        Pass ``url`` only when a fresh document is required — the hash capture
+        needs it, because ``router.push`` to the route the page is already on
+        fires no request.
 
         stockx.com walls unknown browsers, and it also finishes writing
         ``__NEXT_DATA__`` shortly after navigation returns, so poll for the
         payload rather than reading once and reporting a false block.
         """
-        page = self._get_browser().get_page(self._home_url)
+        page = self._get_browser().get_page(url)
         for attempt in range(_APP_READY_ATTEMPTS):
             if page.evaluate(_APP_VERSION_JS):
                 return page
@@ -357,7 +369,9 @@ class StockxClient:
         than an instance read precisely so it joins the cache key.
         """
         seed_path = self._hash_seed_path(operation)
-        page = self._ready_page()
+        # Force a fresh home document: a router.push to the route the page is
+        # already on fires no request, so the interceptor would see nothing.
+        page = self._ready_page(self._home_url)
         page.evaluate(_INSTALL_INTERCEPTOR_JS)
         page.evaluate(
             "(path) => { window.next.router.push(path); return true; }", seed_path
@@ -560,10 +574,12 @@ class StockxClient:
                 "query": query,
                 "filters": filters,
                 "sort": {"id": sort_id},
-                "page": {
-                    "index": index,
-                    "limit": min(PAGE_SIZE, max(limit - len(products), 1)),
-                },
+                # StockX offsets by index * limit, so the page size must stay
+                # constant across pages. Shrinking it on the last page shifts
+                # the window and returns rows already seen (verified: a
+                # 100-row request yielded 98 unique rows). Ask for full pages
+                # and trim to `limit` after the loop.
+                "page": {"index": index, "limit": PAGE_SIZE},
             })
             data = self._graphql(SEARCH_OPERATION, variables)
             edges = data["browse"]["results"]["edges"]
