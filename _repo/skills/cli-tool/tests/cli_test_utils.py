@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import re
+from functools import cache
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Tuple
 
@@ -236,11 +237,40 @@ def _normalize_help_metavar(metavar: str) -> str:
     return _HELP_METAVAR_TYPES.get(metavar, metavar.upper())
 
 
+_ARGUMENT_START_RE = re.compile(
+    r"^\*?\s*[\w-]+\s+(?:\[[A-Z_]+\]|<[^<>\s]+>|[A-Z][A-Z_0-9]+\s)"
+)
+
+
+def _join_wrapped_argument_lines(section_text: str) -> List[str]:
+    """Join a Rich/Typer Arguments section's wrapped continuation lines.
+
+    Rich wraps a long argument help description onto indented continuation
+    lines that repeat none of the name/type columns. A continuation line is
+    told apart from a new argument's line by the absence of the name-plus-
+    type-marker shape every real argument line has (``name  [TYPE]``,
+    ``name  <type>``, or ``name  TYPE``); a continuation line joins onto the
+    previous argument's line instead of starting a new one.
+    """
+    joined_lines: List[str] = []
+
+    for line in section_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if joined_lines and not _ARGUMENT_START_RE.match(line):
+            joined_lines[-1] += " " + stripped
+        else:
+            joined_lines.append(stripped)
+
+    return joined_lines
+
+
 def parse_help_arguments(section_text: str) -> List[Dict]:
     """Parse a Rich/Typer Arguments section into usage.json argument records."""
     arguments = []
 
-    for line in section_text.splitlines():
+    for line in _join_wrapped_argument_lines(section_text):
         line = line.strip()
         if not line:
             continue
@@ -808,6 +838,45 @@ def get_uv_tool_venv_dir(cli_dir: Path, cli_name: str) -> Optional[Path]:
     if uv_tool_dir.exists():
         return uv_tool_dir
     return None
+
+
+@cache
+def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str, Any]]:
+    """Load the target CLI's credential and profile auth metadata."""
+    uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
+    if uv_venv is None:
+        return None
+    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    result = subprocess.run(
+        [
+            str(uv_venv / "bin" / "python"),
+            "-c",
+            (
+                "import json; "
+                "from cli_tools_shared.config import get_profile_auth_settings; "
+                f"from {cli_pkg}.config import Config; "
+                "types = getattr(Config, 'CREDENTIAL_TYPES', None); "
+                "settings = get_profile_auth_settings(Config); "
+                "payload = {"
+                "'credential_types': None if types is None else "
+                "[item.value if hasattr(item, 'value') else str(item) for item in types], "
+                "'profile_auth_types': [] if settings is None else list(settings[1])"
+                "}; "
+                "print(json.dumps(payload))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(cli_dir),
+        env=_clean_path(),
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:

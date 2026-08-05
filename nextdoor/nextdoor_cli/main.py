@@ -226,7 +226,10 @@ classifieds_app = typer.Typer(help="Browse the For Sale & Free classifieds")
 @classifieds_app.command("list")
 @command
 def classifieds_list(
-    query: str = typer.Argument("", help="Optional keyword to search listings (default: browse all)"),
+    query: str = typer.Argument(
+        "",
+        help="Relevance keyword, NOT a filter (default: browse all). See description.",
+    ),
     limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of listings"),
     sort: str = typer.Option(
         "newest",
@@ -244,7 +247,15 @@ def classifieds_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """List For Sale & Free listings with their direct listing URLs."""
+    """List For Sale & Free listings with their direct listing URLs.
+
+    QUERY is Nextdoor's own For Sale & Free keyword box, not a filter. Nextdoor
+    ranks results by relevance and applies no relevance floor, so a keyword with
+    little or no local inventory comes back padded with unrelated listings, and
+    the same keyword can return a different row count on consecutive runs. Add
+    ``--filter "type:eq:ORGANIC,title:contains:<keyword>"`` when the caller needs
+    rows that actually contain the keyword.
+    """
     sort_order = _resolve_sort(CLASSIFIED_SORT_MAP, sort, desc)
 
     def fetch(client):
