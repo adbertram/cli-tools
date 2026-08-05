@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-04T14:31:20Z",
+  "discovered_at": "2026-08-05T14:44:15Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -1720,7 +1720,6 @@
             "coursecraft demos update recXXX --action-summary-review-human",
             "coursecraft demos update recXXX --ai-tested",
             "coursecraft demos update recXXX --dictation-recorded",
-            "coursecraft demos update recXXX --voice-recording-path /path/to/audio.mp3",
             "coursecraft demos update recXXX --audio-synced"
           ],
           "arguments": [
@@ -1887,12 +1886,6 @@
               "type": "bool",
               "required": false,
               "help": "Mark demo dictation audio as recorded"
-            },
-            {
-              "name": "--voice-recording-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Path to the instructor-recorded voice audio for this demo"
             },
             {
               "name": "--recorded",
