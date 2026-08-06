@@ -1,8 +1,8 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-07-27T13:12:29Z",
-  "total_commands": 82,
+  "discovered_at": "2026-08-06T16:13:48Z",
+  "total_commands": 84,
   "global_options": [
     {
       "name": "--version",
@@ -1935,6 +1935,88 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "site": {
+          "help": "Manage the site-wide shoutout above post bodies",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get the site-wide shoutout shown above every post body.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "set": {
+              "help": "Create or update the site-wide shoutout shown above every post body. Only the supplied options change. Every other sub-field keeps its stored value. The command reads the record back after the write and reports it.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Shoutout HTML shown next to the logo"
+                },
+                {
+                  "name": "--link",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Logo click-through URL"
+                },
+                {
+                  "name": "--logo",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Logo media attachment ID from `ata-blog media upload`"
+                },
+                {
+                  "name": "--display",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show or hide the placement"
+                },
+                {
+                  "name": "--border",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show or hide the dashed bottom border"
+                },
+                {
+                  "name": "--cache-clear",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Flush the WP Engine page cache after the write",
+                  "default": "cache-clear"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display the new record as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
