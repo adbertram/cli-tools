@@ -46,12 +46,44 @@ filtered = apply_filters(items, ["status:eq:active"])
 | `lte` | Less or equal | `price:lte:50` |
 | `in` | In list | `status:in:active\|pending` |
 | `nin` | Not in list | `status:nin:archived\|deleted` |
-| `like` | Contains (case-sensitive) | `name:like:%widget%` |
-| `ilike` | Contains (case-insensitive) | `name:ilike:%widget%` |
+| `like` | SQL LIKE, `%` wildcard, case-insensitive | `name:like:%widget%` |
+| `ilike` | Explicit synonym for `like` | `name:ilike:%widget%` |
+| `contains` | Substring, case-insensitive | `name:contains:widget` |
+| `startswith` | Prefix, case-insensitive | `name:startswith:wid` |
+| `endswith` | Suffix, case-insensitive | `name:endswith:get` |
 | `null` | Is null | `deleted_at:null` |
 | `notnull` | Is not null | `email:notnull` |
 
 **Comparison rule:** `gt`/`gte`/`lt`/`lte` must compare numeric-looking strings as numbers. API payloads often represent prices as strings, so `price:gt:500` must treat `"1000.00"` as greater than `500`, not as a lexicographic string. Add regression tests in `_repo/cli-tools-shared/tests/test_filters.py` for numeric string comparisons whenever changing comparison behavior.
+
+**Unknown operators fail loudly.** In the three-token form `field:op:value`, the
+middle token is an operator position. `validate_filters()` raises
+`FilterValidationError` when that token is not a supported operator, and the
+message names the operator and lists the supported set. A typo such as
+`status:bogusop:active` must never fold `bogusop` into the value, match nothing,
+and print an empty result that reads as "nothing matched".
+
+The two-token shorthand `field:value` is unaffected and still means `eq`. A
+value that itself contains a colon needs an explicit operator:
+
+```bash
+mycli items list --filter "url:eq:https://example.com"   # correct
+mycli items list --filter "url:https://example.com"      # rejected: 'https' is an unknown operator
+```
+
+**Service-native operators:** when a CLI accepts operators the shared module
+cannot evaluate (for example Notion's `on_or_after`), declare them so the shared
+validator recognizes the names:
+
+```python
+validate_filters(filter_strings, extra_operators=DATE_OPERATORS)
+```
+
+Only the operator name is validated. The calling CLI owns the value arity and
+the translation of its own operators. Do NOT pass `extra_operators` to
+`apply_filters()` — that function has no such parameter on purpose, because
+client-side matching implements only the shared operator set and an operator it
+cannot evaluate would silently match nothing.
 
 ### cli_tools_shared.filter_map - API Translation
 

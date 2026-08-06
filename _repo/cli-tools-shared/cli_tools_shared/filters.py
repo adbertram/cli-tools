@@ -20,6 +20,7 @@ NO_VALUE_OPERATORS: Set[str] = {'null', 'notnull'}
 def validate_filters(
     filter_strings: List[str],
     allowed_fields: Optional[Iterable[str]] = None,
+    extra_operators: Optional[Iterable[str]] = None,
 ) -> List[str]:
     """
     Validates a list of filter strings.
@@ -38,18 +39,30 @@ def validate_filters(
             filter on a non-existent field silently matches nothing and a caller
             cannot tell "no rows matched" apart from "that field isn't
             filterable" -- a false negative.
+        extra_operators: Optional iterable of service-native operator names that
+            this caller accepts in addition to :data:`OPERATORS` (e.g. Notion's
+            ``on_or_after``). Only the operator NAME is validated here; the
+            caller owns the value arity and the translation of its own
+            operators, because this module cannot evaluate them.
+
+            Do not pass service-native operators to :func:`apply_filters`.
+            Client-side matching only implements :data:`OPERATORS`, so an
+            operator this module cannot evaluate would match nothing.
 
     Returns:
         The validated filter strings
 
     Raises:
-        FilterValidationError: If any filter string is invalid, or references a
-            field not in ``allowed_fields`` when that set is provided.
+        FilterValidationError: If any filter string is invalid, names an
+            operator that is neither in :data:`OPERATORS` nor in
+            ``extra_operators``, or references a field not in
+            ``allowed_fields`` when that set is provided.
     """
     if not filter_strings:
         return []
 
     allowed_set = _normalize_allowed_fields(allowed_fields)
+    extra_set = _normalize_extra_operators(extra_operators)
 
     for filter_string in filter_strings:
         if not filter_string:
@@ -59,7 +72,7 @@ def validate_filters(
         parts = filter_string.split(',')
 
         for part in parts:
-            _validate_part(part.strip(), allowed_set)
+            _validate_part(part.strip(), allowed_set, extra_set)
 
     return filter_strings
 
@@ -84,8 +97,15 @@ def apply_filters(
         Filtered list of dictionaries
 
     Raises:
-        FilterValidationError: If a filter is malformed, or references a field
-            outside ``allowed_fields`` when that set is provided.
+        FilterValidationError: If a filter is malformed, names an operator
+            outside :data:`OPERATORS`, or references a field outside
+            ``allowed_fields`` when that set is provided.
+
+    There is deliberately no ``extra_operators`` parameter here. This function
+    only implements :data:`OPERATORS`, so accepting a service-native operator
+    would let it fall through to a no-match and return the empty result this
+    validation exists to prevent. Translate service-native operators in the
+    owning CLI and use :func:`validate_filters` there.
     """
     # Field validation must run even when there is nothing to filter against.
     # An unsupported-field filter is a caller error regardless of whether the
@@ -145,6 +165,40 @@ def _normalize_allowed_fields(
     return allowed_set
 
 
+def _normalize_extra_operators(
+    extra_operators: Optional[Iterable[str]],
+) -> Optional[Set[str]]:
+    """Normalize a service-native operator declaration into a set, or None.
+
+    Returns ``None`` when ``extra_operators`` is ``None``. An explicitly empty
+    iterable also yields ``None``: "no extra operators" is the same state as
+    "none declared", unlike ``allowed_fields``, where an empty allowlist makes
+    every filter unsatisfiable.
+    """
+    if extra_operators is None:
+        return None
+    extra_set = {str(op) for op in extra_operators}
+    return extra_set or None
+
+
+def _unknown_operator_message(
+    part: str,
+    operator: str,
+    extra_set: Optional[Set[str]],
+) -> str:
+    """Build the error for an unrecognized operator in the field:op:value form."""
+    known = set(OPERATORS)
+    if extra_set:
+        known |= extra_set
+    supported = ", ".join(sorted(known))
+    return (
+        f"Unknown operator '{operator}' in '{part}'. "
+        f"Supported operators: {supported}. "
+        f"If '{operator}' is part of the value, state the operator explicitly, "
+        f"for example '{part.split(':', 1)[0]}:eq:{part.split(':', 1)[1]}'."
+    )
+
+
 def _check_field_allowed(field: str, allowed_set: Optional[Set[str]]):
     """Raise a clear error if ``field`` is not filterable.
 
@@ -164,7 +218,11 @@ def _check_field_allowed(field: str, allowed_set: Optional[Set[str]]):
         )
 
 
-def _validate_part(part: str, allowed_set: Optional[Set[str]] = None):
+def _validate_part(
+    part: str,
+    allowed_set: Optional[Set[str]] = None,
+    extra_set: Optional[Set[str]] = None,
+):
     """Validate a single filter part (field:op:value)."""
     if not part:
         raise FilterValidationError("Empty filter part")
@@ -195,8 +253,21 @@ def _validate_part(part: str, allowed_set: Optional[Set[str]] = None):
             value = ":".join(tokens[2:])
             if not value:
                 raise FilterValidationError(f"Value cannot be empty for operator '{op}' in '{part}'")
+    elif extra_set is not None and second_token in extra_set:
+        # A service-native operator declared by the caller. Only the name is
+        # checked here; this module cannot evaluate the operator, so the caller
+        # owns its value arity and its translation.
+        return
+    elif len(tokens) > 2:
+        # Three or more tokens means the caller wrote field:op:value, so the
+        # middle token is an operator position. An unrecognized token there is
+        # a typo, not a value. Reject it: the implicit-eq reading would fold
+        # 'bogusop' into the value, match nothing, and print an empty result
+        # that reads as "nothing matched" instead of "your filter is wrong".
+        raise FilterValidationError(_unknown_operator_message(part, second_token, extra_set))
     else:
-        value = ":".join(tokens[1:])
+        # Exactly two tokens: the unambiguous 'field:value' shorthand for eq.
+        value = tokens[1]
         if not value:
              raise FilterValidationError(f"Value cannot be empty in '{part}'")
 

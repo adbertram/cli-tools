@@ -272,8 +272,10 @@ def build_filter_from_standard(
     if not filter_strings:
         return None
 
-    # Validate filters first
-    validate_filters(filter_strings)
+    # Validate filters first. Declare the Notion-native date operators so the
+    # shared validator recognizes them instead of rejecting them as unknown
+    # operators; this builder owns their translation below.
+    validate_filters(filter_strings, extra_operators=DATE_OPERATORS)
 
     def get_property_type(field_name: str) -> str:
         """Get property type from schema, trying case-insensitive match."""

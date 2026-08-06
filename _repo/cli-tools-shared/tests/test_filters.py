@@ -117,3 +117,105 @@ def test_no_allowed_fields_preserves_unrestricted_behavior():
 def test_empty_allowed_fields_is_a_caller_error():
     with pytest.raises(FilterValidationError):
         validate_filters(["name:eq:x"], allowed_fields=())
+
+
+# ---- unknown operators are rejected, not folded into the value ----
+
+def test_unknown_operator_raises():
+    # 'status:bogusop:active' used to parse as eq with the value
+    # 'bogusop:active', match nothing, and print an empty result that reads as
+    # "nothing matched" rather than "your filter is wrong".
+    with pytest.raises(FilterValidationError) as excinfo:
+        validate_filters(["status:bogusop:active"])
+
+    msg = str(excinfo.value)
+    assert "bogusop" in msg
+    # The message lists the supported operators so the caller can correct it.
+    assert "eq" in msg and "notnull" in msg and "startswith" in msg
+
+
+def test_unknown_operator_raises_through_apply_filters():
+    items = [{"id": "1", "status": "active"}]
+
+    with pytest.raises(FilterValidationError):
+        apply_filters(items, ["status:bogusop:active"])
+
+
+def test_unknown_operator_in_second_comma_part_raises():
+    with pytest.raises(FilterValidationError) as excinfo:
+        validate_filters(["status:eq:active,price:bogusop:100"])
+    assert "bogusop" in str(excinfo.value)
+
+
+def test_unknown_operator_message_suggests_explicit_operator():
+    # A colon-bearing value is still expressible; the error says how.
+    with pytest.raises(FilterValidationError) as excinfo:
+        validate_filters(["url:https://example.com"])
+    assert "url:eq:https://example.com" in str(excinfo.value)
+
+
+def test_two_token_shorthand_still_means_eq():
+    items = [
+        {"id": "1", "status": "active"},
+        {"id": "2", "status": "archived"},
+    ]
+
+    assert [i["id"] for i in apply_filters(items, ["status:active"])] == ["1"]
+
+
+def test_known_operators_are_unaffected():
+    validate_filters([
+        "status:eq:active",
+        "price:gte:100",
+        "name:like:%widget%",
+        "category:in:a|b",
+        "deleted_at:null",
+        "email:notnull",
+        "created:gt:2024-01-01",
+    ])
+
+
+def test_value_containing_colon_is_allowed_with_an_explicit_operator():
+    items = [{"id": "1", "url": "https://example.com"}]
+
+    filtered = apply_filters(items, ["url:eq:https://example.com"])
+
+    assert [i["id"] for i in filtered] == ["1"]
+
+
+# ---- extra_operators: service-native operator vocabularies ----
+
+def test_extra_operators_are_accepted():
+    # Notion-style date operators the shared module cannot evaluate but the
+    # calling CLI translates itself.
+    validate_filters(
+        ["Publish Date:on_or_after:2026-07-20"],
+        extra_operators=("before", "on_or_after", "past_week", "is_not_empty"),
+    )
+
+
+def test_extra_operators_do_not_impose_shared_value_arity():
+    # 'past_week' takes no value and 'is_not_empty' takes one. The caller owns
+    # that arity, so the shared validator must accept both forms.
+    validate_filters(
+        ["Publish Date:past_week", "Publish Date:is_not_empty:true"],
+        extra_operators=("past_week", "is_not_empty"),
+    )
+
+
+def test_extra_operators_do_not_whitelist_everything_else():
+    with pytest.raises(FilterValidationError) as excinfo:
+        validate_filters(
+            ["Publish Date:bogusop:2026-07-20"],
+            extra_operators=("before", "on_or_after"),
+        )
+
+    msg = str(excinfo.value)
+    assert "bogusop" in msg
+    # Declared service-native operators appear in the supported list.
+    assert "on_or_after" in msg
+
+
+def test_empty_extra_operators_behaves_like_none():
+    with pytest.raises(FilterValidationError):
+        validate_filters(["status:bogusop:active"], extra_operators=())

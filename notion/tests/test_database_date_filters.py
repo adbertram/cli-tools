@@ -104,13 +104,18 @@ def test_unknown_date_operator_is_rejected_locally():
 
 
 def test_unrecognized_operator_token_is_rejected_before_the_api_call():
-    """`Publish Date:sometime:2026-07-20` must not reach Notion as an equals filter."""
+    """`Publish Date:sometime:2026-07-20` must not reach Notion as an equals filter.
+
+    The shared validator now rejects the unknown operator token itself, so the
+    error names the operator instead of the value it used to be folded into.
+    """
     with pytest.raises(FilterValidationError) as excinfo:
         build("Publish Date:sometime:2026-07-20")
 
     message = str(excinfo.value)
-    assert "'sometime:2026-07-20'" in message
-    assert "is not an ISO 8601 date" in message
+    assert "Unknown operator 'sometime'" in message
+    # The Notion-native date operators stay listed as supported.
+    assert "on_or_after" in message
 
 
 @pytest.mark.parametrize(
