@@ -118,6 +118,10 @@ list_commands = [
 ]
 
 [cli_specific.ata-blog]
+# `shoutouts site` is the one site-wide shoutout slot: `get` reads it and `set`
+# writes it. There is no ID space, so a `list` command would have nothing to
+# enumerate.
+excluded_from_list_required = ["site"]
 list_commands = [
     "notion-page list",
     "wordpress-post list",
