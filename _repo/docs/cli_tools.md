@@ -57,6 +57,7 @@
 | `kick` | The `kick` CLI provides a command-line interface for Kick API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `lastpass` | The `lastpass` CLI wraps lpass with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `leanpub` | The `leanpub` CLI provides a command-line interface for Leanpub API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `legoscout` | Sources and prices used LEGO deals: ledger, scoring, pricing, sources, prospects, display |
 | `linkedin` | The `linkedin` CLI lets you create and manage LinkedIn personal and page posts. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `macspeech` | Transcribe local audio on-device via Apple SFSpeechRecognizer with contextual-string vocabulary biasing |
 | `mailchimp` | The `mailchimp` CLI provides a command-line interface for Mailchimp API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
