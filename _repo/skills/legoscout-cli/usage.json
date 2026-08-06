@@ -1,7 +1,7 @@
 {
   "tool": "legoscout",
   "description": "CLI interface for legoscout",
-  "discovered_at": "2026-08-06T15:28:13Z",
+  "discovered_at": "2026-08-06T21:04:53Z",
   "total_commands": 50,
   "global_options": [],
   "commands": {
@@ -11,7 +11,7 @@
       "options": [],
       "commands": {
         "build": {
-          "help": "Assemble one ledger-ready record. Prints JSON; persists nothing.",
+          "help": "Assemble one ledger-ready record. Prints JSON; persists nothing. `build_deal_record` requires both timestamps and defaults NEITHER, because a record whose `first_seen_at` was invented is a record whose age is fiction. Re-assembling an existing row therefore passes its stored `--first-seen-at`; only a genuinely new sighting takes the clock.",
           "arguments": [
             {
               "name": "candidate",
@@ -26,7 +26,20 @@
               "help": "The matching appraisal JSON file"
             }
           ],
-          "options": []
+          "options": [
+            {
+              "name": "--first-seen-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "When this listing was first seen; now (UTC) when omitted"
+            },
+            {
+              "name": "--last-seen-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "When this listing was last seen; now (UTC) when omitted"
+            }
+          ]
         },
         "expire": {
           "help": "Sweep listings whose auction has already ended.",
@@ -73,9 +86,9 @@
           "options": [
             {
               "name": "--limit",
-              "type": "INTEGER",
+              "type": "bool",
               "required": false,
-              "help": "Maximum number of deals",
+              "help": "<int range> [x>=0]  Maximum number of deals",
               "short": "-l",
               "default": "100"
             },
@@ -103,7 +116,7 @@
           ]
         },
         "read": {
-          "help": "Read ONE field live off the listing itself, for debugging. This is the source reader, not the ledger: it fetches the marketplace.",
+          "help": "Read ONE field live off the listing itself, for debugging. This is the source reader, not the ledger: it fetches the marketplace. `--url` is what makes this usable on a FRESH crawl candidate. Without a ledger row the record carries no URL, and a reader that fetches the page could only answer `unknown url type: ''` -- which is exactly the moment a single-field debug read is worth most.",
           "arguments": [
             {
               "name": "listing_key",
@@ -118,7 +131,14 @@
               "help": "A deal-record column: available_fulfillment, item_location, auction_end_date, shipping_estimate, seller_id, seller_name"
             }
           ],
-          "options": []
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "The listing URL, for a candidate that has no ledger row yet"
+            }
+          ]
         },
         "refresh": {
           "help": "Re-read one field across the ledger, from the listing itself.",
@@ -208,7 +228,14 @@
               "help": "crawl / appraisal / synthesis; every field when omitted"
             }
           ],
-          "options": []
+          "options": [
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "the raw JSON Schema properties, for a machine caller"
+            }
+          ]
         },
         "status": {
           "help": "Set one deal's status.",
@@ -484,7 +511,7 @@
           ]
         },
         "set-sales": {
-          "help": "BrickLink sold comps for one set number.",
+          "help": "BrickLink sold comps for one set number. The flag is `--refresh`, not `--no-cache`. `cli_tools_shared.create_app` registers `--no-cache` as an APP-level option and `_hoist_no_cache_flag()` moves the token to the front of `sys.argv`, so a subcommand of the same name never receives it. This one was silently inert until 2026-08-06.",
           "arguments": [
             {
               "name": "set_no",
@@ -513,15 +540,15 @@
               "help": "Resale fee rate"
             },
             {
-              "name": "--no-cache",
+              "name": "--refresh",
               "type": "bool",
               "required": false,
-              "help": "Skip the BrickLink cache"
+              "help": "Call BrickLink directly, ignoring and not writing the call cache"
             }
           ]
         },
         "shipping": {
-          "help": "A carrier rate for a listing whose SOURCE publishes none. Auction houses invoice freight after the sale, so the rate that decides the bid does not exist at bid time. A row with no stated weight cannot be quoted, and this NEVER invents one.",
+          "help": "A carrier rate for a listing whose SOURCE publishes none. Auction houses invoice freight after the sale, so the rate that decides the bid does not exist at bid time. A row with no stated weight cannot be quoted, and this NEVER invents one. The flag is `--refresh`, not `--no-cache`: `cli_tools_shared` hoists a `--no-cache` token to the front of `sys.argv` for its own app-level option, so a subcommand flag of that name never arrives.",
           "arguments": [],
           "options": [
             {
@@ -561,10 +588,10 @@
               "help": "Parcel weight"
             },
             {
-              "name": "--no-cache",
+              "name": "--refresh",
               "type": "bool",
               "required": false,
-              "help": "Skip the rate cache"
+              "help": "Re-quote the carrier, ignoring the rate cache"
             }
           ]
         }
@@ -1020,6 +1047,12 @@
               "type": "INTEGER",
               "required": false,
               "help": "Stop after this many rows"
+            },
+            {
+              "name": "--ledger",
+              "type": "TEXT",
+              "required": false,
+              "help": "Score against this ledger copy, not the live one"
             }
           ]
         }
@@ -1400,7 +1433,7 @@
           "name": "candidates",
           "type": "TEXT",
           "required": true,
-          "help": "A JSON array of eBay candidate dicts"
+          "help": "PATH to a JSON file holding an array of eBay candidate dicts"
         }
       ],
       "options": [
@@ -1415,6 +1448,12 @@
           "type": "bool",
           "required": false,
           "help": "Run `ebay listings get` per kept candidate and write the run artifact (live eBay calls)"
+        },
+        {
+          "name": "--jobs",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Concurrent `ebay listings get` calls; each worker still waits between its own calls"
         },
         {
           "name": "--run-key",
