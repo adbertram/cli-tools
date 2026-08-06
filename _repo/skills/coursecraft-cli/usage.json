@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-06T12:30:28Z",
-  "total_commands": 55,
+  "discovered_at": "2026-08-06T15:10:29Z",
+  "total_commands": 59,
   "global_options": [
     {
       "name": "--version",
@@ -19,6 +19,70 @@
     }
   ],
   "commands": {
+    "artifacts": {
+      "help": "Run CourseCraft artifact validation and preflight",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "preflight": {
+          "help": "Run a CourseCraft artifact's environmental preflight checks.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Artifact slug, e.g. demo.script, slide.content"
+            },
+            {
+              "name": "candidate",
+              "type": "TEXT",
+              "required": true,
+              "help": "Candidate artifact value, usually a record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "validate": {
+          "help": "Validate a CourseCraft artifact against its checks.json contract.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Build or review slug, e.g. demo.script, slide.content.script, module-review"
+            },
+            {
+              "name": "candidate",
+              "type": "TEXT",
+              "required": true,
+              "help": "Candidate artifact value consumed by the artifact's checks.json"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage authentication",
       "usage_instructions": "Authentication management via Airtable PAT delegation. Use to login, logout, test credentials, or check auth status. CourseCraft delegates auth to the airtable CLI under the hood.",
@@ -1202,6 +1266,50 @@
               "required": false,
               "help": "Return only the active course",
               "short": "-a"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "scaffold": {
+          "help": "Scaffold a course from its approved outline (records plus course folder). Dispatches the CourseCraft scaffolder, which parses the approved outline and creates or verifies the Course, Module, and Clip records plus the course folder. Its JSON report goes to stdout and its exit code passes through.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--course-slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Existing CourseCraft Course ID slug",
+              "short": "-c"
+            },
+            {
+              "name": "--google-docs-link",
+              "type": "TEXT",
+              "required": false,
+              "help": "Approved Google Docs outline URL"
+            },
+            {
+              "name": "--file-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Approved outline PDF path",
+              "short": "-f"
+            },
+            {
+              "name": "--deadline",
+              "type": "TEXT",
+              "required": true,
+              "help": "Required CourseCraft course deadline (YYYY-MM-DD)"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Parse and plan only: report what WOULD be created, creating nothing"
             },
             {
               "name": "--profile",
@@ -3467,6 +3575,63 @@
               "type": "TEXT",
               "required": false,
               "help": "ISO 8601 timestamp the feedback gate was requested"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "help": "Report and gate CourseCraft work phase status",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Report the current CourseCraft work phase and gate on it.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft course slug or record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Scope the assertions to this module (record id, Order, M<order>, or name)"
+            },
+            {
+              "name": "--expect-phase",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless this is an available work phase for the scoped module"
+            },
+            {
+              "name": "--check-complete",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless this work phase is complete for the scoped module"
+            },
+            {
+              "name": "--check-feedback-gates",
+              "type": "bool",
+              "required": false,
+              "help": "Fail when any in-scope record is feedback-gated"
             },
             {
               "name": "--profile",

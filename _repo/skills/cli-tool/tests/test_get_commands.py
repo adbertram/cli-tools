@@ -88,10 +88,16 @@ def test_get_commands_have_table_flag(cli_name, test_config, help_cache, command
     if command_filter:
         subgroups = [g for g in subgroups if g == command_filter]
 
+    excluded_from_table = resolve_exclusions(
+        test_config, cli_name, "excluded_from_table_flag_required"
+    )
+
     get_commands = []
 
     # Find all get commands
     for group in subgroups:
+        if group in excluded_from_table:
+            continue
         group_commands = parse_help_commands(help_cache(group))
         if "get" in group_commands:
             get_commands.append(f"{group} get")

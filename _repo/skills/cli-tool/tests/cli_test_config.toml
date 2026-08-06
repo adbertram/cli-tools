@@ -10,6 +10,11 @@ skip_list = ["list", "get", "create", "update", "delete", "login", "status", "lo
 [exclusions]
 excluded_from_get_required = ["search", "profiles", "cart", "rules", "ideas", "responses", "capture", "credentials", "models", "lists"]
 excluded_from_list_required = ["statistics", "metrics", "health", "summary", "status", "content", "profiles", "search", "folders", "agent-traffic", "payouts"]
+# The --table/-t flag renders ONE RECORD as a table. A singular-aggregate group's
+# `get` returns a computed report, not a record, so there is no row set to render
+# and a --table flag would have to invent one. Same aggregate nouns the
+# list-requirement exemption above names.
+excluded_from_table_flag_required = ["statistics", "metrics", "health", "summary", "status"]
 no_auth_clis = [
     "reminders",
     "cliclick",

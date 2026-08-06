@@ -563,8 +563,13 @@ def discover_nested_commands(
         new_path = f"{path} {cmd}".strip()
         discovered.append(new_path)
         # Only recurse into commands not in skip_list
-        # (skip_list prevents recursion, not discovery)
-        if cmd not in skip_list:
+        # (skip_list prevents recursion, not discovery).
+        # The skip_list names LEAF VERBS (list, get, status, login, ...), which only
+        # ever appear below a resource group. At depth 0 every entry is a top-level
+        # GROUP, so the list must not apply there: a CLI whose group is named for an
+        # aggregate noun (`status`, the blessed singular-aggregate group) would
+        # otherwise lose every subcommand under it from the discovered map.
+        if depth == 0 or cmd not in skip_list:
             nested = discover_nested_commands(cli_executable, new_path, depth + 1, max_depth, skip_list, timeout)
             discovered.extend(nested)
 
