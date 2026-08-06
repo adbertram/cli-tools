@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-05T14:44:15Z",
+  "discovered_at": "2026-08-06T12:30:28Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -1718,7 +1718,6 @@
             "coursecraft demos update recXXX --execution-method \"Automated Walkthrough\"",
             "coursecraft demos update recXXX --demo-overview-review-human",
             "coursecraft demos update recXXX --action-summary-review-human",
-            "coursecraft demos update recXXX --ai-tested",
             "coursecraft demos update recXXX --dictation-recorded",
             "coursecraft demos update recXXX --audio-synced"
           ],
@@ -1802,12 +1801,6 @@
               "help": "AI review of the environment spec"
             },
             {
-              "name": "--environment-spec-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Mark environment spec human review as complete"
-            },
-            {
               "name": "--environment-prep-review-ai",
               "type": "TEXT",
               "required": false,
@@ -1817,13 +1810,13 @@
               "name": "--execution-method",
               "type": "bool",
               "required": false,
-              "help": "<Automated Walkthrough|Manual Instructor>                   Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
+              "help": "<Automated Walkthrough|Manual Instructor>                    Demo execution method: 'Automated Walkthrough' (agent builds the walkthrough) or 'Manual Instructor' (instructor records live; no walkthrough)"
             },
             {
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration           How this demo's narration is produced: 'Manual Instructor Generation>                                                 Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited"
+              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited"
             },
             {
               "name": "--action-summary",
@@ -1845,10 +1838,10 @@
               "help": "Mark action summary human review as complete"
             },
             {
-              "name": "--ai-tested",
+              "name": "--walkthrough-test-complete",
               "type": "bool",
               "required": false,
-              "help": "Mark the demo's current design as AI tested after verification"
+              "help": "Mark the demo's walkthrough test complete after a full automated walkthrough is confirmed correct"
             },
             {
               "name": "--script",
