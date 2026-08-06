@@ -95,6 +95,9 @@ buttondown emails update EMAIL_ID --body-file ./updated.md
 buttondown emails delete EMAIL_ID --force
 buttondown emails send-draft EMAIL_ID --recipient test@example.com
 buttondown emails send-draft EMAIL_ID --subscriber SUBSCRIBER_ID
+
+buttondown emails analytics EMAIL_ID
+buttondown emails analytics EMAIL_ID --table
 ```
 
 Supported email filters include `status`, `source`, `subject`, `archival_mode`, `email_type`, `creation_date`, `publish_date`, `deliveries`, `open_rate`, and `click_rate`.
@@ -188,6 +191,7 @@ The client returns Pydantic models for all API resources.
 | --- | --- |
 | `Subscriber` | Subscriber list, get, create, and update responses |
 | `Email` | Email list, get, create, and update responses |
+| `EmailAnalytics` | Email analytics responses |
 | `Tag` | Tag list, get, create, and update responses |
 | `TagAnalytics` | Tag analytics responses |
 | `ActionResult` | Delete and send-action acknowledgements |
