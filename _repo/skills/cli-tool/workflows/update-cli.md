@@ -431,6 +431,9 @@ If the file exists, refresh its command map with the repo-owned generator:
 <cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
 ```
 
+Launcher resolution follows the `Usage JSON Lives In The CLI Skill` principle
+in the repo-owned `cli-tool` skill.
+
 Do not import `cli_test_utils` from ad-hoc Python snippets. The generator owns
 the test-helper import path and keeps the skill-folder `usage.json` in sync with
 the installed CLI help.

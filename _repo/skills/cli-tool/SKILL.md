@@ -618,6 +618,11 @@ adjacent `usage.json` before running that CLI. CLI lifecycle workflows that
 change commands or parameters must refresh that same skill-folder `usage.json`.
 Use `<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json
 <tool>` to refresh it; do not import `cli_test_utils` from ad-hoc Python.
+When an existing `usage.json` declares `binary`, the generator uses that exact
+absolute executable path. This is the launcher contract for non-uv tools whose
+command differs from the skill name. Without `binary`, the generator requires
+the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` only
+for a new non-uv map or an isolated test fixture.
 </principle>
 
 <principle name="Schema-Safe Usage JSON Inspection">
