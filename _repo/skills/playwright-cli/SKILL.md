@@ -12,7 +12,7 @@ description: >-
 ---
 
 <objective>
-Expert reference for the `playwright-cli` browser automation CLI (npm package `@playwright/cli`, v0.1.0). Provides complete command syntax, interaction patterns, and workflow guidance for all 67 flat commands.
+Expert reference for the `playwright-cli` browser automation CLI (npm package `@playwright/cli`, v0.1.18). Provides command syntax and workflow guidance for all 86 visible flat commands.
 </objective>
 
 <quick_start>
@@ -33,7 +33,7 @@ playwright-cli [-s=<session>] <command> [arguments] [options]
 | List sessions | `playwright-cli list` |
 | Press key | `playwright-cli press Enter` |
 | Save auth state | `playwright-cli state-save auth.json` |
-| List network requests | `playwright-cli network` |
+| List network requests | `playwright-cli requests` |
 </quick_start>
 
 <essential_principles>
@@ -43,7 +43,8 @@ It contains every command, argument, and option with descriptions sourced direct
 </principle>
 
 <principle name="Flat Command Surface">
-The binary exposes flat commands — single-word (`open`, `close`, `goto`, `snapshot`, `click`, `fill`, `type`, `hover`, `select`, `upload`, `check`, `uncheck`, `drag`, `eval`, `reload`, `press`, `pdf`, `resize`, `list`, `network`, `route`, `console`, `install`) or hyphenated (`dialog-accept`, `dialog-dismiss`, `go-back`, `go-forward`, `tab-list`, `tab-new`, `tab-close`, `tab-select`, `state-load`, `state-save`, `cookie-list`, `cookie-get`, `cookie-set`, `cookie-delete`, `cookie-clear`, `localstorage-*`, `sessionstorage-*`, `route-list`, `unroute`, `run-code`, `tracing-start`, `tracing-stop`, `video-start`, `video-stop`, `install-browser`, `close-all`, `kill-all`, `delete-data`, `mousemove`, `mousedown`, `mouseup`, `mousewheel`, `keydown`, `keyup`, `dblclick`).
+The binary exposes only flat commands. The adjacent `usage.json` contains the
+exact current command names, arguments, and options.
 
 There are **no** grouped forms like `browser open`, `page snapshot`, `interact click`, `tab list`, `cookie get`, `network requests`, `devtools console`, or `data delete`. Those will fail at parse time.
 </principle>
@@ -96,17 +97,21 @@ browser state.
 </principle>
 
 <principle name="Installed Package Internals">
-When diagnosing the npm-installed `@playwright/cli` package, do not call
-`require.resolve()` on guessed private package subpaths such as
-`playwright/lib/mcp/terminal/daemon`. Node enforces the package `exports` map,
-and non-exported internals fail with `ERR_PACKAGE_PATH_NOT_EXPORTED` even when
-the file exists on disk. Resolve an exported neighboring module from the real
-launcher package context first, then inspect adjacent files by filesystem path
-only after proving those paths exist.
+First prove the launcher identity with `command -v`, its resolved path, its
+shebang, and the owning package metadata. The canonical launcher must resolve
+to the npm package `@playwright/cli` at the version recorded in `usage.json`.
+A Python launcher that imports `playwright_cli.main` is a different wrapper.
+Its grouped `browser`, `page`, or `interact` commands do not define this
+skill's contract. Repair the launcher or package install. Do not translate flat
+commands for that wrapper.
+
+Do not call `require.resolve()` on guessed private package subpaths. Node can
+reject them with `ERR_PACKAGE_PATH_NOT_EXPORTED`. Resolve the real launcher,
+then inspect its adjacent package metadata by file path.
 
 ```bash
 launcher=$(command -v playwright-cli)
-node -e 'const fs=require("node:fs"); const path=require("node:path"); const {createRequire}=require("node:module"); const launcher=fs.realpathSync(process.argv[1]); const req=createRequire(launcher); const exported=req.resolve("playwright/lib/mcp/terminal/program"); const dir=path.dirname(exported); const target=path.join(dir,"daemon.js"); if (!fs.existsSync(target)) { console.error(`MISSING_INSTALLED_FILE:${target}`); process.exit(1); } console.log(target);' "$launcher"
+node -e 'const fs=require("node:fs"); const path=require("node:path"); const launcher=fs.realpathSync(process.argv[1]); const packageJson=path.join(path.dirname(launcher),"package.json"); if (!fs.existsSync(packageJson)) { console.error(`MISSING_PACKAGE_JSON:${packageJson}`); process.exit(1); } const pkg=JSON.parse(fs.readFileSync(packageJson,"utf8")); if (pkg.name !== "@playwright/cli") { console.error(`WRONG_PACKAGE_OWNER:${pkg.name}`); process.exit(1); } console.log(JSON.stringify({launcher,packageJson,name:pkg.name,version:pkg.version},null,2));' "$launcher"
 ```
 </principle>
 
@@ -114,13 +119,15 @@ node -e 'const fs=require("node:fs"); const path=require("node:path"); const {cr
 - `fill REF "text"` — Replaces existing content instantly (like clearing + pasting). Requires a REF. Use for most form fields.
 - `type "text"` — Types character by character into the currently focused element. **Takes only text, no REF.** Focus the target first (e.g., `click REF`) before `type`. Use when the field has autocomplete, live search, or key-by-key event handlers. Add `--submit` to press Enter after typing.
 - For password/API-key/token fields, do not pass the real secret value as the `fill` text and do not embed it in `run-code`; command output includes the generated Playwright code. Instead, open the session with `PLAYWRIGHT_MCP_SECRETS_FILE` pointing to a dotenv file, then pass the secret key name to `fill` only, e.g. `playwright-cli -s=pp fill REF PAYPAL_PASS`. The CLI fills the secret value and redacts it from output as `<secret>PAYPAL_PASS</secret>`.
-- **Only `fill` substitutes a secret key. `type` does not. Never pass a secret key name to `type`.** The CLI `fill` command maps to the MCP tool `browser_type`, which calls `lookupSecret`. The CLI `type` command maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `browser_type` and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=x type MY_KEY` types the literal characters `MY_KEY` into the page. The result is a failed login that looks like a wrong-password event. There is no CLI command that types a secret key by key. Verified on 2026-07-27 against installed `@playwright/cli` 0.1.0 and re-confirmed in published 0.1.17.
+- **Only `fill` substitutes a secret key. `type` does not. Never pass a secret key name to `type`.** The CLI `fill` command maps to the MCP tool `browser_type`, which calls `lookupSecret`. The CLI `type` command maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `browser_type` and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=x type MY_KEY` types the literal characters `MY_KEY` into the page. The result is a failed login that looks like a wrong-password event. There is no CLI command that types a secret key by key. Verified in published `@playwright/cli` 0.1.18.
 - **Every secret `fill` requires the post-fill length check.** See the `Secret Fill Verification` principle below.
 - If `click REF` on a visible submit control is blocked by an overlay or intercepted pointer events, use keyboard submission from the focused field, such as `playwright-cli press Enter` or `playwright-cli fill REF "text" --submit`, before reaching for raw DOM submission.
 </principle>
 
 <principle name="Secret Fill Verification (MANDATORY)">
-`fill` can write the secret into a **different** input while it exits `0` and prints the correct locator. Playwright's `locator.fill()` runs in two phases. An injected in-page script focuses the target element and returns `needsinput`. The driver then calls `page.keyboard.insertText(value)` out of process, and that text goes to whatever holds the focus at that moment. A page that forces the focus back to another field receives the secret. The printed generated code comes from ref resolution, not from the write, so the printed locator is cosmetic. Exit status `0` is not proof. `click REF` before `fill` does not prevent this.
+Version 0.1.18 resolves the secret, then calls `locator.fill()` on the target.
+Exit status `0` does not prove the final page state. A stale ref or a page
+script can still change the target value.
 
 After every secret `fill`, read back the per-field value **LENGTHS** and confirm two facts:
 1. The intended field's value length equals the secret's length.
@@ -165,24 +172,13 @@ itself later enables the button through its normal UI.
 </principle>
 
 <principle name="Command Categories">
-The categories below mirror the section headers in `playwright-cli --help`. They are **reference groupings only** — they are NOT prefixes. Always invoke the flat command name.
-
-- **Core** — `open`, `close`, `goto`, `type`, `click`, `dblclick`, `fill`, `drag`, `hover`, `select`, `upload`, `check`, `uncheck`, `snapshot`, `eval`, `dialog-accept`, `dialog-dismiss`, `resize`, `delete-data`
-- **Navigation** — `go-back`, `go-forward`, `reload`
-- **Keyboard** — `press`, `keydown`, `keyup`
-- **Mouse** — `mousemove`, `mousedown`, `mouseup`, `mousewheel`
-- **Save as** — `screenshot`, `pdf`
-- **Tabs** — `tab-list`, `tab-new`, `tab-close`, `tab-select`
-- **Storage** — `state-load`, `state-save`, `cookie-{list,get,set,delete,clear}`, `localstorage-{list,get,set,delete,clear}`, `sessionstorage-{list,get,set,delete,clear}`
-- **Network** — `route`, `route-list`, `unroute`
-- **DevTools** — `console`, `run-code`, `network`, `tracing-start`, `tracing-stop`, `video-start`, `video-stop`
-- **Install** — `install`, `install-browser`
-- **Browser sessions** — `list`, `close-all`, `kill-all`
+The `category` values in `usage.json` mirror the help section names. They are
+reference groups only. Always invoke the flat command name.
 </principle>
 
 <principle name="Output Format">
-Commands return **markdown** (Slack-style `mrkdwn` with `###` headers and
-indented list items) — **not JSON**. Large results (snapshots, network logs,
+Commands return **markdown** by default. Use the global `--json` option for a
+JSON response. Use `--raw` for only the result value. Large results, such as snapshots and network logs,
 console logs) are written to files inside `.playwright-cli/` and the command
 output references them by path. Read those files directly for structured data.
 When using `--filename`, keep the command output visible and verify the
@@ -234,11 +230,12 @@ fi
 Per-command options vary and are documented in `usage.json`; examples:
 - `list` supports `--all`
 - `cookie-list` supports `--domain` / `--path`
-- `network` supports `--static` / `--clear`
+- `requests` supports `--static` / `--filter` / `--clear`
 - `console` supports `--clear` and a positional `min-level` (info, warning, error, etc.)
 - `screenshot` supports `--filename` / `--full-page`
 
-There are **no** generic `--table`, `--limit`, `--filter`, `--properties`, or `--json` flags. To filter list output, parse the markdown or read the `.playwright-cli/*.log` file the command wrote.
+There are no generic `--table`, `--limit`, or `--properties` flags. Use only
+the options listed for the exact command in `usage.json`.
 </principle>
 
 <principle name="Eval Versus Run-Code">

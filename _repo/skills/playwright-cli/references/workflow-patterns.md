@@ -61,9 +61,9 @@ playwright-cli goto https://app.example.com/dashboard
 
 **Secret rule:** `run-code` cannot read `process.env`; its VM context only receives `page`. For secret entry, set `PLAYWRIGHT_MCP_SECRETS_FILE` when opening the session and pass the secret key name, not the secret value, to **`fill` only**. Do not verify real password fields by returning their full `inputValue()`.
 
-**`type` never substitutes a secret.** `type` maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `fill` (MCP `browser_type`) and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=app type APP_PASSWORD` types the literal characters `APP_PASSWORD` into the page and produces a failed login that looks like a wrong-password event. Verified on 2026-07-27 against installed `@playwright/cli` 0.1.0 and re-confirmed in published 0.1.17.
+**`type` never substitutes a secret.** `type` maps to the MCP tool `browser_press_sequentially`, whose handler calls `page.keyboard.type(text)` and never calls `lookupSecret`. Only `fill` (MCP `browser_type`) and `browser_fill_form` call `lookupSecret`. `playwright-cli -s=app type APP_PASSWORD` types the literal characters `APP_PASSWORD` into the page and produces a failed login that looks like a wrong-password event. Verified in published `@playwright/cli` 0.1.18.
 
-**Post-fill verification is mandatory.** `fill` can write the secret into a different input while it exits `0` and prints the correct locator. `locator.fill()` focuses the target in an injected in-page script, then the driver inserts the text out of process with `page.keyboard.insertText()`, which goes to whatever holds the focus at that moment. Read back per-field value **LENGTHS** only, never values. Confirm the target field's length equals the secret's length and no other field's length changed. Do not submit the form when the check fails. See the `Secret Fill Verification` principle in `SKILL.md`.
+**Post-fill verification is mandatory.** Version 0.1.18 resolves the secret, then calls `locator.fill()` on the target. Read only per-field value **LENGTHS**. Confirm the target length and confirm that no other field length changed. This check detects stale refs and page scripts that change values. Do not submit the form when the check fails. See the `Secret Fill Verification` principle in `SKILL.md`.
 
 **Validation pitfall:** Dummy values in `PLAYWRIGHT_MCP_SECRETS_FILE` are still secrets. If a wrapper reads a field value after filling from a dummy secret key, expect the CLI response redaction layer to return `<secret>KEY_NAME</secret>` rather than the literal dummy value. Validate that command output uses `process.env['KEY_NAME']` and does not print the raw value.
 
@@ -157,18 +157,17 @@ playwright-cli screenshot --filename out.png
 # Navigate and let requests happen
 playwright-cli goto https://example.com
 
-# List all requests made (markdown summary; full log saved to .playwright-cli/network-*.log)
-playwright-cli network
+# List all requests
+playwright-cli requests
 
 # Include static resources (images, fonts, scripts)
-playwright-cli network --static
+playwright-cli requests --static
 
-# To filter, read the log file directly and grep/jq it:
-log=$(playwright-cli network | awk -F'[()]' '/\[Network\]/{print $2; exit}')
-grep '/api/' "$log"
+# Filter request URLs with a regular expression
+playwright-cli requests --filter '/api/.*'
 
 # Clear the captured list
-playwright-cli network --clear
+playwright-cli requests --clear
 
 # Mock a network endpoint
 playwright-cli route "**/api/data*" --status 200 --body '{"ok":true}' --content-type application/json
@@ -217,9 +216,9 @@ playwright-cli tracing-start
 playwright-cli tracing-stop
 
 # Record video
-playwright-cli video-start
+playwright-cli video-start /tmp/session.webm
 # ... perform actions ...
-playwright-cli video-stop --filename /tmp/session.webm
+playwright-cli video-stop
 
 # Run raw Playwright code (pass a callable expression invoked with `page`)
 playwright-cli run-code "async (page) => { const title = await page.title(); return title; }"
@@ -301,7 +300,7 @@ playwright-cli mouseup
 playwright-cli install
 
 # Install/update browser binary
-playwright-cli install-browser --browser chrome
+playwright-cli install-browser chrome
 
 # Resize browser window
 playwright-cli resize 1920 1080
