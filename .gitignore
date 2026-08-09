@@ -46,6 +46,16 @@ cache/
 MagicMock/
 agent_workspaces/
 _personal/
+
+# Skills for private CLI tools under _personal/
+_repo/skills/ata-blog*/
+_repo/skills/azlogs*/
+_repo/skills/coursecraft*/
+_repo/skills/legoscout*/
+_repo/skills/n8n-cli-tool-node-converter*/
+_repo/skills/n8n-node*/
+_repo/skills/pluralsight-author*/
+_repo/skills/progress-servicenow*/
 .fallow/
 bricklink/.playwright-recordings/
 
