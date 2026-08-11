@@ -744,3 +744,95 @@ def test_submit_refund_refuses_when_presubmit_read_is_unreadable(monkeypatch):
     assert "NO refund was submitted" in message
     # Must fail before ever loading the refund form for submission.
     runtime._get_page_for.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# `_reveal_refund_reason_dropdown` — order 32187623 (2026-08-11) proved
+# BrickLink's refund page has two distinct reason-control states: the
+# editable <select> appears directly when an order has no saved reason
+# details, but when reason details already exist (e.g. a prior partial
+# refund on the same order), BrickLink instead shows a read-only summary
+# with an "Edit reason details" button, and the <select> only enters the DOM
+# after that button is clicked. `_submit_refund` previously assumed only the
+# first state, so it raised "Refund reason dropdown not found" on any order
+# with reason details already on file — a false "not eligible" even though
+# the order plainly was refund-eligible (it already had a prior refund).
+# ---------------------------------------------------------------------------
+
+
+class _ReasonDropdownPage:
+    """Simulates BrickLink's two refund-page reason-control states."""
+
+    def __init__(self, *, dropdown_present=False, has_edit_button=False,
+                 dropdown_appears_after_click=False):
+        self.dropdown_present = dropdown_present
+        self.has_edit_button = has_edit_button
+        self.dropdown_appears_after_click = dropdown_appears_after_click
+        self.click_calls = 0
+
+    def evaluate(self, script):
+        assert "select" in script
+        return self.dropdown_present
+
+    def wait_for_timeout(self, _ms):
+        return None
+
+    def get_by_role(self, role, name=None):
+        assert role == "button"
+        assert name == "Edit reason details"
+        return _EditButtonLocator(self)
+
+
+class _EditButtonLocator:
+    def __init__(self, page):
+        self._page = page
+
+    def count(self):
+        return 1 if self._page.has_edit_button else 0
+
+    @property
+    def first(self):
+        return self
+
+    def click(self):
+        self._page.click_calls += 1
+        if self._page.dropdown_appears_after_click:
+            self._page.dropdown_present = True
+
+
+def test_reveal_refund_reason_dropdown_noop_when_already_present(monkeypatch):
+    """Normal case (no prior reason details): nothing to reveal, no clicks."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(dropdown_present=True)
+
+    runtime._reveal_refund_reason_dropdown(page, "32302732")
+
+    assert page.click_calls == 0
+
+
+def test_reveal_refund_reason_dropdown_clicks_edit_button_when_hidden_behind_summary(monkeypatch):
+    """Order 32187623 case: saved reason details hide the <select> behind a
+    read-only summary until 'Edit reason details' is clicked."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(
+        dropdown_present=False,
+        has_edit_button=True,
+        dropdown_appears_after_click=True,
+    )
+
+    runtime._reveal_refund_reason_dropdown(page, "32187623")
+
+    assert page.click_calls == 1
+    assert page.dropdown_present is True
+
+
+def test_reveal_refund_reason_dropdown_noop_when_no_edit_button_found(monkeypatch):
+    """Neither the dropdown nor the edit button ever appear — leave it to the
+    caller's own 'dropdown not found' error rather than raising here."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(dropdown_present=False, has_edit_button=False)
+
+    runtime._reveal_refund_reason_dropdown(page, "99999999")
+
+    assert page.click_calls == 0
+    assert page.dropdown_present is False

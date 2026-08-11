@@ -733,10 +733,122 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
     # ==================== Refunds ====================
 
+    # Poll budget for the refund page's async React render (transaction ID,
+    # prior refunds, etc. are populated after an XHR completes post-mount).
+    # `_get_page_for`'s flat 500ms wait only guarantees `domcontentloaded` +
+    # a fixed pause — it does NOT guarantee the refund data has rendered.
+    # Verified live 2026-08-11: `refund info` and `refund issue`'s pre-submit
+    # gate both call this same method, yet `refund issue` intermittently read
+    # no 'Prior refund(s)' value moments after `refund info` succeeded on the
+    # identical order/URL — proving a render race, not a selector divergence.
+    REFUND_RENDER_POLL_ATTEMPTS = 50
+    REFUND_RENDER_POLL_INTERVAL_MS = 200
+
+    # `_wait_for_refund_page_rendered` only proves the "Prior refund(s)" /
+    # "Original payment" region has painted — a different DOM region than the
+    # reason control, which can still be entirely absent at that point. See
+    # `_reveal_refund_reason_dropdown` for why.
+    REASON_CONTROL_POLL_ATTEMPTS = 25
+    REASON_CONTROL_POLL_INTERVAL_MS = 200
+
+    def _reveal_refund_reason_dropdown(self, page, order_id: str) -> None:
+        """Ensure the refund-reason ``<select>``/combobox is present before
+        callers query for it.
+
+        BrickLink's refund page renders the reason control in one of two
+        states, and `_submit_refund` previously assumed only the first:
+
+        - No reason details saved yet for this order: the editable
+          ``<select>`` is present directly, once the SPA finishes rendering.
+        - Reason details already saved (e.g. this order already has an
+          earlier partial refund): BrickLink instead shows a read-only
+          "Reason for refund" summary with an "Edit reason details" button.
+          The ``<select>`` does not enter the DOM at all until that button is
+          clicked.
+
+        Verified live on order 32187623 (2026-08-11, read-only): the summary
+        panel and "Edit reason details" button render immediately and
+        `_wait_for_refund_page_rendered` returns, yet
+        `document.querySelectorAll('select')` stays at 0 indefinitely.
+        Clicking "Edit reason details" makes the `<select>` appear with the
+        full BrickLink reason option list. A same-session comparison against
+        two orders with no prior refund (32283570, 32296775) showed the
+        `<select>` present with no edit button at all — confirming this is a
+        page-state branch, not a selector regression.
+
+        This only reveals the dropdown; it never selects a value or clicks
+        Review/Confirm.
+        """
+        def _dropdown_present() -> bool:
+            return page.evaluate(
+                "() => document.querySelectorAll('select, [role=\"combobox\"]').length > 0"
+            )
+
+        for _ in range(self.REASON_CONTROL_POLL_ATTEMPTS):
+            if _dropdown_present():
+                return
+            page.wait_for_timeout(self.REASON_CONTROL_POLL_INTERVAL_MS)
+
+        edit_btn = page.get_by_role("button", name="Edit reason details")
+        if edit_btn.count() == 0:
+            # Nothing more we can do here; the caller raises its own
+            # descriptive error when the dropdown still can't be found.
+            return
+
+        activity.info(
+            "Refund page for order %s shows saved reason details with no "
+            "live dropdown — clicking 'Edit reason details' to reveal it.",
+            order_id,
+        )
+        edit_btn.first.click()
+
+        for _ in range(self.REASON_CONTROL_POLL_ATTEMPTS):
+            if _dropdown_present():
+                return
+            page.wait_for_timeout(self.REASON_CONTROL_POLL_INTERVAL_MS)
+
+        activity.warning(
+            "Refund reason dropdown for order %s still not present after "
+            "clicking 'Edit reason details'.",
+            order_id,
+        )
+
+    def _wait_for_refund_page_rendered(self, page, order_id: str) -> None:
+        """Block until the refund page shows either its data or an empty state.
+
+        Does not raise on timeout — callers already treat an unreadable page
+        as a hard-stop (see ``_read_prior_refunds_total`` / ``_submit_refund``).
+        This only removes the race where extraction runs before the SPA has
+        finished populating the DOM.
+        """
+        is_ready_js = """() => {
+            if (document.querySelector('.empty-state__title')) return true;
+            const divs = Array.from(document.querySelectorAll('div'));
+            const hasPrior = divs.some(el => {
+                const t = el.textContent.trim();
+                return t === 'Prior refund(s)' || t === 'Prior refunds';
+            });
+            const hasOriginalPayment = divs.some(
+                el => el.textContent.trim() === 'Original payment'
+            );
+            return hasPrior || hasOriginalPayment;
+        }"""
+        for _ in range(self.REFUND_RENDER_POLL_ATTEMPTS):
+            if page.evaluate(is_ready_js):
+                return
+            page.wait_for_timeout(self.REFUND_RENDER_POLL_INTERVAL_MS)
+        activity.warning(
+            "Refund page for order %s did not render prior-refund or "
+            "original-payment data within %.0fs",
+            order_id,
+            self.REFUND_RENDER_POLL_ATTEMPTS * self.REFUND_RENDER_POLL_INTERVAL_MS / 1000,
+        )
+
     def get_refund_info(self, order_id: str) -> dict:
         """Get refund page info for an order."""
         url = f"{self.REFUND_URL}?id={order_id}"
         page = self._get_page_for(url)
+        self._wait_for_refund_page_rendered(page, order_id)
 
         # Check for explicit empty state / error message on the page
         error_msg = page.evaluate(
@@ -1062,6 +1174,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
             url = f"{self.REFUND_URL}?id={order_id}"
             page = self._get_page_for(url)
+            self._reveal_refund_reason_dropdown(page, order_id)
 
             # Select reason
             dropdown = page.query_selector('select, [role="combobox"]')
