@@ -1,5 +1,6 @@
 """eBay Fulfillment API client with automatic token management and exponential retry."""
 import random
+import re
 import time
 from typing import Dict, List, Optional, Any
 import requests
@@ -20,6 +21,23 @@ DEFAULT_REQUEST_TIMEOUT = (10.0, 30.0)  # (connect, read) seconds
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+STORE_CATEGORIES_ENDPOINT = "/sell/stores/v1/store/categories"
+
+PLAIN_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def expand_plain_date(val: str, end_of_day: bool) -> str:
+    """Expand a plain YYYY-MM-DD date to the full ISO 8601 timestamp eBay requires.
+
+    The Fulfillment API rejects bare dates in creationdate/lastmodifieddate range
+    filters with "Invalid date format". Lower bounds expand to the start of the
+    day; upper bounds expand to the end of the day. Full timestamps pass through
+    unchanged.
+    """
+    if not PLAIN_DATE_PATTERN.match(val):
+        return val
+    suffix = "T23:59:59.999Z" if end_of_day else "T00:00:00.000Z"
+    return f"{val}{suffix}"
 
 
 class ClientError(Exception):
@@ -107,18 +125,20 @@ class EbayClient:
         # Date translator factory
         def create_date_translator(ebay_field):
             def translate_date(op, val):
-                # Note: This simple translation doesn't handle merging min/max for the same field 
+                # Note: This simple translation doesn't handle merging min/max for the same field
                 # (e.g. created:gte:X AND created:lte:Y) perfectly if they come as separate filters.
                 # The joiner will result in "creationdate:[X..],creationdate:[..Y]".
                 # eBay API might accept this, or it might error.
-                # If eBay requires "creationdate:[X..Y]", this logic needs to be smarter or 
+                # If eBay requires "creationdate:[X..Y]", this logic needs to be smarter or
                 # FilterMap needs stateful aggregation.
                 # Assuming eBay accepts multiple filters for same field or we just support single bounds for now.
                 # Based on docs: "You can specify multiple filter criteria, separated by commas".
                 # It doesn't explicitly say "creationdate:[..],creationdate:[..]" is invalid.
                 if op in ('gt', 'gte'):
+                    val = expand_plain_date(val, end_of_day=False)
                     return {'filter': f"{ebay_field}:[{val}..]"}
                 if op in ('lt', 'lte'):
+                    val = expand_plain_date(val, end_of_day=True)
                     return {'filter': f"{ebay_field}:[..{val}]"}
                 return {}
             return translate_date
@@ -215,6 +235,9 @@ class EbayClient:
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
         retry: bool = True,
+        headers: Optional[Dict[str, str]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        raw_response: bool = False,
     ) -> Dict:
         """
         Make an HTTP request to the eBay API with exponential retry.
@@ -225,6 +248,9 @@ class EbayClient:
             data: Request body data
             params: Query parameters
             retry: Whether to retry on transient errors (default: True)
+            headers: Request-specific headers
+            files: Multipart file data
+            raw_response: Return response bytes and metadata
 
         Returns:
             Response JSON data
@@ -256,15 +282,22 @@ class EbayClient:
 
         max_attempts = (self.max_retries + 1) if retry else 1
 
+        def request_headers() -> Dict[str, str]:
+            combined = {**self.headers, **(headers or {})}
+            if files is not None:
+                combined.pop("Content-Type", None)
+            return combined
+
         for attempt in range(max_attempts):
             try:
                 # Make the request
                 response = requests.request(
                     method=method,
                     url=url,
-                    headers=self.headers,
-                    json=data,
+                    headers=request_headers(),
+                    json=data if files is None else None,
                     params=params,
+                    files=files,
                     timeout=self.request_timeout,
                 )
                 last_response = response
@@ -276,9 +309,10 @@ class EbayClient:
                         response = requests.request(
                             method=method,
                             url=url,
-                            headers=self.headers,
-                            json=data,
+                            headers=request_headers(),
+                            json=data if files is None else None,
                             params=params,
+                            files=files,
                             timeout=self.request_timeout,
                         )
                         last_response = response
@@ -331,9 +365,23 @@ class EbayClient:
                 error_msg = last_response.text
             raise ClientError(f"API request failed ({last_response.status_code}): {error_msg}")
 
-        # Handle empty response (204 No Content)
-        if last_response.status_code == 204:
-            return {}
+        if raw_response:
+            return {
+                "content": last_response.content,
+                "content_type": last_response.headers.get("Content-Type"),
+                "content_disposition": last_response.headers.get("Content-Disposition"),
+            }
+
+        # Handle successful responses without JSON content.
+        if not last_response.content:
+            result = {}
+            location = last_response.headers.get("Location")
+            retry_after = last_response.headers.get("Retry-After")
+            if location:
+                result["location"] = location
+            if retry_after:
+                result["retryAfter"] = retry_after
+            return result
 
         return last_response.json()
 
@@ -1148,6 +1196,10 @@ class EbayClient:
         return self._make_request("DELETE", endpoint)
 
     # Store Methods
+    def create_store_category(self, payload: Dict) -> Dict:
+        """Create an eBay store category."""
+        return self._make_request("POST", STORE_CATEGORIES_ENDPOINT, data=payload)
+
     def get_store_categories(self) -> Dict:
         """
         Get all store categories for the seller's eBay store.
@@ -1158,8 +1210,7 @@ class EbayClient:
         Returns:
             Response with 'storeCategories' list (recursive with childrenCategories)
         """
-        endpoint = "/sell/stores/v1/store/categories"
-        return self._make_request("GET", endpoint)
+        return self._make_request("GET", STORE_CATEGORIES_ENDPOINT)
 
     # Metadata API Methods
     def get_item_condition_policies(
@@ -1191,6 +1242,52 @@ class EbayClient:
         return self._make_request("GET", endpoint, params=params)
 
     # Feed API Methods
+    def create_feed_task(
+        self,
+        *,
+        feed_type: str,
+        schema_version: str,
+        marketplace_id: str,
+    ) -> str:
+        """Create a Seller Hub feed task and return its task ID."""
+        result = self._make_request(
+            "POST",
+            "/sell/feed/v1/task",
+            data={"feedType": feed_type, "schemaVersion": schema_version},
+            headers={"X-EBAY-C-MARKETPLACE-ID": marketplace_id},
+        )
+        location = result.get("location")
+        if not location:
+            raise ClientError("Feed task response did not include a Location header")
+        return location.rstrip("/").rsplit("/", 1)[-1]
+
+    def upload_feed_file(
+        self,
+        task_id: str,
+        *,
+        filename: str,
+        content: bytes,
+    ) -> None:
+        """Upload a CSV file for a Seller Hub feed task."""
+        self._make_request(
+            "POST",
+            f"/sell/feed/v1/task/{task_id}/upload_file",
+            files={"file": (filename, content, "text/csv")},
+        )
+
+    def get_feed_task(self, task_id: str) -> Dict:
+        """Get a Seller Hub feed task status."""
+        return self._make_request("GET", f"/sell/feed/v1/task/{task_id}")
+
+    def download_feed_result(self, task_id: str) -> Dict:
+        """Download a Seller Hub feed task result file."""
+        return self._make_request(
+            "GET",
+            f"/sell/feed/v1/task/{task_id}/download_result_file",
+            headers={"Accept": "application/octet-stream"},
+            raw_response=True,
+        )
+
     def create_inventory_task(
         self,
         feed_type: str = "LMS_ACTIVE_INVENTORY_REPORT",
