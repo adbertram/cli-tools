@@ -361,8 +361,12 @@ class HttpTransport(object):
                                 headers.update({'content-type': kwargs['type']})
                             response, data = self._http.request(url, self._method, body=body, headers=headers)
 
-                # Handle rate limiting (429)
-                if response.status == 429 and self._retry_config.retry_on_rate_limit:
+                # Handle rate limiting. Podio's documented rate-limit response
+                # is HTTP 420 (https://developers.podio.com/index/limits), not
+                # the standard 429 -- retry on both so a real Podio rate-limit
+                # response actually engages RetryConfig instead of falling
+                # through to the immediate-failure 4xx branch below.
+                if response.status in (420, 429) and self._retry_config.retry_on_rate_limit:
                     if attempt < self._retry_config.max_retries:
                         # Check for Retry-After header
                         retry_after = response.get('retry-after')
